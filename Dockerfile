@@ -19,11 +19,11 @@ RUN composer dump-autoload --optimize --no-dev
 # --- Stage 3: runtime image (php-fpm + nginx + supervisord) ------------
 FROM php:8.2-fpm-alpine
 
-RUN apk add --no-cache nginx supervisor gettext libpng libjpeg-turbo libwebp \
-        libzip icu-dev oniguruma-dev freetype libpng-dev libjpeg-turbo-dev libwebp-dev \
+RUN apk add --no-cache nginx supervisor gettext libpng libjpeg-turbo libwebp libzip icu-libs \
+        libpng-dev libjpeg-turbo-dev libwebp-dev libzip-dev icu-dev oniguruma-dev \
     && docker-php-ext-configure gd --with-jpeg --with-webp \
     && docker-php-ext-install -j$(nproc) pdo_mysql mbstring bcmath exif pcntl gd zip intl \
-    && apk del libpng-dev libjpeg-turbo-dev libwebp-dev icu-dev oniguruma-dev
+    && apk del libpng-dev libjpeg-turbo-dev libwebp-dev libzip-dev icu-dev oniguruma-dev
 
 WORKDIR /var/www/html
 
