@@ -2,42 +2,44 @@
 
 namespace App\Helpers;
 
+use App\Events\NotificationCreated;
 use App\Models\Notification;
 use App\Models\User;
 
 class NotificationHelper
 {
+    // ── Create + Broadcast a Notification ──────────────────────────
+    protected static function create(int $userId, string $title, string $message, ?string $link, string $type): void
+    {
+        $notification = Notification::create([
+            'user_id' => $userId,
+            'type'    => $type,
+            'title'   => $title,
+            'message' => $message,
+            'link'    => $link,
+            'is_read' => 0,
+            'status'  => 'sent',
+            'sent_at' => now(),
+        ]);
+
+        event(new NotificationCreated($notification));
+    }
+
     // ── Notify Admin(s) ────────────────────────────────────────────
-    public static function notifyAdmin(string $title, string $message, string $type = 'in_app'): void
+    public static function notifyAdmin(string $title, string $message, ?string $link = null, string $type = 'in_app'): void
     {
         // Notify all admin users
         $admins = User::where('role', 'admin')->pluck('id');
 
         foreach ($admins as $adminId) {
-            Notification::create([
-                'user_id' => $adminId,
-                'type'    => $type,
-                'title'   => $title,
-                'message' => $message,
-                'is_read' => 0,
-                'status'  => 'sent',
-                'sent_at' => now(),
-            ]);
+            self::create($adminId, $title, $message, $link, $type);
         }
     }
 
     // ── Notify a Specific Guest ────────────────────────────────────
-    public static function notifyGuest(int $userId, string $title, string $message, string $type = 'in_app'): void
+    public static function notifyGuest(int $userId, string $title, string $message, ?string $link = null, string $type = 'in_app'): void
     {
-        Notification::create([
-            'user_id' => $userId,
-            'type'    => $type,
-            'title'   => $title,
-            'message' => $message,
-            'is_read' => 0,
-            'status'  => 'sent',
-            'sent_at' => now(),
-        ]);
+        self::create($userId, $title, $message, $link, $type);
     }
 
     // ── Preset: New Booking Received ───────────────────────────────
@@ -51,11 +53,12 @@ class NotificationHelper
             "New Booking — {$booking->booking_ref}",
             "{$guestName} placed a {$source} booking for {$propertyName}. " .
             "Check-in: {$booking->check_in_date->format('M d, Y')}. " .
-            "Total: ₱" . number_format($booking->total_amount, 2) . ". Status: Pending."
+            "Total: ₱" . number_format($booking->total_amount, 2) . ". Status: Pending.",
+            route('admin.bookings.show', $booking, false)
         );
     }
 
-    // ── Preset: Payment Received ───────────────────────────────────
+    // ── Preset: Payment Received (online/automatic) ────────────────
     public static function paymentReceived($booking, float $amount, string $method): void
     {
         $guestName   = $booking->user->full_name ?? 'Guest';
@@ -64,7 +67,22 @@ class NotificationHelper
         self::notifyAdmin(
             "Payment Received — {$booking->booking_ref}",
             "₱" . number_format($amount, 2) . " received from {$guestName} via {$methodLabel}. " .
-            "Balance due: ₱" . number_format($booking->balance_due, 2) . "."
+            "Balance due: ₱" . number_format($booking->balance_due, 2) . ".",
+            route('admin.bookings.show', $booking, false)
+        );
+    }
+
+    // ── Preset: Payment Recorded Manually By Admin/Staff ────────────
+    public static function paymentRecorded($booking, float $amount, string $method): void
+    {
+        $guestName   = $booking->user->full_name ?? 'Guest';
+        $methodLabel = ucfirst(str_replace('_', ' ', $method));
+
+        self::notifyAdmin(
+            "Payment Recorded — {$booking->booking_ref}",
+            "₱" . number_format($amount, 2) . " manually recorded for {$guestName} via {$methodLabel}. " .
+            "Balance due: ₱" . number_format($booking->balance_due, 2) . ".",
+            route('admin.bookings.show', $booking, false)
         );
     }
 
@@ -77,7 +95,8 @@ class NotificationHelper
         self::notifyAdmin(
             "Booking Cancelled — {$booking->booking_ref}",
             "{$guestName} cancelled their booking for {$propertyName}. " .
-            ($reason ? "Reason: {$reason}" : "No reason provided.")
+            ($reason ? "Reason: {$reason}" : "No reason provided."),
+            route('admin.bookings.show', $booking, false)
         );
     }
 
@@ -86,7 +105,8 @@ class NotificationHelper
     {
         self::notifyAdmin(
             "New Guest Registered",
-            "{$user->full_name} ({$user->email}) just created an account."
+            "{$user->full_name} ({$user->email}) just created an account.",
+            route('admin.users.show', $user, false)
         );
     }
 
@@ -99,7 +119,8 @@ class NotificationHelper
         self::notifyAdmin(
             "Walk-in Booking — {$booking->booking_ref}",
             "Walk-in booking created by {$staffName} for {$guestName} at {$propertyName}. " .
-            "Check-in: {$booking->check_in_date->format('M d, Y')}."
+            "Check-in: {$booking->check_in_date->format('M d, Y')}.",
+            route('admin.bookings.show', $booking, false)
         );
     }
 
@@ -109,7 +130,8 @@ class NotificationHelper
         self::notifyAdmin(
             "Refund Issued — {$booking->booking_ref}",
             "₱" . number_format($amount, 2) . " refunded for booking {$booking->booking_ref}. " .
-            "Reason: {$reason}"
+            "Reason: {$reason}",
+            route('admin.bookings.show', $booking, false)
         );
     }
 
@@ -122,7 +144,8 @@ class NotificationHelper
         self::notifyAdmin(
             "Guest Checked In",
             "{$guestName} has checked in to {$propertyName}. " .
-            "Check-out: {$booking->check_out_date->format('M d, Y')}."
+            "Check-out: {$booking->check_out_date->format('M d, Y')}.",
+            route('admin.bookings.show', $booking, false)
         );
     }
 
@@ -134,7 +157,8 @@ class NotificationHelper
         self::notifyAdmin(
             "Guest Checked Out",
             "{$guestName} has checked out of {$propertyName}. " .
-            "Booking {$booking->booking_ref} is now complete."
+            "Booking {$booking->booking_ref} is now complete.",
+            route('admin.bookings.show', $booking, false)
         );
     }
 }

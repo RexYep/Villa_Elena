@@ -7,7 +7,6 @@ use App\Models\Booking;
 use App\Models\User;
 use App\Models\Property;
 use App\Models\Payment;
-use App\Models\Notification;
 use Illuminate\Http\Request;
 
 class DashboardController extends Controller
@@ -33,16 +32,7 @@ class DashboardController extends Controller
                             ->sum('amount'), 
         ];
 
-        $notifications = Notification::where('user_id', auth()->id())
-            ->latest()
-            ->take(8)
-            ->get();
-
-        $unreadCount = Notification::where('user_id', auth()->id())
-            ->where('is_read', 0)
-            ->count();
-
-        return view('admin.dashboard.index', compact('stats', 'notifications', 'unreadCount'));
+        return view('admin.dashboard.index', compact('stats'));
     }
 
     // ── Global Search ──────────────────────────────────────────────
@@ -98,15 +88,5 @@ class DashboardController extends Controller
             ]);
 
         return response()->json(compact('bookings', 'guests', 'properties'));
-    }
-
-    // ── Mark Notifications as Read ─────────────────────────────────
-    public function markNotificationsRead()
-    {
-        Notification::where('user_id', auth()->id())
-            ->where('is_read', 0)
-            ->update(['is_read' => 1]);
-
-        return response()->json(['success' => true]);
     }
 }

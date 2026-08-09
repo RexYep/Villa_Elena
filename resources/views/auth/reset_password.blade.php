@@ -2,6 +2,9 @@
 
 @section('title', 'Set New Password — Villa Elena Resort')
 
+@section('auth_bg', 'bg1.png')
+@section('auth_tagline', 'Almost there — set your new password')
+
 @section('content')
 
     <h2>Set new password</h2>

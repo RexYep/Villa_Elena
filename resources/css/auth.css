@@ -1,0 +1,332 @@
+@import './base.css';
+
+/*
+ * Split-screen auth layout.
+ * Left panel  = full-bleed background image with overlay.
+ * Right panel = centred auth card with form.
+ *
+ * Each page sets its own image via @section('auth_bg', 'filename.jpg').
+ * To swap a background, just replace the image file in public/images/.
+ *
+ * Base tokens (--stone, --terracotta, --gold, --gold-light, --sand,
+ * --cream, --border, --muted) come from base.css.
+ */
+
+/* ── Reset ───────────────────────────────────────────────────────── */
+body {
+    font-family: 'Inter', sans-serif;
+    margin: 0;
+    padding: 0;
+    min-height: 100vh;
+    color: var(--stone);
+    background: #fdfbf7;
+}
+
+/* ── Container ───────────────────────────────────────────────────── */
+.auth-container {
+    display: flex;
+    min-height: 100vh;
+}
+
+/* ── Image Panel (left) ──────────────────────────────────────────── */
+.auth-image-panel {
+    position: relative;
+    flex: 0 0 50%;
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+    display: flex;
+    align-items: flex-end;
+    justify-content: flex-start;
+    padding: 48px;
+    overflow: hidden;
+}
+
+.auth-image-overlay {
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+        to top,
+        rgba(15, 10, 5, 0.75) 0%,
+        rgba(15, 10, 5, 0.35) 40%,
+        rgba(15, 10, 5, 0.10) 100%
+    );
+    z-index: 1;
+}
+
+.auth-image-content {
+    position: relative;
+    z-index: 2;
+    color: #fff;
+    animation: authFadeUp 0.8s ease-out both;
+}
+
+.auth-image-content h1 {
+    font-family: 'Playfair Display', serif;
+    font-size: 36px;
+    font-weight: 700;
+    margin: 0 0 4px;
+    letter-spacing: 0.5px;
+    text-shadow: 0 2px 12px rgba(0,0,0,0.3);
+}
+
+.auth-image-content p {
+    color: var(--gold-light, #ebc87e);
+    font-size: 13px;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    margin: 0 0 14px;
+}
+
+.auth-image-tagline {
+    display: inline-block;
+    font-size: 16px;
+    font-weight: 300;
+    color: rgba(255,255,255,0.85);
+    border-left: 3px solid var(--gold, #c9a84c);
+    padding-left: 14px;
+    line-height: 1.5;
+}
+
+/* ── Form Panel (right) ──────────────────────────────────────────── */
+.auth-form-panel {
+    flex: 0 0 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 40px;
+    background: #fdfbf7;
+    overflow-y: auto;
+}
+
+.auth-form-inner {
+    width: 100%;
+    max-width: 440px;
+    animation: authFadeUp 0.6s ease-out both;
+}
+
+/* Mobile-only logo — hidden on desktop */
+.auth-logo-mobile {
+    text-align: center;
+    margin-bottom: 28px;
+    display: none;
+}
+
+.auth-logo-mobile h1 {
+    font-family: 'Playfair Display', serif;
+    color: var(--stone);
+    font-size: 28px;
+    font-weight: 700;
+    margin: 0;
+}
+
+.auth-logo-mobile p {
+    color: var(--gold);
+    font-size: 12px;
+    margin: 4px 0 0;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+}
+
+/* ── Auth Card ───────────────────────────────────────────────────── */
+.auth-card {
+    background: #ffffff;
+    border-radius: 18px;
+    padding: 40px;
+    border: 1px solid var(--border);
+    box-shadow: 0 20px 50px rgba(44, 36, 22, 0.08);
+}
+
+.auth-card h2 {
+    font-family: 'Playfair Display', serif;
+    font-size: 26px;
+    color: var(--stone);
+    margin-bottom: 6px;
+}
+
+.auth-card .subtitle {
+    color: var(--muted);
+    font-size: 14px;
+    margin-bottom: 28px;
+}
+
+/* ── Form Controls ───────────────────────────────────────────────── */
+.form-label {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--stone);
+    margin-bottom: 6px;
+}
+
+.form-control {
+    border: 1.5px solid var(--border);
+    border-radius: 10px;
+    padding: 12px 14px;
+    font-size: 14px;
+    transition: border-color .2s, box-shadow .2s;
+    background: #fff;
+}
+
+.form-control:focus {
+    border-color: var(--terracotta);
+    box-shadow: 0 0 0 3px rgba(196, 103, 58, 0.15);
+}
+
+.input-group .form-control {
+    border-right: none;
+}
+
+.input-group .btn-outline-secondary {
+    border: 1.5px solid var(--border);
+    border-left: none;
+    border-radius: 0 10px 10px 0;
+    color: var(--muted);
+    background: #fff;
+}
+
+/* ── Primary Button ──────────────────────────────────────────────── */
+.btn-primary-custom {
+    background: linear-gradient(135deg, var(--terracotta), var(--gold));
+    color: #fff;
+    border: none;
+    border-radius: 10px;
+    padding: 13px;
+    font-size: 15px;
+    font-weight: 600;
+    width: 100%;
+    transition: all .2s ease;
+}
+
+.btn-primary-custom:hover {
+    opacity: 0.95;
+    transform: translateY(-1px);
+    box-shadow: 0 6px 20px rgba(196, 103, 58, 0.25);
+    color: #fff;
+}
+
+/* ── Divider ─────────────────────────────────────────────────────── */
+.divider {
+    text-align: center;
+    color: var(--muted);
+    font-size: 13px;
+    margin: 20px 0;
+    position: relative;
+}
+
+.divider::before,
+.divider::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    width: 42%;
+    height: 1px;
+    background: var(--border);
+}
+
+.divider::before { left: 0; }
+.divider::after { right: 0; }
+
+/* ── Auth Footer ─────────────────────────────────────────────────── */
+.auth-footer {
+    text-align: center;
+    margin-top: 24px;
+    font-size: 13px;
+    color: var(--muted);
+}
+
+.auth-footer a {
+    color: var(--terracotta);
+    font-weight: 600;
+    text-decoration: none;
+}
+
+.auth-footer a:hover {
+    text-decoration: underline;
+}
+
+/* ── Validation ──────────────────────────────────────────────────── */
+.is-invalid {
+    border-color: #dc3545 !important;
+}
+
+.invalid-feedback {
+    font-size: 12px;
+    color: #dc3545;
+}
+
+/* ── Alerts ──────────────────────────────────────────────────────── */
+.alert {
+    border-radius: 10px;
+    font-size: 13px;
+    padding: 10px 14px;
+    margin-bottom: 20px;
+}
+
+/* ── Animation ───────────────────────────────────────────────────── */
+@keyframes authFadeUp {
+    from {
+        opacity: 0;
+        transform: translateY(18px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* ── Responsive (tablet and below) ───────────────────────────────── */
+@media (max-width: 992px) {
+    .auth-container {
+        flex-direction: column;
+    }
+
+    .auth-image-panel {
+        flex: none;
+        height: 280px;
+        align-items: flex-end;
+        padding: 28px;
+    }
+
+    .auth-image-content h1 {
+        font-size: 28px;
+    }
+
+    .auth-form-panel {
+        flex: 1;
+        padding: 30px 20px;
+    }
+}
+
+@media (max-width: 576px) {
+    .auth-image-panel {
+        height: 220px;
+        padding: 20px;
+    }
+
+    .auth-image-content h1 {
+        font-size: 24px;
+    }
+
+    .auth-image-tagline {
+        font-size: 14px;
+    }
+
+    .auth-card {
+        padding: 28px 22px;
+    }
+
+    .auth-form-panel {
+        padding: 20px 16px;
+    }
+}
+
+/* When the image panel is hidden (ultra-small or fallback) show the mobile logo */
+@media (max-width: 576px) {
+    .auth-image-panel {
+        display: none;
+    }
+
+    .auth-logo-mobile {
+        display: block;
+    }
+}

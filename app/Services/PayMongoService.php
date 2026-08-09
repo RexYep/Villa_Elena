@@ -59,7 +59,7 @@ class PayMongoService
                                 'quantity'  => 1,
                             ]
                         ],
-                        'payment_method_types' => ['gcash', 'card', 'paymaya', 'grab_pay', 'dob', 'brankas_landbank', 'brankas_metrobank'],
+                        'payment_method_types' => ['gcash', 'paymaya', 'grab_pay'],
                         'success_url'       => $data['success_url'],
                         'cancel_url'        => $data['cancel_url'],
                         'reference_number'  => $data['reference_number'],

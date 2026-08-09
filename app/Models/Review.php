@@ -20,6 +20,7 @@ class Review extends Model
      'admin_reply',
      'admin_reply_at',
      'admin_note',       // rejection reason
+     'flag_reason',      // why automated moderation held it for review
  ];
 
     protected $casts = [

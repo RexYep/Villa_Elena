@@ -1,152 +1,382 @@
-{{-- SAVE AS: resources/views/admin/calendar/index.blade.php --}}
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="csrf-token" content="{{ csrf_token() }}">
-    <title>Calendar — Villa Elena Admin</title>
+@extends('layouts.admin')
 
-    <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;500;600;700&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
-    {{-- FullCalendar --}}
-    <link href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.11/index.global.min.css" rel="stylesheet">
+@section('title', 'Calendar — Villa Elena Admin')
+@section('page-title', 'Calendar')
+@section('page-subtitle', 'Bookings, availability & blocked dates')
 
-    <style>
-        :root {
-            --navy:       #0d1b2a;
-            --navy-mid:   #1a2f45;
-            --gold:       #c9a84c;
-            --gold-light: #e8c97a;
-            --gold-dim:   rgba(201,168,76,0.15);
-            --white:      #ffffff;
-            --off-white:  #f4f6f9;
-            --text-main:  #1a2f45;
-            --text-muted: #6b7a8d;
-            --border:     #e2e8f0;
-            --sidebar-w:  260px;
-            --topbar-h:   68px;
-        }
-        * { box-sizing: border-box; margin:0; padding:0; }
-        body { font-family:'DM Sans',sans-serif; background:var(--off-white); color:var(--text-main); overflow-x:hidden; }
+@section('topbar-right')
+    <button class="btn-navy" onclick="openBlockModal()">
+        <i class="bi bi-calendar-x"></i> Block Dates
+    </button>
+    <form method="POST" action="{{ route('logout') }}" class="m-0">
+        @csrf
+        <button type="submit" class="logout-btn"><i class="bi bi-box-arrow-right"></i> Logout</button>
+    </form>
+@endsection
 
-        /* SIDEBAR */
-        .sidebar { position:fixed; top:0; left:0; width:var(--sidebar-w); height:100vh; background:var(--navy); display:flex; flex-direction:column; z-index:1000; overflow-y:auto; }
-        .sidebar-brand { padding:28px 24px 20px; border-bottom:1px solid rgba(255,255,255,0.07); }
-        .sidebar-brand h1 { font-family:'Cormorant Garamond',serif; color:var(--gold-light); font-size:22px; font-weight:700; line-height:1.2; }
-        .sidebar-brand p { color:rgba(255,255,255,0.35); font-size:11px; letter-spacing:1.5px; text-transform:uppercase; margin-top:3px; }
-        .sidebar-section { padding:20px 16px 8px; }
-        .sidebar-section-label { font-size:10px; font-weight:600; letter-spacing:1.5px; text-transform:uppercase; color:rgba(255,255,255,0.25); padding:0 8px; margin-bottom:6px; }
-        .nav-item-custom { display:flex; align-items:center; gap:12px; padding:10px 12px; border-radius:8px; color:rgba(255,255,255,0.6); text-decoration:none; font-size:14px; transition:all .2s; margin-bottom:2px; }
-        .nav-item-custom:hover { background:rgba(255,255,255,0.07); color:var(--white); }
-        .nav-item-custom.active { background:var(--gold-dim); color:var(--gold-light); font-weight:500; }
-        .nav-item-custom .nav-icon { width:32px; height:32px; border-radius:7px; display:flex; align-items:center; justify-content:center; font-size:15px; flex-shrink:0; background:rgba(255,255,255,0.05); }
-        .nav-item-custom.active .nav-icon { background:var(--gold-dim); color:var(--gold); }
-        .sidebar-footer { margin-top:auto; padding:16px; border-top:1px solid rgba(255,255,255,0.07); }
-        .user-card { display:flex; align-items:center; gap:10px; padding:10px 12px; border-radius:10px; background:rgba(255,255,255,0.05); }
-        .user-avatar { width:36px; height:36px; border-radius:50%; background:var(--gold-dim); color:var(--gold); display:flex; align-items:center; justify-content:center; font-size:15px; font-weight:600; flex-shrink:0; }
-        .user-info .name { color:var(--white); font-size:13px; font-weight:500; }
-        .user-info .role-badge { font-size:10px; color:var(--gold); letter-spacing:0.5px; text-transform:uppercase; }
+@push('styles')
+{{-- FullCalendar --}}
+@vite(['resources/js/admin-calendar.js'])
+<style>
+.btn-navy {
+    background: var(--terracotta);
+    color: #fff;
+    border: none;
+    border-radius: 10px;
+    padding: 9px 18px;
+    font-size: 13px;
+    font-weight: 600;
+    text-decoration: none;
+    transition: .2s;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+}
 
-        /* TOPBAR */
-        .topbar { position:fixed; top:0; left:var(--sidebar-w); right:0; height:var(--topbar-h); background:var(--white); border-bottom:1px solid var(--border); display:flex; align-items:center; justify-content:space-between; padding:0 32px; z-index:900; }
-        .topbar-left h2 { font-family:'Cormorant Garamond',serif; font-size:22px; font-weight:600; }
-        .topbar-left p { font-size:12px; color:var(--text-muted); margin-top:1px; }
-        .topbar-right { display:flex; align-items:center; gap:10px; }
-        .btn-navy { background:var(--navy); color:#fff; border:none; border-radius:9px; padding:9px 18px; font-size:13px; font-weight:600; cursor:pointer; font-family:'DM Sans',sans-serif; display:inline-flex; align-items:center; gap:6px; transition:all .2s; text-decoration:none; }
-        .btn-navy:hover { background:var(--gold); color:var(--navy); }
-        .logout-btn { display:flex; align-items:center; gap:7px; background:#fef2f2; color:#ef4444; border:1px solid #fecaca; border-radius:9px; padding:7px 14px; font-size:13px; font-weight:500; cursor:pointer; transition:all .2s; text-decoration:none; }
-        .logout-btn:hover { background:#ef4444; color:white; border-color:#ef4444; }
+.btn-navy:hover {
+    background: #b55a31;
+    color: #fff;
+}
 
-        /* MAIN */
-        .main-content { margin-left:var(--sidebar-w); margin-top:var(--topbar-h); padding:24px 32px; min-height:calc(100vh - var(--topbar-h)); }
+/* LEGEND */
+.legend {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 18px;
+    margin-bottom: 16px;
+    padding: 12px 16px;
+    background: var(--cream);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+}
 
-        /* LEGEND */
-        .legend { display:flex; align-items:center; gap:16px; flex-wrap:wrap; margin-bottom:16px; }
-        .legend-item { display:flex; align-items:center; gap:6px; font-size:12px; color:var(--text-muted); }
-        .legend-dot { width:12px; height:12px; border-radius:3px; flex-shrink:0; }
+.legend-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12.5px;
+    color: var(--muted);
+}
 
-        /* FILTER BAR */
-        .filter-bar { background:var(--white); border-radius:12px; border:1px solid var(--border); padding:14px 18px; margin-bottom:16px; display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
-        .filter-bar label { font-size:11px; font-weight:600; color:var(--text-muted); text-transform:uppercase; letter-spacing:.5px; margin-right:4px; }
-        .filter-bar select { border:1.5px solid var(--border); border-radius:8px; padding:7px 12px; font-size:13px; font-family:'DM Sans',sans-serif; color:var(--text-main); background:#fff; cursor:pointer; }
-        .filter-bar select:focus { outline:none; border-color:var(--navy); }
+.legend-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
 
-        /* CALENDAR WRAPPER */
-        .calendar-wrap { background:var(--white); border-radius:14px; border:1px solid var(--border); padding:20px; }
+/* FILTER BAR */
+.filter-bar {
+    background: var(--cream);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 16px 18px;
+    margin-bottom: 20px;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: 18px;
+}
 
-        /* FullCalendar Overrides */
-        .fc { font-family:'DM Sans',sans-serif; }
-        .fc .fc-toolbar-title { font-family:'Cormorant Garamond',serif; font-size:22px; font-weight:600; color:var(--navy); }
-        .fc .fc-button { background:var(--navy) !important; border-color:var(--navy) !important; font-family:'DM Sans',sans-serif; font-size:12px; font-weight:500; border-radius:8px !important; padding:6px 14px !important; }
-        .fc .fc-button:hover { background:var(--gold) !important; border-color:var(--gold) !important; color:var(--navy) !important; }
-        .fc .fc-button-active { background:var(--gold) !important; border-color:var(--gold) !important; color:var(--navy) !important; }
-        .fc .fc-col-header-cell { background:#f8fafc; font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.5px; color:var(--text-muted); }
-        .fc .fc-daygrid-day-number { font-size:12px; color:var(--text-main); padding:6px 8px; }
-        .fc .fc-daygrid-day.fc-day-today { background:#fffbeb; }
-        .fc .fc-event { border-radius:5px; font-size:11px; font-weight:500; padding:2px 5px; cursor:pointer; }
-        .fc .fc-event:hover { opacity:.85; }
-        .fc .fc-daygrid-event-dot { display:none; }
-        .fc-theme-standard td, .fc-theme-standard th { border-color:var(--border); }
-        .fc .fc-scrollgrid { border-color:var(--border); border-radius:10px; overflow:hidden; }
+.filter-bar > div {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
 
-        /* MODAL */
-        .modal-overlay { display:none; position:fixed; inset:0; z-index:9999; background:rgba(0,0,0,.5); backdrop-filter:blur(4px); align-items:center; justify-content:center; }
-        .modal-overlay.open { display:flex; }
-        .modal-box { background:#fff; border-radius:18px; width:440px; max-width:calc(100vw - 32px); overflow:hidden; box-shadow:0 24px 64px rgba(0,0,0,.2); animation:slideUp .25s ease; }
-        @keyframes slideUp { from { transform:translateY(20px); opacity:0; } to { transform:translateY(0); opacity:1; } }
-        .modal-head { background:var(--navy); padding:18px 22px; display:flex; align-items:center; justify-content:space-between; }
-        .modal-title { font-family:'Cormorant Garamond',serif; color:#fff; font-size:18px; font-weight:600; }
-        .modal-close { background:rgba(255,255,255,.1); border:none; color:#fff; width:30px; height:30px; border-radius:7px; cursor:pointer; font-size:15px; display:flex; align-items:center; justify-content:center; }
-        .modal-body { padding:22px; }
-        .detail-row { display:flex; justify-content:space-between; align-items:center; padding:8px 0; border-bottom:1px solid #f1f5f9; font-size:13px; }
-        .detail-row:last-child { border-bottom:none; }
-        .detail-label { color:var(--text-muted); font-size:12px; }
-        .detail-val { font-weight:500; }
-        .status-pill { padding:3px 10px; border-radius:20px; font-size:10px; font-weight:700; text-transform:uppercase; }
-        .s-pending    { background:#fef9c3; color:#a16207; }
-        .s-confirmed  { background:#dbeafe; color:#1d4ed8; }
-        .s-checked_in { background:#dcfce7; color:#15803d; }
-        .s-checked_out{ background:#f1f5f9; color:#475569; }
-        .s-cancelled  { background:#fee2e2; color:#dc2626; }
-        .s-no_show    { background:#f1f5f9; color:#374151; }
-        .form-label-sm { font-size:11px; font-weight:600; color:#374151; display:block; margin-bottom:5px; text-transform:uppercase; letter-spacing:.3px; }
-        .form-control-sm2 { width:100%; border:1.5px solid var(--border); border-radius:8px; padding:9px 12px; font-size:13px; font-family:'DM Sans',sans-serif; background:#fff; transition:border-color .2s; }
-        .form-control-sm2:focus { outline:none; border-color:var(--navy); }
-        .mb-12 { margin-bottom:12px; }
-        .btn-submit { background:var(--navy); color:#fff; border:none; border-radius:9px; padding:11px; width:100%; font-size:13px; font-weight:600; cursor:pointer; font-family:'DM Sans',sans-serif; margin-top:6px; transition:all .2s; display:flex; align-items:center; justify-content:center; gap:6px; }
-        .btn-submit:hover { background:var(--gold); color:var(--navy); }
-        .btn-danger-sm { background:#fee2e2; color:#dc2626; border:1px solid #fecaca; border-radius:8px; padding:8px 14px; font-size:12px; font-weight:600; cursor:pointer; font-family:'DM Sans',sans-serif; transition:all .2s; display:inline-flex; align-items:center; gap:5px; text-decoration:none; }
-        .btn-danger-sm:hover { background:#dc2626; color:#fff; }
-        .btn-view { background:var(--gold-dim); color:var(--navy); border:1px solid rgba(201,168,76,.3); border-radius:8px; padding:8px 14px; font-size:12px; font-weight:600; cursor:pointer; font-family:'DM Sans',sans-serif; text-decoration:none; display:inline-flex; align-items:center; gap:5px; }
-        .two-btn { display:flex; gap:8px; margin-top:14px; }
-        .toast-msg { position:fixed; bottom:24px; right:24px; background:var(--navy); color:#fff; border-radius:10px; padding:12px 20px; font-size:13px; font-weight:500; z-index:99999; transform:translateY(80px); opacity:0; transition:all .3s; display:flex; align-items:center; gap:8px; }
-        .toast-msg.show { transform:translateY(0); opacity:1; }
-    </style>
-</head>
-<body>
+.filter-bar label {
+    color: var(--muted);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: .5px;
+    text-transform: uppercase;
+}
 
-@include('admin.partials.sidebar')
+.filter-bar select {
+    border: 1.5px solid var(--border);
+    background: white;
+    color: var(--stone);
+    border-radius: 10px;
+    padding: 8px 12px;
+    font-size: 13px;
+    min-width: 180px;
+}
 
-{{-- TOPBAR --}}
-<div class="topbar">
-    <div class="topbar-left">
-        <h2>Calendar</h2>
-        <p>Bookings, availability & blocked dates</p>
-    </div>
-    <div class="topbar-right">
-        <button class="btn-navy" onclick="openBlockModal()">
-            <i class="bi bi-calendar-x"></i> Block Dates
-        </button>
-        <form method="POST" action="{{ route('logout') }}" style="margin:0;">
-            @csrf
-            <button type="submit" class="logout-btn"><i class="bi bi-box-arrow-right"></i> Logout</button>
-        </form>
-    </div>
-</div>
+.filter-bar select:focus {
+    outline: none;
+    border-color: var(--terracotta);
+}
 
-<div class="main-content">
+/* CALENDAR */
+.calendar-wrap {
+    background: var(--cream);
+    border-radius: 16px;
+    border: 1px solid var(--border);
+    padding: 22px;
+}
+
+/* FULLCALENDAR */
+.fc {
+    font-family: 'DM Sans', sans-serif;
+}
+
+.fc .fc-toolbar-title {
+    font-family: 'Cormorant Garamond', serif;
+    color: var(--stone);
+    font-size: 26px;
+}
+
+.fc .fc-button {
+    background: var(--terracotta) !important;
+    border-color: var(--terracotta) !important;
+    border-radius: 9px !important;
+}
+
+.fc .fc-button:hover {
+    background: var(--gold) !important;
+    border-color: var(--gold) !important;
+    color: #fff !important;
+}
+
+.fc .fc-button-active {
+    background: var(--gold) !important;
+    border-color: var(--gold) !important;
+}
+
+.fc .fc-col-header-cell {
+    background: #faf7f2;
+    color: var(--muted);
+}
+
+.fc .fc-daygrid-day-number {
+    color: var(--stone);
+}
+
+.fc .fc-daygrid-day.fc-day-today {
+    background: #fdf5e6;
+}
+
+.fc-theme-standard td,
+.fc-theme-standard th {
+    border-color: var(--border);
+}
+
+.fc .fc-scrollgrid {
+    border-color: var(--border);
+}
+
+/* MODALS (page-specific: rounder corners, sticky head, own max-width) */
+.modal-overlay {
+    background: rgba(44, 36, 22, .55);
+    z-index: 2000;
+    padding: 20px;
+}
+
+.modal-box {
+    border-radius: 20px;
+    width: 100%;
+    max-width: 440px;
+    max-height: 90vh;
+    overflow-y: auto;
+    box-shadow: 0 20px 60px rgba(0,0,0,.25);
+}
+
+.modal-head {
+    border-radius: 20px 20px 0 0;
+    position: sticky;
+    top: 0;
+}
+
+.modal-title {
+    font-size: 20px;
+}
+
+.modal-close {
+    background: rgba(255, 255, 255, .15);
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+}
+
+.modal-close:hover {
+    background: rgba(255, 255, 255, .3);
+}
+
+.modal-body {
+    padding: 20px 22px 24px;
+}
+
+.detail-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--border);
+    font-size: 13.5px;
+}
+
+.detail-row:last-of-type {
+    border-bottom: none;
+}
+
+.detail-label {
+    color: var(--muted);
+    font-weight: 500;
+}
+
+.detail-val {
+    color: var(--stone);
+    font-weight: 600;
+    text-align: right;
+}
+
+.two-btn {
+    display: flex;
+    gap: 10px;
+    margin-top: 16px;
+}
+
+.mb-12 {
+    margin-bottom: 12px;
+}
+
+.form-label-sm {
+    display: block;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: .5px;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 6px;
+}
+
+.form-control-sm2 {
+    border: 1.5px solid var(--border);
+    border-radius: 10px;
+    padding: 9px 12px;
+    font-size: 13px;
+    width: 100%;
+    background: #fff;
+    color: var(--stone);
+}
+
+.form-control-sm2:focus {
+    border-color: var(--terracotta);
+    outline: none;
+}
+
+.btn-submit {
+    border-radius: 10px;
+    padding: 11px 20px;
+    font-size: 13.5px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+}
+
+.btn-view {
+    background: #f9f2e8;
+    color: var(--terracotta);
+    border: 1px solid #edd8bf;
+    border-radius: 10px;
+    padding: 10px 16px;
+    font-size: 13px;
+    font-weight: 600;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    flex: 1;
+    justify-content: center;
+    transition: .2s;
+}
+
+.btn-view:hover {
+    background: #edd8bf;
+    color: var(--terracotta);
+}
+
+.btn-danger-sm {
+    background: #fff2f2;
+    border: 1px solid #f5c7c7;
+    color: #dc2626;
+    border-radius: 10px;
+    padding: 10px 16px;
+    font-size: 13px;
+    font-weight: 600;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    flex: 1;
+    justify-content: center;
+    cursor: pointer;
+    transition: .2s;
+}
+
+.btn-danger-sm:hover {
+    background: #dc2626;
+    color: #fff;
+}
+
+/* STATUS PILL */
+.status-pill {
+    display: inline-block;
+    padding: 4px 12px;
+    border-radius: 999px;
+    font-size: 11.5px;
+    font-weight: 600;
+}
+
+.s-pending      { background: #fef3c7; color: #b45309; }
+.s-confirmed    { background: #dbeafe; color: #1d4ed8; }
+.s-checked_in   { background: #d1fae5; color: #047857; }
+.s-checked_out  { background: #e5e7eb; color: #374151; }
+.s-no_show      { background: #fee2e2; color: #b91c1c; }
+
+/* TOAST */
+.toast-msg {
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    background: var(--terracotta);
+    color: #fff;
+    padding: 14px 20px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 13.5px;
+    font-weight: 500;
+    box-shadow: 0 10px 30px rgba(0,0,0,.2);
+    z-index: 3000;
+    opacity: 0;
+    transform: translateY(20px);
+    pointer-events: none;
+    transition: opacity .25s ease, transform .25s ease;
+}
+
+.toast-msg.show {
+    opacity: 1;
+    transform: translateY(0);
+}
+
+/* Toolbar: stack on small widths so buttons don't overlap the title */
+.fc .fc-toolbar { flex-wrap: wrap; gap: 8px; row-gap: 10px; }
+.fc .fc-toolbar .fc-toolbar-chunk { display: flex; align-items: center; flex-wrap: wrap; gap: 4px; }
+
+@media (max-width: 600px) {
+    .calendar-wrap { padding: 12px; }
+    .filter-bar select { min-width: 140px; }
+    .filter-bar > .text-muted-theme { margin-left: 0 !important; }
+}
+</style>
+@endpush
+
+@section('content')
 
     {{-- LEGEND --}}
     <div class="legend">
@@ -179,7 +409,7 @@
                 <option value="checked_out">Checked Out</option>
             </select>
         </div>
-        <div style="margin-left:auto; font-size:12px; color:var(--text-muted);">
+        <div class="text-muted-theme" style="margin-left:auto; font-size:12px; align-self:center;">
             <i class="bi bi-info-circle me-1"></i> Drag bookings to reschedule
         </div>
     </div>
@@ -189,8 +419,9 @@
         <div id="calendar"></div>
     </div>
 
-</div>
+@endsection
 
+@section('modals')
 {{-- BOOKING DETAIL MODAL --}}
 <div class="modal-overlay" id="bookingModal">
     <div class="modal-box">
@@ -275,7 +506,7 @@
                 </select>
             </div>
             <div class="mb-12">
-                <label class="form-label-sm">Notes <span style="font-weight:400; color:var(--text-muted); text-transform:none;">(optional)</span></label>
+                <label class="form-label-sm">Notes <span class="text-muted-theme" style="font-weight:400; text-transform:none;">(optional)</span></label>
                 <input type="text" id="blockNotes" class="form-control-sm2" placeholder="e.g. Annual maintenance">
             </div>
             <button class="btn-submit" onclick="submitBlock()">
@@ -327,11 +558,12 @@
     <i class="bi bi-check-circle-fill"></i>
     <span id="toastText">Done!</span>
 </div>
+@endsection
 
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.11/index.global.min.js"></script>
+@push('scripts')
 <script>
     const CSRF  = document.querySelector('meta[name="csrf-token"]').content;
+    const bookingShowUrlTemplate = '{{ route('admin.bookings.show', ['booking' => '__ID__']) }}';
     let calendar;
     let activeBlockId = null;
 
@@ -339,6 +571,7 @@
     document.addEventListener('DOMContentLoaded', function () {
         const el = document.getElementById('calendar');
         calendar = new FullCalendar.Calendar(el, {
+            plugins: [FullCalendar.dayGridPlugin, FullCalendar.timeGridPlugin, FullCalendar.listPlugin, FullCalendar.interactionPlugin],
             initialView: 'dayGridMonth',
             headerToolbar: {
                 left:   'prev,next today',
@@ -438,6 +671,15 @@
             }
         });
         calendar.render();
+
+        // Live sync: if another admin creates, moves, or changes the
+        // status of a booking while this calendar is open, refetch so it
+        // doesn't show stale dates/availability. Reuses the Pusher
+        // connection already opened by admin/partials/realtime.blade.php.
+        if (window.rtChannel) {
+            window.rtChannel.bind('booking.created', () => calendar.refetchEvents());
+            window.rtChannel.bind('booking.updated', () => calendar.refetchEvents());
+        }
     });
 
     function refreshCalendar() { calendar.refetchEvents(); }
@@ -453,7 +695,7 @@
         document.getElementById('modalGuests').textContent     = p.num_guests + ' guest(s)';
         document.getElementById('modalAmount').textContent     = '₱' + parseFloat(p.total_amount).toLocaleString('en-PH', {minimumFractionDigits:2});
         document.getElementById('modalPayment').textContent    = ucFirst(p.payment_status);
-        document.getElementById('modalViewLink').href          = `/admin/bookings/${p.booking_id}`;
+        document.getElementById('modalViewLink').href          = bookingShowUrlTemplate.replace('__ID__', p.booking_id);
 
         const statusEl = document.getElementById('modalStatus');
         statusEl.innerHTML = `<span class="status-pill s-${p.status}">${ucFirst(p.status.replace('_',' '))}</span>`;
@@ -531,7 +773,7 @@
     function showToast(msg, isError = false) {
         const toast = document.getElementById('toast');
         document.getElementById('toastText').textContent = msg;
-        toast.style.background = isError ? '#dc2626' : 'var(--navy)';
+        toast.style.background = isError ? '#dc2626' : 'var(--terracotta)';
         toast.classList.add('show');
         setTimeout(() => toast.classList.remove('show'), 3000);
     }
@@ -543,6 +785,4 @@
         });
     });
 </script>
-@include('admin.partials.realtime') 
-</body>
-</html>
+@endpush

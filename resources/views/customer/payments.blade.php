@@ -1,0 +1,76 @@
+@extends('layouts.customer')
+
+@section('title', 'My Payments — Villa Elena')
+
+@push('styles')
+<style>
+.main{max-width:820px;}
+.page-title{font-weight:700;}
+
+.pay-table{width:100%;border-collapse:collapse;font-size:13px;background:#fff;border-radius:16px;overflow:hidden;border:1px solid var(--border);}
+.pay-table th{color:var(--muted);font-weight:600;font-size:10px;text-transform:uppercase;letter-spacing:.7px;padding:12px 16px;border-bottom:1px solid var(--border);text-align:left;background:#faf7f2;}
+.pay-table td{padding:12px 16px;border-bottom:1px solid #f4efe6;}
+.pay-table tr:last-child td{border-bottom:none;}
+.booking-link{color:var(--stone);font-weight:600;text-decoration:none;}
+.booking-link:hover{color:var(--gold);}
+.type-pill{background:#f1f5f9;padding:2px 8px;border-radius:10px;font-size:10px;}
+.status-pill{padding:3px 10px;border-radius:10px;font-size:10px;font-weight:600;}
+.s-success{background:#dcfce7;color:#15803d;}
+.s-pending{background:#fef3c7;color:#b45309;}
+.s-failed{background:#fee2e2;color:#dc2626;}
+.s-refunded{background:#e0e7ff;color:#4338ca;}
+.empty-state{text-align:center;padding:60px 20px;color:var(--muted);}
+</style>
+@endpush
+
+@section('content')
+    <div class="page-title">My Payments</div>
+    <div class="page-sub" style="margin-bottom:20px;">Payment history across all your bookings</div>
+
+    @if($payments->isEmpty())
+        <div class="empty-state">
+            <i class="bi bi-receipt" style="font-size:40px;opacity:.3;"></i>
+            <p style="margin-top:12px;">No payments recorded yet.</p>
+        </div>
+    @else
+        <div style="overflow-x:auto;">
+        <table class="pay-table">
+            <thead>
+                <tr>
+                    <th>Date</th>
+                    <th>Booking</th>
+                    <th>Method</th>
+                    <th>Type</th>
+                    <th>Status</th>
+                    <th style="text-align:right;">Amount</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach($payments as $payment)
+                <tr>
+                    <td class="text-muted-theme">{{ $payment->payment_date?->format('M d, Y') }}</td>
+                    <td>
+                        @if($payment->booking)
+                            <a href="{{ route('customer.bookings.show', $payment->booking) }}" class="booking-link">
+                                {{ $payment->booking->booking_ref }}
+                            </a>
+                            <div class="text-muted-theme" style="font-size:11px;">{{ $payment->booking->property->property_name ?? '' }}</div>
+                        @else
+                            —
+                        @endif
+                    </td>
+                    <td>{{ $payment->method_label ?? ucfirst(str_replace('_',' ',$payment->payment_method)) }}</td>
+                    <td><span class="type-pill">{{ ucfirst($payment->payment_type) }}</span></td>
+                    <td><span class="status-pill s-{{ $payment->status }}">{{ ucfirst($payment->status) }}</span></td>
+                    <td style="text-align:right;font-weight:600;color:{{ $payment->payment_type==='refund'?'#dc2626':'#15803d' }};">
+                        {{ $payment->payment_type==='refund'?'-':'+' }}₱{{ number_format($payment->amount,2) }}
+                    </td>
+                </tr>
+                @endforeach
+            </tbody>
+        </table>
+        </div>
+
+        <div style="margin-top:20px;">{{ $payments->links() }}</div>
+    @endif
+@endsection

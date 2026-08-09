@@ -1,112 +1,71 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Settings — Villa Elena Admin</title>
-    <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;600;700&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
-    <style>
-        :root{--navy:#0d1b2a;--navy-mid:#1a2f45;--gold:#c9a84c;--gold-light:#e8c97a;--gold-dim:rgba(201,168,76,0.15);--off-white:#f4f6f9;--border:#e2e8f0;--text-main:#1a2f45;--text-muted:#6b7a8d;--sidebar-w:260px;--topbar-h:68px;}
-        *{box-sizing:border-box;margin:0;padding:0;}
-        body{font-family:'DM Sans',sans-serif;background:var(--off-white);color:var(--text-main);}
-        .sidebar{position:fixed;top:0;left:0;width:var(--sidebar-w);height:100vh;background:var(--navy);display:flex;flex-direction:column;z-index:1000;overflow-y:auto;}
-        .sidebar-brand{padding:28px 24px 20px;border-bottom:1px solid rgba(255,255,255,0.07);}
-        .sidebar-brand h1{font-family:'Cormorant Garamond',serif;color:var(--gold-light);font-size:22px;font-weight:700;}
-        .sidebar-brand p{color:rgba(255,255,255,0.35);font-size:11px;letter-spacing:1.5px;text-transform:uppercase;margin-top:3px;}
-        .sidebar-section{padding:20px 16px 8px;}
-        .sidebar-section-label{font-size:10px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;color:rgba(255,255,255,0.25);padding:0 8px;margin-bottom:6px;}
-        .nav-item-custom{display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:8px;color:rgba(255,255,255,0.6);text-decoration:none;font-size:14px;transition:all .2s;margin-bottom:2px;}
-        .nav-item-custom:hover{background:rgba(255,255,255,0.07);color:#fff;}
-        .nav-item-custom.active{background:var(--gold-dim);color:var(--gold-light);font-weight:500;}
-        .nav-icon{width:32px;height:32px;border-radius:7px;display:flex;align-items:center;justify-content:center;font-size:15px;flex-shrink:0;background:rgba(255,255,255,0.05);}
-        .nav-item-custom.active .nav-icon{background:var(--gold-dim);color:var(--gold);}
-        .sidebar-footer{margin-top:auto;padding:16px;border-top:1px solid rgba(255,255,255,0.07);}
-        .user-card{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:10px;background:rgba(255,255,255,0.05);}
-        .user-avatar{width:36px;height:36px;border-radius:50%;background:var(--gold-dim);color:var(--gold);display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:600;}
-        .user-info .name{color:#fff;font-size:13px;font-weight:500;}
-        .user-info .role-badge{font-size:10px;color:var(--gold);letter-spacing:0.5px;text-transform:uppercase;}
-        .topbar{position:fixed;top:0;left:var(--sidebar-w);right:0;height:var(--topbar-h);background:#fff;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;padding:0 32px;z-index:900;}
-        .topbar-left h2{font-family:'Cormorant Garamond',serif;font-size:22px;font-weight:600;}
-        .topbar-left p{font-size:12px;color:var(--text-muted);margin-top:1px;}
-        .logout-btn{display:flex;align-items:center;gap:7px;background:#fef2f2;color:#ef4444;border:1px solid #fecaca;border-radius:9px;padding:7px 14px;font-size:13px;font-weight:500;cursor:pointer;transition:all .2s;text-decoration:none;}
-        .logout-btn:hover{background:#ef4444;color:white;border-color:#ef4444;}
-        .main-content{margin-left:var(--sidebar-w);margin-top:var(--topbar-h);padding:32px;}
+@extends('layouts.admin')
 
-        /* Layout */
-        .settings-layout{display:grid;grid-template-columns:220px 1fr;gap:24px;align-items:start;}
+@section('title', 'Settings — Villa Elena Admin')
+@section('page-title', 'Settings')
+@section('page-subtitle', 'Configure your resort system')
 
-        /* Tab Nav */
-        .tab-nav{background:#fff;border-radius:14px;border:1px solid var(--border);overflow:hidden;position:sticky;top:calc(var(--topbar-h) + 24px);}
-        .tab-nav-header{padding:16px 18px;border-bottom:1px solid var(--border);}
-        .tab-nav-header h3{font-family:'Cormorant Garamond',serif;font-size:16px;font-weight:600;}
-        .tab-link{display:flex;align-items:center;gap:10px;padding:11px 18px;font-size:13px;color:var(--text-muted);cursor:pointer;border:none;background:none;width:100%;text-align:left;transition:all .2s;border-left:3px solid transparent;}
-        .tab-link:hover{background:#f8fafc;color:var(--text-main);}
-        .tab-link.active{background:var(--gold-dim);color:var(--text-main);font-weight:600;border-left-color:var(--gold);}
-        .tab-link i{font-size:15px;width:18px;text-align:center;}
+@push('styles')
+<style>
+/* Layout */
+.settings-layout{display:grid;grid-template-columns:220px 1fr;gap:24px;align-items:start;}
 
-        /* Cards */
-        .settings-section{display:none;}
-        .settings-section.active{display:block;}
-        .settings-card{background:#fff;border-radius:14px;border:1px solid var(--border);overflow:hidden;margin-bottom:20px;}
-        .settings-card-header{padding:18px 24px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:12px;}
-        .settings-card-header .icon{width:36px;height:36px;border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:17px;flex-shrink:0;}
-        .settings-card-header h3{font-family:'Cormorant Garamond',serif;font-size:17px;font-weight:600;}
-        .settings-card-header p{font-size:12px;color:var(--text-muted);margin-top:2px;}
-        .settings-card-body{padding:24px;}
+/* Tab Nav */
+.tab-nav{background:var(--cream);border-radius:14px;border:1px solid var(--border);overflow:hidden;position:sticky;top:calc(var(--topbar-h) + 24px);}
+.tab-nav-header{padding:16px 18px;border-bottom:1px solid var(--border);}
+.tab-nav-header h3{font-family:'Cormorant Garamond',serif;font-size:16px;font-weight:600;color:var(--text-main);}
+.tab-link{display:flex;align-items:center;gap:10px;padding:11px 18px;font-size:13px;color:var(--muted);cursor:pointer;border:none;background:none;width:100%;text-align:left;transition:all .2s;border-left:3px solid transparent;}
+.tab-link:hover{background:var(--sand);color:var(--text-main);}
+.tab-link.active{background:var(--gold-dim);color:var(--text-main);font-weight:600;border-left-color:var(--terracotta);}
+.tab-link i{font-size:15px;width:18px;text-align:center;}
 
-        /* Form */
-        .form-label{font-size:13px;font-weight:600;color:#374151;margin-bottom:6px;display:block;}
-        .hint{font-size:11px;color:#94a3b8;margin-top:4px;display:block;}
-        .req{color:#ef4444;}
-        .form-control,.form-select{border:1.5px solid var(--border);border-radius:8px;padding:10px 14px;font-size:14px;font-family:'DM Sans',sans-serif;width:100%;transition:border-color .2s;background:#fff;}
-        .form-control:focus,.form-select:focus{outline:none;border-color:var(--navy-mid);box-shadow:0 0 0 3px rgba(26,47,69,0.08);}
-        .two-col{display:grid;grid-template-columns:1fr 1fr;gap:16px;}
-        .three-col{display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;}
-        .mb-16{margin-bottom:16px;}
+/* Cards */
+.settings-section{display:none;}
+.settings-section.active{display:block;}
+.settings-card{background:var(--cream);border-radius:14px;border:1px solid var(--border);overflow:hidden;margin-bottom:20px;}
+.settings-card-header{padding:18px 24px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:12px;}
+.settings-card-header .icon{width:36px;height:36px;border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:17px;flex-shrink:0;background:var(--gold-dim);color:var(--gold);}
+.settings-card-header h3{font-family:'Cormorant Garamond',serif;font-size:17px;font-weight:600;color:var(--text-main);}
+.settings-card-header p{font-size:12px;color:var(--muted);margin-top:2px;}
+.settings-card-body{padding:24px;}
 
-        /* Toggle Switch */
-        .toggle-row{display:flex;align-items:center;justify-content:space-between;padding:14px 0;border-bottom:1px solid #f1f5f9;}
-        .toggle-row:last-child{border-bottom:none;}
-        .toggle-info .toggle-title{font-size:14px;font-weight:500;}
-        .toggle-info .toggle-desc{font-size:12px;color:var(--text-muted);margin-top:2px;}
-        .toggle-switch{position:relative;width:44px;height:24px;flex-shrink:0;}
-        .toggle-switch input{opacity:0;width:0;height:0;}
-        .toggle-slider{position:absolute;cursor:pointer;inset:0;background:#d1d5db;border-radius:100px;transition:.3s;}
-        .toggle-slider:before{content:'';position:absolute;height:18px;width:18px;left:3px;bottom:3px;background:#fff;border-radius:50%;transition:.3s;}
-        .toggle-switch input:checked + .toggle-slider{background:var(--navy);}
-        .toggle-switch input:checked + .toggle-slider:before{transform:translateX(20px);}
+/* Form */
+.three-col{display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;}
+.mb-16{margin-bottom:16px;}
 
-        /* Submit */
-        .submit-bar{background:#fff;border-radius:12px;border:1px solid var(--border);padding:16px 24px;display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;position:sticky;bottom:24px;box-shadow:0 4px 20px rgba(0,0,0,0.08);}
-        .btn-save{background:var(--navy);color:#fff;border:none;border-radius:9px;padding:11px 28px;font-size:14px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif;display:flex;align-items:center;gap:8px;transition:opacity .2s;}
-        .btn-save:hover{opacity:.88;}
-        .submit-info{font-size:12px;color:var(--text-muted);}
+/* Toggle Switch */
+.toggle-row{display:flex;align-items:center;justify-content:space-between;padding:14px 0;border-bottom:1px solid var(--border);}
+.toggle-row:last-child{border-bottom:none;}
+.toggle-info .toggle-title{font-size:14px;font-weight:500;color:var(--text-main);}
+.toggle-info .toggle-desc{font-size:12px;color:var(--muted);margin-top:2px;}
+.toggle-switch{position:relative;width:44px;height:24px;flex-shrink:0;}
+.toggle-switch input{opacity:0;width:0;height:0;}
+.toggle-slider{position:absolute;cursor:pointer;inset:0;background:#d1d5db;border-radius:100px;transition:.3s;}
+.toggle-slider:before{content:'';position:absolute;height:18px;width:18px;left:3px;bottom:3px;background:#fff;border-radius:50%;transition:.3s;}
+.toggle-switch input:checked + .toggle-slider{background:var(--terracotta);}
+.toggle-switch input:checked + .toggle-slider:before{transform:translateX(20px);}
 
-        .alert{border-radius:10px;font-size:13px;padding:12px 16px;margin-bottom:20px;border:none;}
-        .alert-success{background:#dcfce7;color:#15803d;}
+/* Submit */
+.submit-bar{background:var(--cream);border-radius:12px;border:1px solid var(--border);padding:16px 24px;display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;position:sticky;bottom:24px;box-shadow:0 4px 20px rgba(44,36,22,0.1);}
+.btn-save{background:var(--terracotta);color:#fff;border:none;border-radius:9px;padding:11px 28px;font-size:14px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif;display:flex;align-items:center;gap:8px;transition:background .2s;}
+.btn-save:hover{background:var(--gold);}
+.submit-info{font-size:12px;color:var(--muted);}
 
-        /* Maintenance banner */
-        .maintenance-banner{background:#fef9c3;border:1px solid #fde68a;border-radius:10px;padding:12px 16px;font-size:13px;color:#a16207;margin-bottom:16px;display:flex;align-items:center;gap:8px;}
-    </style>
-</head>
-<body>
+/* Maintenance banner — semantic warning, unchanged */
+.maintenance-banner{background:#fef9c3;border:1px solid #fde68a;border-radius:10px;padding:12px 16px;font-size:13px;color:#a16207;margin-bottom:16px;display:flex;align-items:center;gap:8px;}
 
-@include('admin.partials.sidebar')
+@media (max-width: 900px) {
+    .settings-layout{grid-template-columns:1fr;}
+    .tab-nav{position:static;}
+    .three-col{grid-template-columns:1fr 1fr;}
+}
+@media (max-width: 560px) {
+    .three-col{grid-template-columns:1fr;}
+    .submit-bar{flex-direction:column;align-items:stretch;gap:10px;position:static;}
+}
+</style>
+@endpush
 
-
-<header class="topbar">
-    <div class="topbar-left">
-        <h2>Settings</h2>
-        <p>Configure your resort system</p>
-    </div>
-    <form method="POST" action="{{ route('logout') }}" style="margin:0">
-        @csrf <button type="submit" class="logout-btn"><i class="bi bi-box-arrow-right"></i> Logout</button>
-    </form>
-</header>
-
-<main class="main-content">
+@section('content')
 
     @if(session('success'))
         <div class="alert alert-success"><i class="bi bi-check-circle me-2"></i>{{ session('success') }}</div>
@@ -139,6 +98,9 @@
                 <button type="button" class="tab-link" onclick="showTab('notifications')">
                     <i class="bi bi-bell"></i> Notifications
                 </button>
+                <button type="button" class="tab-link" onclick="showTab('amenities')">
+                    <i class="bi bi-stars"></i> Amenities
+                </button>
                 <button type="button" class="tab-link" onclick="showTab('social')">
                     <i class="bi bi-share"></i> Social & Links
                 </button>
@@ -154,7 +116,7 @@
                 <div class="settings-section active" id="tab-resort">
                     <div class="settings-card">
                         <div class="settings-card-header">
-                            <div class="icon" style="background:#dbeafe;color:#1d4ed8;"><i class="bi bi-building"></i></div>
+                            <div class="icon tag-blue"><i class="bi bi-building"></i></div>
                             <div>
                                 <h3>Resort Information</h3>
                                 <p>Basic details about Villa Elena Resort</p>
@@ -250,7 +212,7 @@
 
                     <div class="settings-card">
                         <div class="settings-card-header">
-                            <div class="icon" style="background:#f3e8ff;color:#7c3aed;"><i class="bi bi-toggles"></i></div>
+                            <div class="icon tag-purple"><i class="bi bi-toggles"></i></div>
                             <div>
                                 <h3>Booking Options</h3>
                                 <p>Enable or disable booking features</p>
@@ -287,7 +249,7 @@
                 <div class="settings-section" id="tab-payments">
                     <div class="settings-card">
                         <div class="settings-card-header">
-                            <div class="icon" style="background:#fef9c3;color:#a16207;"><i class="bi bi-credit-card"></i></div>
+                            <div class="icon tag-amber"><i class="bi bi-credit-card"></i></div>
                             <div>
                                 <h3>Payment Settings</h3>
                                 <p>Currency, deposit, and tax configuration</p>
@@ -325,7 +287,7 @@
                 <div class="settings-section" id="tab-notifications">
                     <div class="settings-card">
                         <div class="settings-card-header">
-                            <div class="icon" style="background:#e0f2fe;color:#0369a1;"><i class="bi bi-bell"></i></div>
+                            <div class="icon tag-cyan"><i class="bi bi-bell"></i></div>
                             <div>
                                 <h3>Notification Preferences</h3>
                                 <p>Control when and how notifications are sent</p>
@@ -343,6 +305,48 @@
                                     <span class="toggle-slider"></span>
                                 </label>
                             </div>
+                        </div>
+                    </div>
+                </div>
+
+                {{-- Amenities --}}
+                <div class="settings-section" id="tab-amenities">
+                    <div class="settings-card">
+                        <div class="settings-card-header">
+                            <div class="icon" style="background:#dcfce7;color:#15803d;"><i class="bi bi-stars"></i></div>
+                            <div>
+                                <h3>Property Amenities</h3>
+                                <p>Manage the amenity options offered when adding/editing the Villa</p>
+                            </div>
+                        </div>
+                        <div class="settings-card-body">
+                            <div id="amenitiesRepeater">
+                                @php
+                                    $currentAmenities = json_decode($settings['property_amenities'] ?? '[]', true) ?: [];
+                                @endphp
+                                @forelse($currentAmenities as $amenity)
+                                    <div class="amenity-row" style="display:flex;gap:8px;margin-bottom:10px;">
+                                        <input type="text" name="amenities[]" class="form-control" value="{{ $amenity }}">
+                                        <button type="button" class="btn-remove-amenity" onclick="this.parentElement.remove()"
+                                            style="background:#fee2e2;color:#dc2626;border:none;border-radius:8px;padding:0 14px;cursor:pointer;">
+                                            <i class="bi bi-trash"></i>
+                                        </button>
+                                    </div>
+                                @empty
+                                    <div class="amenity-row" style="display:flex;gap:8px;margin-bottom:10px;">
+                                        <input type="text" name="amenities[]" class="form-control" placeholder="e.g. WiFi">
+                                        <button type="button" class="btn-remove-amenity" onclick="this.parentElement.remove()"
+                                            style="background:#fee2e2;color:#dc2626;border:none;border-radius:8px;padding:0 14px;cursor:pointer;">
+                                            <i class="bi bi-trash"></i>
+                                        </button>
+                                    </div>
+                                @endforelse
+                            </div>
+                            <button type="button" onclick="addAmenityRow()"
+                                style="background:var(--sand);color:var(--text-main);border:none;border-radius:8px;padding:9px 18px;font-size:13px;font-weight:600;cursor:pointer;margin-top:6px;">
+                                <i class="bi bi-plus-circle me-1"></i> Add Amenity
+                            </button>
+                            <span class="hint" style="display:block;margin-top:10px;">These appear as checkboxes when creating/editing the Villa property.</span>
                         </div>
                     </div>
                 </div>
@@ -365,10 +369,10 @@
                                     placeholder="https://facebook.com/villaelenaresort">
                             </div>
                             <div class="mb-16">
-                                <label class="form-label"><i class="bi bi-instagram text-danger me-1"></i> Instagram</label>
-                                <input type="url" name="instagram_url" class="form-control"
-                                    value="{{ $settings['instagram_url'] ?? '' }}"
-                                    placeholder="https://instagram.com/villaelenaresort">
+                                <label class="form-label"><i class="bi bi-tiktok me-1"></i> TikTok</label>
+                                <input type="url" name="tiktok_url" class="form-control"
+                                    value="{{ $settings['tiktok_url'] ?? '' }}"
+                                    placeholder="https://tiktok.com/@villaelenaresort">
                             </div>
                             <div>
                                 <label class="form-label"><i class="bi bi-geo-alt text-success me-1"></i> Google Maps Link</label>
@@ -384,7 +388,7 @@
                 <div class="settings-section" id="tab-system">
                     <div class="settings-card">
                         <div class="settings-card-header">
-                            <div class="icon" style="background:#fee2e2;color:#dc2626;"><i class="bi bi-shield-gear"></i></div>
+                            <div class="icon tag-red"><i class="bi bi-shield-gear"></i></div>
                             <div>
                                 <h3>System Settings</h3>
                                 <p>Maintenance mode and advanced controls</p>
@@ -416,20 +420,20 @@
                         <div class="settings-card-body">
                             <div class="two-col">
                                 <div>
-                                    <div style="font-size:12px;color:var(--text-muted);margin-bottom:3px;">Laravel Version</div>
-                                    <div style="font-weight:500;">{{ app()->version() }}</div>
+                                    <div class="text-muted-theme" style="font-size:12px;margin-bottom:3px;">Laravel Version</div>
+                                    <div class="fw-medium">{{ app()->version() }}</div>
                                 </div>
                                 <div>
-                                    <div style="font-size:12px;color:var(--text-muted);margin-bottom:3px;">PHP Version</div>
-                                    <div style="font-weight:500;">{{ phpversion() }}</div>
+                                    <div class="text-muted-theme" style="font-size:12px;margin-bottom:3px;">PHP Version</div>
+                                    <div class="fw-medium">{{ phpversion() }}</div>
                                 </div>
                                 <div>
-                                    <div style="font-size:12px;color:var(--text-muted);margin-bottom:3px;">Environment</div>
-                                    <div style="font-weight:500;">{{ app()->environment() }}</div>
+                                    <div class="text-muted-theme" style="font-size:12px;margin-bottom:3px;">Environment</div>
+                                    <div class="fw-medium">{{ app()->environment() }}</div>
                                 </div>
                                 <div>
-                                    <div style="font-size:12px;color:var(--text-muted);margin-bottom:3px;">Server Time</div>
-                                    <div style="font-weight:500;">{{ now()->format('M d, Y h:i A') }}</div>
+                                    <div class="text-muted-theme" style="font-size:12px;margin-bottom:3px;">Server Time</div>
+                                    <div class="fw-medium">{{ now()->format('M d, Y h:i A') }}</div>
                                 </div>
                             </div>
                         </div>
@@ -451,9 +455,9 @@
         </div>
     </form>
 
-</main>
+@endsection
 
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+@push('scripts')
 <script>
 function showTab(name) {
     document.querySelectorAll('.settings-section').forEach(el => el.classList.remove('active'));
@@ -461,7 +465,20 @@ function showTab(name) {
     document.getElementById('tab-' + name).classList.add('active');
     event.currentTarget.classList.add('active');
 }
+
+function addAmenityRow() {
+    const wrap = document.createElement('div');
+    wrap.className = 'amenity-row';
+    wrap.style.cssText = 'display:flex;gap:8px;margin-bottom:10px;';
+    wrap.innerHTML = `
+        <input type="text" name="amenities[]" class="form-control" placeholder="e.g. WiFi">
+        <button type="button" class="btn-remove-amenity" onclick="this.parentElement.remove()"
+            style="background:#fee2e2;color:#dc2626;border:none;border-radius:8px;padding:0 14px;cursor:pointer;">
+            <i class="bi bi-trash"></i>
+        </button>
+    `;
+    document.getElementById('amenitiesRepeater').appendChild(wrap);
+    wrap.querySelector('input').focus();
+}
 </script>
-@include('admin.partials.realtime') 
-</body>
-</html>
+@endpush

@@ -53,6 +53,7 @@ class ReviewController extends Controller
             'type'    => 'in_app',
             'title'   => 'Your Review Was Approved!',
             'message' => "Your {$review->rating}-star review for {$review->property->property_name} has been approved and is now visible.",
+            'link'    => route('customer.reviews.index', [], false),
             'is_read' => 0,
             'status'  => 'sent',
             'sent_at' => now(),
@@ -83,6 +84,7 @@ class ReviewController extends Controller
             'title'   => 'Review Not Published',
             'message' => "Your review for {$review->property->property_name} was not published." .
                 ($request->reject_reason ? " Reason: {$request->reject_reason}" : ''),
+            'link'    => route('customer.reviews.index', [], false),
             'is_read' => 0,
             'status'  => 'sent',
             'sent_at' => now(),
@@ -112,6 +114,7 @@ class ReviewController extends Controller
             'type'    => 'in_app',
             'title'   => 'Villa Elena Replied to Your Review',
             'message' => "The resort replied to your review for {$review->property->property_name}.",
+            'link'    => route('customer.reviews.index', [], false),
             'is_read' => 0,
             'status'  => 'sent',
             'sent_at' => now(),

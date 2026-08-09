@@ -2,6 +2,10 @@
 
 @section('title', 'Create Account — Villa Elena Resort')
 
+
+@section('auth_bg', 'bg1.png')
+@section('auth_tagline', 'Start your Villa Elena experience')
+
 @section('content')
 
     <h2>Create your account</h2>
@@ -92,7 +96,7 @@
                     id="password_confirmation"
                     name="password_confirmation"
                     class="form-control"
-                    placeholder="Repeat your password"
+                    placeholder="Retype your password"
                     required
                 >
                 <button type="button" class="btn btn-outline-secondary" onclick="togglePassword('password_confirmation', this)">

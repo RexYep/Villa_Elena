@@ -1,0 +1,31 @@
+@import './base.css';
+
+/*
+ * Shared stylesheet for resources/views/payment/** (checkout, success) —
+ * bare, centered-card payment pages with no nav/footer. Tokens come from
+ * base.css since these pages already use the exact same
+ * stone/sand/gold/gold-light/muted/border/terracotta palette as
+ * customer/portal. Page-specific card content stays in each view's
+ * @push('styles').
+ */
+
+body {
+    font-family: 'Jost', sans-serif;
+    background: var(--sand);
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 32px 16px;
+}
+
+.card {
+    background: #fff;
+    border-radius: 22px;
+    border: 1px solid var(--border);
+    width: 100%;
+    overflow: hidden;
+    box-shadow: 0 16px 48px rgba(44,36,22,.12);
+}
+
+.card-body { padding: 28px 32px; }

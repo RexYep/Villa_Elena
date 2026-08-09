@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Admin;
 
+use App\Events\BookingUpdated;
 use App\Http\Controllers\Controller;
 use App\Models\Booking;
 use App\Models\Property;
@@ -135,6 +136,8 @@ class CalendarController extends Controller
             'moved_booking', 'bookings', $booking->id,
             "Moved {$booking->booking_ref} from {$oldIn}–{$oldOut} to {$newIn->format('M d, Y')}–{$newOut->format('M d, Y')} via calendar"
         );
+
+        event(new BookingUpdated($booking, 'moved'));
 
         return response()->json(['success' => true, 'nights' => $nights]);
     }

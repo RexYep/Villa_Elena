@@ -110,6 +110,10 @@ $unreadCount = Notification::where('user_id', auth()->id())
 }
 .notif-empty i { font-size: 32px; display: block; margin-bottom: 8px; opacity: .4; }
 
+@media (max-width: 480px) {
+    .notif-dropdown { width: calc(100vw - 24px); right: -12px; }
+}
+
 /* ── Search Modal ── */
 .search-overlay {
     display: none; position: fixed; inset: 0; z-index: 9998;
@@ -176,57 +180,10 @@ $unreadCount = Notification::where('user_id', auth()->id())
 @keyframes spin { to { transform: rotate(360deg); } }
 </style>
 
-{{-- ── Notification Dropdown ── --}}
-<div style="position:relative;display:inline-block;" id="notifWrapper">
-    <div class="notif-dropdown" id="notifDropdown">
-        <div class="notif-header">
-            <div class="notif-header-title">Notifications</div>
-            <button class="notif-mark-read" onclick="markAllRead()">Mark all read</button>
-        </div>
-        <div class="notif-list" id="notifList">
-            @isset($notifications)
-                @forelse($notifications as $notif)
-                @php
-                    $iconMap = [
-                        'booking_update' => ['icon'=>'bi-calendar-check','bg'=>'#dcfce7','color'=>'#16a34a'],
-                        'payment'        => ['icon'=>'bi-credit-card',   'bg'=>'#dbeafe','color'=>'#1d4ed8'],
-                        'cancellation'   => ['icon'=>'bi-x-circle',      'bg'=>'#fee2e2','color'=>'#dc2626'],
-                        'reminder'       => ['icon'=>'bi-bell',          'bg'=>'#fef9c3','color'=>'#a16207'],
-                        'in_app'         => ['icon'=>'bi-info-circle',   'bg'=>'#f1f5f9','color'=>'#475569'],
-                    ];
-                    $ic = $iconMap[$notif->type] ?? $iconMap['in_app'];
-                @endphp
-                <div class="notif-item {{ !$notif->is_read ? 'unread' : '' }}">
-                    <div class="notif-icon-wrap" style="background:{{ $ic['bg'] }};color:{{ $ic['color'] }};">
-                        <i class="bi {{ $ic['icon'] }}"></i>
-                    </div>
-                    <div class="notif-item-body">
-                        <div class="notif-item-title">{{ $notif->title }}</div>
-                        <div class="notif-item-msg">{{ $notif->message }}</div>
-                        <div class="notif-item-time">{{ $notif->created_at->diffForHumans() }}</div>
-                    </div>
-                    @if(!$notif->is_read)
-                        <div class="notif-unread-dot"></div>
-                    @endif
-                </div>
-                @empty
-                <div class="notif-empty">
-                    <i class="bi bi-bell-slash"></i>
-                    <p>No notifications yet</p>
-                </div>
-                @endforelse
-            @else
-                <div class="notif-empty">
-                    <i class="bi bi-bell-slash"></i>
-                    <p>No notifications yet</p>
-                </div>
-            @endisset
-        </div>
-        <div class="notif-footer">
-            <a href="{{ route('admin.dashboard') }}">View all notifications →</a>
-        </div>
-    </div>
-</div>
+{{-- Notification bell + dropdown now live in layouts/admin.blade.php's
+     topbar-right (needs to be a DOM sibling of the bell button itself so
+     the dropdown's `position:absolute` anchors correctly under it — this
+     file is included at the bottom of <body>, too far away for that). --}}
 
 {{-- ── Search Modal ── --}}
 <div class="search-overlay" id="searchOverlay" onclick="handleOverlayClick(event)">
@@ -358,7 +315,7 @@ function renderResults(data, query) {
         html += `<div class="search-section-label">👤 Guests</div>`;
         data.guests.forEach(g => {
             html += `<a href="${baseUrl}/admin/users/${g.id}" class="search-result-item">
-                <div class="result-icon" style="background:#fef9c3;color:#a16207;"><i class="bi bi-person"></i></div>
+                <div class="result-icon tag-amber"><i class="bi bi-person"></i></div>
                 <div class="result-main">
                     <div class="result-title">${g.name}</div>
                     <div class="result-sub">${g.email}</div>

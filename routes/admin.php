@@ -12,6 +12,7 @@ use App\Http\Controllers\Admin\SettingsController;
 use App\Http\Controllers\Admin\InsightsController;
 use App\Http\Controllers\Admin\ForecastController;
 use App\Http\Controllers\Admin\CalendarController;
+use App\Http\Controllers\Admin\NotificationController;
 
 
 Route::prefix('admin')
@@ -39,7 +40,10 @@ Route::get('bookings/lookup', function (\Illuminate\Http\Request $request) {
     // Bookings
     Route::resource('bookings', BookingController::class);
     Route::patch('bookings/{booking}/status', [BookingController::class, 'updateStatus'])->name('bookings.status');
+    Route::patch('bookings/{booking}/extend', [BookingController::class, 'extendStay'])->name('bookings.extend');
     Route::post('bookings/{booking}/payment', [BookingController::class, 'recordPayment'])->name('bookings.payment');
+    Route::post('bookings/{booking}/extras', [BookingController::class, 'storeExtra'])->name('bookings.extras.store');
+    Route::delete('bookings/{booking}/extras/{extra}', [BookingController::class, 'destroyExtra'])->name('bookings.extras.destroy');
     Route::get('users/create', [UserController::class, 'create'])->name('users.create');
 
     // Properties
@@ -79,7 +83,10 @@ Route::delete('reviews/{review}',             [ReviewController::class, 'destroy
     Route::get('/forecast', [ForecastController::class, 'index'])->name('forecast.index');
 
     Route::get('search', [DashboardController::class, 'search'])->name('search');
-    Route::post('notifications/mark-read', [DashboardController::class, 'markNotificationsRead'])->name('notifications.markRead');
+
+    Route::get('notifications', [NotificationController::class, 'index'])->name('notifications.index');
+    Route::get('notifications/{notification}/open', [NotificationController::class, 'open'])->name('notifications.open');
+    Route::post('notifications/mark-read', [NotificationController::class, 'markAllRead'])->name('notifications.markRead');
 
 
 // Calendar

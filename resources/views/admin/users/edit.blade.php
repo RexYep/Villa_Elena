@@ -1,85 +1,16 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="csrf-token" content="{{ csrf_token() }}">
-    <title>{{ isset($user) ? 'Edit' : 'Add' }} User — Villa Elena Admin</title>
-    <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;600;700&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
-    <style>
-        :root{--navy:#0d1b2a;--navy-mid:#1a2f45;--gold:#c9a84c;--gold-light:#e8c97a;--gold-dim:rgba(201,168,76,0.15);--off-white:#f4f6f9;--border:#e2e8f0;--text-main:#1a2f45;--text-muted:#6b7a8d;--sidebar-w:260px;--topbar-h:68px;}
-        *{box-sizing:border-box;margin:0;padding:0;}
-        body{font-family:'DM Sans',sans-serif;background:var(--off-white);color:var(--text-main);}
-        .sidebar{position:fixed;top:0;left:0;width:var(--sidebar-w);height:100vh;background:var(--navy);display:flex;flex-direction:column;z-index:1000;overflow-y:auto;}
-        .sidebar-brand{padding:28px 24px 20px;border-bottom:1px solid rgba(255,255,255,0.07);}
-        .sidebar-brand h1{font-family:'Cormorant Garamond',serif;color:var(--gold-light);font-size:22px;font-weight:700;}
-        .sidebar-brand p{color:rgba(255,255,255,0.35);font-size:11px;letter-spacing:1.5px;text-transform:uppercase;margin-top:3px;}
-        .sidebar-section{padding:20px 16px 8px;}
-        .sidebar-section-label{font-size:10px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;color:rgba(255,255,255,0.25);padding:0 8px;margin-bottom:6px;}
-        .nav-item-custom{display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:8px;color:rgba(255,255,255,0.6);text-decoration:none;font-size:14px;transition:all .2s;margin-bottom:2px;}
-        .nav-item-custom:hover{background:rgba(255,255,255,0.07);color:#fff;}
-        .nav-item-custom.active{background:var(--gold-dim);color:var(--gold-light);font-weight:500;}
-        .nav-icon{width:32px;height:32px;border-radius:7px;display:flex;align-items:center;justify-content:center;font-size:15px;flex-shrink:0;background:rgba(255,255,255,0.05);}
-        .nav-item-custom.active .nav-icon{background:var(--gold-dim);color:var(--gold);}
-        .sidebar-footer{margin-top:auto;padding:16px;border-top:1px solid rgba(255,255,255,0.07);}
-        .user-card{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:10px;background:rgba(255,255,255,0.05);}
-        .user-avatar{width:36px;height:36px;border-radius:50%;background:var(--gold-dim);color:var(--gold);display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:600;}
-        .user-info .name{color:#fff;font-size:13px;font-weight:500;}
-        .user-info .role-badge{font-size:10px;color:var(--gold);letter-spacing:0.5px;text-transform:uppercase;}
-        .topbar{position:fixed;top:0;left:var(--sidebar-w);right:0;height:var(--topbar-h);background:#fff;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;padding:0 32px;z-index:900;}
-        .topbar-left h2{font-family:'Cormorant Garamond',serif;font-size:22px;font-weight:600;}
-        .topbar-left p{font-size:12px;color:var(--text-muted);margin-top:1px;}
-        .logout-btn{display:flex;align-items:center;gap:7px;background:#fef2f2;color:#ef4444;border:1px solid #fecaca;border-radius:9px;padding:7px 14px;font-size:13px;font-weight:500;cursor:pointer;transition:all .2s;text-decoration:none;}
-        .logout-btn:hover{background:#ef4444;color:white;border-color:#ef4444;}
-        .main-content{margin-left:var(--sidebar-w);margin-top:var(--topbar-h);padding:32px;}
-        .breadcrumb-row{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text-muted);margin-bottom:24px;}
-        .breadcrumb-row a{color:var(--text-muted);text-decoration:none;}
-        .breadcrumb-row a:hover{color:var(--navy);}
-        .breadcrumb-row .sep{color:#cbd5e1;}
-        .breadcrumb-row .current{color:var(--text-main);font-weight:500;}
+@extends('layouts.admin')
 
-        .form-wrapper{max-width:720px;}
-        .form-card{background:#fff;border-radius:14px;border:1px solid var(--border);overflow:hidden;margin-bottom:20px;}
-        .form-card-header{padding:18px 24px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;}
-        .form-card-header .card-icon{width:34px;height:34px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:16px;}
-        .form-card-header h3{font-family:'Cormorant Garamond',serif;font-size:17px;font-weight:600;}
-        .form-card-body{padding:24px;}
-        .form-label{font-size:13px;font-weight:600;color:#374151;margin-bottom:6px;display:block;}
-        .req{color:#ef4444;margin-left:2px;}
-        .form-control,.form-select{border:1.5px solid var(--border);border-radius:8px;padding:10px 14px;font-size:14px;font-family:'DM Sans',sans-serif;width:100%;transition:border-color .2s;background:#fff;}
-        .form-control:focus,.form-select:focus{outline:none;border-color:var(--navy-mid);box-shadow:0 0 0 3px rgba(26,47,69,0.08);}
-        .is-invalid{border-color:#ef4444 !important;}
-        .invalid-feedback{font-size:12px;color:#ef4444;margin-top:4px;display:block;}
-        .two-col{display:grid;grid-template-columns:1fr 1fr;gap:16px;}
-        .input-group .form-control{border-right:none;}
-        .input-group .btn-outline-secondary{border:1.5px solid var(--border);border-left:none;border-radius:0 8px 8px 0;background:#fff;color:var(--text-muted);}
-        .btn-submit{background:var(--navy);color:#fff;border:none;border-radius:9px;padding:12px 28px;font-size:14px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif;transition:opacity .2s;}
-        .btn-submit:hover{opacity:.88;}
-        .btn-cancel-link{color:var(--text-muted);font-size:13px;text-decoration:none;margin-left:16px;}
-        .btn-cancel-link:hover{color:var(--navy);}
-        .alert{border-radius:10px;font-size:13px;padding:12px 16px;margin-bottom:20px;border:none;}
-        .alert-danger{background:#fee2e2;color:#dc2626;}
-        .hint{font-size:11px;color:#94a3b8;margin-top:4px;display:block;}
-    </style>
-</head>
-<body>
+@section('title', (isset($user) ? 'Edit' : 'Add') . ' User — Villa Elena Admin')
+@section('page-title', isset($user) ? 'Edit User' : 'Add New User')
+@section('page-subtitle', isset($user) ? 'Update profile for ' . $user->full_name : 'Create a new guest, staff, or admin account')
 
-@include('admin.partials.sidebar')
+@push('styles')
+<style>
+.form-wrapper{max-width:720px;}
+</style>
+@endpush
 
-
-<header class="topbar">
-    <div class="topbar-left">
-        <h2>{{ isset($user) ? 'Edit User' : 'Add New User' }}</h2>
-        <p>{{ isset($user) ? 'Update profile for ' . $user->full_name : 'Create a new guest, staff, or admin account' }}</p>
-    </div>
-    <form method="POST" action="{{ route('logout') }}" style="margin:0">
-        @csrf <button type="submit" class="logout-btn"><i class="bi bi-box-arrow-right"></i> Logout</button>
-    </form>
-</header>
-
-<main class="main-content">
+@section('content')
 
     <div class="breadcrumb-row">
         <a href="{{ route('admin.dashboard') }}">Dashboard</a>
@@ -105,18 +36,18 @@
             {{-- Basic Info --}}
             <div class="form-card">
                 <div class="form-card-header">
-                    <div class="card-icon" style="background:#e0f2fe;color:#0369a1;"><i class="bi bi-person"></i></div>
+                    <div class="card-icon tag-cyan"><i class="bi bi-person"></i></div>
                     <h3>Basic Information</h3>
                 </div>
                 <div class="form-card-body">
-                    <div style="margin-bottom:16px;">
+                    <div class="mb-3">
                         <label class="form-label">Full Name <span class="req">*</span></label>
                         <input type="text" name="full_name" class="form-control @error('full_name') is-invalid @enderror"
                             value="{{ old('full_name', $user->full_name ?? '') }}"
                             placeholder="Juan dela Cruz" required>
                         @error('full_name')<span class="invalid-feedback">{{ $message }}</span>@enderror
                     </div>
-                    <div class="two-col" style="margin-bottom:16px;">
+                    <div class="two-col mb-3">
                         <div>
                             <label class="form-label">Email Address <span class="req">*</span></label>
                             <input type="email" name="email" class="form-control @error('email') is-invalid @enderror"
@@ -147,11 +78,11 @@
             {{-- ID & Address --}}
             <div class="form-card">
                 <div class="form-card-header">
-                    <div class="card-icon" style="background:#dcfce7;color:#15803d;"><i class="bi bi-card-text"></i></div>
+                    <div class="card-icon tag-green"><i class="bi bi-card-text"></i></div>
                     <h3>ID & Address</h3>
                 </div>
                 <div class="form-card-body">
-                    <div class="two-col" style="margin-bottom:16px;">
+                    <div class="two-col mb-3">
                         <div>
                             <label class="form-label">ID Type</label>
                             <select name="id_type" class="form-select">
@@ -181,7 +112,7 @@
             {{-- Password --}}
             <div class="form-card">
                 <div class="form-card-header">
-                    <div class="card-icon" style="background:#f3e8ff;color:#7c3aed;"><i class="bi bi-shield-lock"></i></div>
+                    <div class="card-icon tag-purple"><i class="bi bi-shield-lock"></i></div>
                     <h3>{{ isset($user) ? 'Change Password' : 'Set Password' }}</h3>
                 </div>
                 <div class="form-card-body">
@@ -233,9 +164,9 @@
         </form>
     </div>
 
-</main>
+@endsection
 
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+@push('scripts')
 <script>
 function togglePw(id, btn) {
     const input = document.getElementById(id);
@@ -245,6 +176,4 @@ function togglePw(id, btn) {
     icon.classList.toggle('bi-eye-slash');
 }
 </script>
-@include('admin.partials.realtime') 
-</body>
-</html>
+@endpush

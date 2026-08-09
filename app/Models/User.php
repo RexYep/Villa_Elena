@@ -2,13 +2,16 @@
 
 namespace App\Models;
 
+use Illuminate\Auth\MustVerifyEmail as MustVerifyEmailTrait;
+use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Illuminate\Support\Facades\Storage;
 
-class User extends Authenticatable
+class User extends Authenticatable implements MustVerifyEmail
 {
-    use HasFactory, Notifiable;
+    use HasFactory, Notifiable, MustVerifyEmailTrait;
 
     protected $fillable = [
         'full_name',
@@ -22,6 +25,7 @@ class User extends Authenticatable
         'id_number',
         'status',
         'last_login',
+        'two_factor_enabled',
     ];
 
     protected $hidden = [
@@ -30,10 +34,11 @@ class User extends Authenticatable
     ];
 
     protected $casts = [
-        'email_verified_at' => 'datetime',
-        'last_login'        => 'datetime',
-        'password'          => 'hashed',
-        'status'            => 'integer',
+        'email_verified_at'  => 'datetime',
+        'last_login'         => 'datetime',
+        'password'           => 'hashed',
+        'status'             => 'integer',
+        'two_factor_enabled' => 'boolean',
     ];
 
     // ── Relationships ──────────────────────────────────────────────
@@ -63,6 +68,16 @@ class User extends Authenticatable
         return $this->hasMany(HousekeepingTask::class, 'assigned_to');
     }
 
+    public function trustedDevices()
+    {
+        return $this->hasMany(TrustedDevice::class);
+    }
+
+    public function loginActivities()
+    {
+        return $this->hasMany(LoginActivity::class);
+    }
+
     // ── Helper Methods ─────────────────────────────────────────────
 
     public function isAdmin(): bool
@@ -88,5 +103,12 @@ class User extends Authenticatable
     public function getFullNameAttribute($value): string
     {
         return ucwords($value);
+    }
+
+    public function getProfileImageUrlAttribute(): ?string
+    {
+        return $this->profile_image
+            ? Storage::disk('public')->url($this->profile_image)
+            : null;
     }
 }

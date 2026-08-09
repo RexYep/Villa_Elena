@@ -47,6 +47,7 @@
 .rt-icon.booking  { background: rgba(59,130,246,.2);  color: #3b82f6; }
 .rt-icon.payment  { background: rgba(16,185,129,.2);  color: #10b981; }
 .rt-icon.property { background: rgba(201,168,76,.2);  color: #c9a84c; }
+.rt-icon.generic  { background: rgba(201,168,76,.2);  color: #c9a84c; }
 
 .rt-body { flex: 1; min-width: 0; }
 .rt-title { font-size: 13px; font-weight: 600; color: #fff; margin-bottom: 2px; }
@@ -112,12 +113,95 @@
 (function () {
     const PUSHER_KEY     = '{{ env('PUSHER_APP_KEY') }}';
     const PUSHER_CLUSTER = '{{ env('PUSHER_APP_CLUSTER', 'ap1') }}';
+    const bookingShowUrlTemplate = '{{ route('admin.bookings.show', ['booking' => '__ID__']) }}';
+    const paymentsIndexUrl       = '{{ route('admin.payments.index') }}';
+    const propertiesIndexUrl     = '{{ route('admin.properties.index') }}';
+    const notifOpenUrlTemplate   = '{{ route('admin.notifications.open', ['notification' => '__ID__']) }}';
+    const authUserId             = {{ auth()->id() ?? 'null' }};
 
     if (!PUSHER_KEY) { console.warn('Pusher key not set'); return; }
 
     // ── Init Pusher ──────────────────────────────────────────────
-    const pusher  = new Pusher(PUSHER_KEY, { cluster: PUSHER_CLUSTER });
+    const pusher  = new Pusher(PUSHER_KEY, {
+        cluster: PUSHER_CLUSTER,
+        channelAuthorization: {
+            endpoint: '{{ url('/broadcasting/auth') }}',
+            headers: { 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.content },
+        },
+    });
     const channel = pusher.subscribe('admin-dashboard');
+
+    // Exposed so other admin pages (e.g. the calendar) can bind their own
+    // listeners on this same connection instead of opening a second one.
+    window.rtChannel = channel;
+
+    // ── Personal Notification Bell (Notification model rows) ──────
+    if (authUserId) {
+        const notifChannel = pusher.subscribe('private-notifications.' + authUserId);
+        notifChannel.bind('notification.created', function (data) {
+            prependNotification(data);
+
+            showToast({
+                type:  'generic',
+                icon:  'bi-bell',
+                title: data.title,
+                sub:   data.message,
+                time:  data.created_at,
+                link:  notifOpenUrlTemplate.replace('__ID__', data.id),
+            });
+        });
+    }
+
+    const notifIconMap = {
+        booking_update: { icon: 'bi-calendar-check', bg: '#dcfce7', color: '#16a34a' },
+        payment:        { icon: 'bi-credit-card',    bg: '#dbeafe', color: '#1d4ed8' },
+        cancellation:   { icon: 'bi-x-circle',        bg: '#fee2e2', color: '#dc2626' },
+        reminder:       { icon: 'bi-bell',            bg: '#fef9c3', color: '#a16207' },
+        in_app:         { icon: 'bi-info-circle',     bg: '#f1f5f9', color: '#475569' },
+    };
+
+    function escapeHtml(str) {
+        const div = document.createElement('div');
+        div.textContent = str ?? '';
+        return div.innerHTML;
+    }
+
+    function prependNotification(data) {
+        const list = document.getElementById('notifList');
+        if (list) {
+            const empty = list.querySelector('.notif-empty');
+            if (empty) empty.remove();
+
+            const ic = notifIconMap[data.type] || notifIconMap.in_app;
+            const item = document.createElement('a');
+            item.href = notifOpenUrlTemplate.replace('__ID__', data.id);
+            item.className = 'notif-item unread';
+            item.style.cssText = 'text-decoration:none;color:inherit;display:flex;';
+            item.innerHTML = `
+                <div class="notif-icon-wrap" style="background:${ic.bg};color:${ic.color};">
+                    <i class="bi ${ic.icon}"></i>
+                </div>
+                <div class="notif-item-body">
+                    <div class="notif-item-title">${escapeHtml(data.title)}</div>
+                    <div class="notif-item-msg">${escapeHtml(data.message)}</div>
+                    <div class="notif-item-time">${escapeHtml(data.created_at)}</div>
+                </div>
+                <div class="notif-unread-dot"></div>
+            `;
+            list.insertBefore(item, list.firstChild);
+
+            const items = list.querySelectorAll('.notif-item');
+            if (items.length > 8) items[items.length - 1].remove();
+        }
+
+        const btn = document.getElementById('notifBtn');
+        if (btn && !document.getElementById('notifDot')) {
+            const dot = document.createElement('span');
+            dot.className = 'badge-dot';
+            dot.id = 'notifDot';
+            btn.appendChild(dot);
+        }
+    }
 
     // Show live dot somewhere if element exists
     const liveEl = document.getElementById('rt-live-indicator');
@@ -136,7 +220,7 @@
             title:   '🎉 New Booking — ' + data.booking_ref,
             sub:     data.guest + ' · ' + data.property + '<br>' + data.check_in + ' → ' + data.check_out,
             time:    data.created_at,
-            link:    '/admin/bookings/' + data.booking_id,
+            link:    bookingShowUrlTemplate.replace('__ID__', data.booking_id),
             amount:  data.total_amount,
         });
 
@@ -155,7 +239,7 @@
             title: '💳 Payment — ₱' + parseFloat(data.amount).toLocaleString('en-PH', {minimumFractionDigits:2}),
             sub:   data.guest + ' · ' + data.booking_ref + ' · ' + data.payment_method.toUpperCase(),
             time:  data.created_at,
-            link:  '/admin/payments',
+            link:  paymentsIndexUrl,
         });
 
         updateRevenue('rt-today-revenue', data.amount);
@@ -176,7 +260,7 @@
             title: data.property_name + ' status changed',
             sub:   (statusLabels[data.old_status] || data.old_status) + ' → ' + (statusLabels[data.new_status] || data.new_status),
             time:  data.updated_at,
-            link:  '/admin/properties',
+            link:  propertiesIndexUrl,
         });
 
         // Update property status pill if visible on page
@@ -185,7 +269,27 @@
             pill.className = 'property-status-pill status-' + data.new_status;
             pill.textContent = data.new_status.charAt(0).toUpperCase() + data.new_status.slice(1);
         }
+
+        // "Available Rooms" KPI on the dashboard
+        if (data.new_status === 'available' && data.old_status !== 'available') {
+            updateStat('rt-available-rooms', 1);
+        } else if (data.old_status === 'available' && data.new_status !== 'available') {
+            updateStat('rt-available-rooms', -1);
+        }
+
         bumpBell();
+    });
+
+    // ── Booking Updated (status change or calendar move) ──────────
+    channel.bind('booking.updated', function (data) {
+        if (data.action === 'status_changed') {
+            if (data.old_status === 'pending' && data.new_status !== 'pending') {
+                updateStat('rt-pending-count', -1);
+            } else if (data.new_status === 'pending' && data.old_status !== 'pending') {
+                updateStat('rt-pending-count', 1);
+            }
+            flashElement('rt-bookings-card');
+        }
     });
 
     // ── Show Toast ───────────────────────────────────────────────

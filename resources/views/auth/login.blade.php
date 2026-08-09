@@ -2,6 +2,10 @@
 
 @section('title', 'Login — Villa Elena Resort')
 
+
+@section('auth_bg', 'bg1.png')
+@section('auth_tagline', 'Welcome back to paradise')
+
 @section('content')
 
     <h2>Welcome back</h2>

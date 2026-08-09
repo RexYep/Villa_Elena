@@ -1,365 +1,147 @@
-{{-- SAVE AS: resources/views/admin/payments/index.blade.php --}}
+@extends('layouts.admin')
 
-@php
-    $pageTitle = 'Payments';
-@endphp
+@section('title', 'Payments — Villa Elena Admin')
+@section('page-title', 'Payments')
+@section('page-subtitle', 'All transactions and payment records')
 
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="csrf-token" content="{{ csrf_token() }}">
-    <title>Payments — Villa Elena Admin</title>
-
-    {{-- SAME FONTS as dashboard --}}
-    <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;500;600;700&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
-
-    <style>
-        /* ── SAME ROOT VARIABLES as dashboard ── */
-        :root {
-            --navy:       #0d1b2a;
-            --navy-mid:   #1a2f45;
-            --navy-light: #243b55;
-            --gold:       #c9a84c;
-            --gold-light: #e8c97a;
-            --gold-dim:   rgba(201,168,76,0.15);
-            --white:      #ffffff;
-            --off-white:  #f4f6f9;
-            --text-main:  #1a2f45;
-            --text-muted: #6b7a8d;
-            --border:     #e2e8f0;
-            --sidebar-w:  260px;   /* <-- FIXED: was --sidebar: 260px */
-            --topbar-h:   68px;
-        }
-
-        * { box-sizing: border-box; margin: 0; padding: 0; }
-
-        body {
-            font-family: 'DM Sans', sans-serif;
-            background: var(--off-white);
-            color: var(--text-main);
-            overflow-x: hidden;
-        }
-
-        /* ── SIDEBAR — same as dashboard ── */
-        .sidebar {
-            position: fixed;
-            top: 0; left: 0;
-            width: var(--sidebar-w);
-            height: 100vh;
-            background: var(--navy);
-            display: flex;
-            flex-direction: column;
-            z-index: 1000;
-            overflow-y: auto;
-            transition: transform .3s ease;
-        }
-        .sidebar-brand {
-            padding: 28px 24px 20px;
-            border-bottom: 1px solid rgba(255,255,255,0.07);
-        }
-        .sidebar-brand h1 {
-            font-family: 'Cormorant Garamond', serif;
-            color: var(--gold-light);
-            font-size: 22px;
-            font-weight: 700;
-            letter-spacing: 0.3px;
-            line-height: 1.2;
-        }
-        .sidebar-brand p {
-            color: rgba(255,255,255,0.35);
-            font-size: 11px;
-            letter-spacing: 1.5px;
-            text-transform: uppercase;
-            margin-top: 3px;
-        }
-        .sidebar-section { padding: 20px 16px 8px; }
-        .sidebar-section-label {
-            font-size: 10px;
-            font-weight: 600;
-            letter-spacing: 1.5px;
-            text-transform: uppercase;
-            color: rgba(255,255,255,0.25);
-            padding: 0 8px;
-            margin-bottom: 6px;
-        }
-        .nav-item-custom {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            padding: 10px 12px;
-            border-radius: 8px;
-            color: rgba(255,255,255,0.6);
-            text-decoration: none;
-            font-size: 14px;
-            font-weight: 400;
-            transition: all .2s;
-            margin-bottom: 2px;
-        }
-        .nav-item-custom:hover {
-            background: rgba(255,255,255,0.07);
-            color: var(--white);
-        }
-        .nav-item-custom.active {
-            background: var(--gold-dim);
-            color: var(--gold-light);
-            font-weight: 500;
-        }
-        .nav-item-custom .nav-icon {
-            width: 32px; height: 32px;
-            border-radius: 7px;
-            display: flex; align-items: center; justify-content: center;
-            font-size: 15px;
-            flex-shrink: 0;
-            background: rgba(255,255,255,0.05);
-        }
-        .nav-item-custom.active .nav-icon {
-            background: var(--gold-dim);
-            color: var(--gold);
-        }
-        .sidebar-footer {
-            margin-top: auto;
-            padding: 16px;
-            border-top: 1px solid rgba(255,255,255,0.07);
-        }
-        .user-card {
-            display: flex; align-items: center; gap: 10px;
-            padding: 10px 12px;
-            border-radius: 10px;
-            background: rgba(255,255,255,0.05);
-        }
-        .user-avatar {
-            width: 36px; height: 36px;
-            border-radius: 50%;
-            background: var(--gold-dim);
-            color: var(--gold);
-            display: flex; align-items: center; justify-content: center;
-            font-size: 15px; font-weight: 600;
-            flex-shrink: 0;
-        }
-        .user-info .name   { color: var(--white); font-size: 13px; font-weight: 500; }
-        .user-info .role-badge {
-            font-size: 10px; color: var(--gold);
-            letter-spacing: 0.5px; text-transform: uppercase;
-        }
-
-        /* ── TOPBAR — same as dashboard ── */
-        .topbar {
-            position: fixed;
-            top: 0; left: var(--sidebar-w); right: 0;
-            height: var(--topbar-h);
-            background: var(--white);
-            border-bottom: 1px solid var(--border);
-            display: flex; align-items: center; justify-content: space-between;
-            padding: 0 32px;
-            z-index: 900;
-        }
-        .topbar-left h2 {
-            font-family: 'Cormorant Garamond', serif;
-            font-size: 22px; font-weight: 600; color: var(--text-main);
-        }
-        .topbar-left p { font-size: 12px; color: var(--text-muted); margin-top: 1px; }
-        .topbar-right { display: flex; align-items: center; gap: 12px; }
-        .logout-btn {
-            display: flex; align-items: center; gap: 7px;
-            background: #fef2f2; color: #ef4444;
-            border: 1px solid #fecaca; border-radius: 9px;
-            padding: 7px 14px; font-size: 13px; font-weight: 500;
-            cursor: pointer; transition: all .2s; text-decoration: none;
-        }
-        .logout-btn:hover { background: #ef4444; color: white; border-color: #ef4444; }
-
-        /* ── MAIN CONTENT ── */
-        .main-content {
-            margin-left: var(--sidebar-w);
-            margin-top: var(--topbar-h);
-            padding: 32px;
-            min-height: calc(100vh - var(--topbar-h));
-        }
-
-        /* ── STAT CARDS ── */
-        .stats-row {
-            display: grid;
-            grid-template-columns: repeat(5, 1fr);
-            gap: 16px;
-            margin-bottom: 24px;
-        }
-        .stat-card {
-            background: var(--white);
-            border-radius: 14px;
-            border: 1px solid var(--border);
-            padding: 20px 22px;
-            transition: transform .2s, box-shadow .2s;
-        }
-        .stat-card:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(0,0,0,.07); }
-        .stat-icon {
-            width: 38px; height: 38px; border-radius: 10px;
-            display: flex; align-items: center; justify-content: center;
-            font-size: 17px; margin-bottom: 12px;
-        }
-        .stat-val {
-            font-family: 'Cormorant Garamond', serif;
-            font-size: 24px; font-weight: 700;
-            color: var(--navy); line-height: 1;
-        }
-        .stat-lbl { font-size: 11px; color: var(--text-muted); margin-top: 4px; }
-
-        /* ── FILTER CARD ── */
-        .filter-card {
-            background: var(--white);
-            border-radius: 14px;
-            border: 1px solid var(--border);
-            padding: 18px 22px;
-            margin-bottom: 20px;
-        }
-        .form-label-sm {
-            font-size: 11px; font-weight: 600; color: #374151;
-            display: block; margin-bottom: 5px;
-            text-transform: uppercase; letter-spacing: .3px;
-        }
-
-        /* ── TABLE CARD ── */
-        .table-card {
-            background: var(--white);
-            border-radius: 14px;
-            border: 1px solid var(--border);
-            overflow: hidden;
-        }
-        .table-card-header {
-            padding: 16px 22px;
-            border-bottom: 1px solid var(--border);
-            display: flex; align-items: center; justify-content: space-between;
-        }
-        .table-card-header h3 {
-            font-family: 'Cormorant Garamond', serif;
-            font-size: 17px; font-weight: 600; color: var(--navy);
-        }
-        table { width: 100%; border-collapse: collapse; }
-        thead tr { background: #f8fafc; }
-        thead th {
-            padding: 11px 16px;
-            font-size: 11px; font-weight: 700;
-            color: var(--text-muted);
-            text-transform: uppercase; letter-spacing: .5px;
-            border-bottom: 1px solid var(--border);
-            white-space: nowrap;
-        }
-        tbody tr { border-bottom: 1px solid #f8fafc; transition: background .15s; }
-        tbody tr:last-child { border-bottom: none; }
-        tbody tr:hover { background: #fafbfc; }
-        tbody td { padding: 13px 16px; font-size: 13px; vertical-align: middle; }
-
-        /* ── BADGES ── */
-        .badge {
-            padding: 3px 10px; border-radius: 20px;
-            font-size: 10px; font-weight: 700;
-            text-transform: uppercase; letter-spacing: .3px;
-            white-space: nowrap;
-        }
-        .b-cash        { background:#dcfce7; color:#15803d; }
-        .b-gcash       { background:#dbeafe; color:#1d4ed8; }
-        .b-bank_transfer { background:#f3e8ff; color:#7c3aed; }
-        .b-credit_card { background:#fef9c3; color:#a16207; }
-        .b-online      { background:#e0f2fe; color:#0369a1; }
-        .b-paymaya     { background:#dcfce7; color:#15803d; }
-        .b-grab_pay    { background:#dcfce7; color:#15803d; }
-        .b-deposit     { background:#f0fdf4; color:#16a34a; }
-        .b-full_payment { background:#dcfce7; color:#15803d; }
-        .b-partial     { background:#fef9c3; color:#a16207; }
-        .b-balance     { background:#dbeafe; color:#1d4ed8; }
-        .b-refund      { background:#fee2e2; color:#dc2626; }
-
-        /* ── BUTTONS ── */
-        .btn-navy {
-            background: var(--navy); color: #fff;
-            border: none; border-radius: 9px;
-            padding: 9px 18px; font-size: 13px; font-weight: 600;
-            cursor: pointer; font-family: 'DM Sans', sans-serif;
-            display: inline-flex; align-items: center; gap: 6px;
-            transition: all .2s; text-decoration: none;
-        }
-        .btn-navy:hover { background: var(--gold); color: var(--navy); }
-        .view-link { color: var(--gold); text-decoration: none; font-weight: 600; font-size: 12px; }
-        .view-link:hover { color: var(--navy); }
-        .refund-link { color: #dc2626; text-decoration: none; font-weight: 600; font-size: 12px; }
-
-        /* ── MODAL ── */
-        .modal-overlay {
-            display: none; position: fixed; inset: 0; z-index: 9999;
-            background: rgba(0,0,0,.5); backdrop-filter: blur(4px);
-            align-items: center; justify-content: center;
-        }
-        .modal-box {
-            background: #fff; border-radius: 18px;
-            width: 480px; max-width: calc(100vw - 32px);
-            overflow: hidden; box-shadow: 0 24px 64px rgba(0,0,0,.2);
-        }
-        .modal-head {
-            background: var(--navy); padding: 18px 22px;
-            display: flex; align-items: center; justify-content: space-between;
-        }
-        .modal-title { font-family: 'Cormorant Garamond', serif; color: #fff; font-size: 18px; font-weight: 600; }
-        .modal-close {
-            background: rgba(255,255,255,.1); border: none; color: #fff;
-            width: 30px; height: 30px; border-radius: 7px; cursor: pointer; font-size: 15px;
-        }
-        .modal-body { padding: 22px; }
-        .form-label { font-size: 12px; font-weight: 600; color: #374151; margin-bottom: 6px; display: block; }
-        .form-control, .form-select {
-            border: 1.5px solid var(--border); border-radius: 8px;
-            padding: 10px 14px; font-size: 13px;
-            font-family: 'DM Sans', sans-serif; width: 100%;
-            background: #fff; transition: border-color .2s;
-        }
-        .form-control:focus, .form-select:focus { outline: none; border-color: var(--navy); }
-        .btn-submit {
-            background: var(--navy); color: #fff; border: none;
-            border-radius: 9px; padding: 12px; width: 100%;
-            font-size: 14px; font-weight: 600; cursor: pointer;
-            font-family: 'DM Sans', sans-serif; margin-top: 8px; transition: all .2s;
-        }
-        .btn-submit:hover { background: var(--gold); color: var(--navy); }
-        .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-        .mb-12 { margin-bottom: 12px; }
-
-        .alert { border-radius: 10px; font-size: 13px; padding: 12px 16px; border: none; margin-bottom: 18px; }
-        .alert-success { background: #dcfce7; color: #15803d; }
-        .alert-danger  { background: #fee2e2; color: #dc2626; }
-        .empty-state { text-align: center; padding: 60px; color: var(--text-muted); }
-        .empty-state i { font-size: 44px; display: block; margin-bottom: 12px; opacity: .35; }
-        .pagination .page-link { border-radius: 7px; font-size: 13px; color: var(--navy); border-color: var(--border); }
-        .pagination .page-item.active .page-link { background: var(--navy); border-color: var(--navy); }
-    </style>
-</head>
-<body>
-
-{{-- SIDEBAR PARTIAL --}}
-@include('admin.partials.sidebar')
-
-{{-- TOPBAR --}}
-<div class="topbar">
-    <div class="topbar-left">
-        <h2>Payments</h2>
-        <p>All transactions and payment records</p>
-    </div>
-    <div class="topbar-right">
-        <button class="btn-navy" onclick="openRecordModal()">
-            <i class="bi bi-plus-lg"></i> Record Payment
+@section('topbar-right')
+    <button class="btn-navy" onclick="openRecordModal()">
+        <i class="bi bi-plus-lg"></i> Record Payment
+    </button>
+    <form method="POST" action="{{ route('logout') }}" class="m-0">
+        @csrf
+        <button type="submit" class="logout-btn">
+            <i class="bi bi-box-arrow-right"></i> Logout
         </button>
-        <form method="POST" action="{{ route('logout') }}" style="margin:0;">
-            @csrf
-            <button type="submit" class="logout-btn">
-                <i class="bi bi-box-arrow-right"></i> Logout
-            </button>
-        </form>
-    </div>
-</div>
+    </form>
+@endsection
 
-{{-- MAIN CONTENT --}}
-<div class="main-content">
+@push('styles')
+<style>
+/* ── STAT CARDS ── */
+.stats-row{
+    display:grid;
+    grid-template-columns:repeat(5,1fr);
+    gap:16px;
+    margin-bottom:24px;
+}
+.stat-card{
+    background:var(--cream);
+    border-radius:14px;
+    border:1px solid var(--border);
+    padding:20px 22px;
+    transition:transform .2s, box-shadow .2s;
+}
+.stat-card:hover{ transform:translateY(-2px); box-shadow:0 8px 24px rgba(44,36,22,.09); }
+.stat-icon{
+    width:38px; height:38px; border-radius:10px;
+    display:flex; align-items:center; justify-content:center;
+    font-size:17px; margin-bottom:12px;
+    background:var(--gold-dim); color:var(--gold);
+}
+.stat-val{
+    font-family:'Cormorant Garamond',serif;
+    font-size:24px; font-weight:700;
+    color:var(--stone); line-height:1;
+}
+.stat-lbl{ font-size:11px; color:var(--muted); margin-top:4px; }
+
+/* ── FILTER CARD ── */
+.filter-card{
+    background:var(--cream);
+    border-radius:14px;
+    border:1px solid var(--border);
+    padding:18px 22px;
+    margin-bottom:20px;
+}
+.form-label-sm{
+    font-size:11px; font-weight:600; color:var(--text-main);
+    display:block; margin-bottom:5px;
+    text-transform:uppercase; letter-spacing:.3px;
+}
+
+/* ── TABLE CARD ── */
+.table-card-header{
+    padding:16px 22px;
+    border-bottom:1px solid var(--border);
+    display:flex; align-items:center; justify-content:space-between;
+}
+.table-card-header h3{
+    font-family:'Cormorant Garamond',serif;
+    font-size:17px; font-weight:600; color:var(--stone);
+}
+thead tr{ background:var(--sand); }
+thead th{
+    padding:11px 16px;
+    font-size:11px; font-weight:700;
+    color:var(--muted);
+    text-transform:uppercase; letter-spacing:.5px;
+    border-bottom:1px solid var(--border);
+    white-space:nowrap;
+}
+tbody tr{ border-bottom:1px solid var(--border); transition:background .15s; }
+tbody tr:last-child{ border-bottom:none; }
+tbody tr:hover{ background:var(--sand); }
+tbody td{ padding:13px 16px; font-size:13px; vertical-align:middle; color:var(--text-main); }
+
+/* ── BADGES — semantic, unchanged ── */
+.badge{
+    padding:3px 10px; border-radius:20px;
+    font-size:10px; font-weight:700;
+    text-transform:uppercase; letter-spacing:.3px;
+    white-space:nowrap;
+}
+.b-cash        { background:var(--tag-green-bg); color:var(--tag-green-fg); }
+.b-gcash       { background:var(--tag-blue-bg); color:var(--tag-blue-fg); }
+.b-bank_transfer { background:var(--tag-purple-bg); color:var(--tag-purple-fg); }
+.b-credit_card { background:var(--tag-amber-bg); color:var(--tag-amber-fg); }
+.b-online      { background:var(--tag-cyan-bg); color:var(--tag-cyan-fg); }
+.b-paymaya     { background:var(--tag-green-bg); color:var(--tag-green-fg); }
+.b-grab_pay    { background:var(--tag-green-bg); color:var(--tag-green-fg); }
+.b-deposit     { background:var(--tag-emerald-bg); color:var(--tag-emerald-fg); }
+.b-full_payment { background:var(--tag-green-bg); color:var(--tag-green-fg); }
+.b-partial     { background:var(--tag-amber-bg); color:var(--tag-amber-fg); }
+.b-balance     { background:var(--tag-blue-bg); color:var(--tag-blue-fg); }
+.b-refund      { background:var(--tag-red-bg); color:var(--tag-red-fg); }
+
+/* ── BUTTONS ── */
+.btn-navy{
+    background:var(--terracotta); color:#fff;
+    border:none; border-radius:9px;
+    padding:9px 18px; font-size:13px; font-weight:600;
+    cursor:pointer; font-family:'DM Sans',sans-serif;
+    display:inline-flex; align-items:center; gap:6px;
+    transition:all .2s; text-decoration:none;
+}
+.btn-navy:hover{ background:var(--gold); color:#fff; }
+.view-link{ color:var(--gold); text-decoration:none; font-weight:600; font-size:12px; }
+.view-link:hover{ color:var(--terracotta); }
+.refund-link{ color:#dc2626; text-decoration:none; font-weight:600; font-size:12px; }
+
+/* ── MODAL ── */
+.modal-box{ width:480px; }
+.modal-head{ background:var(--terracotta); }
+.two-col{ display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+.mb-12{ margin-bottom:12px; }
+
+.payments-filter-grid{ display:grid; grid-template-columns:2fr 1fr 1fr 1fr 1fr auto auto; gap:12px; align-items:end; }
+
+@media (max-width: 1100px) {
+    .stats-row{ grid-template-columns:repeat(3,1fr); }
+    .payments-filter-grid{ grid-template-columns:1fr 1fr 1fr; }
+}
+@media (max-width: 700px) {
+    .stats-row{ grid-template-columns:1fr 1fr; }
+    .payments-filter-grid{ grid-template-columns:1fr 1fr; }
+}
+@media (max-width: 480px) {
+    .stats-row{ grid-template-columns:1fr; }
+    .payments-filter-grid{ grid-template-columns:1fr; }
+}
+</style>
+@endpush
+
+@section('content')
 
     @if(session('success'))
         <div class="alert alert-success"><i class="bi bi-check-circle me-2"></i>{{ session('success') }}</div>
@@ -400,7 +182,7 @@
     {{-- Filter Bar --}}
     <div class="filter-card">
         <form method="GET" action="{{ route('admin.payments.index') }}">
-            <div style="display:grid; grid-template-columns:2fr 1fr 1fr 1fr 1fr auto auto; gap:12px; align-items:end;">
+            <div class="payments-filter-grid">
                 <div>
                     <label class="form-label-sm">Search</label>
                     <input type="text" name="search" class="form-control form-control-sm"
@@ -445,7 +227,8 @@
                 </div>
                 <div style="padding-top:18px;">
                     <a href="{{ route('admin.payments.index') }}"
-                       style="background:#fff; color:var(--text-muted); border:1.5px solid var(--border);
+                       class="text-muted-theme"
+                       style="background:#fff; border:1.5px solid var(--border);
                               border-radius:7px; padding:8px 14px; font-size:12px; text-decoration:none;
                               display:inline-block;">
                         Clear
@@ -459,7 +242,7 @@
     <div class="table-card">
         <div class="table-card-header">
             <h3>Payment Records</h3>
-            <span style="font-size:12px; color:var(--text-muted);">{{ $payments->total() }} records</span>
+            <span class="text-muted-theme" style="font-size:12px;">{{ $payments->total() }} records</span>
         </div>
 
         @if($payments->isEmpty())
@@ -485,7 +268,7 @@
                 <tbody>
                     @foreach($payments as $payment)
                     <tr>
-                        <td style="color:var(--text-muted); font-size:12px;">
+                        <td class="text-muted-theme" style="font-size:12px;">
                             {{ $payment->created_at->format('M d, Y') }}
                         </td>
                         <td>
@@ -506,7 +289,7 @@
                         <td>
                             <strong>₱{{ number_format($payment->amount, 2) }}</strong>
                         </td>
-                        <td style="color:var(--text-muted); font-size:12px; max-width:140px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
+                        <td class="text-muted-theme" style="font-size:12px; max-width:140px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
                             {{ $payment->notes ?? '—' }}
                         </td>
                         <td style="white-space:nowrap;">
@@ -531,9 +314,9 @@
         @endif
     </div>
 
-</div>{{-- end main-content --}}
+@endsection
 
-
+@section('modals')
 {{-- Record Payment Modal --}}
 <div class="modal-overlay" id="recordModal">
     <div class="modal-box">
@@ -549,7 +332,7 @@
                     placeholder="e.g. VE-XXXXXXXX" autocomplete="off"
                     oninput="lookupBooking(this.value)">
                 <input type="hidden" name="booking_id" id="bookingIdInput">
-                <div id="bookingInfo" style="margin-top:8px; font-size:12px; color:var(--text-muted); display:none; background:#f8fafc; border-radius:8px; padding:10px 12px;"></div>
+                <div id="bookingInfo" class="text-muted-theme" style="margin-top:8px; font-size:12px; display:none; background:#f8fafc; border-radius:8px; padding:10px 12px;"></div>
             </div>
             <div class="two-col mb-12">
                 <div>
@@ -584,7 +367,7 @@
                 </div>
             </div>
             <div class="mb-12">
-                <label class="form-label">Notes <span style="color:var(--text-muted); font-weight:400;">(optional)</span></label>
+                <label class="form-label">Notes <span class="text-muted-theme" style="font-weight:400;">(optional)</span></label>
                 <input type="text" name="notes" class="form-control" placeholder="e.g. Cash received at frontdesk">
             </div>
             <button type="submit" class="btn-submit"><i class="bi bi-check-circle me-2"></i> Record Payment</button>
@@ -608,7 +391,7 @@
             <div class="mb-12">
                 <label class="form-label">Refund Amount (₱)</label>
                 <input type="number" name="refund_amount" id="refundAmountInput" class="form-control" min="1" step="0.01" required>
-                <div style="font-size:11px; color:var(--text-muted); margin-top:4px;">Max: ₱<span id="refundMax"></span></div>
+                <div class="text-muted-theme" style="font-size:11px; margin-top:4px;">Max: ₱<span id="refundMax"></span></div>
             </div>
             <div class="mb-12">
                 <label class="form-label">Reason for Refund</label>
@@ -621,8 +404,9 @@
         </form>
     </div>
 </div>
+@endsection
 
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+@push('scripts')
 <script>
 function openRecordModal() {
     document.getElementById('recordModal').style.display = 'flex';
@@ -632,7 +416,13 @@ function openRefundModal(paymentId, amount, bookingRef) {
     document.getElementById('refundMax').textContent        = parseFloat(amount).toLocaleString('en-PH', {minimumFractionDigits:2});
     document.getElementById('refundAmountInput').max        = amount;
     document.getElementById('refundAmountInput').value      = amount;
-    document.getElementById('refundForm').action            = `/villa-elena/public/admin/payments/${paymentId}/refund`;
+    // Gumagamit ng route() helper (naka-embed via Blade) sa halip na
+    // hardcoded na "/villa-elena/public/..." path — para gumana ito
+    // kahit paano ma-access ang app (php artisan serve, XAMPP subfolder,
+    // custom domain, atbp.), dahil laging tama ang APP_URL-aware na URL
+    // na ginagawa ng Laravel mismo.
+    document.getElementById('refundForm').action            =
+        "{{ route('admin.payments.refund', ['payment' => '__PAYMENT_ID__']) }}".replace('__PAYMENT_ID__', paymentId);
     document.getElementById('refundModal').style.display    = 'flex';
 }
 function closeModal(id) {
@@ -645,11 +435,12 @@ function closeModal(id) {
 });
 
 let lookupTimer;
+const bookingLookupUrlTemplate = '{{ route('admin.bookings.lookup', ['ref' => '__REF__']) }}';
 function lookupBooking(ref) {
     clearTimeout(lookupTimer);
     if (ref.length < 6) { document.getElementById('bookingInfo').style.display = 'none'; return; }
     lookupTimer = setTimeout(() => {
-        fetch(`/villa-elena/public/admin/bookings/lookup?ref=${ref}`, {
+        fetch(bookingLookupUrlTemplate.replace('__REF__', encodeURIComponent(ref)), {
             headers: { 'X-Requested-With': 'XMLHttpRequest' }
         })
         .then(r => r.json())
@@ -666,6 +457,4 @@ function lookupBooking(ref) {
 
 setTimeout(() => { document.querySelectorAll('.alert').forEach(a => a.style.display='none'); }, 5000);
 </script>
-@include('admin.partials.realtime') 
-</body>
-</html>
+@endpush

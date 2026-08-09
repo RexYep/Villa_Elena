@@ -38,7 +38,16 @@ return [
             'report' => false,
         ],
 
-        'public' => [
+        // Render's disk is ephemeral (uploads vanish on restart/redeploy), so
+        // in production we point this at Cloudinary instead. Set
+        // CLOUDINARY_URL to switch it on; leave it empty for local dev, which
+        // keeps using the local disk with no code changes needed elsewhere.
+        'public' => env('CLOUDINARY_URL') ? [
+            'driver' => 'cloudinary',
+            'url' => env('CLOUDINARY_URL'),
+            'throw' => false,
+            'report' => false,
+        ] : [
             'driver' => 'local',
             'root' => storage_path('app/public'),
             'url' => rtrim(env('APP_URL', 'http://localhost'), '/').'/storage',

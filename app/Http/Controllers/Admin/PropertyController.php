@@ -6,13 +6,34 @@ use App\Http\Controllers\Controller;
 use App\Models\Property;
 use App\Models\PropertyImage;
 use App\Models\AvailabilityBlock;
+use App\Models\Setting;
 use App\Models\StaffLog;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
-use App\Events\PropertyStatusChanged;
 
 class PropertyController extends Controller
 {
+    // Seed value only — used until the admin saves the Settings ->
+    // Amenities tab for the first time (see Admin\SettingsController).
+    private const DEFAULT_AMENITIES = [
+        'WiFi', 'Air Conditioning', 'Private Pool', 'Hot Tub',
+        'Kitchen', 'BBQ Grill', 'Parking',
+        'Garden View', 'Mountain View', 'Sea View',
+        'Smart TV', 'Refrigerator', 'Washing Machine',
+        'Safety Deposit Box', 'Balcony / Terrace',
+        'Karaoke', 'Game Room',
+        'Outdoor Shower', 'Water Heater', 'Generator',
+        'CCTV', 'Rice Cooker', 'Dining Area',
+    ];
+
+    private function amenityList(): array
+    {
+        return json_decode(
+            Setting::get('property_amenities', json_encode(self::DEFAULT_AMENITIES)),
+            true
+        ) ?: [];
+    }
+
     // ── List All Properties ────────────────────────────────────────
     public function index()
     {
@@ -35,37 +56,44 @@ class PropertyController extends Controller
     // ── Show Create Form ───────────────────────────────────────────
     public function create()
     {
-        return view('admin.properties.create');
+        // Isang Villa (master, bookable) na lang dapat mayroon.
+        // Kapag meron nang Villa, hindi na dapat pagpipilian ang type —
+        // Room na agad ang bagong property (ipinapasa ang variable na ito
+        // para malaman ng view kung itatago ang type selector).
+        $existingVilla = Property::where('type', 'villa')->first();
+        $amenityList   = $this->amenityList();
+
+        return view('admin.properties.create', compact('existingVilla', 'amenityList'));
     }
 
     // ── Store New Property ─────────────────────────────────────────
     public function store(Request $request)
     {
+        $isVilla = $request->type === 'villa';
+
         $request->validate([
-            'property_name' => 'required|string|max:150',
-            'type'          => 'required|in:villa,cottage,room,hall',
+            'property_name' => $isVilla ? 'required|string|max:150' : 'nullable|string|max:150',
+            'type'          => 'required|in:villa,room',
             'description'   => 'nullable|string',
             'max_capacity'  => 'required|integer|min:1',
-            'base_price'    => 'required|numeric|min:0',
+            'base_price'    => $isVilla ? 'required|numeric|min:0' : 'nullable|numeric|min:0',
             'weekend_price' => 'nullable|numeric|min:0',
             'floor_area_sqm'=> 'nullable|numeric|min:0',
             'amenities'     => 'nullable|array',
-            'status'        => 'required|in:available,occupied,maintenance',
-            'images.*'      => 'nullable|image|mimes:jpg,jpeg,png,webp|max:3048',
+            'images'   => 'nullable|array|max:20',
+            'images.*' => 'nullable|image|mimes:jpg,jpeg,png,webp|max:3048',
         ]);
 
         $property = Property::create([
             'property_name'  => $request->property_name,
             'type'           => $request->type,
-            'description'    => $request->description,
+            'description'    => $isVilla ? $request->description : null,
             'max_capacity'   => $request->max_capacity,
-            'base_price'     => $request->base_price,
-            'weekend_price'  => $request->weekend_price,
+            'base_price'     => $isVilla ? $request->base_price : 0,
+            'weekend_price'  => $isVilla ? $request->weekend_price : null,
             'floor_area_sqm' => $request->floor_area_sqm,
-            'amenities'      => $request->amenities ?? [],
-            'status'         => $request->status,
+            'amenities'      => $isVilla ? ($request->amenities ?? []) : [],
             'is_featured'    => $request->boolean('is_featured'),
-            'sort_order'     => $request->sort_order ?? 0,
             'created_by'     => auth()->id(),
         ]);
 
@@ -102,41 +130,46 @@ class PropertyController extends Controller
     public function edit(Property $property)
     {
         $property->load('images');
-        return view('admin.properties.edit', compact('property'));
+
+        // Ibang Villa (maliban dito mismo) para sa parehong warning
+        $existingVilla = Property::where('type', 'villa')->where('id', '!=', $property->id)->first();
+        $amenityList   = $this->amenityList();
+
+        return view('admin.properties.edit', compact('property', 'existingVilla', 'amenityList'));
     }
 
     // ── Update Property ────────────────────────────────────────────
     public function update(Request $request, Property $property)
     {
+        $isVilla = $request->type === 'villa';
+
         $request->validate([
-            'property_name' => 'required|string|max:150',
-            'type'          => 'required|in:villa,cottage,room,hall',
+            'property_name' => $isVilla ? 'required|string|max:150' : 'nullable|string|max:150',
+            'type'          => 'required|in:villa,room',
             'max_capacity'  => 'required|integer|min:1',
-            'base_price'    => 'required|numeric|min:0',
+            'base_price'    => $isVilla ? 'required|numeric|min:0' : 'nullable|numeric|min:0',
             'weekend_price' => 'nullable|numeric|min:0',
-            'status'        => 'required|in:available,occupied,maintenance',
-            'images.*'      => 'nullable|image|mimes:jpg,jpeg,png,webp|max:3048',
+            'images'   => 'nullable|array|max:20',
+            'images.*' => 'nullable|image|mimes:jpg,jpeg,png,webp|max:3048',
         ]);
 
-        $oldStatus = $property->status;
+        // I-kunin ang lumang datos ng property BAGO mag-update, para
+        // magamit sa StaffLog (audit trail: "ano bago, ano pagkatapos").
+        // `status` ay hindi na dito na-e-edit — awtomatiko na lang itong
+        // pinapalitan ng check-in/check-out flow (walang binabago dito).
+        $oldData = $property->toArray();
 
         $property->update([
             'property_name'  => $request->property_name,
             'type'           => $request->type,
-            'description'    => $request->description,
+            'description'    => $isVilla ? $request->description : null,
             'max_capacity'   => $request->max_capacity,
-            'base_price'     => $request->base_price,
-            'weekend_price'  => $request->weekend_price,
+            'base_price'     => $isVilla ? $request->base_price : 0,
+            'weekend_price'  => $isVilla ? $request->weekend_price : null,
             'floor_area_sqm' => $request->floor_area_sqm,
-            'amenities'      => $request->amenities ?? [],
-            'status'         => $request->status,
+            'amenities'      => $isVilla ? ($request->amenities ?? []) : [],
             'is_featured'    => $request->boolean('is_featured'),
-            'sort_order'     => $request->sort_order ?? 0,
         ]);
-
-       if ($oldStatus !== $property->fresh()->status) {
-    event(new PropertyStatusChanged($property->fresh(), $oldStatus));
-    }
 
         // Handle new image uploads
         if ($request->hasFile('images')) {
@@ -154,7 +187,7 @@ class PropertyController extends Controller
         }
 
         StaffLog::record('updated_property', 'properties', $property->id,
-            "Updated property: {$property->property_name}", $old, $property->fresh()->toArray());
+            "Updated property: {$property->property_name}", $oldData, $property->fresh()->toArray());
 
         return redirect()->route('admin.properties.index')
             ->with('success', "Property \"{$property->property_name}\" updated successfully.");
@@ -201,7 +234,7 @@ class PropertyController extends Controller
     }
 
     // ── Delete Image ───────────────────────────────────────────────
-    public function deleteImage(PropertyImage $image)
+    public function deleteImage(Request $request, PropertyImage $image)
     {
         Storage::disk('public')->delete($image->image_path);
 
@@ -213,6 +246,17 @@ class PropertyController extends Controller
         }
 
         $image->delete();
+
+        // Ang delete button na ito ay AJAX-only (fetch() sa edit.blade.php)
+        // — hindi ito plain form submit. Ang dating `back()` (302 redirect
+        // pabalik sa edit page) ay nagpapa-follow ng redirect sa fetch(),
+        // na hindi laging maasahang nagre-resolve bilang "ok" sa totoong
+        // browser (kahit successful naman talaga ang delete sa DB/storage
+        // — kaya lumalabas na parang nabigo kahit tapos na). Direktang
+        // JSON response na lang, walang redirect chain na pag-aalinlanganan.
+        if ($request->wantsJson()) {
+            return response()->json(['success' => true, 'message' => 'Image deleted.']);
+        }
 
         return back()->with('success', 'Image deleted.');
     }

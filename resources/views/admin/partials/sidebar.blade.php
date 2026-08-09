@@ -49,7 +49,7 @@
         <div class="sidebar-section-label">Analytics</div>
         <a href="{{ route('admin.insights.index') }}" class="nav-item-custom {{ request()->routeIs('admin.insights.*') ? 'active' : '' }}">
             <span class="nav-icon"><i class="bi bi-stars"></i></span>
-            Smart Insights
+             Insights
         </a>
         <a href="{{ route('admin.forecast.index') }}" class="nav-item-custom {{ request()->routeIs('admin.forecast.*') ? 'active' : '' }}">
             <span class="nav-icon"><i class="bi bi-graph-up-arrow"></i></span>

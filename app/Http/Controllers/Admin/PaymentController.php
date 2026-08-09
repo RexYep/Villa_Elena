@@ -86,10 +86,11 @@ class PaymentController extends Controller
     'amount'         => $request->amount,
     'payment_method' => $request->payment_method,
     'payment_type'   => $request->payment_type,
+    'status'         => 'success',
     'payment_date'   => $request->payment_date,
     'received_by'    => auth()->id(),
     'notes'          => $request->notes,
-]); 
+]);
         event(new PaymentReceived($payment));
 
          NotificationHelper::paymentRecorded($booking, $request->amount, $request->payment_method);
@@ -107,45 +108,76 @@ class PaymentController extends Controller
     public function refund(Request $request, Payment $payment)
     {
         $request->validate([
-            'refund_amount' => 'required|numeric|min:1|max:' . $payment->amount,
+            'refund_amount' => 'required|numeric|min:1',
             'refund_reason' => 'required|string|min:5',
         ]);
 
         $booking = $payment->booking;
 
-    $refundPayment = Payment::create([
-    'booking_id'     => $booking->id,
-    'amount'         => $request->refund_amount,
-    'payment_method' => $payment->payment_method,
-    'payment_type'   => 'refund',
-    'payment_date'   => today(),
-    'received_by'    => auth()->id(),
-    'notes'          => "Refund: {$request->refund_reason}",
-]);
+        // Naka-wrap sa transaction + lockForUpdate() para hindi ma-double
+        // process ang refund (double-click, retry dahil sa slow network,
+        // atbp.) — kinukumpara ang bagong refund laban sa AKTWAL na
+        // natitirang refundable balance ng BUONG booking (total paid minus
+        // total naunang na-refund), hindi lang sa orihinal na halaga ng
+        // isang Payment record.
+        $refundPayment = \Illuminate\Support\Facades\DB::transaction(function () use ($request, $payment, $booking) {
 
-event(new PaymentReceived($refundPayment));
-       
+            $totalPaid = Payment::where('booking_id', $booking->id)
+                ->where('payment_type', '!=', 'refund')
+                ->lockForUpdate()
+                ->sum('amount');
 
-        NotificationHelper::refundIssued($booking, $request->refund_amount, $request->refund_reason);
- 
+            $totalRefunded = Payment::where('booking_id', $booking->id)
+                ->where('payment_type', 'refund')
+                ->lockForUpdate()
+                ->sum('amount');
 
-        // Recalculate
+            $refundableBalance = $totalPaid - $totalRefunded;
+
+            if ($request->refund_amount > $refundableBalance) {
+                return null; // signal na lumampas sa refundable balance
+            }
+
+            $newRefund = Payment::create([
+                'booking_id'     => $booking->id,
+                'amount'         => $request->refund_amount,
+                'payment_method' => $payment->payment_method,
+                'payment_type'   => 'refund',
+                'status'         => 'success',
+                'payment_date'   => today(),
+                'received_by'    => auth()->id(),
+                'notes'          => "Refund: {$request->refund_reason}",
+            ]);
+
+            event(new PaymentReceived($newRefund));
+
+            NotificationHelper::refundIssued($booking, $request->refund_amount, $request->refund_reason);
+
+            Notification::create([
+                'user_id' => $booking->user_id,
+                'type'    => 'in_app',
+                'title'   => 'Refund Processed',
+                'message' => "A refund of ₱" . number_format($request->refund_amount, 2) .
+                    " has been processed for booking {$booking->booking_ref}. Reason: {$request->refund_reason}",
+                'link'    => route('customer.bookings.show', $booking, false),
+                'is_read' => 0,
+                'status'  => 'sent',
+                'sent_at' => now(),
+            ]);
+
+            StaffLog::record('refund_issued', 'payments', $payment->id,
+                "Refund ₱{$request->refund_amount} for booking {$booking->booking_ref}. Reason: {$request->refund_reason}");
+
+            return $newRefund;
+        });
+
+        if (!$refundPayment) {
+            return back()->with('error', 'The refund amount exceeds the remaining refundable balance for this booking. Please check the payment history first.');
+        }
+
+        // Recalculate (sa labas ng transaction, hindi problema dahil
+        // consistent na ang Payment records nung nagsara na ang transaction)
         $this->recalculateBooking($booking);
-
-        // Notify guest
-        Notification::create([
-            'user_id' => $booking->user_id,
-            'type'    => 'in_app',
-            'title'   => 'Refund Processed',
-            'message' => "A refund of ₱" . number_format($request->refund_amount, 2) .
-                " has been processed for booking {$booking->booking_ref}. Reason: {$request->refund_reason}",
-            'is_read' => 0,
-            'status'  => 'sent',
-            'sent_at' => now(),
-        ]);
-
-        StaffLog::record('refund_issued', 'payments', $payment->id,
-            "Refund ₱{$request->refund_amount} for booking {$booking->booking_ref}. Reason: {$request->refund_reason}");
 
         return back()->with('success', "✅ Refund of ₱" . number_format($request->refund_amount, 2) . " processed.");
     }

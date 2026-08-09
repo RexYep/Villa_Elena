@@ -1,0 +1,387 @@
+@import './base.css';
+
+/*
+ * Shared stylesheet for all resources/views/admin/** pages.
+ * Extracted from ~20 pages that each carried their own copy-pasted
+ * <style> block. Only genuinely identical, cross-page rules live here
+ * (sidebar/topbar shell, form controls, table/modal/pagination/badge
+ * primitives). Page-specific layout (stat grids, kpi cards, property
+ * cards, calendar/chart CSS, etc.) stays in each view's @push('styles').
+ *
+ * Canonical design tokens — some source pages had drifted onto stale
+ * variable names (--navy, --white, --text-muted) left over from an
+ * earlier navy-themed palette; this is the single source of truth now.
+ * Base tokens (--stone, --terracotta, --gold, --gold-light, --sand,
+ * --cream, --border, --muted) come from base.css — only admin's own
+ * extra tokens are declared here.
+ */
+:root {
+    --stone-mid: #4a3d2a;
+    --terracotta-dark: #b55a31;
+    --gold-dim: rgba(184, 148, 63, 0.15);
+    --text-main: #2c2416;
+    --sidebar-w: 260px;
+    --topbar-h: 68px;
+}
+
+* { margin: 0; padding: 0; }
+
+body {
+    font-family: 'DM Sans', sans-serif;
+    background: var(--sand);
+    color: var(--text-main);
+    overflow-x: hidden;
+}
+
+/* ── SIDEBAR ─────────────────────────────────────────────── */
+.sidebar {
+    position: fixed;
+    top: 0; left: 0;
+    width: var(--sidebar-w);
+    height: 100vh;
+    background: var(--cream);
+    display: flex;
+    flex-direction: column;
+    border-right: 1px solid var(--border);
+    z-index: 1000;
+    overflow-y: auto;
+    transition: transform .3s ease;
+}
+.sidebar-brand { padding: 28px 24px 20px; border-bottom: 1px solid var(--border); }
+.sidebar-brand h1 {
+    font-family: 'Cormorant Garamond', serif;
+    color: var(--text-main);
+    font-size: 22px;
+    font-weight: 700;
+    letter-spacing: 0.3px;
+    line-height: 1.2;
+}
+.sidebar-brand p {
+    color: var(--muted);
+    font-size: 11px;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    margin-top: 3px;
+}
+.sidebar-section { padding: 20px 16px 8px; }
+.sidebar-section-label {
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    color: var(--muted);
+    padding: 0 8px;
+    margin-bottom: 6px;
+}
+.nav-item-custom {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 12px;
+    border-radius: 8px;
+    color: var(--muted);
+    text-decoration: none;
+    font-size: 14px;
+    font-weight: 400;
+    transition: all .2s;
+    margin-bottom: 2px;
+}
+.nav-item-custom:hover { background: var(--sand); color: var(--text-main); }
+.nav-item-custom.active {
+    background: var(--sand);
+    color: var(--terracotta);
+    border-left: 3px solid var(--terracotta);
+    padding-left: 9px;
+    font-weight: 600;
+}
+.nav-item-custom .nav-icon,
+.nav-icon {
+    width: 32px; height: 32px;
+    border-radius: 7px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 15px;
+    flex-shrink: 0;
+    background: var(--border);
+    color: var(--text-main);
+}
+.nav-item-custom.active .nav-icon { background: var(--terracotta); color: #fff; }
+.sidebar-footer { margin-top: auto; padding: 16px; border-top: 1px solid var(--border); }
+.user-card {
+    display: flex; align-items: center; gap: 10px;
+    padding: 10px 12px;
+    border-radius: 10px;
+    background: var(--sand);
+}
+.user-avatar {
+    width: 36px; height: 36px;
+    border-radius: 50%;
+    background: var(--terracotta);
+    color: #fff;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 15px; font-weight: 600;
+    flex-shrink: 0;
+}
+.user-info .name { color: var(--text-main); font-size: 13px; font-weight: 500; }
+.user-info .role-badge { font-size: 10px; color: var(--gold); letter-spacing: 0.5px; text-transform: uppercase; }
+
+/* ── TOPBAR ──────────────────────────────────────────────── */
+.topbar {
+    position: fixed;
+    top: 0; left: var(--sidebar-w); right: 0;
+    height: var(--topbar-h);
+    background: var(--cream);
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 32px;
+    z-index: 900;
+}
+.topbar-left { display: flex; align-items: center; gap: 14px; min-width: 0; }
+.topbar-left h2 { font-family: 'Cormorant Garamond', serif; font-size: 22px; font-weight: 600; color: var(--text-main); }
+.topbar-left p { font-size: 12px; color: var(--muted); margin-top: 1px; }
+.topbar-right { display: flex; align-items: center; gap: 12px; }
+
+/* ── MOBILE SIDEBAR TOGGLE ───────────────────────────────── */
+.sidebar-toggle {
+    display: none;
+    align-items: center; justify-content: center;
+    width: 38px; height: 38px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: #fff;
+    color: var(--text-main);
+    font-size: 17px;
+    cursor: pointer;
+    flex-shrink: 0;
+}
+.sidebar-backdrop {
+    display: none;
+    position: fixed; inset: 0;
+    background: rgba(44, 36, 22, .45);
+    z-index: 999;
+}
+.sidebar-backdrop.open { display: block; }
+
+@media (max-width: 992px) {
+    .sidebar { transform: translateX(-100%); box-shadow: 0 0 40px rgba(0,0,0,.25); }
+    .sidebar.open { transform: translateX(0); }
+    .topbar { left: 0; padding: 0 16px; }
+    .main-content { margin-left: 0; padding: 20px; }
+    .sidebar-toggle { display: flex; }
+    .topbar-left h2 { font-size: 18px; }
+    .topbar-left p { display: none; }
+}
+
+@media (max-width: 480px) {
+    .topbar { padding: 0 12px; }
+    .main-content { padding: 14px; }
+    .topbar-right { gap: 6px; }
+}
+
+/* ── RESPONSIVE: TABLES & FORMS (shared across admin pages) ──────
+   Most admin pages build their table/form markup around these same
+   .table-card / .two-col primitives, so fixing it here once covers
+   bookings, payments, users, reviews, properties, settings, etc.
+   without needing a matching breakpoint copy-pasted into every page. */
+@media (max-width: 900px) {
+    .table-card { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+    .table-card table { min-width: 640px; }
+    .table-card .table-header,
+    .table-card .pagination-wrap { position: sticky; left: 0; }
+    .two-col { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 600px) {
+    .table-header { flex-direction: column; align-items: flex-start; gap: 10px; }
+    .form-card-body { padding: 18px; }
+}
+.logout-btn {
+    display: flex; align-items: center; gap: 7px;
+    background: #fff2f2; color: #dc2626;
+    border: 1px solid #f5c7c7; border-radius: 9px;
+    padding: 7px 14px; font-size: 13px; font-weight: 500;
+    cursor: pointer; transition: all .2s; text-decoration: none;
+}
+.logout-btn:hover { background: #dc2626; color: #fff; border-color: #dc2626; }
+
+/* ── MAIN CONTENT ────────────────────────────────────────── */
+.main-content {
+    margin-left: var(--sidebar-w);
+    margin-top: var(--topbar-h);
+    padding: 32px;
+    min-height: calc(100vh - var(--topbar-h));
+}
+
+/* ── BREADCRUMB ──────────────────────────────────────────── */
+.breadcrumb-row { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); margin-bottom: 24px; }
+.breadcrumb-row a { color: var(--muted); text-decoration: none; }
+.breadcrumb-row a:hover { color: var(--stone); }
+.breadcrumb-row .sep { color: var(--border); }
+.breadcrumb-row .current { color: var(--text-main); font-weight: 500; }
+
+/* ── GENERIC BADGE/PILL SHAPE ────────────────────────────────
+   Shared shape only — every page keeps its own semantic color
+   rules (.s-pending, .b-cash, .role-admin, etc.) locally, since
+   those vocabularies differ per page (booking status vs payment
+   method vs user role vs property status). */
+.status-badge, .badge, .role-badge, .status-pill, .booking-status,
+.status-active, .status-inactive {
+    padding: 3px 10px;
+    border-radius: 20px;
+    font-size: 11px;
+    font-weight: 600;
+    white-space: nowrap;
+    display: inline-block;
+}
+
+/* ── TABLE-CARD / TABLE ──────────────────────────────────── */
+.table-card { background: var(--cream); border-radius: 14px; border: 1px solid var(--border); overflow: hidden; }
+.table-header {
+    padding: 16px 24px;
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: space-between;
+}
+.table-header h3 { font-family: 'Cormorant Garamond', serif; font-size: 17px; font-weight: 600; color: var(--text-main); }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th {
+    font-size: 11px; font-weight: 600;
+    text-transform: uppercase; letter-spacing: .8px;
+    color: var(--muted);
+    padding: 12px 20px;
+    border-bottom: 1px solid var(--border);
+    text-align: left;
+    white-space: nowrap;
+}
+td { padding: 14px 20px; border-bottom: 1px solid var(--border); vertical-align: middle; color: var(--text-main); }
+tr:last-child td { border-bottom: none; }
+tr:hover td { background: var(--sand); }
+
+/* ── ACTION BUTTONS ──────────────────────────────────────── */
+.action-btns { display: flex; gap: 5px; }
+.btn-icon {
+    width: 30px; height: 30px;
+    border-radius: 7px;
+    border: 1px solid var(--border);
+    background: #fff;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 13px;
+    cursor: pointer;
+    transition: all .2s;
+    text-decoration: none;
+    color: var(--muted);
+}
+.btn-icon:hover { background: var(--terracotta); color: #fff; border-color: var(--terracotta); }
+.btn-icon.danger:hover { background: #ef4444; border-color: #ef4444; color: #fff; }
+.btn-icon.warning:hover { background: #f59e0b; border-color: #f59e0b; color: #fff; }
+
+/* ── EMPTY STATE ─────────────────────────────────────────── */
+.empty-state { text-align: center; padding: 60px 20px; color: var(--muted); }
+.empty-state i { font-size: 44px; display: block; margin-bottom: 10px; opacity: .4; }
+
+/* ── PAGINATION ──────────────────────────────────────────── */
+.pagination-wrap { padding: 16px 24px; border-top: 1px solid var(--border); }
+.pagination { font-size: 13px; margin: 0; gap: 4px; }
+.pagination .page-link {
+    border-radius: 7px;
+    font-size: 13px;
+    color: var(--terracotta);
+    border-color: var(--border);
+}
+.pagination .page-item.active .page-link { background: var(--terracotta); border-color: var(--terracotta); color: #fff; }
+
+/* ── ALERT ───────────────────────────────────────────────── */
+.alert { border-radius: 10px; font-size: 13px; padding: 12px 16px; margin-bottom: 20px; border: none; }
+.alert-success { background: #dcfce7; color: #15803d; }
+.alert-danger { background: #fee2e2; color: #dc2626; }
+
+/* ── FORM CONTROLS ───────────────────────────────────────── */
+.form-card { background: var(--cream); border-radius: 14px; border: 1px solid var(--border); overflow: hidden; margin-bottom: 20px; }
+.form-card-header { padding: 18px 24px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 10px; }
+.form-card-header .card-icon {
+    width: 34px; height: 34px;
+    border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 16px;
+    background: var(--gold-dim);
+    color: var(--gold);
+}
+.form-card-header h3 { font-family: 'Cormorant Garamond', serif; font-size: 17px; font-weight: 600; color: var(--text-main); }
+.form-card-body { padding: 24px; }
+.form-label { font-size: 13px; font-weight: 600; color: var(--text-main); margin-bottom: 6px; display: block; }
+.req { color: #ef4444; margin-left: 2px; }
+.hint { font-size: 11px; color: var(--muted); margin-top: 4px; display: block; }
+.form-control, .form-select {
+    border: 1.5px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 14px;
+    font-size: 14px;
+    font-family: 'DM Sans', sans-serif;
+    width: 100%;
+    transition: border-color .2s;
+    background: #fff;
+    color: var(--text-main);
+}
+.form-control:focus, .form-select:focus {
+    outline: none;
+    border-color: var(--terracotta);
+    box-shadow: 0 0 0 3px rgba(196, 103, 58, 0.08);
+}
+.is-invalid { border-color: #ef4444 !important; }
+.invalid-feedback { font-size: 12px; color: #ef4444; margin-top: 4px; display: block; }
+.two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.input-group .form-control { border-right: none; }
+.input-group .btn-outline-secondary {
+    border: 1.5px solid var(--border);
+    border-left: none;
+    border-radius: 0 8px 8px 0;
+    background: #fff;
+    color: var(--muted);
+}
+.btn-submit {
+    background: var(--terracotta);
+    color: #fff;
+    border: none;
+    border-radius: 9px;
+    padding: 12px 28px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    font-family: 'DM Sans', sans-serif;
+    transition: background .2s;
+}
+.btn-submit:hover { background: var(--gold); }
+.btn-cancel-link { color: var(--muted); font-size: 13px; text-decoration: none; margin-left: 16px; }
+.btn-cancel-link:hover { color: var(--stone); }
+
+/* ── MODALS (custom overlay style used by payments/reviews) ─ */
+.modal-overlay {
+    display: none;
+    position: fixed; inset: 0; z-index: 9999;
+    background: rgba(44, 36, 22, .5);
+    backdrop-filter: blur(4px);
+    align-items: center; justify-content: center;
+}
+.modal-overlay.open { display: flex; }
+.modal-box {
+    background: var(--cream);
+    border-radius: 16px;
+    width: 460px;
+    max-width: calc(100vw - 32px);
+    overflow: hidden;
+    box-shadow: 0 20px 60px rgba(44, 36, 22, .25);
+}
+.modal-head {
+    padding: 16px 22px;
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: space-between;
+}
+.modal-title, .modal-head h3 { font-family: 'Cormorant Garamond', serif; font-size: 17px; font-weight: 600; color: var(--text-main); }
+.modal-close {
+    background: var(--sand);
+    border: none;
+    border-radius: 7px;
+    padding: 5px 10px;
+    font-size: 13px;
+    color: var(--muted);
+    cursor: pointer;
+}
+.modal-body { padding: 20px; }

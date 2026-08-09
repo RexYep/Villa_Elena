@@ -60,12 +60,15 @@ return [
     |--------------------------------------------------------------------------
     |
     | Here you may specify the default timezone for your application, which
-    | will be used by the PHP date and date-time functions. The timezone
-    | is set to "UTC" by default as it is suitable for most use cases.
+    | will be used by the PHP date and date-time functions. Villa Elena
+    | operates in the Philippines, so this is set to Asia/Manila (UTC+8)
+    | rather than the Laravel default of UTC — booking/cancellation/
+    | refund/auto-checkin time math (24hr grace, day-count tiers, stale
+    | pending thresholds, etc.) all rely on wall-clock local time.
     |
     */
 
-    'timezone' => 'UTC',
+    'timezone' => env('APP_TIMEZONE', 'Asia/Manila'),
 
     /*
     |--------------------------------------------------------------------------
@@ -122,5 +125,20 @@ return [
         'driver' => env('APP_MAINTENANCE_DRIVER', 'file'),
         'store' => env('APP_MAINTENANCE_STORE', 'database'),
     ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Cron Trigger Secret
+    |--------------------------------------------------------------------------
+    |
+    | Render's free plan has no Cron Jobs feature, so an external pinger
+    | (e.g. cron-job.org) hits routes/web.php's /cron/run-schedule/{token}
+    | instead of a real server cron. This token guards that route. Read
+    | here (not env() directly in the route) so it still works correctly
+    | after `php artisan config:cache`.
+    |
+    */
+
+    'cron_secret' => env('CRON_SECRET'),
 
 ];

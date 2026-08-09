@@ -1,0 +1,60 @@
+/*
+ * Design tokens shared across all sections (admin / customer+portal / auth).
+ * Each section's own CSS file (admin.css, portal.css, auth.css) imports this
+ * and adds its own section-specific tokens on top — kept separate rather
+ * than one global theme file so a change in one area can't silently
+ * collide with another's palette.
+ */
+:root {
+    --stone: #2c2416;
+    --terracotta: #c4673a;
+    --gold: #b8943f;
+    --gold-light: #d4aa5a;
+    --sand: #f5f0e8;
+    --cream: #fdfbf7;
+    --border: #e4ddd0;
+    --muted: #8a7f6e;
+
+    /* Semantic state colors — the single source of truth for status/role/
+     * payment badge colors, referenced both by .tag-* below and directly
+     * by page-local badge rules (e.g. .s-confirmed, .role-admin) so every
+     * page that agrees on a color agrees by construction, not by copying
+     * hex values around. Pages with a genuinely different color for the
+     * same status (documented case-by-case where it happens) intentionally
+     * keep their own hardcoded value instead of referencing these. */
+    --tag-amber-bg:#fef9c3;   --tag-amber-fg:#a16207;
+    --tag-green-bg:#dcfce7;   --tag-green-fg:#15803d;
+    --tag-blue-bg:#dbeafe;    --tag-blue-fg:#1d4ed8;
+    --tag-purple-bg:#f3e8ff;  --tag-purple-fg:#7c3aed;
+    --tag-cyan-bg:#e0f2fe;    --tag-cyan-fg:#0369a1;
+    --tag-red-bg:#fee2e2;     --tag-red-fg:#dc2626;
+    --tag-emerald-bg:#f0fdf4; --tag-emerald-fg:#16a34a; /* payment type: deposit */
+    --tag-slate-bg:#f1f5f9;   --tag-slate-fg:#475569;   /* booking status: checked_out */
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+
+/* Semantic state colors — shared across every section (including staff's
+ * navy/gold pages) since these represent booking/payment/task state, not
+ * brand identity. Pair with an existing shape class (.badge, .status-badge,
+ * .role-badge) or use bare for text-only coloring. */
+.tag-amber  { background: var(--tag-amber-bg);  color: var(--tag-amber-fg); }
+.tag-green  { background: var(--tag-green-bg);  color: var(--tag-green-fg); }
+.tag-blue   { background: var(--tag-blue-bg);   color: var(--tag-blue-fg); }
+.tag-purple { background: var(--tag-purple-bg); color: var(--tag-purple-fg); }
+.tag-cyan   { background: var(--tag-cyan-bg);   color: var(--tag-cyan-fg); }
+.tag-red    { background: var(--tag-red-bg);    color: var(--tag-red-fg); }
+
+/* Muted text — references the section's own --muted token (base's warm
+ * gray by default, overridden to staff's cooler blue-gray in staff.css),
+ * so this single class stays correct across every section. */
+.text-muted-theme { color: var(--muted); }
+
+/* Spacing values that fall between Bootstrap's scale steps (8px -> 16px,
+ * no 10px gap step) — named by literal px value, not a Bootstrap index. */
+.mb-12 { margin-bottom: 12px; }
+.d-flex-gap-10 { display: flex; align-items: center; gap: 10px; }
+
+/* Small uppercase section/field label — font-size and margin-bottom vary
+ * per usage and stay inline; this covers only the identical part. */
+.section-label { font-weight: 600; text-transform: uppercase; letter-spacing: .5px; }

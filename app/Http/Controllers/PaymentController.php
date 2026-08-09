@@ -7,7 +7,9 @@ use App\Models\Notification;
 use App\Models\Payment;
 use App\Models\StaffLog;
 use App\Services\PayMongoService;
+use App\Mail\BookingConfirmedMail;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Mail;
 use App\Helpers\NotificationHelper;
 
 class PaymentController extends Controller
@@ -24,12 +26,18 @@ class PaymentController extends Controller
 
         $booking->load('property');
 
-        // Deposit amount from settings
-        $depositPct    = (float) \App\Models\Setting::get('deposit_percentage', 30);
+        // Deposit amount from settings — minimum 50% ngayon (dating 30%).
+        $depositPct    = (float) \App\Models\Setting::get('deposit_percentage', 50);
         $depositAmount = round($booking->total_amount * $depositPct / 100, 2);
         $isDepositOnly = $booking->amount_paid == 0; // first payment = deposit
 
-        return view('payment.checkout', compact('booking', 'depositAmount', 'isDepositOnly', 'depositPct'));
+        // Anti-abuse: kung 3+ na ang cancellation ng guest na ito sa
+        // loob ng 30 araw, full payment na lang ang pinapayagan —
+        // walang deposit option, para hindi na sila makapag-hold ng
+        // slot nang mura lang tapos ica-cancel din lang pala ulit.
+        $forceFullPayment = $isDepositOnly && Booking::hasExcessiveCancellations($booking->user_id);
+
+        return view('payment.checkout', compact('booking', 'depositAmount', 'isDepositOnly', 'depositPct', 'forceFullPayment'));
     }
 
     // ── Create PayMongo Checkout Session ──────────────────────────
@@ -42,9 +50,18 @@ class PaymentController extends Controller
             'payment_type' => 'required|in:deposit,full_payment',
         ]);
 
+        // Anti-abuse: server-side re-check (hindi lang basta umaasa sa
+        // UI) — kung naka-flag ang guest sa excessive cancellations,
+        // hindi papayagang "deposit" ang piliin kahit i-bypass ang form.
+        if ($request->payment_type === 'deposit'
+            && $booking->amount_paid == 0
+            && Booking::hasExcessiveCancellations($booking->user_id)) {
+            return back()->with('error', 'Dahil sa cancellation history mo, kailangan ng full payment para sa booking na ito — hindi available ang deposit option.');
+        }
+
         $booking->load(['property', 'user']);
 
-        $depositPct    = (float) \App\Models\Setting::get('deposit_percentage', 30);
+        $depositPct    = (float) \App\Models\Setting::get('deposit_percentage', 50);
         $depositAmount = round($booking->total_amount * $depositPct / 100, 2);
 
         $amount      = $request->payment_type === 'deposit' ? $depositAmount : $booking->balance_due;
@@ -105,14 +122,6 @@ class PaymentController extends Controller
         $session    = $this->paymongo->getCheckoutSession($sessionId);
         $attributes = $session['attributes'];
 
-            // ADD THIS — log the full response para makita natin
- 
-    
-    $attributes = $session['attributes'];
-    $status     = $attributes['status'] ?? '';
-    $amountPaid = ($attributes['line_items'][0]['amount'] ?? 0) / 100;
-    
-
         // PayMongo checkout session status
         $status = $attributes['status'] ?? '';
 
@@ -139,6 +148,7 @@ class PaymentController extends Controller
                     'amount'           => $amountPaid,
                     'payment_method' => $attributes['payment_method_used'] ?? 'gcash',
                     'payment_type'     => $paymentType,
+                    'status'           => 'success',
                     'payment_date'     => today(),
                     'reference_number' => $paymentRef,
                     'notes'            => 'PayMongo online payment',
@@ -165,22 +175,43 @@ class PaymentController extends Controller
                     'paymongo_session_id' => null,
                 ]);
 
-                // Auto-confirm pending bookings
-                if ($booking->status === 'pending') {
+                // Auto-confirm pending bookings — WALANG admin approval
+                // step. Kapag successful ang unang bayad (deposit o full),
+                // automatic nang "confirmed" ang booking, at doon din
+                // ipapadala ang confirmation email.
+                $wasPending = $booking->status === 'pending';
+
+                if ($wasPending) {
                     $booking->update(['status' => 'confirmed']);
                 }
 
-                // Notify guest
+                // Notify guest (in-app)
                 Notification::create([
                     'user_id' => $booking->user_id,
                     'type'    => 'in_app',
                     'title'   => 'Payment Received!',
-                    'message' => "Payment of ₱" . number_format($amountPaid, 2) . 
+                    'message' => "Payment of ₱" . number_format($amountPaid, 2) .
                         " for booking {$booking->booking_ref} confirmed.",
+                    'link'    => route('customer.bookings.show', $booking, false),
                     'is_read' => 0,
                     'status'  => 'sent',
                     'sent_at' => now(),
                 ]);
+
+                // Confirmation Email — ipinapadala LANG kapag ito yung
+                // unang beses na naging "confirmed" ang booking (hindi
+                // kada partial/balance payment pagkatapos).
+                if ($wasPending) {
+                    try {
+                        Mail::to($booking->user->email)
+                            ->send(new BookingConfirmedMail($booking->fresh(['user', 'property'])));
+                    } catch (\Exception $mailException) {
+                        // Hindi dapat i-fail ang buong request kung may
+                        // isyu ang email delivery — naka-log lang, dahil
+                        // matagumpay naman talaga ang bayad at booking.
+                        \Log::error('Failed sending booking confirmation email: ' . $mailException->getMessage());
+                    }
+                }
             }
 
             $booking->refresh();
@@ -216,10 +247,10 @@ class PaymentController extends Controller
         $payload   = $request->getContent();
         $signature = $request->header('Paymongo-Signature', '');
 
-        // Verify signature (optional in sandbox)
-        // if (!$this->paymongo->verifyWebhook($payload, $signature)) {
-        //     return response()->json(['error' => 'Invalid signature'], 401);
-        // }
+        if (!$this->paymongo->verifyWebhook($payload, $signature)) {
+            \Log::warning('PayMongo webhook: invalid signature attempt', ['ip' => $request->ip()]);
+            return response()->json(['error' => 'Invalid signature'], 401);
+        }
 
         $data      = $request->json('data');
         $eventType = $data['attributes']['type'] ?? '';
