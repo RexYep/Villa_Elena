@@ -20,6 +20,12 @@ services:
       - key: RUN_MIGRATIONS
         value: false
 
+      # Render has no persistent disk, so storage/logs/laravel.log (the
+      # default) is invisible in the dashboard's Logs tab. stderr goes
+      # straight into that log stream instead.
+      - key: LOG_CHANNEL
+        value: stderr
+
       # Aiven MySQL — fill in from the Aiven console. Add these as secrets
       # in the Render dashboard rather than committing real values here.
       - key: DB_CONNECTION
