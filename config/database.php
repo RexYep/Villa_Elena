@@ -63,6 +63,31 @@ return [
             ]) : [],
         ],
 
+        // One-off local access to the Aiven (production) database, for
+        // maintenance commands like `php artisan migrate:fresh --force
+        // --database=aiven` — Render's free plan has no Shell tab, so this
+        // is how commands get run against it from a developer machine
+        // instead. Separate env vars on purpose: never touches the 'mysql'
+        // connection above, which local dev keeps pointed at localhost.
+        'aiven' => [
+            'driver' => 'mysql',
+            'host' => env('AIVEN_DB_HOST'),
+            'port' => env('AIVEN_DB_PORT', '3306'),
+            'database' => env('AIVEN_DB_DATABASE', 'defaultdb'),
+            'username' => env('AIVEN_DB_USERNAME', 'avnadmin'),
+            'password' => env('AIVEN_DB_PASSWORD', ''),
+            'charset' => 'utf8mb4',
+            'collation' => 'utf8mb4_unicode_ci',
+            'prefix' => '',
+            'prefix_indexes' => true,
+            'strict' => true,
+            'engine' => null,
+            'options' => extension_loaded('pdo_mysql') ? array_filter([
+                (PHP_VERSION_ID >= 80500 ? \Pdo\Mysql::ATTR_SSL_CA : \PDO::MYSQL_ATTR_SSL_CA) => env('AIVEN_DB_SSL_CA'),
+                \PDO::MYSQL_ATTR_SSL_VERIFY_SERVER_CERT => false,
+            ], fn ($v) => $v !== null) : [],
+        ],
+
         'mariadb' => [
             'driver' => 'mariadb',
             'url' => env('DB_URL'),

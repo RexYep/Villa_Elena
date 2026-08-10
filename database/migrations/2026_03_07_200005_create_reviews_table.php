@@ -13,12 +13,15 @@ return new class extends Migration
             $table->foreignId('booking_id')->constrained('bookings')->cascadeOnDelete();
             $table->foreignId('user_id')->constrained('users')->cascadeOnDelete();
             $table->foreignId('property_id')->constrained('properties')->cascadeOnDelete();
-            $table->tinyInteger('overall_rating');
+            $table->tinyInteger('rating');
+            $table->string('title')->nullable();
             $table->tinyInteger('cleanliness')->nullable();
             $table->tinyInteger('service')->nullable();
             $table->tinyInteger('value')->nullable();
-            $table->text('comment')->nullable();
+            $table->text('content')->nullable();
             $table->text('admin_reply')->nullable();
+            $table->timestamp('admin_reply_at')->nullable();
+            $table->text('admin_note')->nullable();
             $table->enum('status', ['pending', 'approved', 'rejected'])->default('pending');
             $table->timestamps();
         });
