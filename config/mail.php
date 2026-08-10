@@ -53,6 +53,15 @@ return [
             'transport' => 'ses',
         ],
 
+        // Render's free plan blocks outbound traffic on SMTP ports
+        // (25/465/587) entirely, for any host — so plain SMTP (Gmail,
+        // Brevo's own SMTP relay, whatever) never connects there. This
+        // uses Brevo's HTTPS API instead, which isn't blocked. See the
+        // Mail::extend() call in AppServiceProvider::boot().
+        'brevo' => [
+            'transport' => 'brevo',
+        ],
+
         'postmark' => [
             'transport' => 'postmark',
             // 'message_stream_id' => env('POSTMARK_MESSAGE_STREAM_ID'),

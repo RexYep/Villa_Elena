@@ -84,16 +84,12 @@ services:
       - key: ANTHROPIC_API_KEY
         sync: false
 
-      # Reuse the same Gmail SMTP + App Password already validated locally.
+      # Render's free plan blocks outbound SMTP ports entirely (25/465/587,
+      # any host) — Brevo's HTTPS API is used instead. See MAILER_DSN and
+      # config/mail.php's 'brevo' mailer / AppServiceProvider::boot().
       - key: MAIL_MAILER
-        value: smtp
-      - key: MAIL_HOST
-        value: smtp.gmail.com
-      - key: MAIL_PORT
-        value: 587
-      - key: MAIL_USERNAME
-        sync: false
-      - key: MAIL_PASSWORD
+        value: brevo
+      - key: MAILER_DSN
         sync: false
       - key: MAIL_FROM_ADDRESS
         sync: false

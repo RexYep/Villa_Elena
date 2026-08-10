@@ -5,8 +5,11 @@ namespace App\Providers;
 use App\Models\Notification;
 use Illuminate\Pagination\Paginator;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\View;
 use Illuminate\Support\ServiceProvider;
+use Symfony\Component\Mailer\Bridge\Brevo\Transport\BrevoTransportFactory;
+use Symfony\Component\Mailer\Transport\Dsn;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -23,6 +26,17 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        // Render's free plan blocks outbound SMTP ports entirely, so mail
+        // goes through Brevo's HTTPS API instead (config/mail.php's
+        // 'brevo' mailer, MAIL_MAILER=brevo). Only registers a factory —
+        // harmless when a different MAIL_MAILER (e.g. local dev's "log")
+        // is actually selected.
+        Mail::extend('brevo', function () {
+            return (new BrevoTransportFactory())->create(
+                Dsn::fromString(config('services.brevo.dsn'))
+            );
+        });
+
         // The app only loads Bootstrap CSS, not Tailwind, so Laravel's
         // default pagination view (which uses Tailwind utility classes)
         // rendered unstyled. Switch to the Bootstrap 5 view instead.
