@@ -5,6 +5,7 @@ namespace App\Helpers;
 use App\Events\NotificationCreated;
 use App\Models\Notification;
 use App\Models\User;
+use Illuminate\Support\Facades\Log;
 
 class NotificationHelper
 {
@@ -22,7 +23,17 @@ class NotificationHelper
             'sent_at' => now(),
         ]);
 
-        event(new NotificationCreated($notification));
+        // This helper gets called from registration, bookings, payments,
+        // etc. — a broadcast hiccup (bad/missing Pusher config, API
+        // outage) should never take down the flow that triggered it. The
+        // notification row above is already saved either way, so the
+        // in-app bell still picks it up on next page load even if the
+        // realtime push fails.
+        try {
+            event(new NotificationCreated($notification));
+        } catch (\Exception $e) {
+            Log::error('Failed to broadcast notification: ' . $e->getMessage());
+        }
     }
 
     // ── Notify Admin(s) ────────────────────────────────────────────
