@@ -184,7 +184,15 @@ class FrontdeskController extends Controller
                     'status'    => 1,
                 ]);
 
-                \Illuminate\Support\Facades\Password::sendResetLink(['email' => $user->email]);
+                // Don't let a mail hiccup block the walk-in booking itself
+                // (this runs inside the transaction below) — the guest can
+                // still use "forgot password" later if this email doesn't
+                // land.
+                try {
+                    \Illuminate\Support\Facades\Password::sendResetLink(['email' => $user->email]);
+                } catch (\Exception $e) {
+                    \Illuminate\Support\Facades\Log::error('Failed to send walk-in password reset link: ' . $e->getMessage());
+                }
             } else {
                 $user = User::findOrFail($request->user_id);
             }

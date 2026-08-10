@@ -14,6 +14,7 @@ use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Password;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Cookie;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use App\Helpers\NotificationHelper;
 
@@ -64,7 +65,13 @@ class AuthController extends Controller
         if ($user->two_factor_enabled && !$this->isTrustedDevice($user, $request)) {
             $code = (string) random_int(100000, 999999);
             Cache::put("2fa_otp_{$user->id}", Hash::make($code), now()->addMinutes(self::OTP_TTL_MINUTES));
-            $user->notify(new TwoFactorCodeNotification($code));
+
+            try {
+                $user->notify(new TwoFactorCodeNotification($code));
+            } catch (\Exception $e) {
+                Log::error('Failed to send 2FA code: ' . $e->getMessage());
+                return back()->withErrors(['email' => 'Hindi maipadala ang verification code ngayon. Subukan ulit mamaya.'])->withInput();
+            }
 
             $request->session()->put('2fa_user_id', $user->id);
             $request->session()->put('2fa_remember', $remember);
@@ -137,7 +144,13 @@ class AuthController extends Controller
 
         $code = (string) random_int(100000, 999999);
         Cache::put("2fa_otp_{$user->id}", Hash::make($code), now()->addMinutes(self::OTP_TTL_MINUTES));
-        $user->notify(new TwoFactorCodeNotification($code));
+
+        try {
+            $user->notify(new TwoFactorCodeNotification($code));
+        } catch (\Exception $e) {
+            Log::error('Failed to resend 2FA code: ' . $e->getMessage());
+            return back()->with('error', 'Hindi maipadala ang code ngayon. Subukan ulit mamaya.');
+        }
 
         return back()->with('success', 'A new code has been sent to your email.');
     }
@@ -228,10 +241,15 @@ class AuthController extends Controller
         Auth::login($user);
         $request->session()->regenerate();
 
-        // Sends Laravel's built-in VerifyEmail notification (routed through
-        // whatever MAIL_MAILER is set — currently 'log', so check
-        // storage/logs/laravel.log for the link while testing locally).
-        $user->sendEmailVerificationNotification();
+        // Sends Laravel's built-in VerifyEmail notification. Doesn't block
+        // registration if it fails — the user is already created and
+        // logged in by this point, and can retry from the "resend" link
+        // on the verification.notice page.
+        try {
+            $user->sendEmailVerificationNotification();
+        } catch (\Exception $e) {
+            Log::error('Failed to send verification email: ' . $e->getMessage());
+        }
 
         return redirect()->route('verification.notice')
             ->with('success', 'Welcome to Villa Elena! Please verify your email to continue.');
@@ -261,7 +279,12 @@ class AuthController extends Controller
     {
         $request->validate(['email' => 'required|email']);
 
-        $status = Password::sendResetLink($request->only('email'));
+        try {
+            $status = Password::sendResetLink($request->only('email'));
+        } catch (\Exception $e) {
+            Log::error('Failed to send password reset link: ' . $e->getMessage());
+            return back()->withErrors(['email' => 'Hindi maipadala ang reset link ngayon. Subukan ulit mamaya.']);
+        }
 
         return $status === Password::RESET_LINK_SENT
             ? back()->with('success', 'Password reset link has been sent to your email.')
@@ -347,7 +370,12 @@ class AuthController extends Controller
             return $this->redirectByRole($request->user());
         }
 
-        $request->user()->sendEmailVerificationNotification();
+        try {
+            $request->user()->sendEmailVerificationNotification();
+        } catch (\Exception $e) {
+            Log::error('Failed to resend verification email: ' . $e->getMessage());
+            return back()->with('error', 'Hindi maipadala ang verification link ngayon. Subukan ulit mamaya.');
+        }
 
         return back()->with('success', 'Verification link sent! Please check your email.');
     }
