@@ -17,6 +17,12 @@ Route::get('properties/{property}',      [PortalController::class, 'propertyDeta
 Route::get('properties/{property}/price-preview', [PortalController::class, 'pricePreview'])->name('portal.price-preview');
 Route::get('reviews',                    [PortalController::class, 'reviews'])->name('portal.reviews');
 
+// Legal pages — naka-link sa footer ng landing page. Dalawa lang sila:
+// nasa loob ng Privacy Policy (#cookies) ang cookie section, dahil
+// strictly-necessary cookies lang ang ginagamit natin.
+Route::get('privacy-policy',              [PortalController::class, 'privacy'])->name('portal.privacy');
+Route::get('terms-of-service',            [PortalController::class, 'terms'])->name('portal.terms');
+
 Route::post('contact', [PortalController::class, 'submitContact'])
     ->middleware('throttle:5,60')->name('portal.contact.send');
 
@@ -38,6 +44,13 @@ Route::middleware('auth')->group(function () {
 // PayMongo webhook — NO auth, NO CSRF
 Route::post('/webhooks/paymongo', [PaymentController::class, 'webhook'])
     ->name('payment.webhook')
+    ->withoutMiddleware([\App\Http\Middleware\VerifyCsrfToken::class]);
+
+// Callback ng Send Money — inaabisuhan tayo nito kapag na-settle na
+// ang isang refund transfer. Hindi pinagkakatiwalaan ang laman; ang
+// tunay na estado ay kinukuha sa isang authenticated na GET (v5.9).
+Route::post('/webhooks/paymongo/transfer', [PaymentController::class, 'transferCallback'])
+    ->name('payment.webhook.transfer')
     ->withoutMiddleware([\App\Http\Middleware\VerifyCsrfToken::class]);
 
 // Free-tier cron workaround — Render's free plan has no Cron Jobs feature,

@@ -1,0 +1,105 @@
+# Local dev, running the SAME Dockerfile that ships to Render — same PHP
+# version/extensions, same nginx+php-fpm+supervisord stack. The point is to
+# stop testing against a different runtime locally (XAMPP) than what
+# actually runs online, so nothing is left to "discover" only at deploy time.
+#
+# Everything else (mail, filesystem disk, broadcast, etc.) is read from the
+# same .env you already use for `php artisan serve` — only DB_HOST/USERNAME/
+# PASSWORD/PORT are overridden below, since the container needs to reach
+# your host machine's MySQL differently than a process running on the host
+# does. That's a connection detail, not app behavior — everything else stays
+# byte-for-byte the same config as your normal local setup.
+#
+# No full bind mount of the repo — on Windows, PHP reading thousands of
+# vendor/ files across the Windows<->WSL2 boundary on every request was the
+# cause of multi-second page loads. Instead:
+#   - `storage/` is bind-mounted (small, and needs to persist uploads/
+#     sessions/cache across container restarts). `bootstrap/cache/` is
+#     deliberately NOT bind-mounted — it holds the compiled package-manifest
+#     cache, and mounting your host's copy (built against a full `composer
+#     install`) over the container's clean `--no-dev` build is exactly what
+#     caused the "Class ...PailServiceProvider not found" crash — let the
+#     container regenerate its own from the image it actually has installed.
+#   - Everything else you actually edit (app/, resources/, routes/, config/,
+#     database/) is synced in by `docker compose watch` instead of a live
+#     bind mount — edits still show up in a second or two, but requests
+#     themselves read from the container's own fast filesystem, not across
+#     the Windows<->Linux bridge.
+# Run with: docker compose up --watch
+services:
+  # Local-only cache backend (see .env: CACHE_STORE=redis). Not part of the
+  # production stack — Render caching still uses the `database` driver, no
+  # free Redis provider has been wired up there. Run standalone with:
+  #   docker compose up -d redis
+  # (does not require running the `app` service in Docker too — works fine
+  # alongside `composer dev` / `php artisan serve` on the host.)
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8000:10000"
+    env_file:
+      - .env
+    environment:
+      PORT: "10000"
+      # host.docker.internal lets the container reach MySQL running on your
+      # Windows host (Docker Desktop maps this automatically).
+      DB_HOST: host.docker.internal
+      DB_USERNAME: villa_docker
+      DB_PASSWORD: "${DOCKER_DB_PASSWORD}"
+      # `redis` (the sibling service below) is reachable by service name on
+      # Compose's default network — not 127.0.0.1, which inside this
+      # container means "this container," not the host or the redis one.
+      REDIS_HOST: redis
+    depends_on:
+      - redis
+    volumes:
+      - ./storage:/var/www/html/storage
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    develop:
+      watch:
+        - action: sync
+          path: ./app
+          target: /var/www/html/app
+        - action: sync
+          path: ./resources
+          target: /var/www/html/resources
+        - action: sync
+          path: ./routes
+          target: /var/www/html/routes
+        - action: sync
+          path: ./config
+          target: /var/www/html/config
+        - action: sync
+          path: ./database
+          target: /var/www/html/database
+        # Isang FILE lang, sinadya — hindi ang buong ./bootstrap.
+        # Dito nakatira ang middleware config (kasama ang CSRF exemption
+        # ng PayMongo webhook), kaya kailangan itong ma-sync; pero ang
+        # bootstrap/cache/ ay HINDI DAPAT kailanman i-sync — reflection
+        # ng isang buong `composer install` (kasama ang dev packages) ang
+        # kopya ng host, at kapag natakpan nito ang malinis na --no-dev
+        # na build ng image, "Class ...ServiceProvider not found" agad sa
+        # container start.
+        - action: sync
+          path: ./bootstrap/app.php
+          target: /var/www/html/bootstrap/app.php
+        - action: rebuild
+          path: ./composer.json
+        - action: rebuild
+          path: ./composer.lock
+        - action: rebuild
+          path: ./package.json
+        - action: rebuild
+          path: ./package-lock.json
+        - action: rebuild
+          path: ./Dockerfile
+        - action: rebuild
+          path: ./docker

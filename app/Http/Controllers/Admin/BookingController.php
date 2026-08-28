@@ -16,6 +16,7 @@ use App\Helpers\NotificationHelper;
 use App\Events\BookingCreated;
 use App\Events\BookingUpdated;
 use App\Events\PropertyAvailabilityChanged;
+use Illuminate\Support\Facades\Auth;
 
 class BookingController extends Controller
 {
@@ -96,6 +97,14 @@ class BookingController extends Controller
 
         [$checkIn, $checkOut] = Booking::slotDateTimes($request->slot, $request->check_in_date);
 
+        // Kung "ngayong araw" ang pinili pero lumagpas na ang check-in
+        // time mismo ng slot (hal. 10PM na pero "Day" 8AM pa rin ang
+        // pinili), hindi na ito dapat payagan — hindi na ito makaka-
+        // check-in sa oras na iyon.
+        if ($checkIn->isPast()) {
+            return back()->withErrors(['check_in_date' => 'The ' . Booking::SLOTS[$request->slot]['label'] . ' check-in slot has already passed for today. Please select a different date or slot.'])->withInput();
+        }
+
         // Check availability — ang gap sa pagitan ng dalawang fixed slot
         // ang siya nang cleaning buffer, kaya walang hiwalay na buffer
         // check dito.
@@ -106,8 +115,14 @@ class BookingController extends Controller
         $nights = max(1, $checkIn->diffInDays($checkOut));
 
         // Flat/package price — base lang sa segment ng CHECK-IN (hindi
-        // per-night).
-        $baseAmount = $property->getPackagePrice($checkIn);
+        // per-night) — kasama na ang anumang tumatamang seasonal promo.
+        // Awtomatiko ito: kahit admin ang gumawa ng booking, pareho pa
+        // rin ang presyong nakukuha ng guest sa online portal.
+        $quote          = $property->quoteFor($checkIn, $request->slot);
+        $baseAmount     = $quote['base'];
+        $discountAmount = $quote['discount'];
+        $totalAmount    = $quote['total'];
+        $promo          = $quote['promo'];
 
         $booking = Booking::create([
             'user_id'          => $request->user_id,
@@ -120,26 +135,42 @@ class BookingController extends Controller
             'num_guests'       => $request->num_guests,
             'base_amount'      => $baseAmount,
             'extras_amount'    => 0,
-            'discount_amount'  => 0,
-            'total_amount'     => $baseAmount,
+            'discount_amount'  => $discountAmount,
+            'discount_id'      => $promo?->id,
+            'total_amount'     => $totalAmount,
             'amount_paid'      => 0,
-            'balance_due'      => $baseAmount,
+            'balance_due'      => $totalAmount,
             'status'           => 'confirmed',
             'payment_status'   => 'unpaid',
             'source'           => $request->source,
             'special_requests' => $request->special_requests,
         ]);
 
-        event(new BookingCreated($booking));
-        event(new PropertyAvailabilityChanged(
-            $booking->property_id,
-            'blocked',
-            $checkIn->format('Y-m-d'),
-            $checkOut->format('Y-m-d'),
-            checkInTime: $checkIn->format('g:i A'),
-            checkOutTime: $checkOut->format('g:i A'),
-            bookingId: $booking->id,
-        ));
+        $promo?->increment('used_count');
+
+        // Realtime broadcast lang ito (admin dashboard toast) — hindi ito
+        // dapat maka-block sa buong request kung mag-fail ang Pusher (hal.
+        // mali ang credentials, timeout). Naka-commit na ang booking sa
+        // puntong ito.
+        try {
+            event(new BookingCreated($booking));
+        } catch (\Exception $e) {
+            \Illuminate\Support\Facades\Log::error('Failed to broadcast BookingCreated: ' . $e->getMessage());
+        }
+
+        try {
+            event(new PropertyAvailabilityChanged(
+                $booking->property_id,
+                'blocked',
+                $checkIn->format('Y-m-d'),
+                $checkOut->format('Y-m-d'),
+                checkInTime: $checkIn->format('g:i A'),
+                checkOutTime: $checkOut->format('g:i A'),
+                bookingId: $booking->id,
+            ));
+        } catch (\Exception $e) {
+            \Illuminate\Support\Facades\Log::error('Failed to broadcast PropertyAvailabilityChanged (admin create): ' . $e->getMessage());
+        }
 
         NotificationHelper::notifyGuest(
     $booking->user_id,
@@ -159,7 +190,7 @@ class BookingController extends Controller
     // ── Show Booking Detail ────────────────────────────────────────
     public function show(Booking $booking)
     {
-        $booking->load(['user', 'property.images', 'payments', 'extras', 'review', 'housekeepingTasks']);
+        $booking->load(['user', 'property.images', 'payments.refundTransfers', 'extras', 'review', 'housekeepingTasks']);
         return view('admin.bookings.show', compact('booking'));
     }
 
@@ -257,6 +288,7 @@ class BookingController extends Controller
 
             $updates['cancelled_at']        = now();
             $updates['cancellation_reason'] = $request->cancellation_reason;
+            $updates['cancelled_by']        = 'admin';
             $updates['balance_due']         = 0; // cancelled na, walang balance na dapat pa bayaran
             // Free up the property
             $booking->property->update(['status' => 'available']);
@@ -297,20 +329,15 @@ class BookingController extends Controller
                 'amount'         => $refundAmount,
                 'payment_method' => $originalMethod,
                 'payment_type'   => 'refund',
-                'status'         => 'success',
-                'processed_by'   => auth()->id(),
+                // 'pending' — inaprubahan na ang refund, pero manu-mano
+                // pang ipapadala ang pera (tingnan ang Payments page).
+                'status'         => 'pending',
+                'processed_by'   => Auth::id(),
                 'payment_date'   => today(),
                 'notes'          => "Auto-computed refund ({$refundPercentage}% policy) — cancelled by admin/staff.",
             ]);
 
-            $totalPaid     = $booking->payments()->where('payment_type', '!=', 'refund')->sum('amount');
-            $totalRefunded = $booking->payments()->where('payment_type', 'refund')->sum('amount');
-            $amountPaid    = max(0, $totalPaid - $totalRefunded);
-
-            $booking->update([
-                'amount_paid'    => $amountPaid,
-                'payment_status' => $amountPaid > 0 ? 'partial' : 'refunded',
-            ]);
+            $booking->recalculateFinancials();
 
             NotificationHelper::refundIssued(
                 $booking->fresh(),
@@ -342,30 +369,38 @@ class BookingController extends Controller
             $logMessage .= ". Refund eligibility: {$refundPercentage}% (₱" . number_format($refundAmount, 2) . ").";
         }
         if ($newStatus === 'checked_in' && $booking->balance_due > 0) {
-            $logMessage .= ". DEFERRED BALANCE: ₱" . number_format($booking->balance_due, 2) . " — authorized by " . (auth()->user()->full_name ?? auth()->user()->name ?? 'admin') . ".";
+            $logMessage .= ". DEFERRED BALANCE: ₱" . number_format($booking->balance_due, 2) . " — authorized by " . (Auth::user()->full_name ?? Auth::user()->name ?? 'admin') . ".";
         }
         StaffLog::record('updated_booking_status', 'bookings', $booking->id, $logMessage);
 
-        event(new BookingUpdated($booking, 'status_changed', oldStatus: $oldStatus, newStatus: $newStatus));
+        try {
+            event(new BookingUpdated($booking, 'status_changed', oldStatus: $oldStatus, newStatus: $newStatus));
+        } catch (\Exception $e) {
+            \Illuminate\Support\Facades\Log::error('Failed to broadcast BookingUpdated: ' . $e->getMessage());
+        }
 
         if ($newStatus === 'cancelled') {
-            event(new PropertyAvailabilityChanged(
-                $booking->property_id,
-                'freed',
-                $booking->check_in_date->format('Y-m-d'),
-                $booking->check_out_date->format('Y-m-d'),
-                bookingId: $booking->id,
-            ));
+            try {
+                event(new PropertyAvailabilityChanged(
+                    $booking->property_id,
+                    'freed',
+                    $booking->check_in_date->format('Y-m-d'),
+                    $booking->check_out_date->format('Y-m-d'),
+                    bookingId: $booking->id,
+                ));
+            } catch (\Exception $e) {
+                \Illuminate\Support\Facades\Log::error('Failed to broadcast PropertyAvailabilityChanged (status update): ' . $e->getMessage());
+            }
         }
 
         $successMsg = "Booking status updated to " . ucfirst(str_replace('_', ' ', $newStatus)) . ".";
         if ($newStatus === 'cancelled') {
             $successMsg .= $refundAmount > 0
                 ? " ₱" . number_format($refundAmount, 2) . " ({$refundPercentage}%) refund recorded."
-                : " Walang refund — labas na ito sa eligible window ng cancellation policy.";
+                : " No refund — this booking is outside the eligible window of the cancellation policy.";
         }
         if ($newStatus === 'checked_in' && $booking->balance_due > 0) {
-            $successMsg .= " ⚠️ May natitirang balance na ₱" . number_format($booking->balance_due, 2) . " — deferred hanggang check-out.";
+            $successMsg .= " ⚠️ Outstanding balance of ₱" . number_format($booking->balance_due, 2) . " — deferred until check-out.";
         }
 
         return back()->with('success', $successMsg);
@@ -507,8 +542,8 @@ class BookingController extends Controller
     {
         $request->validate([
             'amount'         => 'required|numeric|min:1',
-            'payment_method' => 'required|in:gcash,paymaya,card,cash,bank_transfer',
-            'payment_type'   => 'required|in:deposit,full_payment,partial,refund',
+            'payment_method' => 'required|in:qrph,cash',
+            'payment_type'   => 'required|in:full_payment,partial,refund',
             'notes'          => 'nullable|string',
         ]);
 
@@ -518,33 +553,18 @@ class BookingController extends Controller
             'payment_method' => $request->payment_method,
             'payment_type'   => $request->payment_type,
             'status'         => 'success',
-            'processed_by'   => auth()->id(),
+            'processed_by'   => Auth::id(),
             'notes'          => $request->notes,
             'payment_date'   => now(),
         ]);
 
         
 
-        // Recalculate payment totals
-        $totalPaid = $booking->payments()->where('status', 'success')
-            ->where('payment_type', '!=', 'refund')->sum('amount');
-        $totalRefunded = $booking->payments()->where('status', 'success')
-            ->where('payment_type', 'refund')->sum('amount');
-        $amountPaid = $totalPaid - $totalRefunded;
-        $balanceDue = $booking->total_amount - $amountPaid;
-
-        $paymentStatus = 'unpaid';
-        if ($amountPaid >= $booking->total_amount) {
-            $paymentStatus = 'paid';
-        } elseif ($amountPaid > 0) {
-            $paymentStatus = 'partial';
-        }
-
-        $booking->update([
-            'amount_paid'    => $amountPaid,
-            'balance_due'    => max(0, $balanceDue),
-            'payment_status' => $paymentStatus,
-        ]);
+        $booking->recalculateFinancials();
+        // Tingnan ang Booking::confirmOnFirstPayment() — kung hindi ito
+        // tatawagin, kakanselahin ng stale pending sweeper ang booking
+        // na may hawak nang pera ng guest.
+        $booking->confirmOnFirstPayment();
 
         StaffLog::record('recorded_payment', 'payments', $booking->id,
             "Recorded ₱{$request->amount} payment for {$booking->booking_ref}");

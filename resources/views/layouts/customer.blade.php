@@ -35,12 +35,12 @@
             @endisset
         </a>
         <a href="{{ route('customer.profile.edit') }}" class="user-pill" style="text-decoration:none;">
-            @if(auth()->user()->profile_image)
-                <img src="{{ auth()->user()->profile_image_url }}" alt="Avatar" class="user-avatar" style="object-fit:cover;">
+            @if(Auth::user()->profile_image)
+                <img src="{{ Auth::user()->profile_image_url }}" alt="Avatar" class="user-avatar" style="object-fit:cover;">
             @else
-                <div class="user-avatar">{{ strtoupper(substr(auth()->user()->full_name, 0, 1)) }}</div>
+                <div class="user-avatar">{{ strtoupper(substr(Auth::user()->full_name, 0, 1)) }}</div>
             @endif
-            <span class="user-name">{{ explode(' ', auth()->user()->full_name)[0] }}</span>
+            <span class="user-name">{{ explode(' ', Auth::user()->full_name)[0] }}</span>
         </a>
         <form method="POST" action="{{ route('logout') }}" style="display:inline">
             @csrf
@@ -67,7 +67,7 @@
 (function () {
     const PUSHER_KEY     = '{{ env('PUSHER_APP_KEY') }}';
     const PUSHER_CLUSTER = '{{ env('PUSHER_APP_CLUSTER', 'ap1') }}';
-    const authUserId     = {{ auth()->id() ?? 'null' }};
+    const authUserId     = {{ Auth::id() ?? 'null' }};
 
     if (!PUSHER_KEY || !authUserId) return;
 

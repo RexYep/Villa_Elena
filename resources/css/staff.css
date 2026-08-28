@@ -4,21 +4,36 @@
  * Shared stylesheet for resources/views/staff/** pages.
  * Extracted from staff/walkin.blade.php and staff/frontdesk.blade.php,
  * which each carried an identical copy-pasted <style> block for the
- * sidebar/topbar shell. This is its own "navy/gold" palette — distinct
- * from base.css's "stone/terracotta" tokens used by admin/customer/portal —
- * since staff pages are a genuinely different design, not a shared theme.
+ * sidebar/topbar shell.
+ *
+ * PALETTE — now the same "stone/terracotta/gold" earth theme as admin,
+ * inherited from base.css. This used to declare its own navy/gold
+ * palette, described here as "a genuinely different design." It wasn't
+ * really a design decision: admin itself was navy once and was migrated
+ * to the earth palette (see the note in admin.css about pages left on
+ * stale --navy/--white/--text-muted names) — staff simply never got
+ * migrated with it. Aligning the two finishes that job, so the whole
+ * system reads as one product.
+ *
+ * Only tokens NOT defined in base.css are declared below. The --navy /
+ * --navy-mid names are kept as aliases pointing at the earth tokens:
+ * a dozen `var(--navy)` references still live in the staff blades'
+ * page-local <style> blocks, and aliasing means they all recolour
+ * correctly instead of silently falling back to an unset variable.
  * Page-specific content (forms, tabs, stat cards, modals, etc.) stays in
  * each view's @push('styles').
  */
 :root {
-    --navy: #0D1B2A;
-    --navy-mid: #1A2F45;
-    --gold: #C9A84C;
-    --gold-light: #E8C97A;
-    --bg: #F4F6F9;
+    --text-main: #2c2416;
+    --stone-mid: #4a3d2a;
+    --gold-dim: rgba(184, 148, 63, 0.15);
+
+    /* Compatibility aliases — see note above. */
+    --navy: var(--stone);
+    --navy-mid: var(--stone-mid);
+
+    --bg: var(--sand);
     --white: #fff;
-    --border: #E2E8F0;
-    --muted: #6B7A8D;
     --sidebar-w: 260px;
     --topbar-h: 68px;
 }
@@ -32,48 +47,55 @@ body {
 }
 
 /* ── SIDEBAR ── */
+/* Light/cream sidebar, mirroring admin's shell — the staff portal used
+   to have a dark navy rail, which was the most visible mismatch between
+   the two panels. */
 .sidebar {
     position: fixed; top: 0; left: 0; width: var(--sidebar-w); height: 100vh;
-    background: var(--navy); z-index: 100; display: flex; flex-direction: column;
+    background: var(--cream); z-index: 100; display: flex; flex-direction: column;
+    border-right: 1px solid var(--border);
 }
 .sidebar-brand {
-    padding: 22px 24px 18px; border-bottom: 1px solid rgba(255,255,255,.07);
+    padding: 22px 24px 18px; border-bottom: 1px solid var(--border);
     text-decoration: none; display: block;
 }
-.brand-name { font-family: 'Playfair Display', serif; color: var(--gold-light); font-size: 18px; }
-.brand-role { color: rgba(255,255,255,.3); font-size: 11px; letter-spacing: 1px; text-transform: uppercase; margin-top: 2px; }
+.brand-name { font-family: 'Playfair Display', serif; color: var(--text-main); font-size: 18px; font-weight: 700; }
+.brand-role { color: var(--muted); font-size: 11px; letter-spacing: 1px; text-transform: uppercase; margin-top: 2px; }
 .sidebar-nav { flex: 1; padding: 16px 12px; overflow-y: auto; }
 .nav-label {
-    font-size: 10px; color: rgba(255,255,255,.25); text-transform: uppercase;
+    font-size: 10px; color: var(--muted); text-transform: uppercase;
     letter-spacing: 1.5px; padding: 10px 12px 6px; font-weight: 600;
 }
 .nav-item {
     display: flex; align-items: center; gap: 11px; padding: 10px 14px; border-radius: 9px;
-    color: rgba(255,255,255,.55); text-decoration: none; font-size: 13.5px; font-weight: 500;
+    color: var(--muted); text-decoration: none; font-size: 13.5px; font-weight: 500;
     margin-bottom: 2px; transition: all .2s;
 }
-.nav-item:hover { background: rgba(255,255,255,.06); color: #fff; }
-.nav-item.active { background: rgba(201,168,76,.15); color: var(--gold-light); }
+.nav-item:hover { background: var(--sand); color: var(--text-main); }
+.nav-item.active {
+    background: var(--sand); color: var(--terracotta);
+    border-left: 3px solid var(--terracotta); padding-left: 11px; font-weight: 600;
+}
 .nav-item i { font-size: 16px; width: 20px; text-align: center; }
 .nav-badge {
-    margin-left: auto; background: rgba(201,168,76,.25); color: var(--gold-light);
+    margin-left: auto; background: var(--gold-dim); color: var(--gold);
     padding: 1px 8px; border-radius: 100px; font-size: 10px; font-weight: 700;
 }
-.nav-badge.red { background: rgba(239,68,68,.2); color: #fca5a5; }
-.sidebar-footer { padding: 16px 20px; border-top: 1px solid rgba(255,255,255,.07); }
+.nav-badge.red { background: var(--tag-red-bg); color: var(--tag-red-fg); }
+.sidebar-footer { margin-top: auto; padding: 16px 20px; border-top: 1px solid var(--border); }
 .staff-info { display: flex; align-items: center; gap: 10px; }
 .staff-avatar {
-    width: 34px; height: 34px; border-radius: 50%; background: var(--gold);
-    color: var(--navy); display: flex; align-items: center; justify-content: center;
+    width: 34px; height: 34px; border-radius: 50%; background: var(--terracotta);
+    color: #fff; display: flex; align-items: center; justify-content: center;
     font-weight: 700; font-size: 13px;
 }
-.staff-name { color: rgba(255,255,255,.7); font-size: 13px; }
-.staff-tag  { color: rgba(255,255,255,.3); font-size: 11px; }
+.staff-name { color: var(--text-main); font-size: 13px; font-weight: 500; }
+.staff-tag  { color: var(--muted); font-size: 11px; }
 .logout-btn {
-    margin-left: auto; color: rgba(255,255,255,.3); font-size: 18px;
+    margin-left: auto; color: var(--muted); font-size: 18px;
     text-decoration: none; transition: color .2s; background: none; border: none; cursor: pointer;
 }
-.logout-btn:hover { color: #fff; }
+.logout-btn:hover { color: var(--terracotta); }
 
 /* ── TOPBAR ── */
 .topbar {
@@ -105,7 +127,7 @@ body {
 .sidebar-backdrop {
     display: none;
     position: fixed; inset: 0;
-    background: rgba(13,27,42,.45);
+    background: rgba(44,36,22,.45);
     z-index: 99;
 }
 .sidebar-backdrop.open { display: block; }

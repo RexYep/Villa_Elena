@@ -8,6 +8,7 @@ use App\Models\Booking;
 use App\Models\StaffLog;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Auth;
 
 class UserController extends Controller
 {
@@ -148,7 +149,7 @@ class UserController extends Controller
     public function destroy(User $user)
     {
         // Prevent deleting yourself
-        if ($user->id === auth()->id()) {
+        if ($user->id === Auth::id()) {
             return back()->with('error', 'You cannot delete your own account.');
         }
 
@@ -164,7 +165,7 @@ class UserController extends Controller
     // ── Toggle Active/Inactive Status ──────────────────────────────
     public function toggleStatus(User $user)
     {
-        if ($user->id === auth()->id()) {
+        if ($user->id === Auth::id()) {
             return back()->with('error', 'You cannot deactivate your own account.');
         }
 

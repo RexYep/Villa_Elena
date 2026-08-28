@@ -9,7 +9,7 @@
 
     <h2>Verify your email</h2>
     <p class="subtitle">
-        We sent a verification link to <strong>{{ auth()->user()->email }}</strong>.
+        We sent a verification link to <strong>{{ Auth::user()->email }}</strong>.
         Please click that link to activate your account.
     </p>
 

@@ -8,13 +8,14 @@ use App\Models\Review;
 use App\Helpers\NotificationHelper;
 use App\Services\ReviewModerationService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 
 class ReviewController extends Controller
 {
     // ── My Reviews List ─────────────────────────────────────────────
     public function index()
     {
-        $reviews = Review::where('user_id', auth()->id())
+        $reviews = Review::where('user_id', Auth::id())
             ->with('booking.property')
             ->latest()
             ->get();
@@ -25,7 +26,7 @@ class ReviewController extends Controller
     // ── Edit Review Form ────────────────────────────────────────────
     public function edit(Review $review)
     {
-        abort_if($review->user_id !== auth()->id(), 403);
+        abort_if($review->user_id !== Auth::id(), 403);
 
         $booking = $review->booking->load('property');
 
@@ -35,7 +36,7 @@ class ReviewController extends Controller
     // ── Update Review ───────────────────────────────────────────────
     public function update(Request $request, Review $review, ReviewModerationService $moderation)
     {
-        abort_if($review->user_id !== auth()->id(), 403);
+        abort_if($review->user_id !== Auth::id(), 403);
 
         $request->validate([
             'rating'  => 'required|integer|min:1|max:5',
@@ -64,7 +65,7 @@ class ReviewController extends Controller
             if ($result['reason']) {
                 NotificationHelper::notifyAdmin(
                     'Edited Review Auto-Flagged',
-                    auth()->user()->full_name . " edited their review for {$review->booking->property->property_name} — held for manual review ({$result['reason']}).",
+                    Auth::user()->full_name . " edited their review for {$review->booking->property->property_name} — held for manual review ({$result['reason']}).",
                     route('admin.reviews.index', [], false)
                 );
             }
@@ -82,7 +83,7 @@ class ReviewController extends Controller
     // ── Delete Review ───────────────────────────────────────────────
     public function destroy(Review $review)
     {
-        abort_if($review->user_id !== auth()->id(), 403);
+        abort_if($review->user_id !== Auth::id(), 403);
 
         $review->delete();
 
@@ -93,12 +94,12 @@ class ReviewController extends Controller
     // ── Submit Review Form ─────────────────────────────────────────
     public function create(Booking $booking)
     {
-        abort_if($booking->user_id !== auth()->id(), 403);
+        abort_if($booking->user_id !== Auth::id(), 403);
         abort_if($booking->status !== 'checked_out', 403, 'You can only review after checkout.');
 
         // Check if already reviewed
         $existing = Review::where('booking_id', $booking->id)
-            ->where('user_id', auth()->id())
+            ->where('user_id', Auth::id())
             ->first();
 
         if ($existing) {
@@ -113,7 +114,7 @@ class ReviewController extends Controller
     // ── Store Review ───────────────────────────────────────────────
     public function store(Request $request, Booking $booking, ReviewModerationService $moderation)
     {
-        abort_if($booking->user_id !== auth()->id(), 403);
+        abort_if($booking->user_id !== Auth::id(), 403);
         abort_if($booking->status !== 'checked_out', 403);
 
         $request->validate([
@@ -124,7 +125,7 @@ class ReviewController extends Controller
 
         // Prevent duplicate
         $existing = Review::where('booking_id', $booking->id)
-            ->where('user_id', auth()->id())
+            ->where('user_id', Auth::id())
             ->first();
         if ($existing) {
             return redirect()->route('customer.bookings.show', $booking)
@@ -135,7 +136,7 @@ class ReviewController extends Controller
 
         Review::create([
             'booking_id'  => $booking->id,
-            'user_id'     => auth()->id(),
+            'user_id'     => Auth::id(),
             'property_id' => $booking->property_id,
             'rating'      => $request->rating,
             'title'       => $request->title,
@@ -147,7 +148,7 @@ class ReviewController extends Controller
         if (!$result['approved']) {
             NotificationHelper::notifyAdmin(
                 $result['reason'] ? 'New Review Auto-Flagged' : 'New Review Submitted',
-                auth()->user()->full_name . " submitted a {$request->rating}-star review for {$booking->property->property_name}. " .
+                Auth::user()->full_name . " submitted a {$request->rating}-star review for {$booking->property->property_name}. " .
                 ($result['reason'] ? "Held for manual review ({$result['reason']})." : 'Pending approval.'),
                 route('admin.reviews.index', [], false)
             );

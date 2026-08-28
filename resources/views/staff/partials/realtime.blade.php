@@ -51,7 +51,7 @@
 (function () {
     const PUSHER_KEY     = '{{ env('PUSHER_APP_KEY') }}';
     const PUSHER_CLUSTER = '{{ env('PUSHER_APP_CLUSTER', 'ap1') }}';
-    const currentStaff   = @json(auth()->user()->full_name ?? '');
+    const currentStaff   = @json(Auth::user()->full_name ?? '');
 
     if (!PUSHER_KEY) { console.warn('Pusher key not set'); return; }
 

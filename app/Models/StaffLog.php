@@ -4,7 +4,39 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\Auth;
 
+/**
+ * @property int $id
+ * @property int|null $user_id
+ * @property string $action e.g. created_booking, updated_property, checked_in_guest
+ * @property string|null $target_table
+ * @property int|null $target_id
+ * @property string|null $description
+ * @property array<array-key, mixed>|null $old_values Data before the change
+ * @property array<array-key, mixed>|null $new_values Data after the change
+ * @property string|null $ip_address
+ * @property string|null $user_agent
+ * @property \Illuminate\Support\Carbon|null $created_at
+ * @property \Illuminate\Support\Carbon|null $updated_at
+ * @property-read \App\Models\User|null $user
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|StaffLog newModelQuery()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|StaffLog newQuery()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|StaffLog query()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|StaffLog whereAction($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|StaffLog whereCreatedAt($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|StaffLog whereDescription($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|StaffLog whereId($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|StaffLog whereIpAddress($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|StaffLog whereNewValues($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|StaffLog whereOldValues($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|StaffLog whereTargetId($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|StaffLog whereTargetTable($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|StaffLog whereUpdatedAt($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|StaffLog whereUserAgent($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|StaffLog whereUserId($value)
+ * @mixin \Eloquent
+ */
 class StaffLog extends Model
 {
     use HasFactory;
@@ -42,7 +74,7 @@ class StaffLog extends Model
         array $newValues = null
     ): void {
         static::create([
-            'user_id'      => auth()->id(),
+            'user_id'      => Auth::id(),
             'action'       => $action,
             'target_table' => $targetTable,
             'target_id'    => $targetId,

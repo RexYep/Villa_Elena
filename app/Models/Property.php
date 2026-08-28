@@ -5,6 +5,60 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
+/**
+ * @property int $id
+ * @property string|null $property_name
+ * @property string $type
+ * @property string|null $description
+ * @property int $max_capacity
+ * @property numeric $base_price
+ * @property numeric|null $weekend_price
+ * @property array<array-key, mixed>|null $amenities
+ * @property numeric|null $floor_area_sqm
+ * @property int|null $floor_level
+ * @property string $status
+ * @property bool $is_featured
+ * @property int $sort_order
+ * @property int|null $created_by
+ * @property \Illuminate\Support\Carbon|null $created_at
+ * @property \Illuminate\Support\Carbon|null $updated_at
+ * @property-read \Illuminate\Database\Eloquent\Collection<int, \App\Models\AvailabilityBlock> $availabilityBlocks
+ * @property-read int|null $availability_blocks_count
+ * @property-read \Illuminate\Database\Eloquent\Collection<int, \App\Models\Booking> $bookings
+ * @property-read int|null $bookings_count
+ * @property-read \App\Models\User|null $createdBy
+ * @property-read \App\Models\Booking|null $currentBooking
+ * @property-read float $average_rating
+ * @property-read \Illuminate\Database\Eloquent\Collection<int, \App\Models\HousekeepingTask> $housekeepingTasks
+ * @property-read int|null $housekeeping_tasks_count
+ * @property-read \Illuminate\Database\Eloquent\Collection<int, \App\Models\PropertyImage> $images
+ * @property-read int|null $images_count
+ * @property-read \Illuminate\Database\Eloquent\Collection<int, \App\Models\PricingRule> $pricingRules
+ * @property-read int|null $pricing_rules_count
+ * @property-read \App\Models\PropertyImage|null $primaryImage
+ * @property-read \Illuminate\Database\Eloquent\Collection<int, \App\Models\Review> $reviews
+ * @property-read int|null $reviews_count
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Property newModelQuery()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Property newQuery()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Property query()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Property whereAmenities($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Property whereBasePrice($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Property whereCreatedAt($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Property whereCreatedBy($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Property whereDescription($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Property whereFloorAreaSqm($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Property whereFloorLevel($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Property whereId($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Property whereIsFeatured($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Property whereMaxCapacity($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Property wherePropertyName($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Property whereSortOrder($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Property whereStatus($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Property whereType($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Property whereUpdatedAt($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Property whereWeekendPrice($value)
+ * @mixin \Eloquent
+ */
 class Property extends Model
 {
     use HasFactory;
@@ -164,5 +218,38 @@ public function images()
         // Lunes–Huwebes: regular rate
         return $this->base_price;
     }
-    
+
+    /**
+     * ANG IISANG PINAGMUMULAN ng presyong sinisingil sa isang booking.
+     *
+     * Katulad ng papel na ginagampanan ng Booking::slotDateTimes() para sa
+     * oras: bawat path na gumagawa o nagpepresyo ng booking — public
+     * portal, live price preview, staff walk-in, admin create, customer
+     * reschedule — ay dapat dumaan DITO sa halip na kunin ang
+     * getPackagePrice() at magkuwenta ng sariling promo. Kung may dalawang
+     * lugar na magkuwenta, magkakaiba ang ipinakitang presyo sa aktwal na
+     * sinisingil, at ang guest ang unang makakapansin.
+     *
+     * Ang promo ay laging laban sa BASE RATE lang — hindi kasama ang
+     * extras. Sinasadya iyon: ang mga extras ay pass-through na gastos
+     * (pagkain, karagdagang serbisyo) na hindi dapat bawasan ng kampanya,
+     * at ganoon din ang hugis ng
+     * Admin\BookingController::recalculateBookingTotals() —
+     * `base_amount + extras - discount_amount`.
+     *
+     * @return array{base: float, discount: float, total: float, promo: ?\App\Models\Discount}
+     */
+    public function quoteFor(\Carbon\Carbon $checkin, ?string $slot = null): array
+    {
+        $base  = round((float) $this->getPackagePrice($checkin), 2);
+        $promo = Discount::bestFor($base, $checkin, $slot);
+        $off   = $promo ? $promo->calculateDiscount($base) : 0.0;
+
+        return [
+            'base'     => $base,
+            'discount' => $off,
+            'total'    => round($base - $off, 2),
+            'promo'    => $promo,
+        ];
+    }
 }

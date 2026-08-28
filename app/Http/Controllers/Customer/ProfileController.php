@@ -15,7 +15,7 @@ class ProfileController extends Controller
     // ── Show Profile Page ──────────────────────────────────────────
     public function edit(Request $request)
     {
-        $user = auth()->user();
+        $user = Auth::user();
 
         return view('customer.profile', [
             'user'             => $user,
@@ -28,7 +28,7 @@ class ProfileController extends Controller
     // ── Update Profile Info ────────────────────────────────────────
     public function update(Request $request)
     {
-        $user = auth()->user();
+        $user = Auth::user();
 
         $request->validate([
             'full_name' => 'required|string|max:150',
@@ -56,7 +56,7 @@ class ProfileController extends Controller
     // ── Change Password ─────────────────────────────────────────────
     public function updatePassword(Request $request)
     {
-        $user = auth()->user();
+        $user = Auth::user();
 
         $request->validate([
             'current_password'     => 'required|string',
@@ -82,7 +82,7 @@ class ProfileController extends Controller
     // ── Toggle Two-Factor Authentication ────────────────────────────
     public function toggleTwoFactor(Request $request)
     {
-        $user = auth()->user();
+        $user = Auth::user();
 
         // Turning it off is the sensitive direction — require the current
         // password, same pattern used by deactivate() below. Turning it on
@@ -105,7 +105,7 @@ class ProfileController extends Controller
     // ── Remove A Trusted Device ──────────────────────────────────────
     public function removeTrustedDevice(TrustedDevice $device)
     {
-        abort_if($device->user_id !== auth()->id(), 403);
+        abort_if($device->user_id !== Auth::id(), 403);
 
         $device->delete();
 
@@ -115,7 +115,7 @@ class ProfileController extends Controller
     // ── Deactivate Account ──────────────────────────────────────────
     public function deactivate(Request $request)
     {
-        $user = auth()->user();
+        $user = Auth::user();
 
         $request->validate(['password' => 'required|string']);
 

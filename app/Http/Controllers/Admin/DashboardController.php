@@ -8,29 +8,35 @@ use App\Models\User;
 use App\Models\Property;
 use App\Models\Payment;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 
 class DashboardController extends Controller
 {
     public function index()
     {
-        $stats = [
-            'total_bookings'     => Booking::count(),
-            'todays_checkins'    => Booking::whereDate('check_in_date', today())
-                                        ->where('status', 'confirmed')->count(),
-            'todays_checkouts'   => Booking::whereDate('check_out_date', today())
-                                        ->where('status', 'checked_in')->count(),
-            'pending_bookings'   => Booking::where('status', 'pending')->count(),
-            'total_guests'       => User::where('role', 'customer')->count(),
-            'total_properties'   => Property::count(),
-            'available_rooms'    => Property::where('status', 'available')->count(),
-'revenue_today'      => Payment::whereDate('payment_date', today())
-                            ->where('payment_type', '!=', 'refund')
-                            ->sum('amount'),
-        'revenue_this_month' => Payment::whereMonth('payment_date', now()->month)
-                            ->whereYear('payment_date', now()->year)
-                            ->where('payment_type', '!=', 'refund')
-                            ->sum('amount'), 
-        ];
+        // Hit on every admin dashboard load; the underlying counts/sums
+        // rarely need to be to-the-second fresh, so a short TTL cache cuts
+        // repeat-load DB traffic without stats visibly going stale.
+        $stats = Cache::remember('admin_dashboard_stats', 60, function () {
+            return [
+                'total_bookings'     => Booking::count(),
+                'todays_checkins'    => Booking::whereDate('check_in_date', today())
+                                            ->where('status', 'confirmed')->count(),
+                'todays_checkouts'   => Booking::whereDate('check_out_date', today())
+                                            ->where('status', 'checked_in')->count(),
+                'pending_bookings'   => Booking::where('status', 'pending')->count(),
+                'total_guests'       => User::where('role', 'customer')->count(),
+                'total_properties'   => Property::count(),
+                'available_rooms'    => Property::where('status', 'available')->count(),
+                'revenue_today'      => Payment::whereDate('payment_date', today())
+                                    ->where('payment_type', '!=', 'refund')
+                                    ->sum('amount'),
+                'revenue_this_month' => Payment::whereMonth('payment_date', now()->month)
+                                    ->whereYear('payment_date', now()->year)
+                                    ->where('payment_type', '!=', 'refund')
+                                    ->sum('amount'),
+            ];
+        });
 
         return view('admin.dashboard.index', compact('stats'));
     }

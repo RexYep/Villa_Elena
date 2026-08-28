@@ -21,6 +21,9 @@
             <i class="bi bi-house-door"></i> Frontdesk
             @yield('frontdesk-badge')
         </a>
+        <a href="{{ route('staff.availability') }}" class="nav-item {{ request()->routeIs('staff.availability') ? 'active' : '' }}">
+            <i class="bi bi-calendar3"></i> Availability
+        </a>
         <a href="{{ route('staff.walkin') }}" class="nav-item {{ request()->routeIs('staff.walkin') ? 'active' : '' }}">
             <i class="bi bi-person-plus"></i> Walk-in Booking
         </a>
@@ -28,9 +31,9 @@
     </nav>
     <div class="sidebar-footer">
         <div class="staff-info">
-            <div class="staff-avatar">{{ strtoupper(substr(auth()->user()->full_name, 0, 1)) }}</div>
+            <div class="staff-avatar">{{ strtoupper(substr(Auth::user()->full_name, 0, 1)) }}</div>
             <div>
-                <div class="staff-name">{{ auth()->user()->full_name }}</div>
+                <div class="staff-name">{{ Auth::user()->full_name }}</div>
                 <div class="staff-tag">Staff</div>
             </div>
             <form method="POST" action="{{ route('logout') }}" style="margin:0;margin-left:auto;">

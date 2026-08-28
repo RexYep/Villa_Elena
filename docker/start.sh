@@ -10,9 +10,20 @@ if [ -n "$AIVEN_CA_CERT" ]; then
     printf '%s' "$AIVEN_CA_CERT" > /etc/ssl/certs/aiven-ca.pem
 fi
 
-php artisan config:cache
-php artisan route:cache
-php artisan view:cache
+if [ "$APP_ENV" = "local" ]; then
+    # Local dev: skip framework caching so code/blade/route edits show up
+    # immediately without needing a container restart. Same image, same
+    # PHP/nginx stack as production — only this caching step differs, and
+    # it's driven by the same APP_ENV value Render already sets to
+    # "production" (see render.yaml), not a separate code path.
+    php artisan config:clear
+    php artisan route:clear
+    php artisan view:clear
+else
+    php artisan config:cache
+    php artisan route:cache
+    php artisan view:cache
+fi
 php artisan storage:link || true
 
 if [ "$RUN_MIGRATIONS" = "true" ]; then

@@ -161,39 +161,6 @@ body {
 }
 .sidebar-backdrop.open { display: block; }
 
-@media (max-width: 992px) {
-    .sidebar { transform: translateX(-100%); box-shadow: 0 0 40px rgba(0,0,0,.25); }
-    .sidebar.open { transform: translateX(0); }
-    .topbar { left: 0; padding: 0 16px; }
-    .main-content { margin-left: 0; padding: 20px; }
-    .sidebar-toggle { display: flex; }
-    .topbar-left h2 { font-size: 18px; }
-    .topbar-left p { display: none; }
-}
-
-@media (max-width: 480px) {
-    .topbar { padding: 0 12px; }
-    .main-content { padding: 14px; }
-    .topbar-right { gap: 6px; }
-}
-
-/* ── RESPONSIVE: TABLES & FORMS (shared across admin pages) ──────
-   Most admin pages build their table/form markup around these same
-   .table-card / .two-col primitives, so fixing it here once covers
-   bookings, payments, users, reviews, properties, settings, etc.
-   without needing a matching breakpoint copy-pasted into every page. */
-@media (max-width: 900px) {
-    .table-card { overflow-x: auto; -webkit-overflow-scrolling: touch; }
-    .table-card table { min-width: 640px; }
-    .table-card .table-header,
-    .table-card .pagination-wrap { position: sticky; left: 0; }
-    .two-col { grid-template-columns: 1fr; }
-}
-
-@media (max-width: 600px) {
-    .table-header { flex-direction: column; align-items: flex-start; gap: 10px; }
-    .form-card-body { padding: 18px; }
-}
 .logout-btn {
     display: flex; align-items: center; gap: 7px;
     background: #fff2f2; color: #dc2626;
@@ -292,6 +259,7 @@ tr:hover td { background: var(--sand); }
 .alert { border-radius: 10px; font-size: 13px; padding: 12px 16px; margin-bottom: 20px; border: none; }
 .alert-success { background: #dcfce7; color: #15803d; }
 .alert-danger { background: #fee2e2; color: #dc2626; }
+.alert-warning { background: #fef3c7; color: #92400e; }
 
 /* ── FORM CONTROLS ───────────────────────────────────────── */
 .form-card { background: var(--cream); border-radius: 14px; border: 1px solid var(--border); overflow: hidden; margin-bottom: 20px; }
@@ -385,3 +353,43 @@ tr:hover td { background: var(--sand); }
     cursor: pointer;
 }
 .modal-body { padding: 20px; }
+
+/* ── RESPONSIVE OVERRIDES ─────────────────────────────────────────
+   Kept at the end of the file on purpose: every rule here re-declares
+   a property some earlier, unconditional rule also sets (.sidebar,
+   .main-content, .table-card, .two-col). Same specificity either way,
+   so source order decides the winner — place these before the base
+   rules above and the media query silently loses the cascade at every
+   width, since the plain rule still matches too. */
+@media (max-width: 992px) {
+    .sidebar { transform: translateX(-100%); box-shadow: 0 0 40px rgba(0,0,0,.25); }
+    .sidebar.open { transform: translateX(0); }
+    .topbar { left: 0; padding: 0 16px; }
+    .main-content { margin-left: 0; padding: 20px; }
+    .sidebar-toggle { display: flex; }
+    .topbar-left h2 { font-size: 18px; }
+    .topbar-left p { display: none; }
+}
+
+@media (max-width: 480px) {
+    .topbar { padding: 0 12px; }
+    .main-content { padding: 14px; }
+    .topbar-right { gap: 6px; }
+}
+
+/* Most admin pages build their table/form markup around these same
+   .table-card / .two-col primitives, so fixing it here once covers
+   bookings, payments, users, reviews, properties, settings, etc.
+   without needing a matching breakpoint copy-pasted into every page. */
+@media (max-width: 900px) {
+    .table-card { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+    .table-card table { min-width: 640px; }
+    .table-card .table-header,
+    .table-card .pagination-wrap { position: sticky; left: 0; }
+    .two-col { grid-template-columns: minmax(0, 1fr); }
+}
+
+@media (max-width: 600px) {
+    .table-header { flex-direction: column; align-items: flex-start; gap: 10px; }
+    .form-card-body { padding: 18px; }
+}

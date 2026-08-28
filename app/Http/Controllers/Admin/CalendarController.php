@@ -8,6 +8,7 @@ use App\Models\Booking;
 use App\Models\Property;
 use App\Models\AvailabilityBlock;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 
 class CalendarController extends Controller
 {
@@ -137,7 +138,14 @@ class CalendarController extends Controller
             "Moved {$booking->booking_ref} from {$oldIn}–{$oldOut} to {$newIn->format('M d, Y')}–{$newOut->format('M d, Y')} via calendar"
         );
 
-        event(new BookingUpdated($booking, 'moved'));
+        // Realtime broadcast lang ito — hindi dapat maka-block sa AJAX
+        // response (na-move na ang booking sa DB sa puntong ito) kung
+        // mag-fail ang Pusher.
+        try {
+            event(new BookingUpdated($booking, 'moved'));
+        } catch (\Exception $e) {
+            \Illuminate\Support\Facades\Log::error('Failed to broadcast BookingUpdated (calendar move): ' . $e->getMessage());
+        }
 
         return response()->json(['success' => true, 'nights' => $nights]);
     }
@@ -159,7 +167,7 @@ class CalendarController extends Controller
             'end_date'    => $request->end_date,
             'reason'      => $request->reason,
             'notes'       => $request->notes,
-            'created_by'  => auth()->id(),
+            'created_by'  => Auth::id(),
         ]);
 
         return response()->json(['success' => true, 'block_id' => $block->id]);

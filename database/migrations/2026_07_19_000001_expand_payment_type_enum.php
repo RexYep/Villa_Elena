@@ -7,7 +7,7 @@ return new class extends Migration
 {
     /**
      * Dagdagan ang payment_type ENUM ng 'partial' at 'refund' — ginagamit
-     * na ito sa maraming parte ng application code (FrontdeskController,
+     * na ito sa maraming parte ng application code (FrontDeskController,
      * Admin/PaymentController refund) pero hindi pa kasama sa dating
      * listahan ng allowed values sa database, kaya nagre-result ng
      * "Data truncated for column 'payment_type'" error.

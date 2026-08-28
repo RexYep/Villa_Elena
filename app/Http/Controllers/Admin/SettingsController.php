@@ -29,6 +29,9 @@ class SettingsController extends Controller
             'deposit_percentage'   => 'required|numeric|min:0|max:100',
             'cancellation_hours'   => 'required|integer|min:0',
             'booking_hold_minutes' => 'required|integer|min:1',
+            'booking_cooldown_threshold'   => 'required|integer|min:1',
+            'booking_cooldown_window_days' => 'required|integer|min:1',
+            'booking_cooldown_hours'       => 'required|integer|min:1',
             'check_in_time'        => 'required|string',
             'check_out_time'       => 'required|string',
             'max_advance_days'     => 'required|integer|min:1',
@@ -43,6 +46,7 @@ class SettingsController extends Controller
             'resort_name', 'resort_email', 'resort_phone', 'resort_address',
             'resort_description', 'currency', 'deposit_percentage',
             'cancellation_hours', 'booking_hold_minutes', 'check_in_time',
+            'booking_cooldown_threshold', 'booking_cooldown_window_days', 'booking_cooldown_hours',
             'check_out_time', 'max_advance_days', 'min_stay_nights',
             'tax_percentage', 'facebook_url', 'tiktok_url', 'google_maps_url',
         ];

@@ -2,13 +2,16 @@
 
 @section('title', (isset($user) ? 'Edit' : 'Add') . ' User — Villa Elena Admin')
 @section('page-title', isset($user) ? 'Edit User' : 'Add New User')
-@section('page-subtitle', isset($user) ? 'Update profile for ' . $user->full_name : 'Create a new guest, staff, or admin account')
+@section('page-subtitle', isset($user) ? 'Update profile for ' . $user->full_name : 'Create a new guest, staff, or admin
+    account')
 
-@push('styles')
-<style>
-.form-wrapper{max-width:720px;}
-</style>
-@endpush
+    @push('styles')
+        <style>
+            .form-wrapper {
+                max-width: 720px;
+            }
+        </style>
+    @endpush
 
 @section('content')
 
@@ -17,21 +20,24 @@
         <span class="sep">›</span>
         <a href="{{ route('admin.users.index') }}">Users</a>
         <span class="sep">›</span>
-        <span class="current">{{ isset($user) ? 'Edit: '.$user->full_name : 'Add New' }}</span>
+        <span class="current">{{ isset($user) ? 'Edit: ' . $user->full_name : 'Add New' }}</span>
     </div>
 
-    @if($errors->any())
+    @if ($errors->any())
         <div class="alert alert-danger">
             <i class="bi bi-exclamation-circle me-2"></i>
-            @foreach($errors->all() as $error){{ $error }}. @endforeach
+            @foreach ($errors->all() as $error)
+                {{ $error }}.
+            @endforeach
         </div>
     @endif
 
     <div class="form-wrapper">
-        <form method="POST"
-              action="{{ isset($user) ? route('admin.users.update', $user) : route('admin.users.store') }}">
+        <form method="POST" action="{{ isset($user) ? route('admin.users.update', $user) : route('admin.users.store') }}">
             @csrf
-            @if(isset($user)) @method('PUT') @endif
+            @if (isset($user))
+                @method('PUT')
+            @endif
 
             {{-- Basic Info --}}
             <div class="form-card">
@@ -43,34 +49,43 @@
                     <div class="mb-3">
                         <label class="form-label">Full Name <span class="req">*</span></label>
                         <input type="text" name="full_name" class="form-control @error('full_name') is-invalid @enderror"
-                            value="{{ old('full_name', $user->full_name ?? '') }}"
-                            placeholder="Juan dela Cruz" required>
-                        @error('full_name')<span class="invalid-feedback">{{ $message }}</span>@enderror
+                            value="{{ old('full_name', $user->full_name ?? '') }}" placeholder="Juan dela Cruz" required>
+                        @error('full_name')
+                            <span class="invalid-feedback">{{ $message }}</span>
+                        @enderror
                     </div>
                     <div class="two-col mb-3">
                         <div>
                             <label class="form-label">Email Address <span class="req">*</span></label>
                             <input type="email" name="email" class="form-control @error('email') is-invalid @enderror"
-                                value="{{ old('email', $user->email ?? '') }}"
-                                placeholder="guest@example.com" required>
-                            @error('email')<span class="invalid-feedback">{{ $message }}</span>@enderror
+                                value="{{ old('email', $user->email ?? '') }}" placeholder="guest@example.com" required>
+                            @error('email')
+                                <span class="invalid-feedback">{{ $message }}</span>
+                            @enderror
                         </div>
                         <div>
                             <label class="form-label">Phone Number <span class="req">*</span></label>
                             <input type="text" name="phone" class="form-control @error('phone') is-invalid @enderror"
-                                value="{{ old('phone', $user->phone ?? '') }}"
-                                placeholder="09XX-XXX-XXXX" required>
-                            @error('phone')<span class="invalid-feedback">{{ $message }}</span>@enderror
+                                value="{{ old('phone', $user->phone ?? '') }}" placeholder="09XX-XXX-XXXX" required>
+                            @error('phone')
+                                <span class="invalid-feedback">{{ $message }}</span>
+                            @enderror
                         </div>
                     </div>
                     <div>
                         <label class="form-label">Role <span class="req">*</span></label>
                         <select name="role" class="form-select @error('role') is-invalid @enderror" required>
-                            <option value="customer" {{ old('role', $user->role ?? 'customer') == 'customer' ? 'selected' : '' }}>👤 Guest (Customer)</option>
-                            <option value="staff"    {{ old('role', $user->role ?? '') == 'staff'    ? 'selected' : '' }}>🏷️ Staff</option>
-                            <option value="admin"    {{ old('role', $user->role ?? '') == 'admin'    ? 'selected' : '' }}>⚙️ Admin</option>
+                            <option value="customer"
+                                {{ old('role', $user->role ?? 'customer') == 'customer' ? 'selected' : '' }}>👤 Guest
+                                (Customer)</option>
+                            <option value="staff" {{ old('role', $user->role ?? '') == 'staff' ? 'selected' : '' }}>🏷️
+                                Staff</option>
+                            <option value="admin" {{ old('role', $user->role ?? '') == 'admin' ? 'selected' : '' }}>⚙️
+                                Admin</option>
                         </select>
-                        @error('role')<span class="invalid-feedback">{{ $message }}</span>@enderror
+                        @error('role')
+                            <span class="invalid-feedback">{{ $message }}</span>
+                        @enderror
                     </div>
                 </div>
             </div>
@@ -87,8 +102,9 @@
                             <label class="form-label">ID Type</label>
                             <select name="id_type" class="form-select">
                                 <option value="">None provided</option>
-                                @foreach(["Driver's License","Passport","SSS ID","PhilHealth ID","Voter's ID","National ID","PRC ID","Postal ID"] as $idType)
-                                    <option value="{{ $idType }}" {{ old('id_type', $user->id_type ?? '') == $idType ? 'selected' : '' }}>
+                                @foreach (["Driver's License", 'Passport', 'SSS ID', 'PhilHealth ID', "Voter's ID", 'National ID', 'PRC ID', 'Postal ID'] as $idType)
+                                    <option value="{{ $idType }}"
+                                        {{ old('id_type', $user->id_type ?? '') == $idType ? 'selected' : '' }}>
                                         {{ $idType }}
                                     </option>
                                 @endforeach
@@ -97,14 +113,12 @@
                         <div>
                             <label class="form-label">ID Number</label>
                             <input type="text" name="id_number" class="form-control"
-                                value="{{ old('id_number', $user->id_number ?? '') }}"
-                                placeholder="ID number">
+                                value="{{ old('id_number', $user->id_number ?? '') }}" placeholder="ID number">
                         </div>
                     </div>
                     <div>
                         <label class="form-label">Home Address</label>
-                        <textarea name="address" class="form-control" rows="2"
-                            placeholder="Full home address">{{ old('address', $user->address ?? '') }}</textarea>
+                        <textarea name="address" class="form-control" rows="2" placeholder="Full home address">{{ old('address', $user->address ?? '') }}</textarea>
                     </div>
                 </div>
             </div>
@@ -116,7 +130,7 @@
                     <h3>{{ isset($user) ? 'Change Password' : 'Set Password' }}</h3>
                 </div>
                 <div class="form-card-body">
-                    @if(isset($user))
+                    @if (isset($user))
                         <span class="hint" style="margin-bottom:14px;display:block;">
                             Leave blank to keep the current password.
                         </span>
@@ -127,22 +141,24 @@
                             <div class="input-group">
                                 <input type="password" id="password" name="password"
                                     class="form-control @error('password') is-invalid @enderror"
-                                    placeholder="Min. 8 characters"
-                                    {{ !isset($user) ? 'required' : '' }}>
-                                <button type="button" class="btn btn-outline-secondary" onclick="togglePw('password',this)">
+                                    placeholder="Min. 8 characters" {{ !isset($user) ? 'required' : '' }}>
+                                <button type="button" class="btn btn-outline-secondary"
+                                    onclick="togglePw('password',this)">
                                     <i class="bi bi-eye"></i>
                                 </button>
-                                @error('password')<span class="invalid-feedback">{{ $message }}</span>@enderror
+                                @error('password')
+                                    <span class="invalid-feedback">{{ $message }}</span>
+                                @enderror
                             </div>
                         </div>
                         <div>
                             <label class="form-label">Confirm Password {{ !isset($user) ? '*' : '' }}</label>
                             <div class="input-group">
                                 <input type="password" id="password_confirmation" name="password_confirmation"
-                                    class="form-control"
-                                    placeholder="Repeat password"
+                                    class="form-control" placeholder="Repeat password"
                                     {{ !isset($user) ? 'required' : '' }}>
-                                <button type="button" class="btn btn-outline-secondary" onclick="togglePw('password_confirmation',this)">
+                                <button type="button" class="btn btn-outline-secondary"
+                                    onclick="togglePw('password_confirmation',this)">
                                     <i class="bi bi-eye"></i>
                                 </button>
                             </div>
@@ -158,7 +174,7 @@
                     {{ isset($user) ? 'Save Changes' : 'Create Account' }}
                 </button>
                 <a href="{{ isset($user) ? route('admin.users.show', $user) : route('admin.users.index') }}"
-                   class="btn-cancel-link">Cancel</a>
+                    class="btn-cancel-link">Cancel</a>
             </div>
 
         </form>
@@ -167,13 +183,14 @@
 @endsection
 
 @push('scripts')
-<script>
-function togglePw(id, btn) {
-    const input = document.getElementById(id);
-    const icon  = btn.querySelector('i');
-    input.type  = input.type === 'password' ? 'text' : 'password';
-    icon.classList.toggle('bi-eye');
-    icon.classList.toggle('bi-eye-slash');
-}
-</script>
+    <script>
+        function togglePw(id, btn) {
+            const input = document.getElementById(id);
+            const icon = btn.querySelector('i');
+            input.type = input.type === 'password' ? 'text' : 'password';
+            icon.classList.toggle('bi-eye');
+            icon.classList.toggle('bi-eye-slash');
+        }
+    </script>
 @endpush
+

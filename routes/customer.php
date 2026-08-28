@@ -9,6 +9,7 @@ use App\Http\Controllers\Customer\BookingController;
 use App\Http\Controllers\Customer\ReviewController as CustomerReviewController;
 use App\Http\Controllers\Customer\ProfileController;
 use App\Http\Controllers\Customer\PaymentController as CustomerPaymentController;
+use App\Http\Controllers\Customer\RefundDestinationController;
 
 
 Route::prefix('my')
@@ -33,6 +34,12 @@ Route::prefix('my')
     Route::delete('reviews/{review}', [CustomerReviewController::class, 'destroy'])->name('reviews.destroy');
 
     Route::get('payments', [CustomerPaymentController::class, 'index'])->name('payments.index');
+
+    // Saan ipapadala ang refund. Naaabot mula sa "Refund Approved" na
+    // notification at mula sa booking detail page — hindi ito makukuha
+    // sa QR Ph payment, kaya kailangang itanong (project.md §v5.9).
+    Route::get('refunds/{payment}/destination',   [RefundDestinationController::class, 'edit'])->name('refunds.destination');
+    Route::put('refunds/{payment}/destination',   [RefundDestinationController::class, 'update'])->name('refunds.destination.update');
 
     Route::get('profile',          [ProfileController::class, 'edit'])->name('profile.edit');
     Route::put('profile',          [ProfileController::class, 'update'])->name('profile.update');

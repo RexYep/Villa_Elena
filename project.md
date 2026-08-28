@@ -1,10 +1,911 @@
 # Villa Elena Private Rental Resort
 ## Resort Management System — Project Documentation
 
-**Version:** 5.1
+**Version:** 6.2
 **Stack:** PHP 8.2 / Laravel 12 / MySQL 8 / Bootstrap 5
-**Local URL:** `http://127.0.0.1:8000` (Laravel Dev Server)
-**Database:** `villa_elena_db`
+**Local URL:** `http://127.0.0.1:8000` (`php artisan serve`) or `http://localhost:8000` (Docker — see v5.3)
+**Live URL:** `https://villa-elena.onrender.com` (Render, free tier — testing only, not yet handed to real guests)
+**Database (local):** `villa_elena_db` (MySQL, XAMPP or standalone MySQL — same database either way)
+**Database (live):** Aiven MySQL free tier, database `defaultdb`
+
+---
+
+## What Changed in v6.2 (Read This First)
+
+### A repeat-unpaid-booking cooldown, and what was already there before it
+
+The question that started this: a guest books, never pays the 50% downpayment, `bookings:auto-checkinout` correctly auto-cancels the stale `pending` booking once `booking_hold_minutes` elapses (`AutoCheckInOutBookings::cancelStalePendingBookings()`) — but nothing stopped them from immediately booking again, holding another slot, and repeating the cycle indefinitely with zero cost.
+
+Two anti-abuse mechanisms already existed and are easy to conflate:
+
+- `Booking::hasActivePendingBooking()` — blocks a *second simultaneous* unpaid hold. One at a time, not a repeat-offense guard.
+- `Booking::hasExcessiveCancellations()` (3+ `status='cancelled'` bookings in 30 days) — forces **full payment instead of a deposit** on the next booking. This already counted auto-cancelled bookings too, since the sweeper also just sets `status='cancelled'`. But it only changes payment *terms*; it never stops a guest from opening yet another unpaid pending booking in the meantime, and it can't distinguish a guest who legitimately cancelled from one who never intended to pay.
+
+**New: a booking-creation cooldown, specifically for repeated non-payment.** A `bookings.cancelled_by` enum (`guest` / `admin` / `system`) was added — set at all three cancellation sites (`AutoCheckInOutBookings::cancelStalePendingBookings()`, `Customer\HomeController::cancelBooking()`, `Admin\BookingController::updateStatus()`) — so the two failure modes can finally be told apart instead of guessed at by parsing `cancellation_reason` text. `Booking::bookingCooldownEndsAt($userId)` counts only `cancelled_by='system'` rows in a lookback window; once a guest hits the threshold, `Portal\PortalController::submitBooking()` blocks new bookings until the cooldown expires (message includes the exact retry time).
+
+Three new admin-configurable settings (Settings → Booking Rules, same pattern as `booking_hold_minutes`):
+
+| Setting | Default | Meaning |
+|---|---|---|
+| `booking_cooldown_threshold` | 3 | Auto-cancelled (unpaid) bookings within the window that trigger the cooldown |
+| `booking_cooldown_window_days` | 30 | Lookback window for counting auto-cancels |
+| `booking_cooldown_hours` | 24 | How long new bookings are blocked once triggered |
+
+Deliberately **not** implemented: the Terms of Service already states "we may suspend or deactivate an account... for repeated no-shows" (`terms.blade.php` §03), but that has never been backed by code — no automated account suspension exists, and this change doesn't add one. It only blocks new *bookings* for a limited window; the account itself stays fully usable (can still log in, view history, message support). Full suspension was considered and explicitly deferred — it's a much bigger blast radius (blocks login entirely) for a problem a temporary cooldown already solves.
+
+`cancelled_by` is nullable and starts `NULL` on existing rows — there's no reliable way to backfill who cancelled bookings that predate this column, and `NULL` correctly excludes them from the cooldown count rather than guessing.
+
+---
+
+## What Changed in v6.1 (Read This First)
+
+### Legal pages — two, not three
+
+The landing-page footer had three dead `href="#"` links: Privacy Policy, Terms of Service, and Cookie Policy. Two of them are now real pages; **the Cookie Policy link was deliberately removed**, not built.
+
+The reason is what the system actually does. It sets **strictly-necessary cookies only** — the Laravel session cookie, `XSRF-TOKEN`, and `remember_web_*` when the guest ticks *Remember me*. There is no analytics, no advertising, no cross-site tracking, and therefore no consent banner. A standalone page for three essential cookies is padding; those three are documented in a **`#cookies` section inside the Privacy Policy** instead, as a table naming each cookie, what it does, and how long it lasts (the session cookie's name and lifetime are read from `config('session.*')`, so they can't go stale).
+
+| Route | Name | View |
+|---|---|---|
+| `GET /privacy-policy` | `portal.privacy` | `portal/legal/privacy.blade.php` |
+| `GET /terms-of-service` | `portal.terms` | `portal/legal/terms.blade.php` |
+
+Both are public (no auth), rendered by `Portal\PortalController::privacy()` / `terms()`, and share `portal/legal/_styles.blade.php` (styling) and `portal/legal/_scripts.blade.php` (sidebar scroll-spy) so the two pages can't drift apart visually.
+
+### The rule that matters: legal text reads from live data, never hardcoded
+
+Every number the two pages quote comes from `PortalController::legalContext()`, which pulls from the **same sources the booking flow uses**: the villa's `base_price`/`weekend_price`, `Setting::get('deposit_percentage')`, `Booking::pendingHoldMinutes()`, `Booking::SLOTS` (rendered through `slotDateTimes()`, including the computed slot durations), `Booking::MAX_RESCHEDULES`, and `Booking::RESCHEDULE_CUTOFF_DAYS`.
+
+This is not decoration. The exact bug fixed in v5.5 was **published policy text disagreeing with enforced code** — `portal/booking_form.blade.php` advertised *"Free cancellation 48 hours before check-in"* while `calculateRefundPercentage()` implemented 7 days / 3–6 days / under 3 days. A Terms of Service page is the worst possible place to repeat that mistake, so nothing in it is typed as a literal number that the code also owns. If you add a rule to these pages, wire it to its constant.
+
+The cancellation tiers themselves (100% within 24 hours of booking or 7+ days out, 50% at 3–6 days, none under 3 days) are still written as prose, because they live in `if` branches rather than in named constants — if those tiers ever move, `terms.blade.php` §9 must move with them.
+
+`PortalController::LEGAL_LAST_UPDATED` drives the "Last updated" date on both pages. **Bump it by hand when the policy wording changes** — it deliberately does not track deploys or file mtimes, because it tells a guest when the *policy* changed, not when the app was last shipped.
+
+### Booking policies moved into a modal, behind a required checkbox
+
+`portal/booking_form.blade.php` used to show a **Booking Policies** card in the form body — five paragraphs the guest scrolled past on the way to *Proceed to Payment*, agreed to by a line of small print (*"By proceeding, you agree to our booking policies"*). Nobody reads that.
+
+The card is gone. In its place, directly above the submit button:
+
+- A consent row — **`I have read the` + a highlighted `booking policies` button** — bound to `name="policies_accepted"`.
+- Clicking the highlighted words opens a modal (`#policiesModal`) holding the exact content the card held: deposit, check-in time, check-out time, cancellation tiers, reschedule limits — plus a link out to the full Terms of Service page.
+- The modal's footer has **"I've read these"**, which ticks the checkbox and closes it.
+- **`Proceed to Payment` is disabled until the box is ticked.**
+
+Three details that are load-bearing, not decoration:
+
+1. **The highlighted words are a `<button>`, and the consent row is NOT wrapped in a `<label>`.** Interactive content inside a label activates the label — so wrapping the row would make *opening the policies* tick the box, which is exactly the consent the checkbox is supposed to represent. Only the words "I have read the" are the `<label for>`. Verified by clicking: the link opens the modal and leaves the box unticked.
+2. **The disabling happens in JS, never in the markup.** If the inline script fails, the guest is not stranded with a permanently dead button — the checkbox's native `required` still blocks submission, and `submitBooking()` still rejects it. Three layers, degrading in that order.
+3. **`'policies_accepted' => 'accepted'` in `PortalController::submitBooking()` is the real enforcement.** A disabled button is an affordance; anyone can POST around it. The custom message names the box so the top-of-form `$errors->first()` alert is intelligible, and `$errors->has('policies_accepted')` re-renders the row in the red `.is-invalid` state.
+
+The modal body carries Bootstrap's own **`modal-body`** class alongside `.policy-modal-body`, because `modal-dialog-scrollable` puts `overflow-y` on `.modal-body` specifically. Without it the content overflowed a `.modal-content` that is `overflow:hidden` (for the rounded corners) and **the footer — including "I've read these" — was clipped off-screen**, making the flow uncompletable. This was caught by clicking through a real render, not by reading the markup; keep the class if you restyle the modal.
+### Landing-page gallery — one photo at a time
+
+`portal/home.blade.php`'s gallery was a 7-tile mosaic grid showing everything at once. It is now a single auto-advancing slideshow (`#gallerySlideshow`): one photo visible, cross-fade every 5 seconds (`data-interval`, which also drives the progress bar's animation duration), slow Ken Burns zoom on the active slide, prev/next controls, dot indicators, and a progress bar.
+
+It pauses on hover, while the lightbox is open, when the browser tab is hidden, and when the gallery scrolls out of view (`IntersectionObserver`) — so it isn't animating unwatched. Existing `openLightbox()` behaviour is unchanged; arrows and dots call `stopPropagation()` so they don't open it. The photo list moved into a `$galleryShots` array at the top of the section — add or remove a photo there and both the slides and the dots follow.
+
+---
+## What Changed in v6.0 (Read This First)
+
+### Seasonal promos — automatic, admin-only, advertised on the landing page
+
+The `discounts` table has existed since the original schema (migration `2026_03_07_200008`) and was **never wired to anything**: `bookings.discount_amount` was hardcoded to `0` in all four booking-creating paths, and there was no admin UI. v6.0 turns it into a working feature.
+
+**The mechanic is automatic, not a promo code.** Nothing is typed by the guest. A promo applies when the booking's **check-in date** falls inside the promo's window and the slot matches — the same shape as `pricing_rules`, which is also matched against the stay date rather than the booking date. This was a deliberate choice over code entry: a code is one more thing to lose, mistype, or leak, and on a single-villa resort there is no segmentation a code would buy you.
+
+**Who can create one: admin only.** The routes live in `routes/admin.php` (`role:admin`). Staff can't create or edit a promo — but a walk-in they book *does* get the discount automatically, and the availability grid shows them the discounted price so what they quote at the counter matches what the system charges. Rationale: a promo is a direct reduction in revenue, so it needs one owner and a `staff_logs` trail (`created_promo`, `updated_promo`, `toggled_promo`, `deleted_promo`, `announced_promo`).
+
+**How guests find out — both, doing different jobs:**
+
+| Surface | Reaches | Why it's needed |
+|---|---|---|
+| **Landing page** (hero pill + promo band above the villa showcase) | Everyone, logged in or not | This is the primary channel. Most first-time bookers **have no account**, so they have no `user_id` and `NotificationHelper` cannot reach them at all. Controlled by the promo's `is_public` flag. Includes **not-yet-started** promos — see below. |
+| **In-app notification** (opt-in checkbox on the admin form) | Registered customers with `status = 1` | For returning guests. One-time per promo — guarded by `notified_at`, which editing does **not** reset, so fixing a typo doesn't re-spam every guest's bell. |
+| **Price surfaces** (property page preview, booking form, staff availability grid, walk-in form) | Whoever is looking at a price | The discount is shown as its own line against the struck-through base rate, so the guest sees *why* the total dropped. |
+
+**No email, deliberately.** Production sends through Brevo's HTTPS API on a limited free tier, and that same quota carries 2FA codes, booking confirmations and password resets. A marketing blast that exhausts it doesn't just fail to market — it locks guests out of their accounts. The in-app bell is the right channel for this.
+
+**Advertising runs ahead of pricing — on purpose.** `Discount::publicActive()` (what the banner shows) includes promos whose `start_date` hasn't arrived yet; `Discount::isValidOn()` (what sets the price) does not. A promo dated for September has to be visible in **August**, because that is the only window in which it can still influence a booking — if it first appeared on September 1 it would be advertised only while it was already running, too late for anyone planning ahead. The banner renders those as *"For stays Sep 01 – Sep 30"* rather than *"Until…"*, and the admin list badges them **Scheduled**. Only `expiry_date` bounds the banner. This was corrected after the first real promo (`Ber Months Special`, Sep 1–30, created Aug 25) showed the discount correctly on the property page and booking form — both of which match against the guest's chosen **check-in date** — while being invisible on the landing page.
+
+**Date validation** (`PromotionController::validated()`): `expiry_date` can never be in the past — such a promo is dead the instant it's saved, yet still looks alive in the form. `start_date` can't be moved into the past either, with one deliberate exception: an already-running promo legitimately *has* a past start date, so an edit that leaves it untouched passes. Otherwise, renaming a live promo would force the admin to change its dates. The date inputs carry matching `min` attributes, with the running promo's own start date as its floor.
+
+### The one rule that matters: `Property::quoteFor()` is the only place a price is computed
+
+Mirrors what `Booking::slotDateTimes()` does for time. Every path that prices a booking — public portal preview, booking form, submit, staff walk-in, staff availability grid, admin create, customer reschedule — calls `quoteFor($checkin, $slot)` and gets back `['base', 'discount', 'total', 'promo']`. Nothing recomputes a discount on its own. Two places computing a price means the guest eventually sees one number and is charged another.
+
+**This immediately caught a real one.** `resources/views/staff/walkin.blade.php` had a **JavaScript reimplementation of `getPackagePrice()`** driven off `data-base`/`data-weekend`. Its own comment admitted it couldn't see `pricing_rules` overrides. With promos it would also miss the discount — and because the overpayment guard measures against that client-side `calculatedTotal`, staff would have been allowed to enter a payment the server then rejects as exceeding the total. Replaced with a fetch to the new `GET /staff/walkin/quote` (`FrontDeskController::priceQuote()`). That endpoint deliberately omits the `$checkin->isPast()` rejection that `Portal\PortalController::pricePreview()` performs, because a walk-in can legitimately check in mid-slot — check-out is the boundary there, as `storeWalkin()` already enforces.
+
+### Rules baked in
+
+- **The discount comes off `base_amount` only, never extras.** Extras are pass-through costs (food, added services) that a campaign shouldn't discount, and this matches the existing shape of `Admin\BookingController::recalculateBookingTotals()`: `base_amount + extras - discount_amount`.
+- **Promos never stack.** When windows overlap, the one producing the **largest peso discount** wins (not the largest percentage — those differ once a `fixed` promo is in play). Tie-break by highest `id`. Deterministic, so preview and charge can't disagree.
+- **The deposit is computed off the discounted total**, not the base — otherwise a 50% deposit on a discounted booking asks for more than half of what's actually owed.
+- **`usage_limit` can overshoot by one** under exactly simultaneous bookings. `increment()` is atomic at SQL level so no count is lost, but the limit check isn't locked. Accepted: locking the promo row on every booking costs more than one extra discounted stay.
+- **Rescheduling re-prices**, and moves the usage count with it — decrement the old promo, increment the new one — so a promo's limit isn't consumed by a booking that no longer uses it.
+- **Deleting a promo doesn't rewrite history.** `bookings.discount_id` is `nullOnDelete()`; `discount_amount` stays, so past totals remain correct and only the attribution is lost. Deactivating is preferred and is what the UI nudges toward.
+
+### Verified end-to-end against a running server, not fakes
+
+Per the v5.9 lesson that fake-backed tests structurally miss seams, every path was exercised over real HTTP with real logins:
+
+| Path | Result |
+|---|---|
+| Public booking (`POST /book/{property}`) | Fri night, base ₱6.00 → 20% → total ₱4.80, `discount_id` set, `used_count` 0→1 |
+| Staff walk-in (`POST /staff/walkin`) | base ₱6.00 → 25% → ₱4.50; paying ₱4.50 recorded as `full_payment` / `paid` — proof the overpayment guard now measures against the discounted total |
+| Admin create (`POST /admin/bookings`) | base ₱6.00 → ₱4.50, `discount_id` set |
+| Reschedule in/out of a night-only promo | out → discount cleared, `discount_id` null, `used_count` decremented; in → re-applied and incremented |
+| Admin create + notify | 6 notifications for 6 active customers, `link` = `/` (relative, per the notification-link rule) |
+| Edit an announced promo | value changed 20→25%, notification count stayed at 6 — no re-blast |
+| Slot targeting | night-only promo returned no discount on the day slot |
+| Landing page, admin index/create/edit, staff availability + walk-in, both quote endpoints | all render 200 with the promo visible |
+
+Local rates are ₱4.00/₱6.00 rather than ₱4,000/₱6,000 (test values left over from the ₱1 live-transfer work in v5.9), which is why the figures above look small. That also forced a fix: the admin form's live "what guests will pay" preview reads the villa's **actual** `base_price`/`weekend_price` from the DB instead of hardcoding ₱4,000/₱6,000 — a preview that lies about the price is worse than no preview.
+
+---
+
+## What Changed in v5.9 (Read This First)
+
+### The v5.6 finding "QR Ph cannot be refunded" was WRONG — it was the wrong endpoint
+
+v5.6 concluded, from a live test, that PayMongo categorically refuses to refund QR Ph payments, and closed the refund-API item as *impossible*. **That conclusion was based on a request sent to the wrong host.**
+
+QR Ph refunds do not live on the main API. They have their own host:
+
+| | Host |
+|---|---|
+| Card / wallet refunds | `https://api.paymongo.com/v1/refunds` |
+| **QR Ph refunds** | **`https://refunds-api.paymongo.com/v1/refunds`** |
+
+v5.6 tested only the first one, which is correct for every *other* source type and rejects `qrph` categorically — hence the confident-looking, repeatable, and entirely misleading error.
+
+**Re-verified 2026-08-22** against test keys (`sk_test_`), using the four existing paid `qrph` test payments:
+
+| Test | Result |
+|---|---|
+| `api.paymongo.com/v1/refunds`, full ₱2 | `400 parameter_invalid` — *"Refunds are not allowed for payments with source type qrph."* (v5.6's error, reproduced exactly) |
+| `refunds-api.paymongo.com/v1/refunds`, full ₱2 | **Accepted** — created `ref_d228b731…`, `livemode: false`, then `status: failed` |
+| Same host, **partial** ₱10 of ₱100 | `422 partial_refund_not_allowed` — *"Only full amounts are allowed to be refunded for qrph payments."* |
+| `GET` the refund id, both hosts | 404 on both — no retrieve endpoint exists |
+| `GET /v2/wallets` (test mode) | `{"data":[]}` — no wallet, therefore no available balance |
+
+The full refund passed validation and then failed at execution. The docs state *"Merchant's wallets should have enough available balance in order to do a refund request"*, and test mode has no funded wallet — so **the contract is verifiable in test mode, but the success path is only observable live.**
+
+### What a QR Ph refund actually is — not a reversal
+
+This is the part that shapes the design. PayMongo does **not** push the money back to the payer. It generates a **transfer link** that the guest opens and claims, choosing their own bank or e-wallet:
+
+```
+processing  → link generated
+refunding   → waiting for the guest to claim it
+succeeded   → guest claimed it
+failed      → link expired (3 days) or was declined
+```
+
+So a QR Ph refund still depends on the guest doing something, within 3 days, or it fails. It removes the resort's manual GCash transfer; it does not make the refund fire-and-forget.
+
+### Constraints that survive, and what they mean for us
+
+| Constraint | Consequence |
+|---|---|
+| **Full refunds only** — verified twice (₱10 of ₱100, and ₱1,000 of ₱2,000), and confirmed by PayMongo support as a **permanent limitation of the QR Ph method itself**, not a test-mode or account-settings restriction | Partial refunds **cannot** use the API. This directly collides with `Booking::calculateRefundPercentage()`'s **50% tier** (cancel 3–7 days out), and with every reschedule-to-cheaper-slot difference. Those stay manual permanently |
+| 30-day window (per docs, untested) | Older refunds stay manual |
+| Requires available wallet balance | A refund can fail for reasons unrelated to the request |
+| No GET endpoint (404 on both hosts). The dashboard *does* offer `payment.refund.updated` and `payment.refunded` webhook events — but the qrph refund object is invisible to the main API (`GET /v1/refunds/{ref_id}` → *"No such refund"*), so whether those events fire for qrph refunds is **unverified** | The `processing → succeeded` progression probably cannot be tracked in code. Untested, because the refund never reaches a trackable state without a funded wallet |
+| `payment_method = 'cash'`, or `reference_number` NULL (rows predating the `$fillable` fix) | No PayMongo payment to refund — manual |
+
+**The refund API was investigated and then rejected as the wrong tool — see the next section.** `PayMongoService` still has no refund method, and the manual "Mark Paid Out" flow remains the only implemented path.
+
+The verification script is **not** in the repo (it is throwaway, and it talks to a live payment API); it lives in the session scratchpad as `paymongo_refund_spike.php`, with a safety rail that refuses to run against `sk_live_` keys.
+
+### The refund API is the wrong tool. Send Money (Disbursements) is the right one
+
+The full-refund-only restriction is fatal, not inconvenient. `Booking::calculateRefundPercentage()` has a **50% tier** (cancel 3–7 days out), and `Customer\BookingController`'s reschedule path refunds an arbitrary price *difference*. Neither can ever be a full refund of a payment. The refund API can only serve the easiest case while the policy-driven cases stay manual forever.
+
+**PayMongo's Send Money / Disbursements product has no such restriction**, because it is a plain outbound transfer from the merchant Wallet rather than a reversal of a payment:
+
+| | Refund API | **Send Money** |
+|---|---|---|
+| Partial / arbitrary amounts | ❌ `422 partial_refund_not_allowed` | ✅ Any amount within rail limits |
+| Testable before going live | ❌ No funded test wallet → always `failed` | ✅ Simulator destination accounts |
+| Status tracking | No GET, webhook unverified | ✅ `callback_url` + `GET /v2/transfers/{id}` |
+| Speed | 3-day claim link, can expire unclaimed | InstaPay real-time, 24/7 |
+| Cost | Free | ₱10/transfer (first weekly free) |
+
+**Rails and limits:** InstaPay real-time up to ₱50,000 (the villa's maximum booking is ₱6,000, so this never binds); PESONet same/next banking day up to ₱10,000,000; wallet-to-wallet instant, unlimited.
+
+**The call:**
+
+```
+POST https://api.paymongo.com/v2/batch_transfers      (Basic auth, secret key)
+{"transfers":[{
+  "provider": "instapay",  "amount": 10000,  "currency": "PHP",
+  "source_account":      {"number":…, "name":…, "bic":…},   ← from GET /v2/wallets/
+  "destination_account": {"number":…, "name":…, "bic":…},
+  "callback_url": "…", "reference_number": "…", "metadata": {…}
+}]}
+```
+
+Amounts are in centavos. Statuses are `pending` → `succeeded` / `failed`, with rail-level ISO 20022 error codes (`AC01` invalid account, `AM04` insufficient funds, `DT05` cut-off).
+
+**Test simulator** (works with `sk_test_` keys) — destination account numbers that force an outcome:
+
+| Account number | Outcome |
+|---|---|
+| `999999990001` | `succeeded` |
+| `999999990003` | `account_not_found` |
+| `999999990004` | `account_not_active` |
+| `999999990005` | `account_limit_reached` |
+
+Anything else stays `pending` as a no-op. This is the decisive advantage over the refund API: **every failure path can be rehearsed before real money is involved.**
+
+### Verified against the live API, 2026-08-22 (test keys)
+
+| Probe | Result |
+|---|---|
+| `GET /v1/wallets/receiving_institutions?provider=instapay` | 200, ~16KB. GCash = **`GXCHPHM2XXX`** (G-Xchange, Inc.), Maya Bank = `MYDBPHM2XXX`, Maya Philippines = `PAPHPHM1XXX` |
+| `POST /v2/batch_transfers` | `500` — *"failed to get first source account: failed to get wallet by params"* |
+| `GET /v2/wallets/` | 200 `{"data":[]}` |
+| `GET /v2/wallets/transactions` | 404 *"wallet not found"* |
+
+**The single blocker is the wallet.** It was activated in live mode (Statement of Acceptance signed), but test mode still reports no wallet at all. The docs never explain how to obtain a test-mode wallet or test funds — this is an open support question. Note the endpoints **require the trailing slash**: `/v2/wallets` 301-redirects.
+
+### Payouts do NOT sweep the Wallet — the earlier worry was unfounded
+
+A concern was raised that the weekly (Wednesday) payout would empty the Wallet, leaving nothing to refund from. The docs say otherwise:
+
+> *"Payouts land in your PayMongo Wallet."* … *"You can **configure** a workflow in your Dashboard that automatically forwards each payout from your Wallet to a registered bank account or e-wallet."*
+
+Forwarding to a bank is an **opt-in workflow, not automatic**. Left alone, collected funds accumulate in the Wallet — exactly where refunds need them. Manual top-up is possible (transfer to the Wallet's dedicated account number) but is a convenience, not a requirement.
+
+Wallet states are `deactivated` → `activated` → `frozen`. While deactivated, *"accepted payments can still land, but manual top-ups and sending are unavailable."* Tiers carry direction-aware daily/monthly caps.
+
+### What this forces us to build: recipient details
+
+Send Money needs `destination_account.{number, name, bic}`. **The QR Ph payment does not carry any of it.** Verified against a real paid payment (`pay_fahRhy…`, ₱2,000):
+
+```json
+"source":  { "type": "qrph",
+             "provider": { "bank_institution_code": null } },
+"billing": { "name": "Nick Salvador", "phone": "09222222222" }
+```
+
+`billing` is **not payer data** — it is what `PayMongoService::createCheckoutSession()` sent, echoed back. It is the app's own booking record, not the name registered on the guest's GCash account. There is no payer account number field at all.
+
+Worse, **there is no account-name-inquiry endpoint** — no way to verify a name before sending. Validation happens at submission, so a wrong name surfaces as a runtime `account_not_found`, after the transfer is attempted.
+
+So the guest must be asked where to send the refund. Partially mitigated: `users.phone` already exists and, for GCash, the mobile number *is* the account number — but it is nullable, it is a booking contact number rather than a confirmed wallet number, and neither the institution nor the registered account name is known.
+
+### Built in v5.9: asking the guest where to send the refund
+
+The first piece of the Send Money path is in, and it deliberately does not depend on the wallet — it is needed even while refunds are sent by hand.
+
+| Piece | File |
+|---|---|
+| `refund_destinations` table (one row per refund, `payment_id` unique, `cascadeOnDelete`) | `database/migrations/2026_08_23_090000_create_refund_destinations_table.php` |
+| Model, with `toTransferAccount()` (the exact `destination_account` shape) and `masked_account_number` | `app/Models/RefundDestination.php` |
+| `Payment::refundDestination()`, `needsRefundDestination()`, `isReadyToSend()` | `app/Models/Payment.php` |
+| `PayMongoService::receivingInstitutions()` — live list, 24h cache + never-expiring stale fallback | `app/Services/PayMongoService.php` |
+| Guest form + guards | `Customer\RefundDestinationController`, `customer/refund_destination.blade.php` |
+| Notification now links to the form when details are missing | `NotificationHelper::withRefundDestinationPrompt()` |
+
+**The institution list is not hardcoded** — `GET /v1/wallets/receiving_institutions?provider=instapay` returns 94 receiver-capable institutions, filtered to those advertising `receiver` (some are `sender`-only and would guarantee a failed transfer). The BIC the guest picks is validated against that live list, so an unknown institution is rejected before ₱10 is spent discovering it.
+
+**The guest may choose any account** — the destination is not locked to the account they paid from. Send Money is a plain transfer, not a reversal, and some guests pay from someone else's wallet. The control is at the far end: an admin reviews before money leaves, capped at the refund amount.
+
+**Deliberately not logged:** `StaffLog` records *that* a destination was set and which institution, never the account number or name. The account number is masked everywhere except the moment of sending.
+
+**No financial behaviour changed.** A refund is still deducted from the booking the moment it is approved (`Booking::recalculateFinancials()`), whether or not the guest ever supplies details. A missing destination only changes what the admin sees: *"waiting on guest"* rather than *"ready to send"*.
+
+Verified end-to-end inside a rolled-back transaction (15 assertions): notification links to the form and stays relative, cash refunds never ask for bank details, the unique constraint blocks a second destination, and deleting a refund cascades the PII away with it.
+
+### Phase 2: getting the details actually filled in
+
+Phase 1 built the form. Phase 2 makes sure someone reaches it.
+
+**Guests are redirected straight to it** after self-cancelling (`Customer\HomeController::cancelBooking()`) or rescheduling to a cheaper slot (`Customer\BookingController::update()`), whenever the resulting refund still needs a destination.
+
+This is deliberately a **redirect, not extra fields inside the cancel/reschedule form**. Putting three required fields into a cancellation means a validation error can *block a cancellation* — unacceptable. The cancellation completes first; only then do we ask. If the guest walks away, the notification still links back to the form.
+
+**Admins can enter the details on the guest's behalf** (`PUT admin/payments/{payment}/destination` → `Admin\PaymentController::setRefundDestination()`), because in practice these often arrive by text or phone call. Without it, a guest who never returns to the site could never be refunded.
+
+Both doors share one set of rules — `RefundDestination::rules()`, `messages()`, and `mobileNumberError()` — so one form cannot silently drift looser than the other. GCash and Maya get a stricter check (11 digits, starts `09`) because the generic digits-only rule would accept `12345`; real banks vary in length, so nothing extra is imposed there.
+
+**Admin UI:** the payments list distinguishes two states that used to look identical — `NOT SENT` (waiting on *you*) versus `NEEDS DETAILS` (waiting on *the guest*) — with the count surfaced in the awaiting-payout banner and an *Add Details* shortcut. The payment detail page gains a **Refund Destination** card: institution, account name, and a masked account number behind a click-to-reveal, plus who supplied it and when. Once paid out, the card becomes a read-only record of where the money actually went.
+
+`needsRefundDestination()` and `isReadyToSend()` read the relation **accessor**, not `->exists()`, and `Admin\PaymentController::index()` eager-loads `refundDestination` — verified at 0 extra queries with eager loading versus one per row without it.
+
+### Phase 3: making "Mark Paid Out" mean something
+
+§6.11 records the failure this closes: *"Mark Paid Out" was pressed, and **no money moved*** — the out-of-band step was skipped and nothing in the UI asked for it. A `confirm()` dialog is far too easy to click through.
+
+**"Mark Paid Out" now requires the transfer reference** from the actual GCash/Maya/bank receipt, stored in `payments.transaction_ref` — a column that had been unused since it was created (0 of 59 rows). If you did not send the money, there is nothing to paste. Cash refunds keep it optional, since money handed across a desk has no transfer reference.
+
+Two guards sit in front of it:
+
+- **No destination, no payout.** You cannot have sent money to an account nobody recorded. The escape hatch is Phase 2's *Add Details* — so this is sequencing, not obstruction.
+- The list **doesn't render a Mark Paid Out button** for refunds still missing a destination. Showing a button that is guaranteed to error teaches staff to ignore errors.
+
+The confirmation modal shows the destination account inline, so the admin is looking at where the money goes while pasting the reference from the receipt. `transaction_ref` is displayed next to `reference_number` on the payment page — deliberately adjacent, because they are opposites: `reference_number` is the **inbound** PayMongo payment (`pay_…`), `transaction_ref` is the **outbound** transfer the resort sent.
+
+**Aging nudges** run from `bookings:auto-checkinout` (the existing daily cron — same command that already sweeps stale pending bookings). After `Payment::PAYOUT_NUDGE_DAYS` (3), an unsent refund pokes **whoever is actually blocking it**:
+
+| Stuck on | Who gets told |
+|---|---|
+| Missing guest details | **The guest** — "we can't send it until you tell us where" |
+| Details present, money unsent | **The admins** — "the guest was told they would hear back" |
+
+Mixing those two would send *"you need to do something"* to someone who can do nothing about it. Repeat nudges are deduped against existing `notifications` rows keyed on the notification `link` (unique per refund), so no new column was needed and a daily cron can't spam. The payments list also shows a `{n}D WAITING` badge once a refund passes the threshold.
+
+`daysAwaitingPayout()` measures from `created_at`, not `payment_date` — `payment_date` is date-only, and using a date-only column for aging produces off-by-one days.
+
+Verified in a rolled-back transaction: a 5-day-old refund without details nudges the guest, a 5-day-old refund with details nudges the admins, a 1-day-old refund is left alone, and a second run of the command creates zero further notifications.
+
+### Browser walkthrough — and the two bugs it caught
+
+The whole lifecycle was then driven through a real browser: guest cancels → redirected to the form → bad GCash number rejected → details saved → admin sees the refund → confirms with a transfer reference → refund closes. All test data was restored afterwards.
+
+Two defects surfaced that no amount of unit-level checking would have:
+
+1. **`admin/payments/index.blade.php` never rendered validation errors.** It printed `session('success')` and `session('error')` but not `$errors`, so any `back()->withErrors()` looked like the button simply did nothing. This pre-dated v5.9 — the refund modal's own `refund_amount` / `refund_reason` errors were invisible too. Fixed by adding an `$errors->any()` block.
+2. **The Refund Destination card showed `READY TO SEND` on an already-paid-out refund.** The condition tested only "does a destination exist". Now ordered `isReadyToSend()` → `needsRefundDestination()` → `SENT`.
+
+One workflow note for anyone automating this later: the guest cancel button calls a native `confirm()`, which freezes browser automation. Submit `#cancelForm` directly instead of clicking it.
+
+### The first real transfer — ₱1 through live InstaPay, 2026-08-23
+
+The Wallet was activated in live mode and a single ₱1 transfer was pushed to a GCash number via a throwaway spike (not app code). **The test-mode wallet was re-checked first and still returns `{"data":[]}`**, so the simulator remains unreachable and every observation below came from real money.
+
+The transfer was **accepted** (`201`, `status: "pending"`) and then **rejected downstream** two seconds later. Five things were learned, **none of which are documented by PayMongo**:
+
+1. **`GET /v2/wallets/` hides `balance`, `account` and `limits` by default.** They are absent from the payload, not null. They must be requested explicitly, and `fields` is a **repeated** parameter, not comma-separated: `?fields=balance&fields=account&fields=limits`. Reading `$wallet['balance']['available']` without this silently yields `0` and looks exactly like an empty wallet.
+2. **The fee is ₱10.00 per transfer** (`fee: 1000`) — there is no fee table anywhere in the docs.
+3. **A failed transfer costs nothing — but the fee reverts *asynchronously*.** `fee` is `1000` at creation and eventually `0` on a failed transfer, and **the gap between those two matters**: querying at the moment the status flips to `failed` still returns `1000`. The inline poll hits exactly that early window, so four failed transfers were stored with a ₱10 fee that was never charged. The spike script only ever saw `0` because it was re-checked minutes later. `syncStatus()` therefore **forces `fee = 0` on anything that is not `succeeded`** rather than believing the API at that instant. Ground truth is the wallet balance: six transfers, one success, ₱12 deducted (₱2 + ₱10).
+4. **Live error codes are ISO 20022, not the documented test-mode ones.** This transfer failed with `provider_error_code: "AC06"`, `provider_error_message: "BlockedAccount"`, `metadata.sub_code: "RJCT"`. The codes listed in `transfer-test-cases` (`account_not_found`, `account_not_active`, `account_limit_reached`) are **simulator strings only**. Error handling must map ISO codes. Had the simulator been available, it would have taught the wrong vocabulary.
+5. **`provider_reference_number` changes value.** At creation it echoes back whatever `reference_number` we sent; after settlement it becomes the real trace id, alongside `end_to_end_id`, `instruction_id` and `clearing_cycle`. **Re-read it after settlement** — the value captured from the `201` is not the bank's reference.
+
+**The architectural consequence is the important part: `201` does not mean the money arrived.** PayMongo accepted the instruction, passed it to InstaPay, and the receiving institution rejected it. So:
+
+- `markRefundPaidOut()` must **never** be driven by a `201`. It waits for `succeeded`.
+- A failure must **reopen** the refund, or the guest sees "sent" for money that bounced back.
+- `callback_url` (or polling) is **mandatory**, not an optimisation. It was deliberately omitted in the spike only because a local dev host is unreachable from PayMongo.
+
+*Why this particular transfer failed is not our bug:* the destination GCash account was blocked for cash-in at GCash's end, confirmed by their own SMS to the account holder. The presence of `instruction_id` and `clearing_cycle` proves the instruction genuinely reached the InstaPay network.
+
+#### Then a ₱1 transfer that succeeded — same hour, different institution
+
+A second ₱1 was sent to a **Maya** wallet (`PAPHPHM1XXX`) and **arrived**, confirmed by the recipient. `status: "succeeded"`, `metadata.sub_code: "ACTC"`, settled 2.25s after creation. Both outcomes are now observed against real money:
+
+| | succeeded | failed |
+|---|---|---|
+| `status` | `succeeded` | `failed` |
+| `metadata.sub_code` | `ACTC` | `RJCT` |
+| `fee` | `1000` (₱10 charged) | `0` (reversed) |
+| `provider_error_code` | absent | `AC06` |
+| time to settle | 2.25s | 2.02s |
+
+**The fee reversal is confirmed empirically**, not just inferred from one field: the wallet still read ₱38.82 immediately before the second transfer, i.e. the failed one cost nothing. **₱10 is charged only when the money actually lands.**
+
+*The BIC was never the problem.* Both transfers carried a valid BIC and PayMongo resolved both correctly (`GXCHPHM2XXX` → `G-Xchange, Inc.`, `PAPHPHM1XXX` → `Maya Philippines, Inc.`). The difference was entirely the state of the destination account. Note also that **`Maya Philippines, Inc.` (`PAPHPHM1XXX`, the wallet) is a different institution from `MAYA BANK, INC` (`MYDBPHM2XXX`, a real bank)** — see the `MOBILE_WALLET_BICS` note in `RefundDestination`.
+
+#### ⚠️ Open question: a ₱10,000/month cap on money entering the Wallet
+
+The same `fields=limits` call exposed this on the live wallet (`type: "custom"`):
+
+```
+limits.transactions.inward.monthly   = 1000000    → PHP 10,000.00
+running_transaction.inward.monthly   =    5882    → PHP 58.82 used
+limits.balance                       = 5000000    → PHP 50,000.00 max held
+limits.transactions.outward.*        = effectively unlimited
+```
+
+Outbound is unconstrained, so refunds themselves are not capped. **Inbound is capped at ₱10,000/month** — roughly two bookings at the ₱4,000–6,000 package rates.
+
+**PayMongo support says no such cap applies.** That is reassuring but not conclusive: the wallet API reports the field, and support has been wrong twice already in this same investigation — first claiming partial QR Ph refunds were possible, then claiming G-Xchange is not listed as an InstaPay receiver when their own endpoint lists it as one.
+
+So treat this as **probably fine, worth watching rather than trusting**. The wallet response carries `running_transaction.inward.monthly` alongside the limit, so the answer is observable rather than argued: if inward volume approaches ₱10,000 in a month and payouts keep arriving, the cap is not enforced. If they stop, it is. No code depends on this either way — refunds are capped by the *available balance* check, which fails safe and points at the manual flow.
+
+#### 🟢 GCash `AC06` is intermittent — the same payload both fails and succeeds
+
+**The API can reach GCash. It always could.** `tr_9bc989fac1d90b7844eca10a` is an API transfer to `09508912563` that landed on 2026-08-26 at 16:49. Nothing about `/v2/batch_transfers` is blocked, and no field in the payload determines the outcome.
+
+The two probes that settled it were 69 seconds apart, sent from the same command, differing in one field:
+
+| | `purpose` | `description` | `reference_number` | Result |
+|---|---|---|---|---|
+| `tr_2125e015…` 16:48 | `own-account` | `own-account` | `kdqyv59sk…` | `AC06` |
+| `tr_9bc989fa…` 16:49 | `own-account` | `Villa Elena refund for booking …` | `pzlow3yqx…` | **succeeded** |
+
+That alone looks like `description` matters. It does not — because `tr_2125e015…` (the failure) is **identical in every merchant-controlled field** to the two dashboard transfers that succeeded earlier the same day (`tr_3477975c…` ₱10, `tr_0d54b95e…` ₱6): same source, same destination, same name, same amount, same rail, same `purpose=own-account`, same `description=own-account`, same lowercase reference shape. Same payload, both outcomes.
+
+**So the payload does not decide. G-Xchange rejects a large share of inbound InstaPay from this wallet nondeterministically and reports it as `AC06 / BlockedAccount`** — a code that reads like a permanent fact about the account, on an account that accepted money 69 seconds later. Sixteen InstaPay transfers to GCash are on record; three landed.
+
+**Four diagnoses were wrong before this one**, and they failed the same way every time: a small sample, one variable that happened to correlate, and **no attempt ever repeated with an identical payload**. In order — "GCash blocks the Wallet" (killed by a dashboard success), "Send Money needs more than ₱5" (killed by our own ₱1 and ₱2 to Maya), "the dashboard sends something invisible" (killed by reading `GET /v2/transfers`, which shows both payloads in full), and "the `purpose` field decides" (killed by `tr_2125e015…`). The rule that would have caught all four: **before concluding a field matters, send the same payload twice.**
+
+**Fix — retry, don't surrender.** `RefundTransferService::send()` now loops up to `MAX_ATTEMPTS` (3), one `refund_transfers` row and a fresh `reference_number` per attempt, and stops early on success or on a non-retryable code. `RefundTransfer::RETRYABLE_ERROR_CODES` holds `AC06`, `AB08`, `9910`, `91`; the account-detail codes (`AC01`, `AC02`, `AC03`, `AC04`, `BE01`, …) are deliberately excluded, since retrying a wrong account number just repeats the mistake more slowly. `status = 'error'` is not retried either — the request never reached PayMongo, so its shape is what is broken.
+
+The admin is notified **once**, after the last attempt, with the attempt count in the message — a rejection retried three times must not look like one that was never retried, or the admin just presses the same button again. Failure announcements are suppressed inside the loop via `syncStatus(..., announceFailure: false)`; success always records immediately, since that is what closes the refund.
+
+Verified against a faked PayMongo that rejects once then accepts, inside a rolled-back transaction: two rows written, `AC06` then `succeeded`, ₱0 fee on the failure and ₱10 on the success, refund closed with the bank trace, no failure notification.
+
+**What is still unknown: the success rate.** Three of sixteen is not a rate — most of those attempts varied other fields, and the sample is tiny. `php artisan paymongo:probe-transfer` exists for exactly this: it sends one controlled transfer with every field settable (`--purpose`, `--description`, `--reference`, `--to`, `--bic`, `--provider`), touches no refund/payment/transfer row, and prints the real settled status. Run it a handful of times at ₱1 with everything held constant and count. If GCash lands roughly half the time, three attempts is plenty; if it is one in ten, `MAX_ATTEMPTS` needs raising or GCash refunds belong on the manual path after all. **`MAX_ATTEMPTS = 3` is a guess about how long an admin will wait at a button (~10s per attempt), not a measured figure.**
+
+`RefundDestination::KNOWN_TRANSFER_ISSUES` still warns above the Send button, now saying the true thing: GCash rejects intermittently, the app retries, and a failure is free.
+
+#### Switching back to test keys — what survives and what does not
+
+Verified on 2026-08-27 by calling the endpoints with the test secret key:
+
+| | Test mode | Notes |
+|---|---|---|
+| `GET /v2/wallets/` | **`{"data":[]}`** | HTTP 200, no error, no wallet |
+| **Send Money / refund payout** | ❌ impossible | No wallet means no `source_account`, so `/v2/batch_transfers` can never be built |
+| `GET /v1/wallets/receiving_institutions` | ✅ 94 entries, GCash included | The refund-destination form keeps working |
+| `qrph` checkout session | ✅ created, `active`, `livemode: false` | Guests can still pay through the flow |
+| Webhook secret | ⚠️ different per mode | Must swap `PAYMONGO_WEBHOOK_SECRET` too |
+
+The empty wallet is the trap: it is a **success** response, so nothing throws where it is fetched, and the failure only surfaces later as *"Could not reach the PayMongo wallet"* — which reads like a network fault and sends you looking in the wrong place. `RefundTransferService::send()` therefore checks `PayMongoService::isTestMode()` **before claiming the refund**, so test mode produces a clear message and no `error` row, no admin notification, no half-written attempt.
+
+Everything else in the refund flow still works on test keys: recording a refund, asking the guest for a destination, and `markRefundPaidOut()`. Only the automatic payout needs live keys.
+
+---
+
+*Superseded — the earlier incorrect diagnosis, kept for the reasoning lesson:*
+
+#### ⚠️ GCash rejects InstaPay transfers from the Wallet — `AC06`, on every account tried
+
+Three separate live attempts to **G-Xchange, Inc. (`GXCHPHM2XXX`)** over InstaPay have all come back `AC06 / BlockedAccount`, across **two different GCash accounts**, one of which the holder confirms is not restricted. The identical code path to **Maya (`PAPHPHM1XXX`) succeeds**, so this is not our bug and not InstaPay generally.
+
+What is known:
+
+- It is **not account-specific** — two accounts, same code.
+- GCash's own SMS after the first attempt named the flow explicitly: *unable to process the InstaPay cash-in via PayMongo, funds returned*, and asked the holder to contact GCash support about their cash-in service. GCash evidently treats this specific source differently.
+- **Every attempt is free** (`fee` reverts to `0`), so the retries cost nothing.
+
+**Update — PESONet failed too, and GCash is now off the automatic path entirely.** The PESONet probe to the same GCash account was rejected with **`RR04` (Regulatory Reason)** — a compliance-level refusal, distinct from InstaPay's `AC06 BlockedAccount`. So GCash rejects transfers from the PayMongo Wallet on **both rails, for two different stated reasons**.
+
+Routing GCash to PESONet was therefore not just useless but actively worse: PESONet is batch-cleared, so the admin waits a **full banking day** to learn what InstaPay reports in two seconds. `RefundDestination::NO_AUTO_TRANSFER_BICS` now blocks GCash from automatic transfer altogether — `canSendTransfer()` returns false, the Send button is not rendered, the detail page explains why, and the manual form opens by default because it is the only option. `PESONET_ONLY_BICS` and `preferredProvider()` are kept for when GCash (or another institution) becomes reachable.
+
+**GCash is the most common e-wallet among Filipino guests, so in practice a large share of refunds are manual.** That is the honest state of things, and the reason the manual flow was never removed. Re-test occasionally; remove the BIC from `NO_AUTO_TRANSFER_BICS` only when a real transfer lands, never on the strength of PayMongo's institution list.
+
+---
+
+*Superseded context — the reasoning that led to the PESONet attempt:*
+
+**PayMongo support confirmed it and named the fix: use PESONet for G-Xchange.** They also stated there is no enablement gap on our side (the Wallet is activated and Maya works), and that PESONet carries a much higher per-transaction ceiling (₱10,000,000 vs InstaPay's ₱50,000).
+
+⚠️ **Their stated *reason* is wrong, and the wrong part matters.** Support said G-Xchange "is not listed as an InstaPay receiver". PayMongo's own live endpoint says otherwise:
+
+```
+GET /v1/wallets/receiving_institutions?provider=instapay
+  GXCHPHM2XXX   G-Xchange, Inc.   type = sender + receiver
+```
+
+So **`receiving_institutions` cannot be trusted to answer "can this institution actually receive over this rail?"** — it lists GCash as an InstaPay receiver that rejects every InstaPay transfer. This is why `RefundDestination::PESONET_ONLY_BICS` is a hardcoded map rather than something derived from the API: the API is the thing that was wrong. Treat that constant as the record of empirically-proven routing, and only remove a BIC from it after a real transfer proves InstaPay works.
+
+This also means the guest-facing dropdown, built from the InstaPay list, happily offers GCash — so without the routing map every GCash refund would fail. Note too that the PESONet rows report an **empty `type`**, so `receivingInstitutions()`'s `in_array('receiver', $type)` filter would drop them all; that filter needs revisiting if PESONet is ever offered as a guest-visible choice.
+
+**Product consequence, and it is significant:** GCash is the most common e-wallet among Filipino guests. If it cannot receive, the automatic path covers Maya and banks but not GCash, and those refunds fall back to the manual `Mark Paid Out` flow. That is precisely why the manual path was kept.
+
+### Phase 4: the system sends the money itself
+
+`Admin\PaymentController::sendRefundTransfer()` → `POST /admin/payments/{payment}/send`. The manual `markRefundPaidOut()` path is **kept, not replaced** — it is still the only option for cash, for institutions InstaPay cannot reach, and whenever a transfer fails.
+
+**New tables and classes**
+
+- `refund_transfers` — one row per *attempt*, with its own snapshot of institution/account. Separate from `refund_destinations` because the destination is the *current* answer to "where does this go?" (the guest can still change it) while a transfer is the immutable record of "where it actually went and what happened". If the guest corrects their details after a failure, the question *"where did the first attempt go?"* still has an answer.
+- `RefundTransfer` — status helpers plus `failureReason()`, which maps ISO 20022 codes to something an admin can act on.
+- `RefundTransferService` — all the money-moving logic, deliberately out of the controller.
+- `PayMongoService::wallet()`, `walletBalance()`, `sendTransfer()`, `getTransfer()`.
+
+**The ordering that matters**
+
+1. **Claim inside a short transaction** (`lockForUpdate` on the payment + a check for an existing `pending`/`succeeded` transfer), writing the `pending` row *before* any API call. A double-click or two admins at once cannot produce two transfers, and the guard is in the **database**, not in the view — hiding a button is decoration, not a lock.
+2. **Call PayMongo outside that transaction.** Money moving inside a transaction that later rolls back leaves no record it ever happened.
+3. **Wait inline only for InstaPay** — up to 8s, against a measured ~2.25s settlement. PESONet is never polled inline: it clears in banking-day batches, so waiting would just hold the admin's request open for nothing.
+4. **`succeeded` is the only thing that closes the refund.** `syncStatus()` is the single place that sets `status = success` from a transfer.
+
+**Four things can close a pending transfer, all through `syncStatus()`:** the inline poll, the `callback_url`, opening the payment detail page (which syncs anything in flight), and `AutoCheckInOutBookings::syncPendingTransfers()` on the scheduled run. That last one is the **backstop and is not optional** — `callback_url` is deliberately omitted when `APP_URL` is local (PayMongo cannot reach `127.0.0.1`), and even in production PayMongo gives no delivery guarantee. Without it a PESONet transfer that actually landed would sit `pending` forever and the debt would stay open in the records. It swallows per-transfer errors so an unreachable PayMongo cannot take down the check-in/check-out run it shares a command with.
+
+**Failure keeps the refund open.** A failed transfer never marks the refund paid out; the admin is notified with a plain-language reason, the raw code is shown for support calls, and the refund can be sent again — free, since failed transfers are not charged. `status = 'error'` is kept distinct from `'failed'`: the former never reached PayMongo at all, which is a different problem from a bank rejection.
+
+**The callback is not trusted.** `POST /webhooks/paymongo/transfer` (CSRF-exempt) reads only *which* transfer changed, looks that id up in our own table, and then fetches the real state over an authenticated `GET`. The payload shape is undocumented and it is unclear whether it is signed, so nothing in it is believed. A forged call can at most make us ask PayMongo about a transfer that is already ours.
+
+**Balance is checked first**, including the ₱10 fee — a balance exactly equal to the refund is not enough. An unreachable wallet returns `null`, not `0.0`, and is deliberately *not* treated as "no funds"; the check is a guard against a known failure, not a gate.
+
+**Verified** with a fake `PayMongoService` returning the exact shapes observed live (including `fee: 1000` → `0` on failure and the `ACTC`/`RJCT` sub-codes): 24 assertions across success, `AC06` failure, insufficient balance, unreachable API, double-send, and cash — all passing, inside a rolled-back transaction. No real transfer was made from app code.
+
+### What live testing found after Phase 4 shipped
+
+Five defects, none of which the 24-assertion suite could have caught. Worth reading as a set, because the pattern is the same each time: **the verification exercised the logic and skipped the seam.**
+
+**1. The list page steered every admin into the wrong button.** `Send Refund` was only ever on the *detail* page; the payments list still offered `Mark Paid Out` — the manual fallback — as the sole action. The first real test went straight into it, and a ₱2 refund was recorded as sent with the *booking reference* typed in as the transfer receipt, while `refund_transfers` held zero rows. `Mark Paid Out` never calls PayMongo; that is the whole point of it. Fixed by making `Send Refund` the primary action in the list, rewording the banner, and making the manual modal say **"This does not send any money"** outright.
+
+**2. `Http::get()` silently broke the `fields` parameter.** `['fields' => ['balance','account']]` serialises through `http_build_query()` to `fields[0]=…&fields[1]=…`, which PayMongo ignores — returning a wallet with no `account`, indistinguishable from a wallet that has none. Live symptom: *"The PayMongo wallet has no source account. Nothing was sent."* on a funded, activated wallet. **Write that query string literally into the URL.** The spike script had it right because it built the URL by hand; the service regressed it by using the idiomatic array. The guard behaved correctly and refused to send, so no money moved.
+
+**3. The guest could change the destination mid-flight.** `isAwaitingPayout()` stays true while a transfer clears, so nothing stopped a guest editing GCash → Maya while money was already on its way to GCash — the record would say Maya, the money would land in GCash, and the refund would look lost. Invisible when everything settled in two seconds; a full-day window once PESONet entered the picture. Both `Customer\RefundDestinationController::authorizeRefund()` and `Admin\PaymentController::setRefundDestination()` now refuse while `hasTransferInFlight()`, and the admin form is hidden rather than shown-then-rejected. **A failed transfer reopens the lock** — that is exactly when the details need correcting.
+
+**4. `MAYA BANK, INC` was being forced to enter a mobile number.** `isMobileWallet()` matched on institution *name* (`str_contains($name, 'maya')`), which catches both `Maya Philippines, Inc.` (`PAPHPHM1XXX`, the wallet — mobile number) and `MAYA BANK, INC` (`MYDBPHM2XXX`, a real bank — ordinary account number). A Maya Bank customer could never have submitted valid details. Now keyed on BIC via `MOBILE_WALLET_BICS`. **Never detect wallet-vs-bank by name.**
+
+**5. A Blade expression inside a CSS comment.** `{{ payment_status }}` written inside `/* … */` still compiles — Blade does not care where it appears — producing `e(payment_status)` and a runtime *"Undefined constant"*. `compileString()` reported the view as fine, because that **is** valid PHP; only rendering catches it.
+
+**The verification lesson, and it is the general one:** every one of these lived in a seam the tests stubbed over — the fake `PayMongoService` overrode `wallet()`, so the query-string bug was unreachable; the assertions called methods directly, so the button wiring was unreachable; `compileString()` checks syntax, so a runtime constant was unreachable. Fakes prove logic and prove nothing about the edges where the code meets Laravel, PayMongo, or a browser. Those need a real render, a real read-only API call, or a real click.
+
+**One data-repair note:** refund #143 was reopened (`status` back to `pending`, `transaction_ref` and `processed_by` cleared) after being falsely marked paid out, with a `refund_payout_reversed` StaffLog entry recording why. Safe to do because `recalculateFinancials()` sums refunds **regardless of status**, so booking financials were unaffected — confirmed before and after.
+
+### Phase 5: "Refunded" was a lie until the money actually moved
+
+A booking's badge read **Refunded** the moment a refund was *approved* — `recalculateFinancials()` sums refund rows **regardless of `status`**, so `payment_status` flipped to `refunded` before anything was sent. With InstaPay that gap was two seconds. With PESONet it is a full day, and the guest sees "Refunded" while holding no money.
+
+**`payment_status` was deliberately left alone.** It answers *"is this booking's money settled?"* and drives filters, reports, the calendar and six views; overloading it with delivery stages would mix two different questions and ripple everywhere. Instead `Booking::refundStage()` **derives** the stage from the records that already know the truth — `payments.status` plus `refund_transfers.status` — so there is no column that can drift out of sync:
+
+| Stage | Shown as | Meaning |
+|---|---|---|
+| `owed` | **Refund** | Approved, nothing sent yet |
+| `processing` | **Refund Processing** | A transfer is in flight (the normal state for GCash/PESONet) |
+| `failed` | **Refund Failed** | A transfer was attempted and rejected — needs attention |
+| `refunded` | **Refunded** | Money actually delivered |
+
+Rendered via `$booking->payment_status_label` / `payment_status_class` in `admin/bookings/show` and `customer/booking_detail`. Both controllers eager-load `payments.refundTransfers` — without it `refundStage()` is a query per refund. The customer view also had **no `.p-refunded` rule at all**, so that badge had been rendering unstyled.
+
+**A "Refund On Its Way" notification** now fires when a transfer is submitted but has not settled — `NotificationHelper::refundOnTheWay()`, called only when the transfer is still `pending` after the inline wait, so instant transfers don't produce two notifications in a row. It names the institution and, for PESONet, the actual clearing windows. Without it the guest gets "approved" and then silence for a day, which in money terms reads as a refund that vanished.
+
+Verified across all five stages (including `none`) inside a rolled-back transaction, plus against the real bookings in the local database.
+
+### Wallet QR — considered, not chosen
+
+`Wallet QR` would remove the recipient-details problem entirely (*"no account number required"* — scan the recipient's QR Ph code and push funds via `POST /v2/qr/transfer`). It is **not** the primary path for three reasons: the docs state *"Wallet QR does not support test mode"* (live keys only, so zero rehearsal); the API needs the QR **payload string**, which a guest cannot extract from their wallet app — only a screenshot, so something has to decode it; and it is undocumented whether a personal GCash receive-QR is a valid transfer target. Revisit as a convenience once the InstaPay path is stable.
+
+---
+
+## What Changed in v5.8 (Read This First)
+
+### Groq retired `llama-3.1-8b-instant` — every AI feature was returning an API error
+
+The model this app had hardcoded since v4.0 was **decommissioned by Groq**. It now returns:
+
+```
+400 {"error":{"message":"The model `llama-3.1-8b-instant` does not exist or you do not have access to it.","code":"model_not_found"}}
+```
+
+This broke all four AI call sites at once — the public chatbot, admin insights, admin forecast, and review moderation — with no code change on our side. Confirmed against the live account: `GET https://api.groq.com/openai/v1/models` no longer lists it.
+
+**Fix — the model is no longer hardcoded.** It reads from `GROQ_MODEL` (default `openai/gpt-oss-20b`), so the next retirement is an env change, not a code deploy:
+
+| Area | Before | v5.8 (Now) |
+|---|---|---|
+| Model id | Hardcoded `llama-3.1-8b-instant` in `GeminiService` | `config('services.groq.model')` from `GROQ_MODEL`, default `openai/gpt-oss-20b` |
+| Reasoning | N/A (Llama 3.1 was not a reasoning model) | Sends `reasoning_effort`, **derived from the model id** by `GeminiService::reasoningEffort()`; a 400 naming the parameter is retried once without it. `GROQ_REASONING_EFFORT` overrides, `omit` skips |
+| Token budget | `max_tokens` fixed at 1024 for every call | `ask(string $prompt, int $maxTokens = 1024)`; the forecast report passes `2048` |
+| Failures | Returned an error string to the caller, logged nothing | Same string (the fail-open contract `ReviewModerationService` depends on) **plus** `Log::error` with model + status + body |
+| Stray `<think>` blocks | Would have been rendered to the guest verbatim | Stripped by `GeminiService::stripReasoning()` |
+
+### Why `reasoning_effort` matters here
+
+Every chat model Groq currently offers is a **reasoning** model, and reasoning tokens are billed against the same `max_tokens` budget as the answer. Measured on the forecast prompt at `max_tokens: 1024`:
+
+| `reasoning_effort` | Hidden reasoning | Actual answer | Result |
+|---|---|---|---|
+| default | 2,244 chars | 1,845 chars | Report truncated mid-section |
+| **`low`** | 121 chars | **3,518 chars** | Nearly 2x the usable output |
+
+Left at the default, the admin forecast would have silently cut off partway through — a subtler failure than the outright 400, and easy to mistake for the model being bad.
+
+### `reasoning_effort` is not portable across models
+
+Each family accepts a **different, mutually exclusive** set of values — there is no value that works everywhere. Verified against the live API:
+
+| Model family | Accepts | Sending anything else |
+|---|---|---|
+| `openai/gpt-oss-*` | `low` \| `medium` \| `high` | `400 "must be one of low, medium, or high"` |
+| `qwen/*` | `none` \| `default` | `400 "must be one of none or default"` |
+| `groq/compound*` | *(unsupported)* | `400 "not supported with this model"` |
+
+So a hardcoded `reasoning_effort` re-breaks every AI feature on the next model swap — the exact failure the env var was meant to prevent. `GeminiService::reasoningEffort()` therefore derives the value from the model id, and any 400 naming the parameter is retried once without it, so even an unrecognised future family degrades to a working call instead of an error string. Verified end to end across all four families above, plus a forced-invalid value (`high` on qwen) to confirm the retry path logs and recovers.
+
+### Model choice on Groq's free tier
+
+`openai/gpt-oss-20b` is the default: fastest, and it keeps its reasoning in a **separate `reasoning` field**, so `content` stays clean for the two call sites that parse the reply strictly (`ChatbotController`'s intent JSON, and `ReviewModerationService`'s exact `CLEAN` / `FLAGGED: <reason>` one-liner). `openai/gpt-oss-120b` is a drop-in upgrade via `GROQ_MODEL` if forecast quality matters more than latency. Avoid `qwen/qwen3.6-27b` — it inlines `<think>` into `content`.
+
+All four call sites re-verified end to end after the swap: chatbot intent returns valid JSON, moderation returns clean verdicts on both a genuine and a spam review, insights returns exactly 5 lines, and the forecast renders a complete report (2,695 chars, closing section intact).
+
+---
+
+## What Changed in v5.7 (Read This First)
+
+### QR Ph replaces GCash and Maya as the online payment method
+
+GCash and Maya each require a **separate application and activation** on PayMongo. QR Ph is already activated on the resort's account and **covers both — plus every bank app that supports QR Ph** — through a single integration. Switching to it is what makes real payments possible at all; the per-wallet route was blocked on approvals that hadn't been granted.
+
+Verified against the live PayMongo API before building: `payment_method_types: ['qrph']` is accepted by Checkout Sessions on this account, so the hosted-checkout architecture is unchanged. Only the requested method list changed.
+
+| Area | Before | v5.7 (Now) |
+|---|---|---|
+| `payments.payment_method` | `ENUM('gcash','paymaya','cash')` | `ENUM('qrph','cash')` |
+| PayMongo request | `payment_method_types => ['gcash','paymaya']` | `['qrph']` |
+| Manual record dropdowns (admin ×2, staff ×2) | Cash / GCash / PayMaya | Cash / QR Ph |
+| Checkout page badges | `💙 GCash` `💚 Maya` | QR Ph + GCash + Maya + Bank apps, **plus an explainer** that a QR will be shown to scan |
+| Dead duplicate `app/Http/Services/PayMongoService.php` | Still present, unreferenced, still requesting `grab_pay` | Deleted |
+
+**41 existing rows were relabeled** (`gcash` ×37, `paymaya` ×4) to `qrph`. Most of those were *manual* records — staff receiving a direct GCash transfer, which is not the same thing as QR Ph — so the migration writes the original method into `notes` first (`[Originally recorded as GCash before the QR Ph switch.]`). Narrowing the ENUM erases the value; it should not erase the history.
+
+The migration takes **four** steps, and the order matters in the opposite direction from v5.5's shrink: widen the ENUM to admit `qrph` → relabel → narrow. Relabeling first fails with `Data truncated`, because the target value isn't in the ENUM being written to yet. (v5.5 relabeled *toward* an existing value, so one ALTER sufficed there.)
+
+On the checkout page the wallet names are still shown alongside "QR Ph". Almost nobody recognises the QR Ph brand name; listing it alone reads as *"GCash is gone"* to a guest whose GCash app is exactly what they'll scan with.
+
+### QR Ph is asynchronous — which broke an assumption the success page was built on
+
+With GCash the guest is redirected into the wallet, authorises, and is redirected back, so arriving at `success_url` implied payment. **QR Ph has no such guarantee.** PayMongo displays a QR code; the guest scans it with a phone that is frequently *not* the device showing the QR. That browser tab may never navigate again, and if it does, settlement may not have completed.
+
+Two consequences, both now handled:
+
+1. **The webhook is the primary recording path, not a fallback.** This is why the v5.6 webhook work had to land first. It also means registering the webhook is now a **prerequisite**, not an optional extra — see Pending/Optional.
+2. **The success page can be reached before payment exists.** It used to render an unconditional green check and *"Payment Successful!"*, with the amount taken from `line_items` — the amount *requested*, not received. It now renders a second, honest state: a waiting notice explaining that confirmation arrives automatically, the outstanding balance, a "Not yet received" payment-status chip (previously a blank cell), and a retry link.
+
+**A real financial bug surfaced while doing this.** The callback recorded a payment when the session status was `'paid'` **or `'active'`** — but `active` means the session is still *open*, i.e. unpaid. Combined with reading the amount from `line_items`, a guest who opened checkout and returned without paying would have had a full payment recorded against their booking with no money received. Rare under GCash (you couldn't get back without authorising); routine under QR Ph. The check is now the authoritative one: an actual payment object inside the session carrying `status === 'paid'`, with the amount and reference read from that payment.
+
+---
+
+## What Changed in v5.6 (Read This First)
+
+### Refunds — the guest was never told anything
+
+v5.5 fixed the refund *accounting* (pending vs. paid out). What it didn't fix was that **nobody told the guest**. Cancelling a booking produced two notifications and both went to the admin; the guest got only a flash message, which disappears on the next page load, leaving no record of whether a refund was even owed.
+
+| Gap | Before | Now |
+|---|---|---|
+| **Guest self-cancels** | `Customer\HomeController::cancelBooking()` called `bookingCancelled()` and `refundIssued()` — **both `notifyAdmin()`**. The guest received nothing. (The *admin*-initiated cancel path did notify the guest, so this was an oversight in one path, not a design choice) | `bookingCancelledForGuest()` — one notification covering both the cancellation and the refund amount/percentage, or an explicit "not eligible for a refund" |
+| **Refund marked paid out** | `markRefundPaidOut()` only flipped `status` and wrote a `StaffLog` row. Completely silent — the guest was told a refund was coming and then never heard again, and no admin got confirmation the refund was closed | `refundPaidOut()` notifies **both**: the guest ("Refund Sent … allow a few banking days") and all admins ("Nothing further is pending on this refund") |
+| **"Refund Processed" was a lie** | The admin refund path told the guest *"has been processed"* while the refund row was still `status='pending'` — no money had moved. Guests would go looking in GCash for something that hadn't been sent | Retitled **"Refund Approved"**, explicitly stating the money hasn't been sent yet and that a second notification follows. Same correction applied to the reschedule flash message ("has been refunded" → "will be refunded") and the admin success message |
+
+All four refund-creating sites (`Customer\HomeController`, `Customer\BookingController`, `Admin\BookingController`, `Admin\PaymentController`) now notify the guest. The wording lives in **three new guest-facing presets** in `NotificationHelper` rather than in scattered `Notification::create()` blocks, so the pending-vs-sent distinction can't drift apart per call site again.
+
+### PayMongo webhook — signature verification could never have passed
+
+`PayMongoService::verifyWebhook()` hashed the raw body and compared it to the **entire `Paymongo-Signature` header**. That header is not a bare hash — it looks like:
+
+```
+Paymongo-Signature: t=1496734173,te=5f1a3b...,li=9c2d7e...
+```
+
+`t` is the timestamp, `te` the test-mode signature, `li` the live-mode one, and the signed payload is `"{timestamp}.{rawBody}"` — not the body alone. **Every genuine PayMongo event would have been rejected with 401**, silently, even with the webhook correctly configured in the dashboard. Now parses the header, reconstructs the signed payload, and accepts either `te` or `li` so it works in test and live mode without a code change.
+
+### The webhook now actually records payments
+
+The handler matched a booking and then only called `Log::info()` — the comment called it "a fallback for missed callbacks", but it never wrote anything. **The success callback was the only thing creating `Payment` rows**, and it only runs if the guest returns to the site after paying. Close the GCash browser tab and PayMongo has the money while the system still shows the booking unpaid.
+
+- Both paths now call one shared `recordPaymongoPayment()` — payment row, notifications, `recalculateFinancials()`, auto-confirm, confirmation email. (Deliberately shared: this codebase already had *seven* diverging copies of the money math, fixed in v5.5.)
+- **Idempotent** via `reference_number`, which holds the PayMongo `pay_xxx` ID in both paths — so a retry or a webhook-plus-callback double delivery records once. This only works because `reference_number` was added to `Payment::$fillable` in v5.5; before that it was always `NULL` and the guard could never match.
+- Unmatched bookings and already-recorded payments still return **200** — a non-2xx would make PayMongo retry something no retry can fix.
+- `payment_method` is normalised against the narrowed `gcash/paymaya/cash` ENUM, with the original value kept in `notes` and logged. Without this, an unexpected source type would fail the INSERT, return non-2xx, and have PayMongo retry forever while the payment stayed unrecorded.
+
+**This needed no live PayMongo account** — webhooks work in test mode with the test secret key. What it *does* need is a publicly reachable URL: register `POST /webhooks/paymongo` in the PayMongo dashboard against the Render URL or an ngrok tunnel, and set `PAYMONGO_WEBHOOK_SECRET`. It cannot fire against `localhost`.
+
+### Verified against real money
+
+QR Ph was tested end to end on **live keys** with two real ₱2 payments (`VE-AVFHSPDY`, 2026-08-16): a ₱2 deposit, then the ₱2 balance. Both were delivered by webhook and recorded correctly; the booking auto-confirmed and settled to fully paid.
+
+**PayMongo reports QR Ph as `source.type = "qrph"`** — matching the ENUM exactly, so the unmapped-method fallback never fired.
+
+Two webhook deliveries were rejected with 401 during the session. Diagnosed via the ngrok request inspector: both carried `livemode: false` — **test events sent from the PayMongo dashboard**, which sign the `te=` slot with the test secret while the app runs live keys. Correct rejection, nothing lost; real payments sign `li=`. The rejection log now says this itself (see Known Issues).
+
+### Payment display and notification fixes found after the live test
+
+| Issue | Detail | Fix |
+|---|---|---|
+| Payment history in random order | `payment_date` is a **date, no time**, so two payments on the same day tie and MySQL returns them arbitrarily — the deposit showed *above* the later balance payment | `id` added as tiebreaker in both payment controllers; the two booking-detail histories had **no ordering at all** and now sort newest-first |
+| `Full_payment`, `Qrph`, `FULL PAYMENT`, `Full payment` | Six views each did their own `ucfirst(str_replace(...))` on the raw enum, producing four different renderings of the same value | `Payment::typeLabelFor()` / `methodLabelFor()` (static, so `NotificationHelper` can use them too) plus `type_label` / `method_label` accessors, used everywhere |
+| **Admin told the wrong balance** | `paymentReceived()` was called **before** `recalculateFinancials()`, so "Balance due" was always one step behind. Live evidence: ₱2 paid on a ₱4 booking reported *"Balance due: ₱4.00"*; the final ₱2 reported *"₱2.00"* on an already fully-paid booking | Notification moved after the recompute, in both the PayMongo and manual-record paths |
+
+The four notification rows already written with `via Qrph` were relabeled. **Their "Balance due" figures were deliberately left alone** — those are what was actually sent at the time, and rewriting them would hide that the bug happened.
+
+### QR Ph payments CANNOT be refunded through PayMongo — ⚠️ SUPERSEDED, THIS WAS WRONG
+
+> **Corrected in v5.9 — read that section instead.** The conclusion below is false. The test hit `api.paymongo.com/v1/refunds`; QR Ph refunds live on a **different host**, `refunds-api.paymongo.com/v1/refunds`, which does accept them. The error quoted here is real and reproducible — it is simply what the *wrong* endpoint returns for a `qrph` source type. The record is kept because the reasoning failure is instructive: a categorical-sounding error, repeated four ways, was treated as proof about the payment method when it was only ever proof about one URL. **The support chatbot dismissed below was closer to right than this section was.**
+
+`POST /v1/refunds` rejects every QR Ph payment:
+
+```
+HTTP 400 parameter_invalid
+"Refunds are not allowed for payments with source type qrph."
+```
+
+Tested four ways against real live payments (`VE-AVFHSPDY`): both payments, full and partial amounts, and both **before and after** settlement (`available_at` 2026-08-18 17:00). Identical categorical error every time — so this is a restriction on the **source type**, not a timing or balance condition.
+
+PayMongo's support chatbot states the opposite (that dashboard and API refunds route back to the customer's GCash automatically). It appears to answer generically about "QR code payments" without checking the `qrph` source-type restriction. **The API response is authoritative; the chatbot is not.** Worth confirming with a human at support@paymongo.com, quoting the error above, since it shapes the entire refund design.
+
+Consequences, and they are structural:
+
+- ~~**No refund automation is possible for QR Ph.** The Pending/Optional item proposing a `POST /v1/refunds` integration is closed — not deferred, impossible.~~ **False (v5.9)** — automation is possible for *full* refunds on the other host, and for **any** amount via Send Money (`/v2/batch_transfers`), which is the direction actually chosen. Only *partial refunds through the refund API* are impossible.
+- ~~**Every refund must be sent by hand**~~ — still true *in practice*, because no code has been written yet, and permanently true for partial/cash refunds. But it is a choice now, not a limitation.
+- The original transaction fee is not returned on a refund (per support; consistent with industry norms — observed fee was ₱0.03 on ₱2.00, ~1.5%).
+
+Settlement behaviour observed on the live payments, matching what support described: QR Ph clears to `available_at` in about one banking day, then batches into a weekly (default Wednesday) payout.
+
+### Switching between PayMongo test and live mode
+
+Swapping the two API keys is **not** sufficient. Three things go wrong quietly if the rest is skipped.
+
+**To go live:**
+
+1. Move the live values into the active names in `.env` (they are parked as `PAYMONGO_PUBLIC_KEY_LIVE` / `PAYMONGO_SECRET_KEY_LIVE` so they are never lost):
+   ```
+   PAYMONGO_PUBLIC_KEY=pk_live_…
+   PAYMONGO_SECRET_KEY=sk_live_…
+   ```
+2. **Rebuild the container** — `docker compose up -d --build`. Env vars are read at container start, so editing `.env` alone changes nothing, and a plain `up -d` recreates from the *image*, silently reverting synced source too. This bit us twice in one session.
+3. **Re-check the ngrok URL.** The live webhook (`hook_ryzReXGN…`) is registered against one specific hostname. A free ngrok URL changes on every restart, and when it does the webhook points at a dead host — PayMongo takes the money and the app never records it, with nothing in the local logs to show for it. Either claim ngrok's free static domain (`ngrok http --url=<domain> 8000`) or re-register the URL in the PayMongo dashboard after every restart.
+
+`PAYMONGO_WEBHOOK_SECRET` does **not** change — it belongs to the live webhook and is already correct. In test mode it simply will not match (webhooks are mode-specific and no test-mode webhook is registered), so `401 invalid signature — rejected … livemode: false` in the logs is expected, not a fault.
+
+**To go back to test:** blank the two active keys and paste the test pair from Dashboard → Developers → API Keys with the Test toggle on, then rebuild. Test keys are not stored anywhere in the repo — `.env` is gitignored and `.env.example` ships empty.
+
+**If prices were lowered for cheap live testing, restore them.** `properties.base_price` / `weekend_price` for the villa must return to ₱4,000 / ₱6,000. This is the easiest step to forget and the most expensive to miss: a real guest would be quoted ₱4.
+
+### Still deliberately manual: sending refund money
+
+**"Mark as Paid Out" does not move money.** It is `$payment->update(['status' => 'success'])` — a logbook entry meaning "I, the admin, have sent this." The admin sends the money out-of-band (own GCash/Maya transfer to the guest's number) and *then* presses the button.
+
+> **v5.9 correction:** this section used to read *"and cannot be made to"*, on the grounds that PayMongo refuses QR Ph refunds outright. That was wrong — see v5.9. `PayMongoService` still has no refund or transfer method, but that is now unbuilt work rather than a hard limit: **Send Money** (`/v2/batch_transfers`) can send any amount, including the 50% tier. The manual flow stays correct regardless for cash refunds and as the fallback whenever a transfer is ineligible or fails.
+
+This was demonstrated the hard way during live testing: the guest-cancel flow was run end to end, "Mark Paid Out" was pressed, and **no money moved** — because the out-of-band step was skipped, and nothing in the UI asked for it. The app told the guest "Refund Sent" while the resort still held the cash. See the safeguards in Pending/Optional.
+
+
+---
+
+## What Changed in v5.5 (Read This First)
+
+Version 5.5 tightens up three areas that had drifted out of step with the single-villa / fixed-slot model, plus a cluster of money-handling bugs found while working on them. The theme running through all of it: **screens were showing numbers that were technically computed but operationally meaningless**, and **money flows claimed to be finished when nothing had actually happened**.
+
+### Payments — e-wallets and cash only
+
+| Area | Before (v5.4) | v5.5 (Now) |
+|---|---|---|
+| `payments.payment_method` | `ENUM('gcash','paymaya','card','cash','bank_transfer')` — dropdowns also offered "Credit Card", "Online Banking", and a bare "Online" that **wasn't even a valid enum value** (would have thrown on save) | `ENUM('gcash','paymaya','cash')`. The resort only accepts e-wallets online plus cash in person. 17 existing `card`/`bank_transfer` rows were relabeled to `gcash` before narrowing the ENUM (MySQL rejects rows using a value being removed) |
+| `payments.payment_type` | `ENUM('deposit','full_payment','balance','extra','partial','refund')` — `deposit` and `partial` were used interchangeably across the codebase to mean the same thing (a payment less than the full amount) | `ENUM('full_payment','balance','extra','partial','refund')`. Consolidated on `partial`; 5 existing `deposit` rows relabeled |
+| PayMongo checkout | `payment_method_types` requested `['gcash','paymaya','grab_pay']`, while the on-screen "Accepted Payment Methods" badges advertised Card + GCash + Maya + GrabPay — neither list matched the other or the DB | Both now say GCash + Maya, matching the ENUM |
+| `Admin\PaymentController::store()` | `'payment_method' => 'required'` / `'payment_type' => 'required'` — no `in:` rule at all, so any string reached the DB | Proper `in:` rules on both |
+
+**Note on wording:** the *guest-facing* "Deposit" concept on the checkout page (the 50% needed to confirm a booking) is unchanged and still correct — only the stored `payment_type` behind it changed to `partial`.
+
+### Rescheduling — closing a real cancellation-policy loophole
+
+Rescheduling had **no limit of any kind**: no cap on how many times, no cutoff on how close to check-in, and no column even tracking it. That made the cancellation policy bypassable:
+
+1. Guest cancels 2 hours before check-in → `calculateRefundPercentage()` returns **0%**.
+2. Instead, the guest *reschedules* to next month. Free, no penalty, unlimited.
+3. Now check-in is 30 days out → cancel → **100% refund**.
+
+The refund tier reads `checkInDateTime()` (the *new* date), so one reschedule turned a 0% refund into 100%, and the peak slot was held closed the whole time.
+
+| Rule | Value | Why |
+|---|---|---|
+| `Booking::RESCHEDULE_CUTOFF_DAYS` | **7 days** before check-in | Deliberately the *same* boundary as the 100%-refund tier. Once the 100% tier is gone, rescheduling is gone too — so there's nothing left to gain by rescheduling instead of cancelling |
+| `Booking::MAX_RESCHEDULES` | **2** per booking | New `bookings.reschedule_count` column. Existing bookings start at 0 (fresh allowance, not retroactively locked out) |
+
+`Booking::rescheduleBlockReason()` is the single source of truth — it returns the reason a booking can't be moved (or `null`), and that same string is what the guest sees. The controller re-checks it in `update()`, not just `edit()`, so a form left open past the cutoff can't slip through.
+
+**Also corrected:** `portal/booking_form.blade.php` advertised *"Free cancellation 48 hours before check-in"* while the code actually implements 7 days = 100%, 3–6 days = 50%, under 3 days = nothing. The terms text now matches the code, and pulls the reschedule numbers from the constants so it can't drift again.
+
+### Refunds — they were claiming to be done when no money had moved
+
+| Bug | What was happening | Fix |
+|---|---|---|
+| **Fully-paid booking tagged "Partial"** | Rescheduling to a cheaper slot always set `payment_status = 'partial'`, even when the guest had fully paid the new lower total. Reproduced: ₱6,000 paid → reschedule to ₱4,000 → refund ₱2,000 → `paid=4000, balance=0`, but status read `partial` | Fixed via the centralized recalculation below |
+| **Seven copies of the same money math** | `amount_paid`/`balance_due`/`payment_status` were recomputed inline in 7 places and had drifted apart. The PayMongo success callback **ignored refunds entirely**, so a booking with a prior refund would have its `amount_paid` jump back up after the next online payment | New `Booking::recalculateFinancials()` — one implementation, called from all 7. Two explicit rules: real payments count only when `status='success'`; refunds count **as soon as they're approved**, regardless of payout state (the guest is owed it either way) |
+| **Refunds marked `success` with no money sent** | There is no refund API (and cash can't be API-refunded anyway) — admin sends the money by hand. But refund rows were written as `status='success'` immediately, and the admin notification said *"₱X **refunded**"*, past tense. Nothing anywhere tracked whether the payout actually happened, so a guest's refund could be forgotten with no trace | Refunds now start as `status='pending'`. The Payments page shows a **"NOT SENT"** badge, an *"N refunds (₱X) awaiting payout"* banner, and a **Mark Paid Out** action. Notification retitled *"Refund To Send"* and links straight to the filtered list. Marking paid out changes **no amounts** — the refund was already deducted when approved |
+| **Audit trail was entirely blank** | `reference_number` and `received_by` were passed by nearly every `Payment::create()` call site but **missing from `$fillable`**, so mass assignment silently dropped them: all 46 payment rows had both as `NULL`. This also broke the duplicate-payment guard in `PaymentController::success()`, which looks up an existing row by `reference_number` — a lookup that can never match when the column is always `NULL` | Both added to `$fillable`, plus a `receivedBy()` relationship |
+| **Walk-in payment recorded with no Payment row** | If staff typed an amount but left Payment Method blank, `storeWalkin()` still wrote `amount_paid` onto the booking but skipped `Payment::create()` (gated on `$request->payment_method`). Found one real instance: `VE-OLRWMOGX`, `amount_paid = ₱3,999.96`, **zero payment records** — invisible to revenue reports, and the two sources of truth disagreed | Validation now rejects an amount with no method. **The existing bad row was left untouched** — it's real data and needs a human decision on whether ₱4,000 was actually received |
+
+`Admin\ReportController`'s net-revenue calculation was also corrected: it filtered refunds by `status='success'`, which after this change would have excluded not-yet-paid-out refunds and **overstated net revenue**. Refunds there now count on approval, matching `recalculateFinancials()`.
+
+### Staff Portal — rebuilt around the single villa
+
+| Area | Before | v5.5 (Now) |
+|---|---|---|
+| Frontdesk stat cards | "Occupied **1** / Available **3**" — counted *all* property rows: 1 villa + 3 unnamed info-only `type=room` records. Read as "3 units still free" when the only bookable unit was taken | Replaced with a **Villa status strip**: real status, current guest, checkout time, plus the next few Day/Night slots as one-click links into the walk-in form |
+| "Properties" tab | One card per property row — so three blank cards, since those room records have `property_name = NULL` since v5.0 | Removed. Superseded by the Villa strip and the new Availability page |
+| Slot availability | **Did not exist anywhere.** The admin calendar is `check_in_date`→`check_out_date` based and therefore **slot-blind** — a Day booking and a Night booking on the same date look identical, so you can't tell which half of the day is free without clicking each event. The walk-in form did no availability check at all until submit | New **Availability page** (own sidebar item, `/staff/availability`) — a 14-day slot grid, Day and Night per row, four states (Available / Booked / Blocked / Passed). Clicking a free slot opens the walk-in form pre-filled with that date and slot |
+| Housekeeping | Task shows a due **date** only. Nothing ever closed the loop: check-in creates the task, auto-checkout flips it to `in_progress`, and "Complete" is manual — buried in a tab. Result: **11 of 13 open tasks overdue** (worst: 48 days), 6 stuck in `in_progress` | Each task now shows its **real deadline** — the *next check-in time* — because the turnaround between slots is only 2 hours (5PM→7PM, 6AM→8AM). A colour-coded banner sits at the top of the frontdesk with a one-click **Mark cleaned**. Checkout's success message now names the deadline instead of saying "task activated" |
+| Theme | Its own navy/gold palette, dark sidebar | Same stone/terracotta earth theme as admin, cream sidebar. This was never really a design decision — **admin used to be navy too** and was migrated to the earth palette; staff simply never got migrated with it |
+
+`buildSlotGrid()` deliberately calls `Booking::hasConflict()` per slot rather than writing its own overlap query, so the grid and the actual booking rules can never disagree — including expired unpaid holds freeing up automatically.
+
+**Backlog cleared:** a migration closed 13 → 5 open tasks (6 were seed rows with no `booking_id`; 2 were real tasks whose bookings checked out days earlier). They're marked `completed` — the only other enum value — but each carries an explicit note saying it was auto-closed and never actually marked done, so it doesn't read as a real cleaning record.
+
+### Public portal touch-ups
+
+- **Contact section:** Facebook and TikTok are now regular contact rows (icon + label + link) matching Phone and Email, instead of bare circular icon buttons. The duplicate social icons in the footer were removed, so social links live in exactly one place.
+- **Reviews:** the reviewer's uploaded profile picture now shows in the avatar on both the homepage testimonials and `/reviews`, falling back to the initial when there's none. Customers could already upload one; it just was never displayed.
+- **Customer dashboard:** the "My Bookings" button in the welcome banner wasn't clickable — the banner's decorative `::before` circle overlapped it. Fixed with `position:relative; z-index:1` on the CTA row.
+
+### One workflow note worth remembering
+
+Mid-session, dropdown changes appeared not to take effect. The cause wasn't caching — the Docker container was running **stale code**. `resources/`, `app/`, `routes/`, `config/`, and `database/` are only synced into the container by Compose Watch, which requires `docker compose up --watch`; a plain `docker compose up` leaves the container frozen on whatever the image was built with.
+
+The dangerous part isn't the stale UI. Migrations run from the host hit the **same MySQL** the container uses, so a stale container ends up running **old code against a new schema** — here, container code still writing `payment_type = 'deposit'` against an ENUM that no longer had it, which fails with `Data truncated`. **Always restart the container after running migrations** if Watch isn't active, or the next error you chase may be an artifact rather than a real bug. Diagnose it by reading the file *inside* the container (`docker exec <container> grep ...`) rather than assuming it's a cache.
+
+---
+
+## What Changed in v5.4 (Read This First)
+
+Version 5.4 removes a real friction point in the Staff walk-in flow: a brand-new walk-in guest (no existing account) previously **had to** get a full login account created for them — `full_name` and `email` were both mandatory, and a password-reset email was always sent, whether or not the guest wanted portal access. Many walk-in guests just want to be checked in; they don't want to hand over an email or manage a login. The fix separates **"guest record"** (needed for every booking, for history/payments/reviews) from **"login account"** (now fully optional).
+
+| Area | Before | v5.4 (Now) |
+|---|---|---|
+| New walk-in guest | `full_name` **and** `email` both mandatory; a `User` account was always created and a password-reset email always sent, regardless of whether the guest wanted one | Staff now answers **"Gagawa ba ng login account?"** (Yes/No, defaults to **No**). A `User` record (role=`customer`) is **always** created either way — that's the guest record, kept for booking/payment/review history — but email is only required, and a password-reset email only sent, when the answer is **Yes** |
+| `users.email` column | `NOT NULL` — every account, including walk-in-only guest records, had to have *some* email value | **Nullable** (new migration) — a guest-record-only account can have no email at all. **Scoped narrowly on purpose**: this only loosens the DB constraint; `AuthController::register()` (public self-registration) still independently enforces `'email' => 'required'` at the validation layer, so online sign-ups are completely unaffected |
+| Existing guest (has an account already) | Reused via the "Existing Guest" dropdown | **Unchanged** — this path already worked the way it should |
+| "Existing Guest" dropdown display | `{{ $customer->full_name }} — {{ $customer->email }}` — showed a dangling `—` with nothing after it for any guest with no email | Falls back to phone, then a plain "walang email/phone naka-record" label, so guest-record-only accounts don't look broken in the list |
+
+**Implementation:** `Staff\FrontDeskController::storeWalkin()` gained a `create_account` (`yes`/`no`) field; `email` validation changed from `required_if:guest_type,new` to `required_if:create_account,yes`. The `User::create()` call and the `Password::sendResetLink()` call are both gated on `create_account === 'yes'`. `resources/views/staff/walkin.blade.php` gained a second toggle (Yes/No) inside the "New Guest" panel, only shown once "New Guest" is selected; picking "No" removes the `required` attribute from the Email input client-side and swaps the explanatory note.
+
+**Also fixed in this pass:** testing the above surfaced a real, currently-live instance of the already-documented "unprotected Pusher broadcast" issue (see v5.2's Known Issues, and the Pending/Optional row about the other unprotected `event()` call sites) — every `event(new FrontdeskUpdated(...))` / `event(new PropertyAvailabilityChanged(...))` call in `Staff\FrontDeskController` (7 call sites across `storeWalkin`, `recordPayment`, `checkIn`, `checkOut`, `startTask`, `completeTask`) fired *after* its DB write had already committed, with no protection — a `BroadcastException` (confirmed locally: `auth_key should be a valid app key`) would bubble all the way up to a 500 error page, even though the underlying booking/payment/check-in/check-out/task action had already fully succeeded. Fixed by wrapping all 7 in try/catch + `Log::error()`, the same pattern already used for `NotificationHelper::create()`'s broadcast (v5.2). Verified: re-ran the exact walk-in scenario that previously threw — booking now completes with a normal success redirect, and the broadcast failure is logged instead of surfacing to the user. **Follow-up the same day:** the rest of the "~12 unprotected call sites" pending item (`BookingController`, `CalendarController`, `HomeController`, `PortalController`) got the identical fix, plus a previously-uncounted pair in `Admin\PaymentController` — see [Known Issues Fixed](#13-known-issues-fixed) for the full breakdown, including the refund one that could have silently dropped a valid refund record.
+
+### Current test data in the local database (as of 2026-08-13)
+
+v5.1 wiped every pre-fixed-slot booking (see that section). The database was then re-seeded **by hand, in two passes**, purely so the app has something realistic to exercise — this is test data, not a seeder class, and it is **not reproducible via `db:seed`** (both passes were run through throwaway one-off Artisan commands that were deleted immediately afterwards). If the database is ever reset, this data is gone and would need re-creating.
+
+| Pass | What | Why |
+|---|---|---|
+| 2026-08-08 | **9 bookings** — 7 past (July 2026, all `checked_out`, each with a Payment + completed housekeeping task) + 2 future (Sept 2026, one fully paid, one deposit-only with a remaining balance). Spread across all 7 existing customer accounts. **5 of the 7 past bookings have approved reviews** (some with admin replies) | General testing across the whole app. The 2 past bookings deliberately left **without** a review are for manually testing the "Write a Review" flow — one of them belongs to the developer's own customer account. The deposit-only future booking doubles as a fixture for the "check-in blocked by outstanding balance" path |
+| 2026-08-11 | **29 more bookings** spread across **March–June 2026** (all `checked_out`, each with a Payment), with a mild upward trend into the already-seeded July | AI Forecasting reads a trailing **6-month** window. Only ~2 months of real data existed, so the forecast had nothing meaningful to work with. This backfills Mar–Jun so the 6-month window (Mar–Aug) is genuinely populated — see the Forecast row in Pending/Optional |
+
+Totals as of 2026-08-13: **45 bookings, 6 reviews** — 5 seeded above, plus **1 genuinely written through the app** by the developer's own customer account on 2026-08-09, which is what confirmed the customer "Write a Review" flow actually works end-to-end. That leaves exactly 1 past booking still review-less if another manual test of that flow is wanted.
+
+Note that the 2026-08-11 pass is what exposed the Insights `created_at`-vs-`payment_date` revenue bug (see Known Issues Fixed) — every one of those 29 historical payments carries a real backdated `payment_date` but a `created_at` of the day it was seeded, which is exactly the condition that made the bug visible.
+
+---
+
+## What Changed in v5.3 (Read This First)
+
+Version 5.3 is a direct response to a real incident: something that worked in local dev needed code changes to work on Render, and after those changes went out, local dev broke in return (`Cloudinary\Api\Exception\NotFound` on a page that never touched Cloudinary code directly). Root cause turned out to be twofold — a real unguarded-exception bug, and a local `.env` that had drifted into a mix of local and production credentials. v5.3 fixes both, and adds a way to actually run the **same Docker image** used on Render locally, so this class of "only breaks in one environment" bug gets caught before a deploy instead of after.
+
+| Area | Before (v5.2) | v5.3 (Now) |
+|---|---|---|
+| Cloudinary image URL accessors | `PropertyImage::getUrlAttribute()`, `User::getProfileImageUrlAttribute()`, `Package::getImageUrlAttribute()` called `Storage::disk('public')->url($path)` with no error handling | For the Cloudinary driver, `->url()` makes a **live Admin API call** (`adminApi()->asset($id)`) to fetch the resource before it can build a URL — unlike every other disk, where `->url()` is pure string-building. If that specific asset doesn't exist on Cloudinary, it throws `Cloudinary\Api\Exception\NotFound` **uncaught** — `'throw' => false` in `config/filesystems.php` doesn't protect this, since `Storage::url()` calls the adapter directly and never passes through Flysystem's exception-wrapping layer (confirmed in `vendor/laravel/framework/.../FilesystemAdapter.php`). All 3 accessors now wrap the call in try/catch + `Log::error()`, returning `null` (or `Package`'s existing default image) instead of 500ing the page |
+| Local `.env` | Had drifted into a mix of local and production values — `CLOUDINARY_URL` and a duplicate `MAIL_MAILER=brevo`/`MAILER_DSN` block had been appended at the bottom (from copying Render's env vars in for reference at some point), silently overriding the local `smtp`/local-disk settings above them | Cleaned back to local-only values (local disk, SMTP). **Confirmed this has zero effect on Render** — `.env` is gitignored and never deployed; Render reads its own, separately-configured dashboard env vars (`render.yaml`'s `sync: false` entries) |
+| Local dev runtime | `php artisan serve` (Windows-native PHP) — a genuinely different runtime (PHP CLI server, no nginx/php-fpm) from what Render actually runs | **Docker Desktop, running the same `Dockerfile`** Render builds from (`docker compose up --watch`) — same PHP 8.2-fpm-alpine + nginx + supervisord stack in both places. `php artisan serve` still works fine and is unaffected; Docker is now available as an option for testing changes against the real runtime before pushing |
+| `.dockerignore` | Didn't exist | **Added** — without it, a local `docker build` run from the actual working directory (not a fresh git clone, unlike Render's build) copies the local `vendor/` (installed **with** dev packages), `node_modules/`, and `.env` straight into the image, clobbering the clean `--no-dev` install. This is exactly why local Docker builds failed with `Class "Barryvdh\LaravelIdeHelper\IdeHelperServiceProvider" not found` the first time — the fix also means a local `docker build` now actually reproduces Render's build context instead of silently diverging from it |
+| `docker/start.sh` caching | Always ran `config:cache`/`route:cache`/`view:cache` on container start | Now branches on `APP_ENV` — `local` runs `config:clear`/`route:clear`/`view:clear` instead (so edits show up without a container restart); anything else (Render sets `APP_ENV=production`) keeps the original caching behavior unchanged |
+| Local Docker + host MySQL | N/A | A local Docker container can't reach `root@localhost` MySQL grants (it connects as a different apparent host). Rather than opening `root` to the network, a scoped `villa_docker`@`%` MySQL user was created with privileges on `villa_elena_db` only — used solely by `docker-compose.yml`, wired via `host.docker.internal` |
+| Local Docker file I/O speed | N/A | First working version bind-mounted the whole repo (`.:/var/www/html`) — functional, but multi-second page loads, since every PHP file `vendor/` include crosses the Windows↔WSL2 filesystem boundary on every request. Replaced with **Docker Compose Watch** (`develop.watch`): only `storage/` is bind-mounted (small, needs to persist uploads/sessions/cache); `app/`, `resources/`, `routes/`, `config/`, `database/` are synced in by Compose Watch instead of live-mounted, so requests read from the container's own fast filesystem while edits still show up within a second or two. Brought page loads from multi-second down to ~0.05–0.4s, matching `php artisan serve`. **`bootstrap/cache/` is deliberately not bind-mounted or synced** — mounting the host's copy (built against a full `composer install`, dev packages included) over the container's clean `--no-dev` build reproduces the exact same `PailServiceProvider not found` class of crash the `.dockerignore` fix addressed at build time |
+| Local Redis cache + Docker `app` service | Redis (`CACHE_STORE=redis`) already existed as a **v5.2** addition, but only as a standalone service — nothing else in `docker-compose.yml` to integrate with yet, since the Dockerized `app` service didn't exist until v5.3 | Now wired into the same `docker-compose.yml` as the `app` service: `REDIS_HOST=127.0.0.1` (in `.env`) still correctly reaches Redis's published port for host-based `php artisan serve`, but the containerized `app` service overrides `REDIS_HOST` to `redis` (the Compose service name — `127.0.0.1` inside that container means the container itself, not the Redis one) and declares `depends_on: redis`. Production is unaffected — Render still caches via `CACHE_STORE=database` (no free Redis provider wired up there) |
+
+**Not a code-path branch — a config-only difference:** worth calling out explicitly, since it looks superficially similar to the Cloudinary bug: `MAIL_MAILER` differs between local (`smtp`) and Render (`brevo`), but `Mail::extend('brevo', ...)` in `AppServiceProvider::boot()` registers unconditionally in both environments — Laravel's Mail manager just picks whichever transport `MAIL_MAILER` names. No application code (mailables, `Mail::to()->send()` call sites) branches on environment. This is the safe kind of environment difference; the Cloudinary bug above was not (custom code with an actual unguarded failure path), which is the distinction worth remembering before assuming any local/prod config difference is automatically fine.
+
+---
+
+## What Changed in v5.2 (Read This First)
+
+Version 5.2 is the first deployment of the system off the developer's local machine — moving from "runs on XAMPP on one laptop" to "has a real, testable URL anyone with the link can open." No application features changed; this was entirely infrastructure and bug-fixing work needed to make the existing v5.1 app actually run correctly outside local dev. It surfaced several real bugs that had been silently masked by always running against the same, incrementally-hand-edited local database.
+
+**Stack chosen (all free tiers, picked specifically for a testing-phase deploy with $0 cost):**
+
+| Concern | Service | Why |
+|---|---|---|
+| Hosting / compute | **Render** (free Web Service, Docker runtime) | Free tier, straightforward GitHub-connected auto-deploy |
+| Database | **Aiven** (free MySQL "Developer Tier") | Always-free (no trial/expiry), no credit card, real MySQL |
+| Property images | **Cloudinary** | Render's disk is ephemeral — local file storage doesn't survive a restart/redeploy |
+| Realtime (admin dashboard toasts) | **Pusher** | Already used locally; same free-tier account, same code path |
+| Transactional email | **Brevo**, via its HTTPS API (not SMTP) | See the SMTP-block row below — this wasn't optional |
+| Scheduled task (`bookings:auto-checkinout`) | Free external cron (e.g. cron-job.org) hitting a token-gated route | Render Cron Jobs are **not** free ($1/mo minimum) |
+
+| Area | Before (local-only) | v5.2 (Now) |
+|---|---|---|
+| Web server | `php artisan serve` only | `Dockerfile` + `docker/` (nginx + php-fpm + supervisord), listens on Render's injected `$PORT` |
+| Database driver | Hardcoded to local MySQL via `.env` | `config/database.php` unchanged in shape, but a new **`aiven`** connection was added (separate `AIVEN_DB_*` env vars) purely for one-off maintenance commands run from a developer machine — Render's free plan has no Shell tab, so there's no other way to run `php artisan migrate:fresh` etc. against production |
+| Property image storage | `Storage::disk('public')` → local disk always | `config/filesystems.php`'s `public` disk now switches to the `cloudinary` driver automatically when `CLOUDINARY_URL` is set, local disk otherwise — **zero controller code changes needed** |
+| Image URLs in views | ~15 places hardcoded `asset('storage/'.$path)`, assuming local-disk serving | All switched to disk-aware accessors (`$image->url`, `$property->primaryImage->url`, new `User::profile_image_url`) that resolve correctly regardless of which disk is active |
+| Outbound email | Gmail SMTP | **Render blocks all outbound SMTP traffic on its free tier** (ports 25/465/587, any host — confirmed this is what broke a previous deploy attempt too). Switched to Brevo's HTTPS API via `symfony/brevo-mailer` + a custom `Mail::extend('brevo', ...)` in `AppServiceProvider` — HTTPS isn't blocked |
+| Logging | `LOG_CHANNEL=stack` (file) | `stderr` in production — Render has no persistent disk, so a log file written inside the container is invisible in the dashboard's Logs tab; `stderr` streams straight into it |
+| Scheduled task | Manual `php artisan schedule:work` in an open terminal (see the v6.0-planned note this row replaces) | Token-gated `GET /cron/run-schedule/{CRON_SECRET}` route (`routes/web.php`) that runs `schedule:run` — hit every few minutes by a free external cron pinger, since Render's own Cron Jobs feature isn't free |
+| Session/cache tables | Never existed — local always used `SESSION_DRIVER=file` / `CACHE_STORE=file` | **New migration** `2026_08_10_000000_create_sessions_and_cache_tables.php` — production uses `database` for both (no persistent disk for file-based drivers on Render) |
+| `reviews` table migration | Out of date relative to the actual local schema — `overall_rating`/`comment` columns that the app hadn't used in a long time, missing `title`/`admin_reply_at`/`admin_note` that the app *does* use | `create_reviews_table` migration corrected to match reality (see Known Issues below) |
+| Unhandled mail/broadcast failures | Registration, 2FA (send + resend), verification (send + resend), forgot-password, and walk-in guest creation all called mail-sending code with no error handling; `NotificationHelper::create()`'s Pusher broadcast (`event(new NotificationCreated(...))`) was likewise unprotected | All wrapped in try/catch + `Log::error()` — a transport hiccup now degrades gracefully (user continues, just doesn't get that one email/push) instead of 500ing the whole request |
+
+**Not yet done (see [Section 15](#15-deployment) and Pending/Optional below for the running list):** PayMongo webhook not yet registered against the live URL; the other ~12 `event(new BookingUpdated/FrontdeskUpdated/PropertyAvailabilityChanged(...))` call sites (bookings, calendar, front desk) have the same unprotected-broadcast shape as the `NotificationHelper` bug that was fixed, but haven't been patched yet since none have actually failed in testing so far.
 
 ---
 
@@ -94,6 +995,7 @@ Version 3.0 modeled the resort as a **hotel with individually bookable rooms/vil
    - [AI Smart Insights](#616-ai-smart-insights)
    - [AI Forecasting](#617-ai-forecasting)
    - [AI Chatbot](#618-ai-chatbot)
+   - [Seasonal Promotions (v6.0)](#619-seasonal-promotions-v60)
 7. [Pricing Model (v4.0)](#7-pricing-model-v40)
 8. [Booking Availability & Fixed Slots (v5.1)](#8-booking-availability--fixed-slots-v51)
 9. [AI Integration](#9-ai-integration)
@@ -102,6 +1004,7 @@ Version 3.0 modeled the resort as a **hotel with individually bookable rooms/vil
 12. [Routes Summary](#12-routes-summary)
 13. [Known Issues Fixed](#13-known-issues-fixed)
 14. [Build Progress Summary](#14-build-progress-summary)
+15. [Deployment (v5.2, local Docker parity in v5.3)](#15-deployment)
 
 ---
 
@@ -132,20 +1035,34 @@ Public-facing customers interact with a **fourth surface**, the Public Portal (h
 | Charts | Chart.js | 4.5 (npm package, was CDN) |
 | Calendar | **FullCalendar** | 6.1.11 (npm package, was CDN) — used in both the admin calendar module and the customer-facing availability calendar |
 | Fonts | Playfair Display + DM Sans / Jost | Google Fonts |
-| AI Provider | Groq API | llama-3.1-8b-instant |
+| AI Provider | Groq API | `openai/gpt-oss-20b` (env-overridable via `GROQ_MODEL`) |
 | Payment Gateway | PayMongo | Sandbox / Live |
+| Caching | **Redis** (`predis/predis` client) | **NEW v5.2** — local dev only, see below; production still caches via the `database` driver (no free Redis provider wired up on Render yet) |
+| Reports Export | **barryvdh/laravel-dompdf** + **maatwebsite/excel** | **NEW v5.2** — PDF/Excel export on the Admin Reports page, see [Reports & Analytics](#66-reports--analytics) |
 
 ### Local Development Configuration
 
 | Setting | Value |
 |---|---|
 | Project Root | `C:\xampp\htdocs\villa-elena\` |
-| Web URL | `http://127.0.0.1:8000` |
-| Database | `villa_elena_db` |
-| DB User | `root` (no password) |
+| Web URL | `http://127.0.0.1:8000` (`php artisan serve`) or `http://localhost:8000` (Docker) |
+| Database | `villa_elena_db` (credentials in local `.env`, not reproduced here) |
 | Session Driver | `file` |
-| Cache Driver | `file` |
+| Cache Driver | `redis` (**v5.2** — was `file`; see Redis Caching below) |
 | Queue Driver | `sync` |
+| Docker (optional, **NEW v5.3**) | `docker compose up --watch` — runs the same `Dockerfile`/image Render deploys, for testing changes against the real production runtime before pushing. See [What Changed in v5.3](#what-changed-in-v53-read-this-first) |
+
+### Redis Caching (NEW v5.2, local dev only)
+
+Added specifically to make the caching layer real rather than just described — `App\Models\Setting::get()` already called `Cache::remember(..., 3600, ...)` before this (see [Settings](#67-settings)), it just meant nothing (`file` driver) until now. As of v5.2, `CACHE_STORE=redis` / `REDIS_CLIENT=predis` in the local `.env`, backed by a standalone Redis container (not the full app) — no PHP `redis` extension needs to be installed into XAMPP's `php.ini`:
+
+```bash
+docker compose up -d redis      # starts just the redis service from docker-compose.yml
+```
+
+Also newly cached: `Admin\DashboardController::index()`'s KPI stats (`Cache::remember('admin_dashboard_stats', 60, ...)`) — previously ran 8 fresh COUNT/SUM queries on every admin dashboard load; a 60s TTL was chosen over event-driven invalidation to avoid touching every booking/payment mutation call site for a monitoring-only figure.
+
+**Production is unaffected on purpose** — `.env.example`'s `CACHE_STORE` stays `database` for Render (no free Redis add-on there yet, same reasoning as the rest of the [Deployment](#15-deployment) stack being picked for $0 cost). If a free Redis provider (e.g. Upstash) is added later, only `.env`/`render.yaml` need to change — no application code depends on which cache driver is active.
 
 ---
 
@@ -194,7 +1111,7 @@ Managed via Laravel migrations with sequential timestamps to resolve foreign key
 | 06 | `reviews` | Guest reviews and star ratings (now with automated-moderation flag) |
 | 07 | `booking_extras` | Add-on/extra amenity charges per booking |
 | 08 | `pricing_rules` | Date-range pricing overrides (e.g. holidays) — takes priority over the standard day/time pricing segments |
-| 09 | `discounts` | Promo codes and discount rules |
+| 09 | `discounts` | **Seasonal promos** — automatic discounts on the villa base rate, matched against the booking's check-in date and slot (v6.0). Originally shaped for promo codes; `code` is now nullable and unused by the automatic flow |
 | 10 | `notifications` | In-app notifications for all users (now with a click-through `link`) |
 | 11 | `housekeeping_tasks` | Housekeeping job assignments |
 | 12 | `packages` | Bundled booking packages |
@@ -203,6 +1120,60 @@ Managed via Laravel migrations with sequential timestamps to resolve foreign key
 | 15 | `settings` | Key-value system configuration (now also stores the admin-managed amenities list) |
 | 16 | **`trusted_devices`** ← **NEW v5.0** | Devices a customer has verified via 2FA email OTP; lets a device skip OTP on future logins and lets the customer view/revoke them |
 | 17 | **`login_activities`** ← **NEW v5.0** | Read-only per-login history (device, IP, timestamp, whether it required OTP) shown on the customer Profile page |
+
+### v5.7 Schema Changes
+
+`2026_08_16_090000_switch_payment_method_to_qrph.php` — four steps, and **the order is load-bearing**:
+
+```sql
+-- 1) Preserve the original method before the value disappears
+UPDATE payments SET notes = TRIM(CONCAT(COALESCE(notes,''),
+       ' [Originally recorded as GCash before the QR Ph switch.]'))
+ WHERE payment_method = 'gcash';   -- same for 'paymaya' / PayMaya
+
+-- 2) WIDEN first — nothing can hold 'qrph' until the ENUM admits it
+ALTER TABLE payments
+  MODIFY payment_method ENUM('qrph','gcash','paymaya','cash') NOT NULL;
+
+-- 3) Relabel (41 rows: 37 gcash + 4 paymaya)
+UPDATE payments SET payment_method = 'qrph'
+ WHERE payment_method IN ('gcash','paymaya');
+
+-- 4) Narrow to the final shape
+ALTER TABLE payments
+  MODIFY payment_method ENUM('qrph','cash') NOT NULL;
+```
+
+Skipping step 2 fails with `Data truncated for column 'payment_method'` — MySQL will not store a value the ENUM doesn't list. Note this is the **mirror image** of the v5.5 shrink below, which relabeled toward an *existing* value (`gcash`) and so needed only one ALTER. The notes step is written to be idempotent (it skips rows already tagged), so a partially-applied run can be re-run safely.
+
+`down()` restores the wider ENUM only — which row was `gcash` and which was `paymaya` is no longer recoverable from the column, and is deliberately left readable in `notes` instead.
+
+### v5.5 Schema Changes
+
+```sql
+-- payments: only e-wallets + cash are accepted now.
+-- The 17 existing card/bank_transfer rows are relabeled FIRST — MySQL
+-- rejects the ALTER while rows still use a value being removed.
+UPDATE payments SET payment_method = 'gcash'
+  WHERE payment_method IN ('card', 'bank_transfer');
+ALTER TABLE payments
+  MODIFY payment_method ENUM('gcash','paymaya','cash') NOT NULL;
+
+-- payments: 'deposit' and 'partial' meant the same thing (a payment
+-- less than the full amount). Consolidated on 'partial'; 5 rows moved.
+UPDATE payments SET payment_type = 'partial' WHERE payment_type = 'deposit';
+ALTER TABLE payments
+  MODIFY payment_type ENUM('full_payment','balance','extra','partial','refund') NOT NULL;
+
+-- bookings: caps how many times a guest may move one booking.
+-- Existing rows start at 0 — a fresh allowance, not a retroactive lockout.
+ALTER TABLE bookings
+  ADD COLUMN reschedule_count TINYINT UNSIGNED NOT NULL DEFAULT 0 AFTER source;
+```
+
+**Data-only migration (no schema change):** `2026_08_15_120000_close_stale_housekeeping_tasks` closed the housekeeping backlog — any open task more than 7 days past its `due_date`, or whose booking checked out more than 3 days ago. 13 open → 5. Marked `completed` (the only other enum value) with an explicit note that they were auto-closed rather than genuinely done.
+
+**No schema change, but behaviourally important:** `payments.status` on **refund** rows now means *"has the money actually been sent?"* — `pending` until an admin marks it paid out, `success` after. It does **not** gate whether the refund counts against the booking; that happens the moment the refund is approved. See `Booking::recalculateFinancials()`.
 
 ### v5.0 Schema Changes
 
@@ -488,6 +1459,7 @@ GET    /admin/bookings/lookup                    → admin.bookings.lookup  (AJA
 - 5 Period filters + custom date range
 - KPI summary cards
 - Top properties table
+- **Export PDF / Export Excel (NEW v5.2)** — `GET /admin/reports/export/{pdf,excel}` (`ReportController::exportPdf()`/`exportExcel()`), reusing the same `buildReportData()` the index view uses (respects whatever period/date-range filter is active). PDF via `barryvdh/laravel-dompdf` rendering `admin/reports/pdf.blade.php` (a plain-table layout — dompdf's CSS support is limited, no flexbox/grid). Excel via `maatwebsite/excel`, `App\Exports\ReportExport` (a 3-sheet `WithMultipleSheets` workbook: Summary KPIs, Revenue by Month, Top Properties).
 
 ---
 
@@ -500,7 +1472,7 @@ GET    /admin/bookings/lookup                    → admin.bookings.lookup  (AJA
 
 **Setting Model helpers:**
 ```php
-Setting::get('resort_name', 'Villa Elena')  // cached 3600s
+Setting::get('resort_name', 'Villa Elena')  // cached 3600s — real Redis cache locally since v5.2 (was always Cache::remember(), just backed by the `file` driver before)
 Setting::set('resort_name', 'New Name')     // upsert + cache clear
 ```
 
@@ -545,6 +1517,21 @@ Setting::set('resort_name', 'New Name')     // upsert + cache clear
 - If the new slot is **cheaper**: auto-creates a `refund` Payment row for the difference, recomputes `amount_paid`/`balance_due`/`payment_status` from the payments table (same pattern as `cancelBooking()`).
 - If **pricier**: increases `balance_due`; the guest settles it later via the existing Pay Now flow — no new payment code needed.
 - No live AJAX price preview (the existing `portal.price-preview` endpoint can't exclude the booking's own slot, so it would falsely flag a conflict) — reschedule is a single synchronous submit, consistent with how `cancelBooking()` already works.
+
+**v5.5 — Reschedule limits (closes a cancellation-policy loophole).** Until v5.5 there was **no limit of any kind** on rescheduling: no cap on how many times, no cutoff on how close to check-in, and no column even tracking it. `isCancellable()` (status is `pending`/`confirmed`) was the only gate.
+
+That made the cancellation policy bypassable. Cancelling 2 hours before check-in yields **0%**; instead the guest reschedules a month out — free, unlimited — and then cancels from there for **100%**, because `calculateRefundPercentage()` reads `checkInDateTime()`, the *new* date. The peak slot stays blocked the whole time.
+
+| Constant | Value | Reasoning |
+|---|---|---|
+| `Booking::RESCHEDULE_CUTOFF_DAYS` | **7 days** before check-in | Deliberately the same boundary as the 100%-refund tier. Once the 100% tier is gone, rescheduling is gone too — so there is nothing left to gain by rescheduling instead of cancelling |
+| `Booking::MAX_RESCHEDULES` | **2** per booking | Backed by the new `bookings.reschedule_count` column. Existing bookings start at 0 |
+
+`Booking::rescheduleBlockReason()` is the single source of truth: it returns the reason a booking can't be moved (or `null` when it can), and **that same string is what the guest is shown** — so the UI can't claim something different from what's enforced. `reschedulesRemaining()` drives the "N left" counters. The guard runs in `update()` as well as `edit()`, so a form left open past the cutoff can't slip through, and the booking detail page swaps the Reschedule button for the blocking reason once it no longer applies.
+
+Verified against live bookings: those 14–27 days out are reschedulable; past-dated ones are refused; the count limit refuses correctly at 2.
+
+**Also corrected:** `portal/booking_form.blade.php` advertised *"Free cancellation 48 hours before check-in"*, which never matched the implemented tiers (7 days = 100%, 3–6 days = 50%, under 3 days = 0%). The terms text now states the real policy and pulls the reschedule numbers from the constants so the two can't drift apart again.
 
 **v5.0 — 2FA / Login Activity** (`AuthController`, `TrustedDevice`/`LoginActivity` models, `App\Helpers\DeviceHelper`):
 - **Method:** email OTP (6-digit code, 10-minute expiry, cached hashed via `Cache::put`) — chosen over TOTP/authenticator-app or SMS because it reuses the mail infrastructure the app already has (password reset, email verification), with zero new packages or per-message SMS cost.
@@ -595,34 +1582,49 @@ Review flat package rate → Submit → Confirmation
 
 ### 6.10 Staff Portal
 
-**Controller:** `app/Http/Controllers/Staff/FrontdeskController.php`
-**Views:** `resources/views/staff/` (frontdesk, walkin)
+**Controller:** `app/Http/Controllers/Staff/FrontDeskController.php`
+**Views:** `resources/views/staff/` (frontdesk, walkin, availability, partials/task_deadline)
 **Route prefix:** `/staff/` → `staff.*`
+**Sidebar:** Frontdesk · **Availability (v5.5)** · Walk-in Booking
 
-**6 Tabs on Frontdesk:**
+**Frontdesk page structure (v5.5):**
 
-| Tab | Feature |
+| Element | Feature |
 |---|---|
-| Check-ins | Today's arrivals with one-click Check In button |
-| Check-outs | Today's departures with Check Out button |
-| Current Guests | All checked-in guests, nights remaining, overdue alerts |
-| Pending | Unconfirmed bookings (view only) |
-| Housekeeping | Start / Mark Done buttons for tasks |
-| Properties | Color-coded availability grid |
+| Stat cards | Check-ins today, Check-outs today, Pending bookings, Housekeeping |
+| **Villa status strip** | The villa's real status, current guest, checkout time, plus the next Day/Night slots as one-click links into the walk-in form |
+| **Cleaning banner** | Only when a task is open — shows the real deadline (next check-in time), colour-coded by urgency, with a one-click **Mark cleaned** |
+| Tabs | Check-ins · Check-outs · Current Guests · Pending · Housekeeping (+ an Availability link) |
+
+**v5.5 — what changed and why.** The stat row used to show "Occupied / Available" counted across *all* property rows — 1 villa plus 3 unnamed info-only `type=room` records. It read as "3 units still free" when the only bookable unit was already taken. The "Properties" tab had the same root cause and rendered three blank cards (those room records have `property_name = NULL` since v5.0). Both were removed in favour of the Villa strip and the Availability page. The room records still exist in the database for housekeeping history; they're just no longer surfaced at the frontdesk.
+
+**Availability page (v5.5)** — `GET /staff/availability` → `staff.availability`
+
+A 14-day grid, one row per date, two columns (Day 8AM–5PM / Night 7PM–6AM). Four states: **Available** (shows the package price, click to book), **Booked** (guest name + booking ref), **Blocked** (admin `AvailabilityBlock`, shows the reason), **Passed** (slot's check-in time has elapsed). Prev / Today / Next navigation, clamped so it never shows the past.
+
+This exists because the admin calendar **cannot answer the frontdesk's actual question.** It's built on `check_in_date` → `check_out_date`, so it's slot-blind: a Day booking and a Night booking on the same date look the same, and you must click each event to find out which half of the day is taken. Verified against real data — Aug 29 shows `Day: Sample Guest` and `Night: Reynald` as separate cells, which no date-range view can express.
+
+`buildSlotGrid()` calls **`Booking::hasConflict()` per slot** rather than writing its own overlap query, so what the grid shows and what the booking form enforces can never diverge — including expired unpaid holds freeing their slot automatically. Pricing comes from `getPackagePrice()` for the same reason (verified: Sunday Day = ₱6,000 peak, Sunday Night = ₱4,000 regular).
+
+Clicking a free slot opens `/staff/walkin?date=…&slot=…` with both pre-filled and a confirmation note. Before this, the walk-in form did **no availability check at all** until submit — staff filled in the whole form only to be told the slot was taken.
+
+**Housekeeping (v5.5).** Tasks previously showed a due **date**, which is close to useless here: the gap between checkout and the next check-in is only **2 hours** (5PM→7PM, 6AM→8AM), and with a single villa there's no other unit to fall back on if it isn't ready. Each task now shows its real deadline — the next check-in time — computed in one query for all tasks via `attachCleaningDeadlines()`.
+
+Nothing used to close the loop: check-in creates the task, auto-checkout flips it to `in_progress`, and marking it complete was manual and buried in a tab. **11 of 13 open tasks were overdue** (worst: 48 days) and 6 were stuck in `in_progress`. Fixed by surfacing the most urgent task in a banner at the top of the page with a one-click **Mark cleaned**, and by having checkout's success message name the deadline (`"Villa must be cleaned and ready by Aug 19, 8:00 AM"`) instead of the old `"Housekeeping task activated"`.
+
+**Still open on housekeeping:** `task_type` has three values no code ever creates — `daily_clean`, `maintenance`, `inspection` (all 53 rows are `checkout_clean`) — and staff has no way to create a task manually, so a broken aircon can't be logged. The two are the same gap; see Pending/Optional.
 
 **Walk-in Booking Form** (`/staff/walkin`):
-- Select existing guest or create new account on-the-spot
-- Live price calculator with weekday/weekend breakdown
+- Select an existing guest, **or** register a new one on-the-spot — **(v5.4)** for a new guest, staff is asked whether to also create a login account (defaults to **No**); either way a guest record (`User`, role=`customer`) is created for booking/payment/review history, but email + the password-reset email are only involved if the answer is Yes. See [What Changed in v5.4](#what-changed-in-v54-read-this-first)
+- Live price calculator, flat package rate based on check-in day/slot (Day/Night, see [Section 8](#8-booking-availability--fixed-slots-v51)) — not weekday/weekend per-night
 - Record payment immediately upon booking
 - Walk-in bookings auto-confirmed (no admin approval needed)
-- New guest default password: `VillaElena@2026`
-
-> ✅ **Confirmed up to date (re-checked v5.0):** `FrontDeskController::storeWalkin()` already validates `check_in_time`/`check_out_time` and prices via `getPackagePrice($checkin)`, consistent with the rest of the booking flow — no changes needed here.
+- New guest password (when an account **is** created): random/unguessable (`Str::random(20)`), never shown to anyone — guest sets their own via the password-reset email
 
 **Payment Recording Modal:**
 - Available on each booking row in Check-ins, Check-outs, Current Guests tabs
-- Fields: amount, method (Cash/GCash/Bank/Card), type, notes
-- Auto-updates `amount_paid`, `balance_due`, `payment_status`
+- Fields: amount, method (**Cash / GCash / PayMaya** — v5.5, Card and Bank Transfer removed), type, notes
+- Recalculates via `Booking::recalculateFinancials()` (v5.5) rather than its own inline copy of the math
 
 **Check-in side effects:**
 - Booking → `checked_in`, Property → `occupied`
@@ -644,11 +1646,22 @@ Review flat package rate → Submit → Confirmation
 
 **Features:**
 - 5 KPI cards: Total Revenue, Today's Revenue, This Month, Pending Balance, Total Refunds
-- Filter by method, type, date range, search
+- Filter by method, type, date range, search — plus `?status=awaiting_payout` (v5.5)
 - Color-coded payment method and type badges
-- **Record Payment modal** — type booking ref → AJAX auto-lookup guest info
+- **Record Payment modal** — type booking ref → AJAX auto-lookup guest info. Method is now Cash / GCash / PayMaya only, and both method and type are validated with real `in:` rules (v5.5 — previously just `required`, so any string reached the DB)
 - **Refund modal** — partial or full refund with reason
 - Payment detail page with full booking summary
+
+**v5.5 — refunds now track whether the money actually moved.** No refund API is wired up (and cash can't be API-refunded regardless) — an admin sends the money by hand. *(v5.9: a QR Ph refund API does exist and could cover full refunds; it is simply not built yet. Partial and cash refunds stay manual permanently.)* But refund rows used to be written as `status = 'success'` immediately, and the admin notification read *"₱X **refunded**"* in the past tense, while nothing anywhere recorded whether the payout had happened. A guest's refund could be forgotten entirely with no trace in the system.
+
+Refunds now start as `status = 'pending'`, and the page gains:
+- a **"NOT SENT"** badge on any refund awaiting payout,
+- an *"N refunds (₱X) awaiting payout"* banner with a filter shortcut,
+- a **Mark Paid Out** action (`PATCH admin/payments/{payment}/paid-out` → `admin.payments.paidOut`), confirm-guarded and `StaffLog`-recorded.
+
+**Marking a refund paid out changes no amounts.** The refund is deducted from the booking the moment it's *approved* — the resort owes it either way — so `status` tracks only the payout itself. This rule is enforced centrally in `Booking::recalculateFinancials()`: real payments count only when `status='success'`, refunds count regardless of status. `Admin\ReportController`'s net-revenue figure follows the same rule (it previously filtered refunds by `status='success'`, which after this change would have hidden un-paid-out refunds and overstated net revenue).
+
+The notification preset is now `"Refund To Send"` and links directly to the awaiting-payout list rather than the booking.
 
 ---
 
@@ -658,23 +1671,46 @@ Review flat package rate → Submit → Confirmation
 **Controller:** `app/Http/Controllers/PaymentController.php`
 **Views:** `resources/views/payment/` (checkout, success)
 
-**Supported Payment Methods:** GCash, Credit/Debit Card, Maya, GrabPay
+**Supported Payment Method (v5.7): QR Ph only** — `payment_method_types => ['qrph']`
+
+QR Ph is the national QR standard, so a single activation covers GCash, Maya and participating bank apps. Enabling `gcash`/`paymaya` individually on PayMongo requires a **separate application per wallet**; QR Ph was already activated on this account, which is what made real payments possible. The checkout page still names the wallets next to "QR Ph" — the brand name alone reads as "GCash is gone" to a guest whose GCash app is exactly what they'll scan with.
+
+`payments.payment_method` is `ENUM('qrph','cash')`. History: v5.5 narrowed it from a 5-value set to `gcash/paymaya/cash`; v5.7 replaced the wallets with `qrph` (see [v5.7 Schema Changes](#v57-schema-changes)).
 
 **Guest Payment Flow:**
 ```
 Booking Detail → "💳 Pay Now" button
       ↓
-Payment page — choose Deposit (30%) or Full Payment
+Payment page — choose Deposit (50%, from Setting `deposit_percentage`) or Full Payment
       ↓
 Redirect to PayMongo hosted checkout
       ↓
-Guest pays via GCash / Card / Maya / GrabPay
+Guest pays via GCash / Maya
       ↓
-Redirect to /pay/{booking}/success
-      ↓
-Payment auto-recorded, booking auto-confirmed if deposit
-Admin notified, Guest notified
+   ┌── Guest returns to site ──┐   ┌── Guest closes the tab ──┐
+   │ GET /pay/{booking}/success│   │ POST /webhooks/paymongo  │
+   └───────────┬───────────────┘   └────────────┬─────────────┘
+               └──────────┬─────────────────────┘
+                          ↓
+        PaymentController::recordPaymongoPayment()
+        (one shared implementation, idempotent)
+                          ↓
+Payment recorded, financials recalculated, booking auto-confirmed
+Admin notified, Guest notified, confirmation email sent
 ```
+
+**Two entry points, one implementation (v5.6).** The success callback only fires if the guest comes back to the site. Before v5.6 it was the *only* thing writing `Payment` rows — the webhook handler just called `Log::info()` — so a guest who paid and closed the browser left PayMongo holding the money while the system still showed the booking unpaid. Both paths now share `recordPaymongoPayment()`, guarded for idempotency by `reference_number` (the PayMongo `pay_xxx` ID), so a double delivery records once.
+
+**Webhook signature format.** `Paymongo-Signature` is not a bare hash — it is `t=<timestamp>,te=<test-sig>,li=<live-sig>`, and the signed payload is `"{timestamp}.{rawBody}"`. `verifyWebhook()` hashed only the body and compared it against the whole header string, so every real event was rejected with 401. Fixed in v5.6; both `te` and `li` are accepted so the same code works in test and live mode.
+
+**Setup (works in test mode — no live account needed):** register `POST /webhooks/paymongo` in the PayMongo dashboard and set `PAYMONGO_WEBHOOK_SECRET`. The URL must be publicly reachable — the Render URL or an ngrok tunnel. It cannot fire against `localhost`.
+
+**No refund automation wired up yet (v5.9).** `PayMongoService` has no refund or transfer call, so refunds are approved in-app and the money is sent by hand; see §6.11.
+
+Two API paths exist and were both investigated in v5.9 — **read that section before touching refund code**:
+
+- `https://refunds-api.paymongo.com/v1/refunds` — real, and accepts QR Ph (v5.6 wrongly concluded otherwise by testing the wrong host), but **full amounts only**, which the 50% cancellation tier can never satisfy. **Rejected.**
+- `POST https://api.paymongo.com/v2/batch_transfers` (Send Money / Disbursements) — arbitrary amounts, testable via simulator accounts, status callbacks. **This is the chosen direction**, blocked only on obtaining a test-mode wallet, and requiring guest bank/e-wallet details the QR Ph payment does not carry.
 
 **Environment Variables:**
 ```env
@@ -742,7 +1778,7 @@ Review live on the site           Admin: Approve / Reject / Reply
                                    Guest notified either way
 ```
 
-**`ReviewModerationService`** (`app/Services/ReviewModerationService.php`) — reuses the existing `GeminiService` (Groq/`llama-3.1-8b-instant`) rather than adding a new AI dependency. Config: `config/moderation.php` (blocked-word list, PH mobile/email/URL regex patterns).
+**`ReviewModerationService`** (`app/Services/ReviewModerationService.php`) — reuses the existing `GeminiService` (Groq, model from `GROQ_MODEL`) rather than adding a new AI dependency. Config: `config/moderation.php` (blocked-word list, PH mobile/email/URL regex patterns).
 
 Editing a previously-approved review re-runs the same pipeline (see [Customer Portal](#68-customer-portal) → My Reviews) instead of automatically bouncing back to `pending` on every edit.
 
@@ -791,9 +1827,19 @@ NotificationHelper::notifyGuest($userId, 'Title', 'Message', $link = null);
 | `NotificationHelper::walkInBooking($booking, $staffName)` | Staff creates walk-in | `admin.bookings.show` |
 | `NotificationHelper::guestCheckedIn($booking)` | Staff checks in guest | `admin.bookings.show` |
 | `NotificationHelper::guestCheckedOut($booking)` | Staff checks out guest | `admin.bookings.show` |
-| `NotificationHelper::refundIssued($booking, $amount, $reason)` | Admin issues refund | `admin.bookings.show` |
+| `NotificationHelper::refundIssued($booking, $amount, $reason)` | Refund approved (any path) | `admin.payments.index?status=awaiting_payout` |
 
-Guest-facing notifications (booking confirmations, payment receipts, review approve/reject/reply, etc.) are created directly via `Notification::create([...])` at ~11 call sites across `PaymentController`, `Admin\{Booking,Payment,Review}Controller`, `Staff\FrontDeskController`, and `AutoCheckInOutBookings` — every one now includes a `link` pointing to `customer.bookings.show` or `customer.reviews.index` as appropriate.
+**Guest-facing presets (NEW v5.6)** — the refund lifecycle is the one flow where wording had to stay consistent across four different entry points, so it lives here instead of in inline `Notification::create()` blocks:
+
+| Method | Triggered When | Links To (guest-facing) |
+|---|---|---|
+| `NotificationHelper::bookingCancelledForGuest($booking, $refundAmount, $refundPct)` | Guest cancels their own booking | `customer.bookings.show` |
+| `NotificationHelper::refundApprovedForGuest($booking, $amount, $reason)` | Refund approved but **not yet sent** | `customer.bookings.show` |
+| `NotificationHelper::refundPaidOut($payment)` | Admin marks a refund paid out — notifies **guest *and* admins** | `customer.bookings.show` / `admin.bookings.show` |
+
+The wording distinction is deliberate and load-bearing: **"Approved" ≠ "Sent".** A refund row is created as `status='pending'` and no money moves until an admin manually sends it and marks it paid out (see §6.11). Saying "processed" at approval time — which is what the code did before v5.6 — sends guests looking in their GCash for money that hasn't left yet.
+
+Other guest-facing notifications (booking confirmations, payment receipts, review approve/reject/reply, etc.) are still created directly via `Notification::create([...])` at ~11 call sites across `PaymentController`, `Admin\{Booking,Payment,Review}Controller`, `Staff\FrontDeskController`, and `AutoCheckInOutBookings` — every one includes a `link` pointing to `customer.bookings.show` or `customer.reviews.index` as appropriate.
 
 **How it works:** Finds all users with `role = admin` → creates one `Notification` record per admin → appears in the topbar bell dropdown on **every** admin page (see below — this used to only work on the Dashboard).
 
@@ -876,11 +1922,57 @@ Linear regression algorithm on 6 months of booking and revenue data.
 ### 6.18 AI Chatbot
 
 **Route:** `POST /chatbot` → `chatbot.reply`
-**Provider:** Groq API (`llama-3.1-8b-instant`)
+**Provider:** Groq API (model from `GROQ_MODEL`, default `openai/gpt-oss-20b`)
 
 Floating chat widget on public portal. Answers questions about Villa Elena, pricing, and amenities using real database data injected into the system prompt.
 
 > ✅ **Confirmed up to date (re-checked v5.0):** `Portal\ChatbotController`'s prompt is explicitly single-villa-aware ("SINGLE-VILLA private resort... only ONE bookable villa"), fetches the real master Villa record (`Property::where('type','villa')->first()`), and uses the real `getPackagePrice()`/`hasConflict()` results — no stale multi-villa references found.
+
+> ✅ **Promo-aware (v6.0).** Prices through `quoteFor()` on the availability/price path, and a `CURRENT PROMOS` block — built from the same `Discount::publicActive()` that feeds the landing-page banner — is injected into **every** prompt, not just when the intent extractor guesses "promo". Guests ask in too many ways ("discount ba meron?", "mura ba sa September?") to rely on intent classification for this; a few lines of context are cheaper than a missed promo.
+>
+> Three things that must not be undone:
+> - **The "no promos" branch is explicit.** When `publicActive()` is empty the prompt states *"There are NO promos or discounts running right now… do NOT invent one."* An empty section invites the model to hallucinate a discount, which on a pricing question is a promise the resort then has to honour.
+> - **Never mention a promo code.** The prompt bans it outright — there are no codes in this system, and a chatbot asking for one sends the guest hunting for something that doesn't exist.
+> - **No date means no discounted figure.** On a `get_price` intent with no check-in date, the bot gives the list price and asks for a date rather than quoting a promo price it can't yet verify — whether a promo applies depends entirely on the check-in date.
+>
+> Verified with live Groq calls: promo question → named the promo and its window; Sept 10 check-in → ₱4.00 → ₱3.20 with the promo named on the card; Aug 28 check-in → no discount, `promo: null`; "what's your promo code?" → correctly answered that none is needed; promo deactivated → *"wala kaming mga promos."*
+
+**Bug fixed while here:** the chatbot's property card read `p.nights` / `p.total` / `p.per_night`, fields the controller stopped sending when the system moved to the fixed-slot package model — so the card had been rendering **"₱NaN/night"**. It now reads `p.price` (the amount actually charged) with `p.base_price` struck through beside it when a promo applies, plus the slot label.
+
+---
+
+### 6.19 Seasonal Promotions (v6.0)
+
+**Routes:** `/admin/promotions` (admin-only — see the [route list](#admin-routes-admin))
+**Controller:** `app/Http/Controllers/Admin/PromotionController.php`
+**Model:** `app/Models/Discount.php`
+**Views:** `resources/views/admin/promotions/{index,form}.blade.php`
+
+Automatic seasonal discounts on the villa base rate. Full rationale and the rules that must not be undone are in the [v6.0 notes](#what-changed-in-v60-read-this-first); this is the mechanical reference.
+
+**Schema additions** (`2026_08_25_100000_add_seasonal_fields_to_discounts_table.php`):
+
+| Column | Purpose |
+|---|---|
+| `code` | Made **nullable** — the automatic flow never uses it |
+| `description` | One-line subtext for the landing-page card and the notification body |
+| `start_date` | Window start; `NULL` = starts immediately (`expiry_date` is the end, **inclusive**) |
+| `applies_to` | `all` / `day` / `night` — lets a promo target a single slot |
+| `is_public` | Whether it appears on the landing page. A non-public promo still applies, it just isn't advertised |
+| `notified_at` | Set once when announced; stops edits from re-blasting the bell |
+
+Plus `bookings.discount_id` (`2026_08_25_100001`, `nullOnDelete`) for attribution — `discount_amount` remains the authority on the money.
+
+**Key model methods:**
+
+- `Discount::bestFor(float $base, Carbon $checkIn, ?string $slot): ?Discount` — the largest-peso-discount winner among overlapping promos
+- `Discount::isValidOn(Carbon $checkIn, ?string $slot)` — window + slot + active + limit
+- `Discount::publicActive()` — what the landing page advertises. Bounded only by `expiry_date`, so **upcoming** promos are included; ordered running-first, then soonest-starting. Do not narrow this to match `isValidOn()`
+- `Discount::isUpcoming()` — drives the *"For stays …"* wording on the banner instead of *"Until …"*
+- `Discount::calculateDiscount(float $amount)` — clamps percentages at 100 and never exceeds the amount, so no booking can go negative
+- `$promo->value_label` / `->state` / `->state_badge` / `->window_label` / `->slot_label` — display accessors; render enums through these rather than rebuilding strings, same rule as `Payment::$method_label`
+
+**Admin actions:** create, edit, toggle active, announce (one-time in-app blast to active customers), delete. Every action writes a `staff_logs` entry.
 
 ---
 
@@ -888,7 +1980,7 @@ Floating chat widget on public portal. Answers questions about Villa Elena, pric
 
 Villa Elena is rented as a **flat-rate package** — one of two fixed slots, Day (9 hrs) or Night (11 hrs), see [Section 8](#8-booking-availability--fixed-slots-v51) — not a per-night hotel stay, and the price does **not** vary by number of guests (private/exclusive resort, not per-head pricing). The rate depends only on **when the guest checks in**.
 
-**Implementation:** `Property::getPackagePrice(Carbon $checkin): float` in `app/Models/Property.php`
+**Implementation:** `Property::getPackagePrice(Carbon $checkin): float` in `app/Models/Property.php` — but **do not call it directly from booking code.** Since v6.0 the entry point is `Property::quoteFor(Carbon $checkin, ?string $slot)`, which wraps it and applies any active seasonal promo (see [v6.0 notes](#what-changed-in-v60-read-this-first)). It returns `['base', 'discount', 'total', 'promo']`. `getPackagePrice()` remains the source of the *base* rate and is still called directly where only a list price is wanted.
 
 | Segment | Days / Times | Rate |
 |---|---|---|
@@ -899,6 +1991,7 @@ Villa Elena is rented as a **flat-rate package** — one of two fixed slots, Day
 **Priority order:**
 1. An active `pricing_rules` entry covering the check-in date (e.g. holiday override) — takes precedence over the standard segments above.
 2. Otherwise, the day-of-week / time-of-day segment table above.
+3. **Then** (v6.0) any matching seasonal promo from `discounts` is subtracted from whatever rate steps 1–2 produced. Promos are a discount *on* the rate, never a replacement for it — that's the difference between a `pricing_rule` and a promo, and why both can be in play on the same date.
 
 **Important:** `getPriceForDate()` (the original per-calendar-date method, still used by `PricingRule` and legacy code paths) is **not** used for the booking flow anymore — it only checks Saturday/Sunday and has no time-of-day awareness, so it can't express the Friday-peak or Sunday-6PM-cutoff rules. All customer and admin booking creation now calls **`getPackagePrice($checkin)`** instead.
 
@@ -939,16 +2032,20 @@ Villa Elena is rented as a **flat-rate package** — one of two fixed slots, Day
 ## 9. AI Integration
 
 **Provider:** Groq API (switched from Gemini due to quota exhaustion)
-**Model:** `llama-3.1-8b-instant`
+**Model:** `openai/gpt-oss-20b` — **not hardcoded**, read from `GROQ_MODEL` (see v5.8 below)
 
 ```env
 GROQ_API_KEY=gsk_xxxxxxxxxxxxxxxxxxxx
+GROQ_MODEL=openai/gpt-oss-20b
+# GROQ_REASONING_EFFORT=      # optional override; auto-derived per model when unset
 ```
 
 ```php
 // config/services.php
 'groq' => [
-    'key' => env('GROQ_API_KEY'),
+    'key'              => env('GROQ_API_KEY'),
+    'model'            => env('GROQ_MODEL', 'openai/gpt-oss-20b'),
+    'reasoning_effort' => env('GROQ_REASONING_EFFORT'),   // auto-derived when unset
 ],
 ```
 
@@ -956,7 +2053,10 @@ GROQ_API_KEY=gsk_xxxxxxxxxxxxxxxxxxxx
 |---|---|---|
 | Gemini 2.0 Flash | ❌ | Free quota exhausted |
 | Gemini 2.0 Flash-Lite | ❌ | Same project quota exhausted |
-| **Groq (Llama 3.1)** | ✅ | Free tier, fast, working |
+| Groq — `llama-3.1-8b-instant` | ❌ | **Decommissioned by Groq** — returns `400 model_not_found`, broke chatbot/insights/forecast/review-moderation (fixed v5.8) |
+| **Groq — `openai/gpt-oss-20b`** | ✅ | Free tier, fast, current default. Reasoning model — see v5.8 |
+| Groq — `openai/gpt-oss-120b` | ✅ | Same free tier, stronger reasoning, slower. Drop-in via `GROQ_MODEL` if forecast quality matters more than latency |
+| Groq — `qwen/qwen3.6-27b` | ✅ | Works. Needs `reasoning_effort: none` — at `default` it emits its scratchpad as an inline `<think>` block in `content` (the `gpt-oss` models keep it in a separate `reasoning` field). Both handled automatically; `stripReasoning()` remains the backstop |
 
 ---
 
@@ -969,7 +2069,7 @@ GROQ_API_KEY=gsk_xxxxxxxxxxxxxxxxxxxx
 **Key Points:**
 - Webhook not required for sandbox/demo — success callback handles payment recording
 - For production, register webhook URL at PayMongo dashboard
-- Webhook endpoint: `POST /webhooks/paymongo` (CSRF exempt)
+- Webhook endpoint: `POST /webhooks/paymongo` (CSRF exempt — via `validateCsrfTokens(except: [...])` in `bootstrap/app.php`; this was **documented but never actually implemented** until v5.7, see Known Issues)
 - Ngrok required for webhook testing on localhost
 
 ---
@@ -1002,7 +2102,7 @@ app/
 │   │   │   ├── PortalController.php      ← UPDATED v4.0 — single-villa listing, time, buffer, package price
 │   │   │   └── ChatbotController.php
 │   │   ├── Staff/
-│   │   │   └── FrontdeskController.php   ⚠ pending v4.0 review (see 6.10)
+│   │   │   └── FrontDeskController.php   ⚠ pending v4.0 review (see 6.10)
 │   │   └── PaymentController.php
 │   └── Middleware/
 │       └── RoleMiddleware.php
@@ -1117,6 +2217,57 @@ routes/
 └── customer.php       /my/* routes  ← UPDATED v5.0 — profile, reviews, payments, reschedule routes
 ```
 
+### v5.7 File Changes
+
+**QR Ph migration**
+
+| File | Change |
+|---|---|
+| `database/migrations/2026_08_16_090000_switch_payment_method_to_qrph.php` | **New.** Preserves the original method in `notes`, then widens → relabels 41 rows → narrows the ENUM to `('qrph','cash')` |
+| `app/Http/Services/PayMongoService.php` | **Deleted.** Unreferenced duplicate still requesting `grab_pay`; `CLAUDE.md` had warned about editing the wrong copy |
+| `app/Services/PayMongoService.php` | `payment_method_types => ['qrph']`; `verifyWebhook()` rewritten for the real `t=/te=/li=` header format |
+| `app/Http/Controllers/PaymentController.php` | Shared `recordPaymongoPayment()`; authoritative paid-check in `success()`; `$known` set → `['qrph','cash']`; `paymentConfirmed` passed to the view; notification moved after the recompute; enriched signature-rejection log |
+| `app/Models/Payment.php` | `methodLabelFor()` / `typeLabelFor()` statics plus `method_label` / `type_label` accessors |
+| `resources/views/payment/{checkout,success}.blade.php` | QR explainer on checkout; honest waiting state on success |
+| `app/Http/Controllers/{Admin/PaymentController,Admin/BookingController,Staff/FrontDeskController}.php` | Validation → `in:qrph,cash` |
+
+**Webhook reachability**
+
+| File | Change |
+|---|---|
+| `bootstrap/app.php` | `validateCsrfTokens(except: ['webhooks/paymongo'])` — the route was in the `web` group and returned **419** to every real delivery, despite the docs claiming it was exempt |
+| `docker-compose.yml` | Single-file Compose Watch sync for `./bootstrap/app.php`; `bootstrap/` was never watched, so middleware changes could not reach the container. Deliberately **not** the whole directory — `bootstrap/cache/` must never be synced |
+
+**Paid-booking auto-cancellation**
+
+| File | Change |
+|---|---|
+| `app/Models/Booking.php` | New `confirmOnFirstPayment()` — one definition of "the first successful payment confirms the booking" |
+| `app/Console/Commands/AutoCheckInOutBookings.php` | Stale-pending sweeper now skips any booking with `amount_paid > 0` |
+| `app/Http/Controllers/{Admin/PaymentController,Admin/BookingController,Staff/FrontDeskController}.php` | All three manual record-payment paths call `confirmOnFirstPayment()` |
+
+**Payment display and notifications**
+
+| File | Change |
+|---|---|
+| `app/Helpers/NotificationHelper.php` | Uses `Payment::methodLabelFor()` instead of its own `ucfirst()` (source of *"via Qrph"*) |
+| `app/Http/Controllers/Customer/PaymentController.php` | `id` tiebreaker on the `payment_date` sort |
+| `app/Http/Controllers/Admin/PaymentController.php` | Same tiebreaker; `paymentRecorded()` moved after the recompute |
+| `resources/views/{customer/payments,customer/booking_detail,admin/payments/index,admin/payments/show,admin/bookings/show}.blade.php` | Raw enum renders replaced with `type_label` / `method_label`; booking-scoped histories sorted newest-first |
+
+### v5.5 New Files
+
+| File | Purpose |
+|---|---|
+| `resources/views/staff/availability.blade.php` | 14-day Day/Night slot grid — the frontdesk's availability view |
+| `resources/views/staff/partials/task_deadline.blade.php` | Shared "Ready by *next check-in*" line for housekeeping task rows |
+| `database/migrations/2026_08_14_090000_shrink_payment_method_enum.php` | Relabels card/bank_transfer → gcash, narrows ENUM to e-wallets + cash |
+| `database/migrations/2026_08_14_090001_shrink_payment_type_enum.php` | Relabels deposit → partial, drops `deposit` from the ENUM |
+| `database/migrations/2026_08_14_100000_add_reschedule_count_to_bookings_table.php` | Adds `bookings.reschedule_count` |
+| `database/migrations/2026_08_15_120000_close_stale_housekeeping_tasks.php` | Data-only — closes the overdue housekeeping backlog (13 → 5) |
+
+**Key methods added (existing files):** `Booking::recalculateFinancials()` (the single money-math implementation, replacing 7 inline copies), `Booking::isReschedulable()` / `rescheduleBlockReason()` / `reschedulesRemaining()` + the `MAX_RESCHEDULES` / `RESCHEDULE_CUTOFF_DAYS` constants, `Payment::isRefund()` / `isPaidOut()` / `isAwaitingPayout()` / `scopeAwaitingPayout()` / `receivedBy()`, `Admin\PaymentController::markRefundPaidOut()`, `Staff\FrontDeskController::availability()` / `buildSlotGrid()` / `attachCleaningDeadlines()`.
+
 ### v5.0 New Files (not shown in the tree above — added this session)
 
 ```
@@ -1169,6 +2320,8 @@ config/
 GET  /                              home
 GET  /properties/{property}         portal.property
 GET  /reviews                       portal.reviews            ← NEW v5.0 (all approved reviews)
+GET  /privacy-policy                portal.privacy            ← NEW v6.1
+GET  /terms-of-service              portal.terms              ← NEW v6.1
 POST /contact                       portal.contact.send       ← NEW v5.0 (throttle:5,60)
 GET  /book/{property}               portal.book
 POST /book/{property}               portal.book.submit
@@ -1178,7 +2331,8 @@ GET  /pay/{booking}                 payment.page
 POST /pay/{booking}/checkout        payment.checkout
 GET  /pay/{booking}/success         payment.success
 GET  /pay/{booking}/cancel          payment.cancel
-POST /webhooks/paymongo             payment.webhook  (no CSRF)
+POST /webhooks/paymongo             payment.webhook           (no CSRF)
+POST /webhooks/paymongo/transfer    payment.webhook.transfer  (no CSRF)  ← NEW v5.9
 GET  /login                         login
 POST /login
 GET  /register                      register
@@ -1213,6 +2367,17 @@ GET    /admin/payments                        admin.payments.index
 POST   /admin/payments                        admin.payments.store
 GET    /admin/payments/{payment}              admin.payments.show
 POST   /admin/payments/{payment}/refund       admin.payments.refund
+PATCH  /admin/payments/{payment}/paid-out     admin.payments.paidOut             ← now requires transfer_reference (v5.9)
+PUT    /admin/payments/{payment}/destination  admin.payments.destination         ← NEW v5.9      ← NEW v5.5
+POST   /admin/payments/{payment}/send         admin.payments.send                ← NEW v5.9 Phase 4
+GET    /admin/promotions                      admin.promotions.index             ← NEW v6.0
+GET    /admin/promotions/create                admin.promotions.create            ← NEW v6.0
+POST   /admin/promotions                       admin.promotions.store             ← NEW v6.0
+GET    /admin/promotions/{promotion}/edit      admin.promotions.edit              ← NEW v6.0
+PUT    /admin/promotions/{promotion}           admin.promotions.update            ← NEW v6.0
+PATCH  /admin/promotions/{promotion}/toggle    admin.promotions.toggle            ← NEW v6.0
+POST   /admin/promotions/{promotion}/notify    admin.promotions.notify            ← NEW v6.0
+DELETE /admin/promotions/{promotion}           admin.promotions.destroy           ← NEW v6.0
 GET    /admin/reviews                         admin.reviews.index
 PATCH  /admin/reviews/{review}/approve        admin.reviews.approve
 PATCH  /admin/reviews/{review}/reject         admin.reviews.reject
@@ -1233,9 +2398,11 @@ DELETE /admin/calendar/blocks/{block}          admin.calendar.deleteBlock
 ### Staff Routes (`/staff/`)
 ```
 GET    /staff/frontdesk                       staff.frontdesk
+GET    /staff/availability                    staff.availability          ← NEW v5.5 (?start=Y-m-d)
 PATCH  /staff/checkin/{booking}               staff.checkin
 PATCH  /staff/checkout/{booking}              staff.checkout
 GET    /staff/walkin                          staff.walkin
+GET    /staff/walkin/quote                    staff.walkin.quote  (AJAX)         ← NEW v6.0
 POST   /staff/walkin                          staff.walkin.store
 POST   /staff/bookings/{booking}/payment      staff.payment
 PATCH  /staff/tasks/{task}/start              staff.tasks.start
@@ -1259,6 +2426,8 @@ GET    /my/reviews/{review}/edit              customer.reviews.edit             
 PUT    /my/reviews/{review}                   customer.reviews.update            ← NEW v5.0
 DELETE /my/reviews/{review}                   customer.reviews.destroy           ← NEW v5.0
 GET    /my/payments                           customer.payments.index            ← NEW v5.0
+GET    /my/refunds/{payment}/destination      customer.refunds.destination       ← NEW v5.9
+PUT    /my/refunds/{payment}/destination      customer.refunds.destination.update ← NEW v5.9
 GET    /my/profile                            customer.profile.edit              ← NEW v5.0
 PUT    /my/profile                            customer.profile.update            ← NEW v5.0
 PUT    /my/profile/password                   customer.profile.password          ← NEW v5.0
@@ -1306,6 +2475,52 @@ DELETE /my/profile/devices/{device}           customer.profile.devices.destroy  
 | **(v5.0)** ~50% of pre-existing notifications had no click-through destination at all | The `link` column didn't exist before v5.0 — every notification ever created up to that point had nothing to derive a destination from after the fact | Backfill migration parses each notification's title/message for an embedded `booking_ref` or review-related wording and recovers a real link for 151/203; the remaining 52 reference bookings that no longer exist in the database (deleted) and are left `null` by design |
 | **(v5.1)** Booking policy said "12–24 hours" but was actually meant to be two fixed packages | v4.0 modeled the resort's two real packages (a daytime tour and an overnight stay) as an open-ended free-choice time window with min/max hour validation, instead of the two fixed slots they actually are | Replaced with `Booking::SLOTS` (`day` 8AM–5PM, `night` 7PM–6AM) + `Booking::slotDateTimes()`; every booking form now submits a slot choice, not raw time |
 | **(v5.1)** Redundant 2-hour cleaning buffer on top of the fixed slots | Before the fixed slots existed, a buffer had to be explicitly enforced in `hasConflict()` since guests could pick any time; once the two fixed slots were introduced, the gap between them (exactly 2 hours on both ends) already *is* the buffer, making the separate `$bufferHours` padding redundant | Removed the `$bufferHours` parameter from `Booking::hasConflict()` entirely; conflict checks are now a plain datetime overlap |
+| **(v5.2)** `php artisan migrate:fresh` against a clean Aiven database failed (`Unknown column 'admin_note' in 'reviews'`) | The `create_reviews_table` migration was years out of date relative to what the app actually uses — it still had `overall_rating`/`comment`, and never had `title`/`admin_reply_at`/`admin_note` at all. Those columns only existed locally because they'd been added directly to the dev database at some point, outside any migration — so `migrate:fresh` had never actually been run against this schema before | Rewrote `create_reviews_table` to match the real, in-use schema. Verified with a full column-by-column diff (throwaway local scratch database, freshly migrated, vs. the real local dev database) that this was the *only* such gap before trusting it against production |
+| **(v5.2)** `SQLSTATE[42S22]: Table 'sessions' doesn't exist` (production only) | `SESSION_DRIVER=database`/`CACHE_STORE=database` are required in production (Render has no persistent disk for the `file` drivers used locally) — but no migration for `sessions`/`cache`/`cache_locks` had ever existed in this codebase, since local dev never needed them | Added `2026_08_10_000000_create_sessions_and_cache_tables.php` |
+| **(v5.2)** Production database ended up with tables missing/schema stale despite a completed `migrate:fresh --seed` run reporting no errors | A full local database export/import (data **and** schema, including the `migrations` tracking table) was used to seed the production DB before deployment — Laravel trusted the imported `migrations` table's "already ran" records and skipped re-running anything, even though the import itself had silently dropped some tables (likely a foreign-key-order or charset issue in the dump) | Ran `migrate:fresh --seed` against Aiven from a developer machine (via the new `aiven` connection, since Render's free plan has no Shell tab) to rebuild the schema purely from migration files instead of trusting a data dump. General lesson: a dump's `migrations` table state doesn't prove the dump is actually complete |
+| **(v5.2)** Registering a new account returned a 500 error on the live site | `AuthController::register()` called `$user->sendEmailVerificationNotification()` with no error handling — any transport hiccup (misconfigured mailer, provider rejection, etc.) crashed the whole request instead of just skipping that one email. Root transport issue was Render blocking outbound SMTP entirely on its free tier (see the v5.2 summary table above for the Brevo API switch) | Wrapped in try/catch (registration itself still succeeds even if the email fails); same fix applied to 2FA send/resend, verification resend, forgot-password, and walk-in guest account creation (`FrontDeskController`) — the latter was worse, since it ran inside a DB transaction and would have rolled back the entire walk-in booking over a failed email |
+| **(v5.2)** (same 500, second cause) Registration could still fail even after the mail fix | `NotificationHelper::create()` — called by `newGuestRegistered()` during registration to notify admins — broadcasts via Pusher **synchronously** (`QUEUE_CONNECTION=sync` doesn't defer job exceptions the way a real queue worker would), so a Pusher config problem threw before the request ever reached the email code | Wrapped the `event(new NotificationCreated($notification))` call in try/catch + `Log::error()`; the notification row is still saved for the in-app bell either way, only the realtime push is skipped on failure |
+| **(v5.3)** `Cloudinary\Api\Exception\NotFound` crashed pages back in local dev, after having worked fine on Render | Local `.env` had drifted to include the same `CLOUDINARY_URL` as production (copied in for reference during v5.2 deploy setup, never removed) — combined with `PropertyImage`/`User`/`Package`'s `->url()` accessors making an **uncaught, live Cloudinary Admin API call** just to build a URL string, any property image row referencing an asset no longer present on Cloudinary crashed the whole page | Wrapped all 3 accessors in try/catch + `Log::error()`, returning `null`/default-image instead of throwing; separately, cleaned the local `.env` back to local-only values (see v5.3 summary table) |
+| **(v5.3)** Local `docker build` failed with `Class "Barryvdh\LaravelIdeHelper\IdeHelperServiceProvider" not found` | No `.dockerignore` existed — building from the actual local working directory (not a fresh clone, unlike Render) let `COPY . .` copy the local `vendor/` (installed **with** dev packages) over the image's freshly-installed `--no-dev` vendor, leaving Composer's package manifest referencing a dev-only provider whose class files the `--no-dev` autoloader had excluded | Added `.dockerignore` (excludes `vendor/`, `node_modules/`, `.env`, logs, etc.) so the local build context matches what Render's git-clone-based build actually sees |
+| **(v5.3)** Same class of crash again, different cause: `docker compose up` failed with the identical `PailServiceProvider not found` error even after the `.dockerignore` fix | `docker-compose.yml` bind-mounted `./bootstrap/cache` from the host — the host's package-manifest cache (built against a full local `composer install`, dev packages included) overwrote the container's correctly-built `--no-dev` manifest at container start | Removed the `bootstrap/cache` bind mount entirely; the container regenerates its own manifest from the packages it actually has installed |
+| **(v5.3)** `Target class [App\Http\Controllers\Staff\FrontdeskController] does not exist` when logging in as staff — only inside Docker, worked fine on `php artisan serve` | The controller's **file** is `FrontDeskController.php` (capital D) but its **class declaration** was `class FrontdeskController` (lowercase d) — a longstanding mismatch invisible on Windows/NTFS, since Windows file lookups are case-insensitive. `routes/staff.php` imported/referenced it as `FrontdeskController` (lowercase, matching the class), so Composer's PSR-4 autoloader looked for `FrontdeskController.php` — which doesn't exist on Linux's case-sensitive filesystem inside the Docker container. (`routes/web.php` separately imports the same class as `FrontDeskController`, capital D, matching the actual file — that one worked by coincidence, since PHP's class-existence check is case-insensitive once the *file* is found.) Exactly the class of "only breaks in one environment" bug the v5.3 Docker-parity work was meant to catch | Renamed the class declaration to `FrontDeskController` (capital D, matching the file) and fixed all 9 references in `routes/staff.php` (the `use` import + 8 `[FrontDeskController::class, ...]` route actions) to match; also fixed 3 cosmetic comment mentions elsewhere for consistency |
+| **(v5.3)** Local Docker page loads took multiple seconds, `php artisan serve` did not | Bind-mounting the whole repo (`.:/var/www/html`) meant every PHP `vendor/` file `stat()`/read on every request crossed the Windows↔WSL2 filesystem boundary — compounded by `docker/start.sh` intentionally skipping Laravel's route/view/config caching in local dev (more file reads per request, not fewer) | Switched to Docker Compose Watch (`develop.watch`) for `app/`, `resources/`, `routes/`, `config/`, `database/` — edits sync in instead of being live-mounted, so requests read from the container's own filesystem. Brought load times from multi-second down to ~0.05–0.4s |
+| **(v5.4)** Every walk-in guest was forced to get a login account, even ones who just wanted to be checked in | `full_name` and `email` were both mandatory for any "new guest" walk-in, and a `User` account + password-reset email were created unconditionally — there was no way to just record a guest without also creating account/login machinery for them | Added a `create_account` (Yes/No, defaults to No) choice to the walk-in form; a guest record (`User`, role=`customer`) is still always created for booking/history purposes, but email + the password-reset email are now only involved when staff picks Yes. `users.email` changed to nullable (new migration) to allow a guest record with no email at all — `AuthController::register()` independently still requires email for public self-registration, unaffected |
+| **(v5.4)** Walk-in bookings / payments / check-in / check-out / housekeeping tasks could 500 even though the underlying action had already succeeded | All 7 `event(new FrontdeskUpdated(...))`/`event(new PropertyAvailabilityChanged(...))` broadcast calls in `Staff\FrontDeskController` fired unprotected, after their DB write had already committed — a Pusher failure (confirmed locally: `auth_key should be a valid app key`) threw all the way up to a 500 page, so staff saw an error despite the action having gone through | Wrapped all 7 in try/catch + `Log::error()`, same pattern as `NotificationHelper::create()` (v5.2) |
+| **(v5.4)** Admin notification bell was spammed with a brand-new "Guest Arrived — May Balance Pa" notification **every single minute**, forever, for the same booking | `AutoCheckInOutBookings::autoCheckIns()` correctly refuses to auto-check-in a guest who still has an outstanding balance (that decision needs a named staff member at the Frontdesk, for accountability) — but it alerted admin about it with no dedup guard, and the command runs `->everyMinute()` (`routes/console.php`). So for as long as the booking sat `confirmed`-with-a-balance, every tick created another `Notification` row + another `StaffLog` entry. Confirmed against real data: one booking (`VE-RGFUE55L`) generated **20 duplicate notifications** in 20 minutes before the balance was settled | Added a "have we already alerted about this exact booking?" check (`StaffLog::where(action: 'auto_checkin_skipped_balance', target_id: $booking->id)->exists()`) before notifying — one alert per booking, until staff resolves it at the Frontdesk. Also gave that notification a click-through `link` to the booking (it had none). Cleaned up the 19 leftover duplicates |
+| **(v5.4)** Staff walk-in form said the Villa was unavailable **for every date**, even far-future ones, whenever any guest happened to be checked in right now | `Staff\FrontDeskController` (`index()` + `walkinForm()`) and `Admin\BookingController::create()` used `Property::where('status', 'available')` to decide which property to offer in the form. But `properties.status` is **real-time occupancy** (flipped to `occupied` by the check-in lifecycle), not date-specific availability — so with a guest checked in, the query returned zero rows and the Villa vanished from the form entirely, before the real per-date/slot check (`Booking::hasConflict()`) was ever reached | Changed all 3 sites to `where('status', '!=', 'maintenance')` — only a deliberate admin maintenance block should hide the Villa from the form; transient `occupied` should not, since it says nothing about the date being booked. The genuine availability check remains `Booking::hasConflict()` at submit time |
+| **(v5.4)** A guest could book a slot whose check-in time had already passed — e.g. booking the "Day" (8:00 AM) slot at 10:00 PM tonight, which they could never actually check into | `'check_in_date' => 'required|date|after_or_equal:today'` validates only at **date** granularity — it has no idea the chosen *slot's* start time is already in the past for today's date. Nothing anywhere else re-checked it | Added an `$checkin->isPast()` guard to all 5 booking-creating paths: `PortalController` (`pricePreview`, `bookingForm`, `submitBooking`), `Customer\BookingController::update()` (reschedule), and `Admin\BookingController::store()`. **`Staff\FrontDeskController::storeWalkin()` deliberately uses a looser rule** — it checks `$checkout->isPast()` instead, because a walk-in guest is physically standing there: arriving at 9:00 AM for the 8:00 AM–5:00 PM Day slot is normal and should still be allowed; only a fully-elapsed slot should be refused |
+| **(v5.4)** Admin → Insights reported nonsense revenue: "increased significantly to PHP 206,000, up from PHP 0 last month", despite prior months having real revenue | `InsightsController` summed `Payment::whereMonth('created_at', ...)` — the row's **insert** timestamp — instead of `payment_date`, the date the payment actually happened. Every historical payment row inserted during a backfill/seed therefore counted as "this month", collapsing months of revenue into one bucket and leaving genuinely-earlier months at ₱0 | Switched both `$revenueThisMonth` and `$revenueLastMonth` to `payment_date` (matching `DashboardController` and `ForecastController`), and added the `status = 'success'` + `payment_type != 'refund'` filters those two already had — so pending/failed payments and refunds no longer inflate the figure. Verified: now correctly reports ₱32,000 this month vs ₱34,000 last month |
+| **(v5.4)** Same issue everywhere else it appeared — admin booking create/status-update, calendar drag-move, customer self-cancel, **public online booking submit**, and manual payment/refund recording could all 500 despite the underlying action already having succeeded | The identical unprotected-broadcast shape, in `Admin\BookingController` (x4), `Admin\CalendarController` (x1), `Customer\HomeController` (x1), `Portal\PortalController` (x2 — the online booking one is guest-facing, not just staff-facing), and a previously-uncounted pair in `Admin\PaymentController` (x2) | Wrapped all 10 in try/catch + `Log::error()`. The `Admin\PaymentController` refund one was the most serious: it sat inside a `DB::transaction()` closure, so an uncaught Pusher failure there would have silently rolled back an otherwise-valid refund payment record. Verified live: the refund now persists correctly even when the broadcast throws. Closes out the entire "~12 unprotected call sites" pending item (turned out to be 18 total across the app, once actually counted) |
+
+| **(v5.5)** A guest could dodge the cancellation policy entirely by rescheduling first | Rescheduling had **no cutoff and no cap** — only an `isCancellable()` status check. Cancelling 2 hours before check-in gives 0%, but rescheduling a month out was free and unlimited, and `calculateRefundPercentage()` reads `checkInDateTime()` (the *new* date) — so cancelling from the moved date returned 100%. The peak slot stayed blocked throughout | Added `RESCHEDULE_CUTOFF_DAYS = 7` (deliberately the same boundary as the 100%-refund tier, so there's nothing to gain by moving instead of cancelling) and `MAX_RESCHEDULES = 2`, backed by a new `bookings.reschedule_count` column. `rescheduleBlockReason()` is the single source of truth for both the guard and the guest-facing message, and is re-checked in `update()` not just `edit()` |
+| **(v5.5)** A fully-paid booking displayed as "Partial" after rescheduling to a cheaper slot | The refund branch of `Customer\BookingController::update()` unconditionally set `payment_status = 'partial'`. Reproduced: ₱6,000 paid → reschedule to ₱4,000 → ₱2,000 refunded → `amount_paid=4000`, `balance_due=0`, yet status read `partial`, i.e. contradicting its own zero balance | Replaced with the new centralized `Booking::recalculateFinancials()` |
+| **(v5.5)** Seven diverging copies of the same `amount_paid`/`balance_due`/`payment_status` math | The recalculation was written inline in 7 controllers and had drifted. Most seriously, `PaymentController::success()` (PayMongo callback) **ignored refunds entirely**, so a booking with an earlier refund would have `amount_paid` jump back up after the next online payment | One `Booking::recalculateFinancials()` used everywhere, with two explicit rules: real payments count only at `status='success'`; refunds count from approval regardless of payout state. Cancellation behaviour verified unchanged (50% → `partial`, 100% → `refunded`, none → `paid`) |
+| **(v5.5)** Refunds claimed to be complete when no money had been sent | There is no refund API, and cash can't be API-refunded — an admin pays out by hand. But refund rows were written `status='success'` immediately and the admin notification said *"₱X **refunded**"*, past tense. Nothing tracked whether the payout happened, so a guest's refund could be forgotten with no trace | Refunds now start `pending`; the Payments page gained a "NOT SENT" badge, an awaiting-payout banner + filter, and a **Mark Paid Out** action. Notification retitled *"Refund To Send"*. Amounts are unaffected by payout state — the refund is deducted on approval |
+| **(v5.5)** Net revenue in Reports would have been overstated | `ReportController` subtracted refunds filtered by `status='success'` — correct while every refund was written as `success`, but wrong the moment refunds started life as `pending`, which would have hidden un-paid-out refunds from the deduction | Removed the status filter on the refund sum so it matches `recalculateFinancials()`. Caught before shipping, not in production |
+| **(v5.5)** Every payment row had a `NULL` audit trail, and the duplicate-payment guard could never fire | `reference_number` and `received_by` were passed by nearly every `Payment::create()` call site but were **missing from `Payment::$fillable`**, so mass assignment silently discarded them — confirmed: 0 of 46 rows had either populated. This also disabled the duplicate guard in `PaymentController::success()`, which looks for an existing row by `reference_number` — impossible to match when it's always `NULL` | Both added to `$fillable`; added a `receivedBy()` relationship |
+| **(v5.5)** A walk-in booking recorded ₱3,999.96 as paid with **zero** payment records | `storeWalkin()` writes `amount_paid` onto the booking from `payment_amount`, but only creates the `Payment` row `if ($amountPaid > 0 && $request->payment_method)` — and Payment Method was optional. Leaving it blank produced a booking claiming payment that no payment row backed: invisible to revenue reports, and the two sources of truth disagreed. Found one real instance (`VE-OLRWMOGX`) while scanning all 45 bookings for stored-vs-computed drift | Validation now rejects an amount with no method, with the error surfaced on the field. **The existing row was deliberately left as-is** — it's real business data and needs a human to decide whether ₱4,000 was actually received |
+| **(v5.5)** Frontdesk told staff there were 3 units still available when the only bookable one was taken | The stat cards ran `Property::where('status','occupied'/'available')->count()` across **all** property rows — 1 villa plus 3 unnamed info-only `type=room` records left from the pre-v4.0 multi-unit model. The "Properties" tab had the same cause and rendered three blank cards (`property_name` is `NULL` on those rows since v5.0) | Both replaced with a single Villa status strip (real status, current guest, checkout time, next free slots) and the new Availability page. Room records stay in the database for housekeeping history, just aren't surfaced at the frontdesk |
+| **(v5.5)** Housekeeping tasks piled up unresolved — 11 of 13 overdue, worst by 48 days, 6 stuck in `in_progress` | Nothing closed the loop: check-in creates the task, auto-checkout flips it to `in_progress`, but marking it complete was manual **and** buried in a tab nobody opened. The task also displayed only a due *date*, which is nearly useless when the turnaround between slots is 2 hours | Tasks now show their real deadline (the next check-in time, resolved in one query by `attachCleaningDeadlines()`); the most urgent one surfaces in a colour-coded banner at the top of the frontdesk with one-click **Mark cleaned**; checkout's success message names the deadline. A data-only migration closed the existing backlog (13 → 5), tagging each closed row with a note that it was auto-closed rather than genuinely done |
+| **(v5.5)** Blade silently stopped compiling half a template, producing `syntax error, unexpected end of file` | `@php($slot = $row['slots'][$slotKey])` compiled to a bare `<?php(...)` with **no closing tag** — Blade fell back to treating `@php` as a block opener, so every directive after it was emitted as raw PHP and the whole rest of the file became one unterminated PHP block | Removed the parenthesised `@php(...)` form from both staff views in favour of `@foreach($row['slots'] as $slotKey => $slot)`, which needs no temporary assignment at all |
+| **(v5.5)** Reviewer profile pictures never appeared, though customers could upload them | Both the homepage testimonials and `/reviews` hardcoded the first initial into `.author-avatar`; `User::profile_image_url` was never referenced | Both now render the uploaded image when present, falling back to the initial. `.author-avatar` gained `overflow:hidden` + an `img` rule to keep the circular crop |
+| **(v5.5)** "My Bookings" button on the customer dashboard was unclickable | The welcome banner's decorative `::before` gradient circle is positioned over the CTA row and was capturing the clicks | `position:relative; z-index:1` on `.welcome-cta` |
+| **(v5.6)** A guest who cancelled their own booking was never told anything | `Customer\HomeController::cancelBooking()` issued two notifications and **both were `notifyAdmin()`** — the guest got only a flash message, which is gone after one page load, so there was no lasting record of the cancellation or of whether a refund was owed. The admin-initiated cancel path *did* notify the guest, which is what made this look intentional rather than a miss | New `bookingCancelledForGuest()` preset, covering both the cancellation and the refund amount/percentage (or an explicit "not eligible") in one notification |
+| **(v5.6)** Marking a refund paid out was completely silent | `markRefundPaidOut()` only flipped `status` and wrote a `StaffLog` row. The guest had been told a refund was coming and then never heard again; no admin got confirmation the refund was closed. This is the end of the refund lifecycle and it produced no signal at all | New `refundPaidOut($payment)` preset notifying **both** sides — guest ("Refund Sent … allow a few banking days") and all admins ("Nothing further is pending on this refund") |
+| **(v5.6)** Guests were told their refund was "processed" while the money was still sitting in the resort's account | v5.5 correctly made refunds start as `status='pending'`, but the guest-facing notification still read *"has been processed"*, and the reschedule flash message said *"has been refunded"* — both past tense, both wrong at that point. Guests would go looking in GCash for money that hadn't been sent | Retitled **"Refund Approved"**, stating plainly that the money hasn't been sent yet and that a second notification follows. Reschedule message and the admin success message corrected to match. All four refund-creating sites now route through shared presets so the pending-vs-sent wording can't drift apart again |
+| **(v5.6)** PayMongo webhook signature verification could never have succeeded | `verifyWebhook()` computed `hash_hmac('sha256', $rawBody, $secret)` and compared it against the **entire `Paymongo-Signature` header**. That header is `t=<timestamp>,te=<test-sig>,li=<live-sig>`, and the signed payload is `"{timestamp}.{rawBody}"` — not the body alone. Every genuine PayMongo event would have been rejected 401, silently, even with the webhook correctly registered | Header is now parsed into its components, the signed payload reconstructed as `timestamp . '.' . body`, and compared against both `te` and `li` so the same code works in test and live mode. Verified against synthetically-signed payloads including tampered-body and wrong-timestamp cases |
+| **(v5.6)** A guest who paid and closed the browser stayed "unpaid" forever | The webhook handler found the booking and then only called `Log::info()` — its own comment described it as "a fallback for missed callbacks", but it never wrote anything. `PaymentController::success()` was the sole creator of `Payment` rows, and it only runs if the guest returns to the site after paying. PayMongo would have the money while the booking showed unpaid, with no reconciliation path short of reading the PayMongo dashboard by hand | Extracted `recordPaymongoPayment()` — payment row, notifications, `recalculateFinancials()`, auto-confirm and confirmation email — and called it from **both** the success callback and the webhook. Idempotent via `reference_number` (the PayMongo `pay_xxx` ID), verified by replaying the same event twice: one payment row, no duplicate notifications |
+| **(v5.7)** The success callback could record a full payment for a booking that had paid nothing | It recorded whenever the checkout session status was `'paid'` **or `'active'`** — but `active` means the session is still *open*, i.e. unpaid — and it took the amount from `line_items`, which is the amount *requested*, not received. So a guest who opened checkout and came back without paying would be marked paid. Rare under GCash (returning to the site required authorising in the wallet); **routine under QR Ph**, where the guest scans on a different device and can land on the page before — or without — paying | The check is now authoritative: a payment object inside the session with `status === 'paid'`, with the amount and reference read from that payment rather than from the line items. Verified across four cases (paid / active-with-no-payment / failed payment / expired session) — only the first records |
+| **(v5.7)** Payment history listed in unpredictable order | Both payment lists sorted by `payment_date` alone — a **date column with no time**. Two payments on the same day tie exactly, so MySQL returned them in arbitrary (effectively insertion) order, putting the deposit *above* the later balance payment. The payment histories on the customer and admin booking-detail pages had **no `ORDER BY` at all** | `id` added as a tiebreaker in `Customer\PaymentController` and `Admin\PaymentController`; the three booking-scoped histories now sort newest-first in the view without extra queries |
+| **(v5.7)** The same enum rendered four different ways | Six views each ran their own `ucfirst()` / `strtoupper()` / `str_replace()` over the raw column, yielding `Full_payment`, `Full payment`, `FULL PAYMENT` and `Qrph` for the same two values. `NotificationHelper` had its own copy again, which is how admins were told a payment arrived *"via Qrph"* | `Payment::typeLabelFor()` and `methodLabelFor()` — static so the helper can share them — plus `type_label` / `method_label` accessors. Every render site now goes through them |
+| **(v5.7)** Admin notifications reported the balance from *before* the payment | `NotificationHelper::paymentReceived()` ran **before** `recalculateFinancials()`, so `balance_due` was always one payment stale. Caught in the live QR Ph test: ₱2 paid against a ₱4 booking announced *"Balance due: ₱4.00"*, and the closing ₱2 announced *"₱2.00"* on a booking that was by then fully paid — the one number an admin would act on, consistently wrong | Notification moved after the recompute in `recordPaymongoPayment()` and in `Admin\PaymentController::store()` (which had the same ordering) |
+| **(v5.7)** Rejected webhooks were undiagnosable from the logs | A failed signature logged only `invalid signature attempt` and an IP. Two live rejections could only be explained by pulling the raw payloads out of the ngrok inspector — they turned out to be harmless `livemode: false` dashboard test events | The rejection log now includes the event id, type and `livemode` (parsed for logging only, never trusted or acted on) plus a plain-language hint distinguishing "test event while live — expected" from a genuine secret mismatch |
+| **(v5.7)** The system auto-cancelled bookings that had **already paid**, telling the guest their downpayment "wasn't completed" | `AutoCheckInOutBookings::cancelStalePendingBookings()` selected on `status = 'pending'` and `created_at` only — never on `amount_paid`. Meanwhile the three **manual** record-payment paths (`Admin\PaymentController::store()`, `Admin\BookingController::recordPayment()`, `Staff\FrontDeskController::recordPayment()`) called `recalculateFinancials()`, which updates `amount_paid`/`balance_due`/`payment_status` but **never `status`**. Only the PayMongo path auto-confirmed. Net effect: staff takes a ₱2,000 downpayment at the front desk → booking stays `pending` → the sweeper cancels it and notifies the guest that payment wasn't completed, while the resort is holding their money. **Observed live** on `VE-KX24HC95` (₱2,000 paid, auto-cancelled 2026-08-16 01:20) | Two layers. **Root cause:** new `Booking::confirmOnFirstPayment()` — one definition of "the first successful payment confirms the booking" — called from all three manual paths; `recordPaymongoPayment()` was refactored onto it too, so the PayMongo and manual paths can no longer diverge. **Safety net:** the sweeper now skips any booking with `amount_paid > 0`, so a future path that forgets to promote status leaves a booking merely stuck at `pending` rather than cancelled while holding cash. Verified three ways: manual payment → confirmed and survives the sweep; paid-but-unpromoted → survives; genuinely unpaid → still cancelled |
+| **(v5.7)** The webhook endpoint returned **419 Page Expired** to every PayMongo delivery | `POST /webhooks/paymongo` lives in `routes/web.php`, so it inherits the `web` middleware group — including `ValidateCsrfTokens`. A server-to-server webhook carries no session and no CSRF token, so Laravel rejected it **before the controller ever ran**. Both `project.md` and `CLAUDE.md` had asserted the route was "CSRF exempt" for several versions; `bootstrap/app.php` contained no such exemption. Every earlier test passed because they invoked the controller method directly, bypassing middleware entirely — the defect only appears when the request goes through the real stack | Added `$middleware->validateCsrfTokens(except: ['webhooks/paymongo'])`. Authentication for this route is the HMAC signature, not CSRF. Verified by POSTing to the **public ngrok URL** from outside: bad signature → `401 {"error":"Invalid signature"}`, correctly signed → `200 {"received":true}` with the payment recorded |
+| **(v5.7)** Docker container silently ran the old `bootstrap/app.php` | The CSRF fix above appeared to do nothing — the container serving `localhost:8000` kept returning 419. Compose Watch syncs `app/`, `resources/`, `routes/`, `config/` and `database/`, but **`bootstrap/` was never in the watch list**, so middleware changes could never reach the container. A variant of the v5.5 stale-container trap, but not fixable by running `--watch`: the path simply wasn't covered | Added a **single-file** sync entry for `./bootstrap/app.php` (deliberately *not* the whole `./bootstrap` directory — `bootstrap/cache/` must never be synced; the host copy reflects a full dev `composer install` and overwrites the image's `--no-dev` manifest, breaking container start with `Class ...ServiceProvider not found`) |
+| **(v5.7)** The success page told every visitor "Payment Successful!" | Unconditional green check and confirmation text, with a blank cell where the payment status belonged whenever the booking was still `unpaid`. Under QR Ph a guest can legitimately reach this page before settlement completes, so the page would confidently confirm a payment the system had not received | Second state added: a waiting notice explaining confirmation arrives automatically (true — the webhook delivers it), the outstanding balance, a "Not yet received" chip in place of the blank cell, and a retry link |
+| **(v5.8)** Every AI feature broke at once, with no change on our side | `GeminiService` hardcoded `llama-3.1-8b-instant`, which Groq **decommissioned**. The API now answers `400 model_not_found`, and `ask()` returns that error string straight to the caller — so the chatbot showed it to guests, insights and forecast rendered it as their "report", and review moderation fell back to the manual queue for every review. Nothing was logged, because the failure branch only returned the string. The forecast had a second, quieter problem waiting: Groq's replacement models are all **reasoning** models whose hidden reasoning is charged against `max_tokens`, so at the default effort the report came back truncated mid-section | Model and reasoning effort moved to config (`GROQ_MODEL`, default `openai/gpt-oss-20b`; `GROQ_REASONING_EFFORT`, default `low`), so the next retirement is an env change rather than a deploy. `ask()` now takes a per-call `$maxTokens` (forecast passes 2048), logs failures with model/status/body while keeping the error-string return the fail-open moderation path depends on, and strips inline `<think>` blocks in case a model that inlines its scratchpad is ever configured. Re-verified end to end on all four call sites — see v5.8 above |
+| **(v5.6)** An unexpected PayMongo payment method would have wedged the webhook in a retry loop | `payments.payment_method` was narrowed to `gcash`/`paymaya`/`cash` in v5.5. Any other source type (e.g. `card`, `grab_pay` if ever enabled) would fail the INSERT on the ENUM constraint, return non-2xx, and have PayMongo retry the same doomed event repeatedly — with the payment never recorded | Method is normalised against the allowed set before insert; the original value is preserved in `notes` and logged as a warning. Recording the payment under the closest valid method beats losing it |
 
 ---
 
@@ -1358,16 +2573,50 @@ DELETE /my/profile/devices/{device}           customer.profile.devices.destroy  
 | 43 | **(v5.0)** Clickable Notifications (Customer + Admin) + Bell/Dropdown Rebuild | ✅ Complete |
 | 44 | **(v5.1)** Fixed Day/Night Booking Slots (replaced free-choice time + buffer) | ✅ Complete |
 | 45 | **(v5.1)** Pre-v5.1 Data Reset (bookings/payments/reviews/stale notifications) | ✅ Complete |
+| 46 | **(v5.2)** Render + Docker Deployment (Dockerfile, nginx/php-fpm/supervisord, `render.yaml`) | ✅ Complete |
+| 47 | **(v5.2)** Aiven MySQL Production Database (schema fixed, migrated, seeded) | ✅ Complete |
+| 48 | **(v5.2)** Cloudinary Image Storage (production disk switch, view/model URL fixes) | ✅ Complete |
+| 49 | **(v5.2)** Pusher Realtime on Production | ✅ Complete |
+| 50 | **(v5.2)** Transactional Email on Production (Brevo API, replacing SMTP) | ✅ Complete |
+| 51 | **(v5.2)** Free-Tier Cron Workaround (`/cron/run-schedule` route) | ✅ Complete |
+| 52 | **(v5.2)** Mail/Broadcast Failure Isolation (auth flows no longer 500 on transport errors) | ✅ Complete |
+| 53 | **(v5.3)** Cloudinary Image URL Accessors Hardened (try/catch on `PropertyImage`/`User`/`Package`) | ✅ Complete |
+| 54 | **(v5.3)** Local `.env` Cleanup (removed drifted-in production credentials) | ✅ Complete |
+| 55 | **(v5.3)** Local Docker Parity (`Dockerfile`, `.dockerignore`, Compose Watch, scoped `villa_docker` MySQL user) | ✅ Complete |
+| 56 | **(v5.3)** Local Redis Cache Wired Into Dockerized `app` Service | ✅ Complete |
+| 57 | **(v5.4)** Optional Walk-in Guest Login Accounts (guest record no longer requires an account) | ✅ Complete |
+| 58 | **(v5.4)** `FrontDeskController` Broadcast Failure Isolation (7 unprotected `event()` calls) | ✅ Complete |
+| 59 | **(v5.4)** App-wide Broadcast Failure Isolation (remaining 10 unprotected `event()` calls: Admin Booking/Calendar/Payment, Customer, Portal) | ✅ Complete |
+| 60 | **(v5.5)** Payment Method / Type ENUM Consolidation (e-wallets + cash; `deposit` merged into `partial`) | ✅ Complete |
+| 61 | **(v5.5)** Reschedule Limits — 7-day cutoff + max 2 (closes the cancellation-policy loophole) | ✅ Complete |
+| 62 | **(v5.5)** Centralized `Booking::recalculateFinancials()` (replaced 7 diverging inline copies) | ✅ Complete |
+| 63 | **(v5.5)** Refund Payout Tracking (pending → Mark Paid Out, awaiting-payout banner/filter) | ✅ Complete |
+| 64 | **(v5.5)** Payment Audit Trail Restored (`reference_number` / `received_by` added to `$fillable`) | ✅ Complete |
+| 65 | **(v5.5)** Staff Availability Page — 14-day Day/Night slot grid with walk-in prefill | ✅ Complete |
+| 66 | **(v5.5)** Frontdesk Single-Villa Rework (Villa status strip; removed misleading unit counters) | ✅ Complete |
+| 67 | **(v5.5)** Housekeeping Deadlines + Cleaning Banner + Backlog Cleared (13 → 5) | ✅ Complete |
+| 68 | **(v5.5)** Staff Portal Theme Aligned to Admin (earth palette, cream sidebar) | ✅ Complete |
+| 69 | **(v5.5)** Public Portal Polish (social contact rows, reviewer avatars, dashboard CTA fix) | ✅ Complete |
+| 70 | **(v5.6)** Refund Lifecycle Notifications (guest cancel, refund approved, refund sent) | ✅ Complete |
+| 71 | **(v5.6)** PayMongo Webhook Signature Verification Fixed | ✅ Complete |
+| 72 | **(v5.6)** Webhook Records Payments (shared `recordPaymongoPayment()`, idempotent) | ✅ Complete |
+| 73 | **(v5.7)** QR Ph Payment Migration (ENUM, checkout, dropdowns, badges, 41 rows relabeled) | ✅ Complete |
+| 74 | **(v5.7)** Async-Safe Payment Confirmation (authoritative paid check + waiting state) | ✅ Complete |
+| 75 | **(v5.7)** Webhook Endpoint Made Actually Reachable (CSRF exemption + `bootstrap/app.php` Compose Watch) | ✅ Complete |
+| 76 | **(v5.7)** Paid-Booking Auto-Cancellation Fixed (`confirmOnFirstPayment()` + sweeper guard) | ✅ Complete |
+| 77 | **(v5.7)** QR Ph Verified on Live Keys (2 real ₱2 payments, webhook-delivered) | ✅ Complete |
+| 78 | **(v5.7)** Payment Label + Ordering Cleanup (`type_label`/`method_label`, date-tie fix) | ✅ Complete |
+| 79 | **(v5.7)** Stale-Balance Notification Fixed + Webhook Rejection Diagnostics | ✅ Complete |
 
 ### Pending / Optional
 
-Re-verified directly against the live code/database (not just re-stated from memory) on 2026-08-08.
+Re-verified directly against the live code/database (not just re-stated from memory) on 2026-08-08; v5.5 rows added 2026-08-15.
 
 | Module | Status | Notes |
 |---|---|---|
 | ~~AI features — needs `GROQ_API_KEY`~~ | ✅ Resolved | `GROQ_API_KEY` is set in `.env` — confirmed live. The blocker this item was tracking is gone (Insights/Chatbot can call the API); Forecast still uses dummy data regardless — see next row |
-| PayMongo Webhook | 🔲 Optional | Still just the local route + Ngrok setup — registering the production webhook URL on the PayMongo dashboard is an external, one-time deploy step, not something fixable in code |
-| AI Forecasting real data | 🔲 **Still not done** | Re-checked `Admin\ForecastController::index()` directly — it still runs entirely on hardcoded dummy arrays (`$dummyBookings`, `$dummyRevenue`, `$totalProperties = 4; // dummy`), not live DB queries |
+| ~~PayMongo Webhook (code side)~~ | ✅ **Resolved (v5.6)** | Superseded — the handler was a no-op and signature verification was broken; both fixed in v5.6. What remains is only the external dashboard registration, tracked in the v5.2 row below |
+| ~~AI Forecasting real data~~ | ✅ **Resolved (2026-08-11)** | `Admin\ForecastController::index()` used to run entirely on hardcoded dummy arrays (`$dummyBookings`, `$dummyRevenue`, `$totalProperties = 4; // dummy`) — replaced with live `Booking`/`Payment` queries per month over a real trailing 6-month window. Also removed the "occupancy rate"/"total properties" framing from both this and `Admin\InsightsController` (meaningless for a single-exclusive-villa resort — there's only ever one bookable unit, so "% of properties occupied" doesn't mean anything); Insights' KPI card was swapped for a plain Villa Status (Occupied/Available). Separately, switched the AI's raw Markdown forecast response to render as real HTML (`league/commonmark`) instead of literal `**`/`#` characters showing up on the page |
 | ~~Reviews on property public page~~ | ✅ **Resolved (2026-08-08)** | Added a "Guest Reviews" section to `portal/property.blade.php`, scoped to that specific property's own **approved** reviews (average rating + count, individual review cards, admin replies shown inline, empty state if none yet). `Portal\PortalController::propertyDetail()` now queries `Review::where('property_id', $property->id)->where('status', 'approved')` and passes `reviews`/`avgRating`/`totalReviews` to the view |
 | ~~Staff walk-in booking form~~ | ✅ **Confirmed done** | Re-checked `Staff\FrontDeskController` — it already validates `check_in_time`/`check_out_time` and prices via `$property->getPackagePrice($checkin)`. Not touched this session, but it's already correct — no longer pending |
 | ~~AI Chatbot context refresh~~ | ✅ **Confirmed done** | Re-checked `Portal\ChatbotController` — the prompt is explicitly single-villa-aware ("SINGLE-VILLA private resort... only ONE bookable villa"), pulls the real master Villa record, real `getPackagePrice()`/`hasConflict()` results. No stale multi-villa references found |
@@ -1377,9 +2626,111 @@ Re-verified directly against the live code/database (not just re-stated from mem
 | ~~(v5.0) 52 orphaned notifications with no click-through link~~ | ✅ **Superseded (2026-08-08)** | Moot after the v5.1 data reset wiped all pre-v5.1 bookings/notifications — see the next row |
 | ~~(v5.0) Amenities list needs the admin's real content~~ | ✅ **Tooling fixed (2026-08-08)** | Curating the actual amenity names is a self-service admin task (Settings → Amenities, already built in v5.0) — not something that gets "completed" in code. What WAS a real bug: the master list said `"Swimming Pool"` while the Villa's actual saved amenity was `"Private Pool"`, silently orphaning that checkbox on the Property edit form (it couldn't render as checked, so re-saving the property from that form would have dropped it) — fixed in both the live `property_amenities` setting and the `PropertyController::DEFAULT_AMENITIES` seed constant. Also added **one-way sync** in `SettingsController::update()`: removing an amenity from Settings → Amenities now also strips it from every property that had it selected (previously the two lists could silently drift apart, which is exactly how the Swimming Pool/Private Pool mismatch happened in the first place) |
 | **(v5.1)** Data reset — all pre-v5.1 bookings wiped | ✅ **Done (2026-08-08)** | 31 bookings (30 live + 1 already-trashed) hard-deleted, cascading 24 payments + 7 reviews; 14 housekeeping tasks unlinked (`booking_id` → null, not deleted); Villa property status reset to `available`; 97 stale notifications referencing the deleted bookings/reviews removed (kept 12 real "New Guest Registered" notifications). Clean slate for testing the new fixed-slot booking flow — no leftover free-time-era data anywhere |
-| **(v6.0-planned)** Permanent Windows Task Scheduler entry for `php artisan schedule:run` | 🔲 **Pending — do this when hosting online, not before** | Right now the scheduler (`bookings:auto-checkinout` — auto check-in/out, plus the 1-hour stale-pending-booking auto-cancel, see [Section 8](#8-booking-availability--fixed-slots-v51)) only fires while someone manually runs `php artisan schedule:work` in an open terminal — it is **not persistent** and stops on terminal close / machine restart. That's intentional for now: this app still runs on a personal dev laptop via XAMPP, and a permanent 24/7 Task Scheduler entry only makes sense once it's deployed to a real always-on server. **Reminder for that day:** create a Windows Task Scheduler entry (or cron, if the eventual host is Linux) that runs `php artisan schedule:run` every minute |
+| ~~(v6.0-planned) Permanent scheduler for `php artisan schedule:run`~~ | ✅ **Resolved (v5.2)** | Now hosted on Render, whose free tier has no Cron Jobs feature ($1/mo minimum). Workaround: a token-gated `GET /cron/run-schedule/{CRON_SECRET}` route runs `schedule:run` on demand, hit periodically by a free external pinger (e.g. cron-job.org). Local dev is unaffected — still `php artisan schedule:work` in an open terminal there |
+| **(v5.2 → v5.7)** PayMongo Webhook registration | 🔴 **PREREQUISITE — must be done before QR Ph goes live** | Register `https://villa-elena.onrender.com/webhooks/paymongo` on the PayMongo dashboard and set `PAYMONGO_WEBHOOK_SECRET` (still the placeholder `whsk_xxx` in `.env` as of this writing, so signature verification currently rejects everything). **No live account needed** — webhooks fire in test mode against the test secret key; it just needs a publicly reachable URL (Render or ngrok), never `localhost`. This was merely nice-to-have while GCash was the rail, because the redirect back to `success_url` reliably recorded the payment. **Under QR Ph it is the primary recording path** — the guest scans on a separate device and the browser tab may never return — so without it, real payments will be taken and silently not recorded |
+| **(v5.7)** Confirm what QR Ph reports as its source type | 🔲 Verify on the first real payment | The code stores `source.type` / `payment_method_used` and normalises anything unrecognised to `qrph`, keeping the original string in `notes` and logging a warning — so an unexpected value degrades safely instead of failing the INSERT. Check `storage/logs` after the first live QR Ph payment; if a warning appears, add the real value to the `$known` set in `PaymentController::recordPaymongoPayment()` |
+| **(v5.7)** Whether QR Ph payments can be completed in PayMongo **test** mode | 🔲 Verify before relying on sandbox testing | The API accepts `payment_method_types: ['qrph']` with a test key and returns a checkout URL, but that only proves the session is created — not that the sandbox can simulate a scan-and-pay. If test mode can't complete a QR Ph payment end to end, the remaining verification has to happen on live keys with a small real amount. The webhook path itself is already proven by replaying signed `payment.paid` events locally |
+| ~~(v5.2) Other unprotected Pusher broadcast calls~~ | ✅ **Fully resolved (2026-08-13)** | The same "broadcasts synchronously, no try/catch" shape that caused the registration 500 (see Known Issues) existed in every remaining `event(new ...)` call site across the app: `Admin\BookingController` (x4: `BookingCreated`, `BookingUpdated`, `PropertyAvailabilityChanged` x2), `Admin\CalendarController` (x1: `BookingUpdated` on drag-move), `Customer\HomeController` (x1: `PropertyAvailabilityChanged` on self-cancel), `Portal\PortalController` (x2: `BookingCreated`, `PropertyAvailabilityChanged` on the **public online booking submit** — the highest-impact one, since it's guest-facing not just staff-facing), and `Staff\FrontDeskController` (x7, fixed earlier the same day — see above). A 10th, previously-uncounted pair was also found and fixed in `Admin\PaymentController` (`PaymentReceived` on manual payment record + refund) — **the refund one was the worst of all of them**, since it sat inside a `DB::transaction()` closure: an uncaught Pusher failure there would have silently rolled back the whole refund payment record, even though the refund was otherwise entirely valid. Confirmed this wasn't hypothetical (it actually threw with the current local Pusher credentials) and verified the fix with a live test: the refund payment now persists correctly even when the broadcast fails. All 18 call sites across the whole app now wrapped in try/catch + `Log::error()`, matching the pattern `NotificationHelper::create()` already used since v5.2 |
+| **(v5.2)** Admin/Staff seeded account passwords | 🔲 **Change before real use** | `AdminSeeder` sets `admin@villaelenareosrt.com` / `Admin@1234` and `staff@villaelenareosrt.com` / `Staff@1234` on the live Aiven database — fine for solo testing, must be changed before anyone else gets the link |
+| ~~(v5.6) Automated refunds via the PayMongo Refunds API~~ | ❌ **Impossible — closed (v5.7)** | Verified against live payments: `POST /v1/refunds` returns `400 parameter_invalid — "Refunds are not allowed for payments with source type qrph."` Tried on both payments, full and partial amounts, before and after settlement. Not a timing or balance issue; QR Ph simply cannot be refunded through PayMongo at all, by API or dashboard. Refunds must be sent out-of-band via the resort's own GCash/Maya. This is now a permanent property of the design, not a backlog item |
+| **(v5.7)** Safeguards on "Mark Paid Out" | 🔲 **Recommended — the flow is now unguarded** | Since no automation is possible, the honour-system button is the only control on real money leaving. It was skipped during live testing by someone who knew the process, and the app then told the guest "Refund Sent" while holding the cash. Three fixes proposed: (1) state plainly in the Issue Refund UI that PayMongo cannot refund QR Ph and the transfer must be made by hand; (2) surface the guest's payout destination — `users.phone` is populated for all 10 users and is the GCash number — in the Mark Paid Out confirmation; (3) require the GCash/Maya transfer reference, stored in the refund row's `reference_number`. (3) is the substantive one: a reference cannot be supplied if the transfer never happened, which turns a checkbox into evidence and creates a trail reconcilable against PayMongo |
+| **(v5.5)** Booking `VE-OLRWMOGX` — ₱3,999.96 recorded as paid with no `Payment` row | 🔲 **Needs a human decision** | Found while scanning all 45 bookings for stored-vs-computed drift. The code path that caused it is fixed (walk-in now rejects an amount with no payment method), but this existing row is **real business data** and was deliberately left untouched. Someone has to establish whether ₱4,000 was actually received, then either create a matching cash `Payment` row or reset the booking to unpaid |
+| **(v5.5)** Housekeeping — 3 dead `task_type` values, and no way to create a task manually | 🔲 **Open** | All 53 tasks are `checkout_clean`; `daily_clean`, `maintenance`, and `inspection` exist in the ENUM but no code ever creates them. The same gap explains why: tasks are only ever generated automatically at check-in, so staff can't log e.g. a broken aircon. Either build manual task creation (which makes the three values usable) or drop them from the ENUM |
+| **(v5.5)** Only 5 housekeeping tasks remain open, all with real deadlines | ✅ **Resolved (2026-08-15)** | Was 13 open with 11 overdue (worst 48 days) and 6 stuck in `in_progress`. Backlog closed by migration; recurrence prevented by the deadline display + one-click banner. Kept here as the record of what the numbers were before |
+| **(v5.5)** Docker container can silently run stale code against a migrated database | 🔲 **Workflow discipline, not a code fix** | `resources/`, `app/`, `routes/`, `config/`, `database/` only sync into the container under `docker compose up --watch`. A plain `docker compose up` freezes them at image-build time — but migrations run from the host still hit the same MySQL, producing old code against a new schema (observed: container writing `payment_type='deposit'` into an ENUM that no longer had it → `Data truncated`). Restart the container after any migration if Watch isn't running; diagnose by grepping the file **inside** the container rather than assuming a cache |
+
+---
+
+## 15. Deployment
+
+### 15.1 Stack
+
+| Concern | Service | Free tier used |
+|---|---|---|
+| Hosting | Render (Web Service, Docker runtime) | Yes — spins down after 15 min idle, 30–60s cold start, no persistent disk, 750 instance-hrs/month pooled |
+| Database | Aiven (MySQL, "Developer Tier") | Yes — always-free, no card, no expiry; 1GB storage/RAM, 1 CPU |
+| Image storage | Cloudinary | Yes — 25GB storage/bandwidth |
+| Realtime | Pusher (Channels) | Yes — 200 concurrent connections, 200K msgs/day |
+| Email | Brevo (HTTPS API, not SMTP) | Yes — 300 emails/day |
+| Payments | PayMongo | Test-mode keys |
+| AI chatbot | Groq | Free tier |
+
+### 15.2 Required environment variables
+
+See `.env.example` for the full, commented list — every variable there has a note on where to get its value. Render-specific ones (set in the dashboard's Environment tab, not committed):
+
+- `APP_KEY` — let Render auto-generate (`render.yaml` has `generateValue: true`); don't reuse the local one
+- `APP_URL` — the Render service URL
+- `DB_CONNECTION=mysql`, `DB_HOST`/`DB_PORT`/`DB_DATABASE`/`DB_USERNAME`/`DB_PASSWORD` — from Aiven's console
+- `MYSQL_ATTR_SSL_CA=/etc/ssl/certs/aiven-ca.pem` + `AIVEN_CA_CERT` (the full `.pem` contents) — Aiven requires TLS; `docker/start.sh` writes the cert file from this env var at container start
+- `SESSION_DRIVER=database`, `CACHE_STORE=database`, `QUEUE_CONNECTION=sync` — no persistent disk for file-based drivers; sync queue avoids needing a separate worker service (fine at this traffic level)
+- `LOG_CHANNEL=stderr` — a log file inside the container is invisible in Render's dashboard; stderr streams there directly
+- `CLOUDINARY_URL=cloudinary://<key>:<secret>@<cloud_name>` — from the Cloudinary dashboard's home page
+- `BROADCAST_CONNECTION=pusher` + `PUSHER_APP_ID`/`PUSHER_APP_KEY`/`PUSHER_APP_SECRET`/`PUSHER_APP_CLUSTER=ap1`
+- `MAIL_MAILER=brevo` + `MAILER_DSN=brevo+api://<API_KEY>@default` — **must be the API key** (`xkeysib-...`) from Brevo's Settings → SMTP & API → **API Keys** tab, not the SMTP key (`xsmtpsib-...`) from the SMTP tab; using the wrong one fails with "Key not found (401)"
+- `MAIL_FROM_ADDRESS` — must be a verified sender in Brevo (Settings → Senders & IP)
+- `CRON_SECRET` — let Render auto-generate; guards the `/cron/run-schedule/{token}` route
+- `RUN_MIGRATIONS` — `true` only for a deploy that needs to run pending migrations, then back to `false`
+
+### 15.3 Why Render blocks SMTP (and why Brevo is used via API, not SMTP)
+
+Since September 2025, Render's free web services block **all** outbound traffic on SMTP ports 25, 465, and 587 — for any host, not just specific providers. Gmail SMTP (what local dev still uses) and Brevo's own SMTP relay would both fail identically here; this isn't a Brevo-specific limitation, it's a Render network-level block that only lifts on a paid instance. The fix used instead: `symfony/brevo-mailer` + `symfony/http-client`, wired up as a custom `brevo` Laravel mailer in `AppServiceProvider::boot()` (`Mail::extend('brevo', ...)` using `BrevoTransportFactory` + a `brevo+api://` DSN), which talks to Brevo over HTTPS — not blocked.
+
+### 15.4 Running one-off commands against the production database
+
+Render's free plan has no Shell tab, so there's no way to run `php artisan migrate` or similar directly against the live container. Instead, `config/database.php` has a separate `aiven` connection (reads `AIVEN_DB_HOST`/`AIVEN_DB_PORT`/`AIVEN_DB_DATABASE`/`AIVEN_DB_USERNAME`/`AIVEN_DB_PASSWORD`/`AIVEN_DB_SSL_CA` — a **different** set of env vars from the ones Render uses, added to the local `.env` only) that lets any artisan command target Aiven directly from a developer machine, e.g.:
+
+```
+php artisan migrate --force --database=aiven
+php artisan migrate:fresh --seed --force --database=aiven   # full reset + reseed
+```
+
+`AIVEN_DB_SSL_CA` points at a local copy of the same Aiven CA cert (`storage/aiven-ca.pem`, gitignored). Local MySQL connections needed `PDO::MYSQL_ATTR_SSL_VERIFY_SERVER_CERT => false` added alongside the CA option to actually connect (plain `MYSQL_ATTR_SSL_CA` alone wasn't enough from this machine).
+
+### 15.5 Seeded production accounts
+
+`AdminSeeder` (run via `--seed` during the initial `migrate:fresh`) created:
+
+| Role | Email | Password |
+|---|---|---|
+| Admin | `admin@villaelenareosrt.com` | `Admin@1234` |
+| Staff | `staff@villaelenareosrt.com` | `Staff@1234` |
+| Customer (sample) | `guest@example.com` | `Guest@1234` |
+
+**Change these before sharing the live link with anyone else** — see Pending/Optional.
+
+### 15.6 Deploying changes
+
+Push to `main` on GitHub (`RexYep/Villa_Elena`) — Render auto-deploys from there. `render.yaml` is a Blueprint; if the Render service was created manually rather than via Blueprint sync, new env vars added to `render.yaml` need to also be added by hand in the dashboard the first time.
+
+### 15.7 Running the same stack locally (Docker, NEW v5.3)
+
+`docker compose up --watch` runs the **same `Dockerfile`** Render builds from — same PHP 8.2-fpm-alpine + nginx + supervisord — so changes that might behave differently under that stack can be caught locally instead of only after a deploy. `php artisan serve` still works exactly as before and isn't affected by any of this; Docker is an additional option, not a replacement.
+
+**Setup, one-time:**
+- Requires Docker Desktop (already installed here — no separate Linux/WSL setup needed beyond what Docker Desktop sets up itself).
+- The container reaches the local MySQL server via `host.docker.internal`, using a scoped MySQL user (not `root`) created once:
+  ```sql
+  CREATE USER 'villa_docker'@'%' IDENTIFIED WITH mysql_native_password BY '<password>';
+  GRANT ALL PRIVILEGES ON villa_elena_db.* TO 'villa_docker'@'%';
+  FLUSH PRIVILEGES;
+  ```
+  The password is stored in `.env` as `DOCKER_DB_PASSWORD` (used only by `docker-compose.yml`, not read by the app itself — kept separate from the app's real `DB_PASSWORD` so `root`'s network exposure never has to change).
+
+**Day to day:**
+```bash
+docker compose up --watch     # start app + redis, keep this running while you work
+docker compose down           # stop
+docker compose logs -f app    # tail logs (same as Render's dashboard Logs tab)
+```
+
+**Why not a plain bind mount:** the first working version bind-mounted the whole repo into the container — simple, but every `vendor/` file read crosses the Windows↔WSL2 filesystem boundary on every request, which made page loads take multiple seconds (see Known Issues Fixed). `docker-compose.yml` instead bind-mounts only `storage/` (needs to persist uploads/sessions/cache across restarts) and uses **Compose Watch** to sync `app/`, `resources/`, `routes/`, `config/`, `database/` into the container as they change — edits still show up in a second or two, but requests read from the container's own fast filesystem. Editing `composer.json`, `package.json`, the `Dockerfile`, or anything under `docker/` triggers an automatic image rebuild instead of a sync (declared under `develop.watch` in `docker-compose.yml`).
+
+**`bootstrap/cache/` is deliberately not bind-mounted or synced** — it holds Laravel's compiled package-manifest cache. The host's version reflects a full `composer install` (dev packages included); mounting it over the container's clean `--no-dev` build reproduces the same "class not found" crash that motivated adding `.dockerignore` in the first place (see Known Issues Fixed). Let the container regenerate its own.
+
+**`.env` is shared as-is** (`env_file: .env` in `docker-compose.yml`) between `php artisan serve` and Docker — only `DB_HOST`/`DB_USERNAME`/`DB_PASSWORD` and `REDIS_HOST` are overridden per-service in `docker-compose.yml`, since those are genuine connection details (how to reach services from inside vs. outside a container), not application behavior. Everything else — mail driver, filesystem disk, broadcast connection — stays identical between the two ways of running the app locally, which is the point: nothing about *how the app behaves* should depend on whether you're running it via `php artisan serve` or Docker.
 
 ---
 
 *Documentation updated for Villa Elena Resort Management System — Capstone Project 2026*
-*Version 5.1 — Updated August 2026 (Fixed Day/Night Booking Slots, Pre-v5.1 Data Reset)*
+*Version 5.7 — Updated August 2026 (QR Ph Payment Migration, Verified on Live Keys, Webhook Made Reachable, QR Ph Refunds Confirmed Impossible)*

@@ -55,7 +55,7 @@ td{padding:13px 20px;}
 
 @media (max-width: 900px) {
     .kpi-grid{grid-template-columns:1fr 1fr;}
-    .charts-row{grid-template-columns:1fr;}
+    .charts-row{grid-template-columns:minmax(0, 1fr);}
 }
 @media (max-width: 480px) {
     .kpi-grid{grid-template-columns:1fr;}
@@ -91,9 +91,19 @@ td{padding:13px 20px;}
         </div>
     </form>
 
-    <div class="period-label">
-        Showing data from <strong>{{ $from->format('M d, Y') }}</strong>
-        to <strong>{{ $to->format('M d, Y') }}</strong>
+    <div class="period-label" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;">
+        <span>
+            Showing data from <strong>{{ $from->format('M d, Y') }}</strong>
+            to <strong>{{ $to->format('M d, Y') }}</strong>
+        </span>
+        <span style="display:flex;gap:8px;">
+            <a href="{{ route('admin.reports.export.pdf', request()->query()) }}" class="period-btn">
+                <i class="bi bi-file-earmark-pdf"></i> Export PDF
+            </a>
+            <a href="{{ route('admin.reports.export.excel', request()->query()) }}" class="period-btn">
+                <i class="bi bi-file-earmark-excel"></i> Export Excel
+            </a>
+        </span>
     </div>
 
     {{-- KPI Cards --}}

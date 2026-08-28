@@ -61,6 +61,9 @@ class AdminSeeder extends Seeder
             ['setting_key' => 'booking_hold_minutes','setting_value' => '15',                               'data_type' => 'integer', 'description' => 'Minutes to hold a pending booking'],
             ['setting_key' => 'deposit_percentage',  'setting_value' => '30',                               'data_type' => 'integer', 'description' => 'Deposit % required to confirm booking'],
             ['setting_key' => 'cancellation_hours',  'setting_value' => '48',                               'data_type' => 'integer', 'description' => 'Hours before check-in for free cancellation'],
+            ['setting_key' => 'booking_cooldown_threshold',   'setting_value' => '3',                       'data_type' => 'integer', 'description' => 'Auto-cancelled (unpaid) bookings within the window that trigger a booking cooldown'],
+            ['setting_key' => 'booking_cooldown_window_days', 'setting_value' => '30',                      'data_type' => 'integer', 'description' => 'Lookback window (days) for counting auto-cancelled bookings'],
+            ['setting_key' => 'booking_cooldown_hours',       'setting_value' => '24',                      'data_type' => 'integer', 'description' => 'Hours a guest is blocked from booking again after hitting the cooldown threshold'],
             ['setting_key' => 'currency',            'setting_value' => 'PHP',                              'data_type' => 'string',  'description' => 'Currency code'],
             ['setting_key' => 'currency_symbol',     'setting_value' => '₱',                               'data_type' => 'string',  'description' => 'Currency symbol'],
         ];

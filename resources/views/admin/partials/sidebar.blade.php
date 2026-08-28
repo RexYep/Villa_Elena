@@ -23,6 +23,10 @@
             <span class="nav-icon"><i class="bi bi-credit-card"></i></span>
             Payments
         </a>
+        <a href="{{ route('admin.promotions.index') }}" class="nav-item-custom {{ request()->routeIs('admin.promotions.*') ? 'active' : '' }}">
+            <span class="nav-icon"><i class="bi bi-tags"></i></span>
+            Promotions
+        </a>
     </div>
 
     <div class="sidebar-section">
@@ -72,11 +76,11 @@
     <div class="sidebar-footer">
         <div class="user-card">
             <div class="user-avatar">
-                {{ strtoupper(substr(auth()->user()->full_name ?? 'A', 0, 1)) }}
+                {{ strtoupper(substr(Auth::user()->full_name ?? 'A', 0, 1)) }}
             </div>
             <div class="user-info">
-                <div class="name">{{ auth()->user()->full_name ?? 'Admin' }}</div>
-                <div class="role-badge">{{ ucfirst(auth()->user()->role ?? 'admin') }}</div>
+                <div class="name">{{ Auth::user()->full_name ?? 'Admin' }}</div>
+                <div class="role-badge">{{ ucfirst(Auth::user()->role ?? 'admin') }}</div>
             </div>
         </div>
     </div>

@@ -73,7 +73,8 @@ class NotificationHelper
     public static function paymentReceived($booking, float $amount, string $method): void
     {
         $guestName   = $booking->user->full_name ?? 'Guest';
-        $methodLabel = ucfirst(str_replace('_', ' ', $method));
+        // Dating `ucfirst(str_replace(...))` — "Qrph" ang lumalabas.
+        $methodLabel = \App\Models\Payment::methodLabelFor($method);
 
         self::notifyAdmin(
             "Payment Received — {$booking->booking_ref}",
@@ -87,7 +88,7 @@ class NotificationHelper
     public static function paymentRecorded($booking, float $amount, string $method): void
     {
         $guestName   = $booking->user->full_name ?? 'Guest';
-        $methodLabel = ucfirst(str_replace('_', ' ', $method));
+        $methodLabel = \App\Models\Payment::methodLabelFor($method);
 
         self::notifyAdmin(
             "Payment Recorded — {$booking->booking_ref}",
@@ -138,10 +139,167 @@ class NotificationHelper
     // ── Preset: Refund Issued ──────────────────────────────────────
     public static function refundIssued($booking, float $amount, string $reason): void
     {
+        // Sinasadyang "needs to be sent" — hindi "refunded". Walang refund
+        // API ang sistema, kaya ang refund na ito ay naitala pa lang;
+        // manu-manong ipapadala ng admin ang pera bago ito matapos.
+        // Dating "refunded" ang nakasulat dito, kaya mukhang tapos na ang
+        // isang bagay na hindi pa naman talaga nagagawa.
         self::notifyAdmin(
-            "Refund Issued — {$booking->booking_ref}",
-            "₱" . number_format($amount, 2) . " refunded for booking {$booking->booking_ref}. " .
-            "Reason: {$reason}",
+            "Refund To Send — {$booking->booking_ref}",
+            "₱" . number_format($amount, 2) . " needs to be sent to the guest for booking {$booking->booking_ref}. " .
+            "Reason: {$reason}. Mark it as paid out on the Payments page once the money has actually been sent.",
+            route('admin.payments.index', ['status' => 'awaiting_payout'], false)
+        );
+    }
+
+    // ══════════════════════════════════════════════════════════════
+    //  GUEST-FACING PRESETS
+    //
+    //  Lahat ng preset sa itaas ay para sa admin. Ang guest naman ay
+    //  umaasa dati sa flash message lang — nawawala ito pagkatapos ng
+    //  isang page load, kaya walang natitirang record na natanggap nga
+    //  ang cancellation o naaprubahan ang refund niya. Dito nakatira
+    //  ang guest-facing na kopya para iisa lang ang wording kahit saan
+    //  pang entry point galing ang cancellation/refund.
+    // ══════════════════════════════════════════════════════════════
+
+    // ── Preset: Cancellation Confirmed (guest) ────────────────────
+    public static function bookingCancelledForGuest($booking, float $refundAmount = 0, ?int $refundPercentage = null, $refund = null): void
+    {
+        $message = "Your booking {$booking->booking_ref} has been cancelled.";
+
+        if ($refundAmount > 0) {
+            $message .= " A refund of ₱" . number_format($refundAmount, 2)
+                . ($refundPercentage !== null ? " ({$refundPercentage}% of what you paid)" : '')
+                . " has been approved. The money hasn't been sent yet — we'll notify you again once it's on its way.";
+        } else {
+            $message .= " Based on our cancellation policy, this booking is no longer eligible for a refund.";
+        }
+
+        [$message, $link] = self::withRefundDestinationPrompt($message, $booking, $refund);
+
+        self::notifyGuest(
+            $booking->user_id,
+            "Booking Cancelled — {$booking->booking_ref}",
+            $message,
+            $link
+        );
+    }
+
+    /**
+     * Idinadagdag ang tanong na "saan ipapadala?" kapag ito ang aktwal
+     * na kulang, at inililipat ang notification link papunta sa form.
+     *
+     * Iisang lugar ito para sa dalawang guest-facing na refund preset —
+     * ang buong punto ng mga preset na ito ay para hindi maghiwalay ang
+     * pananalita sa bawat call site (tingnan ang v5.6 sa project.md).
+     *
+     * Ang link ay RELATIVE (`route(..., false)`), gaya ng lahat ng iba
+     * dito: ang absolute URL ay nagbe-bake ng kung anumang APP_URL o
+     * tunnel host ang aktibo noong nilikha ito, at namamatay kapag
+     * nagbago iyon.
+     */
+    private static function withRefundDestinationPrompt(string $message, $booking, $refund): array
+    {
+        if ($refund && $refund->needsRefundDestination()) {
+            return [
+                $message . " First, please tell us where to send it — open this to add your "
+                    . "GCash, Maya, or bank account details.",
+                route('customer.refunds.destination', $refund, false),
+            ];
+        }
+
+        return [$message, route('customer.bookings.show', $booking, false)];
+    }
+
+    // ── Preset: Refund Approved — hindi pa naipapadala (guest) ────
+    // Sinasadyang "approved", hindi "processed"/"refunded". Ang refund
+    // row ay ginagawa bilang 'pending' — wala pang perang lumalabas sa
+    // puntong ito. Dating sinasabi ng notification na tapos na ito,
+    // kaya hinahanap ng guest sa GCash niya ang perang hindi pa naman
+    // talaga ipinapadala.
+    public static function refundApprovedForGuest($booking, float $amount, string $reason, $refund = null): void
+    {
+        $message = "A refund of ₱" . number_format($amount, 2) . " has been approved for booking {$booking->booking_ref}. "
+            . "Reason: {$reason}. The money hasn't been sent yet — we'll notify you again once it's on its way.";
+
+        [$message, $link] = self::withRefundDestinationPrompt($message, $booking, $refund);
+
+        self::notifyGuest(
+            $booking->user_id,
+            "Refund Approved — {$booking->booking_ref}",
+            $message,
+            $link
+        );
+    }
+
+    // ── Preset: Refund Aktwal Nang Naipadala (guest + admin) ──────
+    // Ito ang kabilang dulo ng refund lifecycle. Dati, ang pagpindot ng
+    // "Mark as Paid Out" ay tahimik — walang nalalaman ang guest na
+    // naipadala na ang pera niya, at walang kumpirmasyon ang admin na
+    // sarado na ang refund na iyon.
+    /**
+     * Ang refund ay naipadala na pero hindi pa dumarating.
+     *
+     * Ito ang nawawalang yugto. Sa InstaPay ay 2 segundo lang ito, kaya
+     * hindi kailangan — pero ang GCash ay dumaraan sa PESONet, at doon
+     * ay maghihintay ang guest nang ilang ORAS o hanggang sa susunod
+     * na banking day. Kung walang magsasabi nito, ang tanging alam
+     * niya ay "inaprubahan" tapos katahimikan — at ang katahimikan sa
+     * usaping pera ay parang nawawala ang refund.
+     *
+     * Tinatawag LAMANG ito kapag hindi agad na-settle, para hindi
+     * makatanggap ng dalawang magkasunod na abiso ang guest sa mga
+     * transfer na dumarating agad.
+     */
+    public static function refundOnTheWay($payment, $transfer): void
+    {
+        $booking = $payment->booking;
+
+        if (! $booking) {
+            return;
+        }
+
+        $amount = number_format($payment->amount, 2);
+        $where  = $transfer->institution_name;
+
+        $when = $transfer->provider === 'instapay'
+            ? 'It should arrive shortly.'
+            : "Transfers to {$where} clear in batches on banking days (11am, 2pm and 5pm), "
+              . 'so expect it later today or on the next banking day.';
+
+        self::notifyGuest(
+            $booking->user_id,
+            "Refund On Its Way — {$booking->booking_ref}",
+            "Your refund of ₱{$amount} for booking {$booking->booking_ref} is on its way to your "
+            . "{$where} account. {$when} We will let you know once it has landed.",
+            route('customer.bookings.show', $booking, false)
+        );
+    }
+
+    public static function refundPaidOut($payment): void
+    {
+        $booking = $payment->booking;
+
+        if (! $booking) {
+            return;
+        }
+
+        $amount = number_format($payment->amount, 2);
+        $method = $payment->method_label;
+
+        self::notifyGuest(
+            $booking->user_id,
+            "Refund Sent — {$booking->booking_ref}",
+            "Your refund of ₱{$amount} for booking {$booking->booking_ref} has been sent via {$method}. " .
+            "Please allow a few banking days for it to show up in your account.",
+            route('customer.bookings.show', $booking, false)
+        );
+
+        self::notifyAdmin(
+            "Refund Paid Out — {$booking->booking_ref}",
+            "₱{$amount} refund for {$booking->booking_ref} was marked as sent via {$method}. " .
+            "Nothing further is pending on this refund.",
             route('admin.bookings.show', $booking, false)
         );
     }

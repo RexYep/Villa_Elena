@@ -5,63 +5,272 @@
 @section('page-subtitle', 'Fill in the details below to create a new property listing')
 
 @push('styles')
-<style>
-/* Form Layout */
-.form-grid{display:grid;grid-template-columns:1fr 360px;gap:24px;align-items:start;}
+    <style>
+        /* Form Layout */
+        .form-grid {
+            display: grid;
+            grid-template-columns: 1fr 360px;
+            gap: 24px;
+            align-items: start;
+        }
 
-textarea.form-control{resize:vertical;min-height:110px;}
-.input-prefix{position:relative;}
-.input-prefix span{position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:14px;pointer-events:none;}
-.input-prefix input{padding-left:28px;}
+        textarea.form-control {
+            resize: vertical;
+            min-height: 110px;
+        }
 
-.three-col{display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;}
+        .input-prefix {
+            position: relative;
+        }
 
-/* Amenities checkboxes */
-.amenities-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;}
-.amenity-check{display:flex;align-items:center;gap:8px;padding:8px 10px;border:1.5px solid var(--border);border-radius:8px;cursor:pointer;transition:all .15s;font-size:13px;color:var(--text-main);}
-.amenity-check:hover{border-color:var(--terracotta);background:var(--sand);}
-.amenity-check input{display:none;}
-.amenity-check.checked{border-color:var(--terracotta);background:var(--gold-dim);color:var(--terracotta);font-weight:500;}
-.amenity-check .check-icon{width:18px;height:18px;border:1.5px solid var(--border);border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:11px;flex-shrink:0;}
-.amenity-check.checked .check-icon{background:var(--terracotta);border-color:var(--terracotta);color:#fff;}
+        .input-prefix span {
+            position: absolute;
+            left: 12px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: var(--muted);
+            font-size: 14px;
+            pointer-events: none;
+        }
 
-/* Image Upload */
-.upload-zone{border:2px dashed var(--border);border-radius:10px;padding:28px 20px;text-align:center;cursor:pointer;transition:all .2s;position:relative;}
-.upload-zone:hover,.upload-zone.drag-over{border-color:var(--terracotta);background:var(--sand);}
-.upload-zone input{position:absolute;inset:0;opacity:0;cursor:pointer;}
-.upload-zone i{font-size:32px;color:var(--muted);display:block;margin-bottom:8px;}
-.upload-zone p{font-size:13px;color:var(--muted);margin:0;}
-.upload-zone small{font-size:11px;color:var(--muted);}
+        .input-prefix input {
+            padding-left: 28px;
+        }
 
-/* Image previews */
-.image-previews{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-top:12px;}
-.preview-item{position:relative;border-radius:8px;overflow:hidden;aspect-ratio:4/3;}
-.preview-item img{width:100%;height:100%;object-fit:cover;}
-.preview-remove{position:absolute;top:4px;right:4px;width:22px;height:22px;border-radius:50%;background:rgba(0,0,0,0.6);color:#fff;border:none;cursor:pointer;font-size:11px;display:flex;align-items:center;justify-content:center;}
-.primary-badge{position:absolute;bottom:4px;left:4px;background:var(--gold);color:#fff;font-size:9px;font-weight:700;padding:2px 6px;border-radius:4px;letter-spacing:0.5px;text-transform:uppercase;}
+        .three-col {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 16px;
+        }
 
-/* Toggle Switch */
-.toggle-row{display:flex;align-items:center;justify-content:space-between;padding:12px 0;border-bottom:1px solid var(--border);}
-.toggle-row:last-child{border-bottom:none;padding-bottom:0;}
-.toggle-label{font-size:13px;font-weight:500;color:var(--text-main);}
-.toggle-label small{display:block;font-size:11px;color:var(--muted);font-weight:400;}
-.form-switch .form-check-input{width:40px;height:22px;cursor:pointer;}
-.form-switch .form-check-input:checked{background-color:var(--terracotta);border-color:var(--terracotta);}
+        /* Amenities checkboxes */
+        .amenities-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 8px;
+        }
 
-/* Submit Buttons */
-.btn-submit{width:100%;}
-.btn-cancel{display:block;text-align:center;margin-top:10px;color:var(--muted);font-size:13px;text-decoration:none;padding:8px;border-radius:8px;transition:background .2s;}
-.btn-cancel:hover{background:var(--sand);color:var(--text-main);}
+        .amenity-check {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 10px;
+            border: 1.5px solid var(--border);
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all .15s;
+            font-size: 13px;
+            color: var(--text-main);
+        }
 
-@media (max-width: 900px) {
-    .form-grid{grid-template-columns:1fr;}
-}
-@media (max-width: 560px) {
-    .three-col{grid-template-columns:1fr;}
-    .amenities-grid{grid-template-columns:1fr 1fr;}
-    .image-previews{grid-template-columns:1fr;}
-}
-</style>
+        .amenity-check:hover {
+            border-color: var(--terracotta);
+            background: var(--sand);
+        }
+
+        .amenity-check input {
+            display: none;
+        }
+
+        .amenity-check.checked {
+            border-color: var(--terracotta);
+            background: var(--gold-dim);
+            color: var(--terracotta);
+            font-weight: 500;
+        }
+
+        .amenity-check .check-icon {
+            width: 18px;
+            height: 18px;
+            border: 1.5px solid var(--border);
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 11px;
+            flex-shrink: 0;
+        }
+
+        .amenity-check.checked .check-icon {
+            background: var(--terracotta);
+            border-color: var(--terracotta);
+            color: #fff;
+        }
+
+        /* Image Upload */
+        .upload-zone {
+            border: 2px dashed var(--border);
+            border-radius: 10px;
+            padding: 28px 20px;
+            text-align: center;
+            cursor: pointer;
+            transition: all .2s;
+            position: relative;
+        }
+
+        .upload-zone:hover,
+        .upload-zone.drag-over {
+            border-color: var(--terracotta);
+            background: var(--sand);
+        }
+
+        .upload-zone input {
+            position: absolute;
+            inset: 0;
+            opacity: 0;
+            cursor: pointer;
+        }
+
+        .upload-zone i {
+            font-size: 32px;
+            color: var(--muted);
+            display: block;
+            margin-bottom: 8px;
+        }
+
+        .upload-zone p {
+            font-size: 13px;
+            color: var(--muted);
+            margin: 0;
+        }
+
+        .upload-zone small {
+            font-size: 11px;
+            color: var(--muted);
+        }
+
+        /* Image previews */
+        .image-previews {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 8px;
+            margin-top: 12px;
+        }
+
+        .preview-item {
+            position: relative;
+            border-radius: 8px;
+            overflow: hidden;
+            aspect-ratio: 4/3;
+        }
+
+        .preview-item img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .preview-remove {
+            position: absolute;
+            top: 4px;
+            right: 4px;
+            width: 22px;
+            height: 22px;
+            border-radius: 50%;
+            background: rgba(0, 0, 0, 0.6);
+            color: #fff;
+            border: none;
+            cursor: pointer;
+            font-size: 11px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .primary-badge {
+            position: absolute;
+            bottom: 4px;
+            left: 4px;
+            background: var(--gold);
+            color: #fff;
+            font-size: 9px;
+            font-weight: 700;
+            padding: 2px 6px;
+            border-radius: 4px;
+            letter-spacing: 0.5px;
+            text-transform: uppercase;
+        }
+
+        /* Toggle Switch */
+        .toggle-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 12px 0;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .toggle-row:last-child {
+            border-bottom: none;
+            padding-bottom: 0;
+        }
+
+        .toggle-label {
+            font-size: 13px;
+            font-weight: 500;
+            color: var(--text-main);
+        }
+
+        .toggle-label small {
+            display: block;
+            font-size: 11px;
+            color: var(--muted);
+            font-weight: 400;
+        }
+
+        .form-switch .form-check-input {
+            width: 40px;
+            height: 22px;
+            cursor: pointer;
+        }
+
+        .form-switch .form-check-input:checked {
+            background-color: var(--terracotta);
+            border-color: var(--terracotta);
+        }
+
+        /* Submit Buttons */
+        .btn-submit {
+            width: 100%;
+        }
+
+        .btn-cancel {
+            display: block;
+            text-align: center;
+            margin-top: 10px;
+            color: var(--muted);
+            font-size: 13px;
+            text-decoration: none;
+            padding: 8px;
+            border-radius: 8px;
+            transition: background .2s;
+        }
+
+        .btn-cancel:hover {
+            background: var(--sand);
+            color: var(--text-main);
+        }
+
+        @media (max-width: 900px) {
+            .form-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        @media (max-width: 560px) {
+            .three-col {
+                grid-template-columns: 1fr;
+            }
+
+            .amenities-grid {
+                grid-template-columns: 1fr 1fr;
+            }
+
+            .image-previews {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
 @endpush
 
 @section('content')
@@ -75,7 +284,7 @@ textarea.form-control{resize:vertical;min-height:110px;}
         <span class="current">Add New</span>
     </div>
 
-    @if($errors->any())
+    @if ($errors->any())
         <div class="alert alert-danger">
             <i class="bi bi-exclamation-circle me-2"></i>
             Please fix the following errors: {{ implode(', ', $errors->all()) }}
@@ -93,7 +302,8 @@ textarea.form-control{resize:vertical;min-height:110px;}
                 {{-- Basic Info --}}
                 <div class="form-card">
                     <div class="form-card-header">
-                        <div class="card-icon" style="background:#e0f2fe; color:#0369a1;"><i class="bi bi-info-circle"></i></div>
+                        <div class="card-icon" style="background:#e0f2fe; color:#0369a1;"><i class="bi bi-info-circle"></i>
+                        </div>
                         <h3>Basic Information</h3>
                     </div>
                     <div class="form-card-body">
@@ -102,36 +312,48 @@ textarea.form-control{resize:vertical;min-height:110px;}
 
                         <div class="mb-3">
                             <label class="form-label">Property Name
-                                <span class="req" id="nameRequiredMark" style="display:{{ $initialIsVilla ? 'inline' : 'none' }};">*</span>
+                                <span class="req" id="nameRequiredMark"
+                                    style="display:{{ $initialIsVilla ? 'inline' : 'none' }};">*</span>
                             </label>
-                            <input type="text" name="property_name" class="form-control @error('property_name') is-invalid @enderror"
+                            <input type="text" name="property_name"
+                                class="form-control @error('property_name') is-invalid @enderror"
                                 value="{{ old('property_name') }}" placeholder="e.g. Villa Elena Suite A">
-                            @error('property_name')<span class="invalid-feedback">{{ $message }}</span>@enderror
+                            @error('property_name')
+                                <span class="invalid-feedback">{{ $message }}</span>
+                            @enderror
                         </div>
 
-                        @if($existingVilla)
+                        @if ($existingVilla)
                             <input type="hidden" name="type" value="room">
-                            <div class="mb-3" style="padding:10px 12px;background:var(--sand);border-radius:8px;font-size:13px;color:var(--text-main);">
+                            <div class="mb-3"
+                                style="padding:10px 12px;background:var(--sand);border-radius:8px;font-size:13px;color:var(--text-main);">
                                 <i class="bi bi-info-circle me-1"></i>
-                                Adding a <strong>Room</strong> — part of "{{ $existingVilla->property_name }}". Villa Elena only has one master Villa.
+                                Adding a <strong>Room</strong> — part of "{{ $existingVilla->property_name }}". Villa Elena
+                                only has one master Villa.
                             </div>
                         @else
                             <div class="mb-3">
                                 <label class="form-label">Property Type <span class="req">*</span></label>
-                                <select name="type" id="typeSelect" class="form-select @error('type') is-invalid @enderror" required>
+                                <select name="type" id="typeSelect"
+                                    class="form-select @error('type') is-invalid @enderror" required>
                                     <option value="villa" selected>🏡 Villa</option>
-                                    <option value="room" {{ old('type')=='room' ? 'selected':'' }}>🛏️ Room</option>
+                                    <option value="room" {{ old('type') == 'room' ? 'selected' : '' }}>🛏️ Room</option>
                                 </select>
-                                @error('type')<span class="invalid-feedback">{{ $message }}</span>@enderror
+                                @error('type')
+                                    <span class="invalid-feedback">{{ $message }}</span>
+                                @enderror
                             </div>
                         @endif
 
                         <div class="two-col mb-3">
                             <div>
                                 <label class="form-label">Max Guests <span class="req">*</span></label>
-                                <input type="number" name="max_capacity" class="form-control @error('max_capacity') is-invalid @enderror"
+                                <input type="number" name="max_capacity"
+                                    class="form-control @error('max_capacity') is-invalid @enderror"
                                     value="{{ old('max_capacity') }}" min="1" placeholder="0" required>
-                                @error('max_capacity')<span class="invalid-feedback">{{ $message }}</span>@enderror
+                                @error('max_capacity')
+                                    <span class="invalid-feedback">{{ $message }}</span>
+                                @enderror
                             </div>
                             <div>
                                 <label class="form-label">Floor Area (sqm)</label>
@@ -160,17 +382,21 @@ textarea.form-control{resize:vertical;min-height:110px;}
                                 <label class="form-label">Base Price / Night <span class="req">*</span></label>
                                 <div class="input-prefix">
                                     <span>₱</span>
-                                    <input type="number" name="base_price" class="form-control @error('base_price') is-invalid @enderror"
+                                    <input type="number" name="base_price"
+                                        class="form-control @error('base_price') is-invalid @enderror"
                                         value="{{ old('base_price') }}" min="0" step="0.01" placeholder="0.00">
                                 </div>
-                                @error('base_price')<span class="invalid-feedback">{{ $message }}</span>@enderror
+                                @error('base_price')
+                                    <span class="invalid-feedback">{{ $message }}</span>
+                                @enderror
                             </div>
                             <div>
                                 <label class="form-label">Weekend Price / Night</label>
                                 <div class="input-prefix">
                                     <span>₱</span>
                                     <input type="number" name="weekend_price" class="form-control"
-                                        value="{{ old('weekend_price') }}" min="0" step="0.01" placeholder="0.00">
+                                        value="{{ old('weekend_price') }}" min="0" step="0.01"
+                                        placeholder="0.00">
                                 </div>
                                 <small style="font-size:11px; color:#94a3b8; margin-top:4px; display:block;">
                                     Applied on Saturdays &amp; Sundays
@@ -183,23 +409,24 @@ textarea.form-control{resize:vertical;min-height:110px;}
                 {{-- Amenities (Villa only) --}}
                 <div class="form-card" id="villaOnlyAmenities" style="display:{{ $initialIsVilla ? 'block' : 'none' }};">
                     <div class="form-card-header">
-                        <div class="card-icon" style="background:#dcfce7; color:#15803d;"><i class="bi bi-stars"></i></div>
+                        <div class="card-icon" style="background:#dcfce7; color:#15803d;"><i class="bi bi-stars"></i>
+                        </div>
                         <h3>Amenities</h3>
                     </div>
                     <div class="form-card-body">
                         <div class="amenities-grid" id="amenitiesGrid">
                             @php $selected = old('amenities', []); @endphp
                             @forelse($amenityList as $amenity)
-                            <label class="amenity-check {{ in_array($amenity, $selected) ? 'checked' : '' }}">
-                                <input type="checkbox" name="amenities[]" value="{{ $amenity }}"
-                                    {{ in_array($amenity, $selected) ? 'checked' : '' }}>
-                                <span class="check-icon">{{ in_array($amenity, $selected) ? '✓' : '' }}</span>
-                                <span>{{ $amenity }}</span>
-                            </label>
+                                <label class="amenity-check {{ in_array($amenity, $selected) ? 'checked' : '' }}">
+                                    <input type="checkbox" name="amenities[]" value="{{ $amenity }}"
+                                        {{ in_array($amenity, $selected) ? 'checked' : '' }}>
+                                    <span class="check-icon">{{ in_array($amenity, $selected) ? '✓' : '' }}</span>
+                                    <span>{{ $amenity }}</span>
+                                </label>
                             @empty
-                            <p class="text-muted-theme" style="font-size:13px;">
-                                No amenities configured yet — add some in Settings → Amenities.
-                            </p>
+                                <p class="text-muted-theme" style="font-size:13px;">
+                                    No amenities configured yet — add some in Settings → Amenities.
+                                </p>
                             @endforelse
                         </div>
                     </div>
@@ -213,7 +440,8 @@ textarea.form-control{resize:vertical;min-height:110px;}
                 {{-- Image Upload --}}
                 <div class="form-card">
                     <div class="form-card-header">
-                        <div class="card-icon" style="background:#f3e8ff; color:#7c3aed;"><i class="bi bi-images"></i></div>
+                        <div class="card-icon" style="background:#f3e8ff; color:#7c3aed;"><i class="bi bi-images"></i>
+                        </div>
                         <h3>Photos</h3>
                     </div>
                     <div class="form-card-body">
@@ -231,7 +459,8 @@ textarea.form-control{resize:vertical;min-height:110px;}
                 {{-- Settings --}}
                 <div class="form-card">
                     <div class="form-card-header">
-                        <div class="card-icon" style="background:#fef9c3; color:#a16207;"><i class="bi bi-sliders"></i></div>
+                        <div class="card-icon" style="background:#fef9c3; color:#a16207;"><i class="bi bi-sliders"></i>
+                        </div>
                         <h3>Settings</h3>
                     </div>
                     <div class="form-card-body">
@@ -268,81 +497,90 @@ textarea.form-control{resize:vertical;min-height:110px;}
 @endsection
 
 @push('scripts')
-<script>
-// ── Show/Hide Villa-Only Sections Based On Selected Type ────────
-const typeSelect = document.getElementById('typeSelect');
-function updatePropertyTypeUI() {
-    const isVilla = typeSelect ? typeSelect.value === 'villa' : false;
-    ['villaOnlyPricing', 'villaOnlyAmenities', 'villaOnlyDescription'].forEach(id => {
-        const el = document.getElementById(id);
-        if (el) el.style.display = isVilla ? 'block' : 'none';
-    });
-    const mark = document.getElementById('nameRequiredMark');
-    if (mark) mark.style.display = isVilla ? 'inline' : 'none';
-}
-typeSelect?.addEventListener('change', updatePropertyTypeUI);
-updatePropertyTypeUI();
+    <script>
+        // ── Show/Hide Villa-Only Sections Based On Selected Type ────────
+        const typeSelect = document.getElementById('typeSelect');
 
-// ── Amenity Checkboxes ────────────────────────────────────────
-document.querySelectorAll('.amenity-check').forEach(label => {
-    label.addEventListener('click', (e) => {
-        e.preventDefault();
-        const cb   = label.querySelector('input[type="checkbox"]');
-        const icon = label.querySelector('.check-icon');
-        cb.checked = !cb.checked;
-        label.classList.toggle('checked', cb.checked);
-        icon.textContent = cb.checked ? '✓' : '';
-    });
-});
+        function updatePropertyTypeUI() {
+            const isVilla = typeSelect ? typeSelect.value === 'villa' : false;
+            ['villaOnlyPricing', 'villaOnlyAmenities', 'villaOnlyDescription'].forEach(id => {
+                const el = document.getElementById(id);
+                if (el) el.style.display = isVilla ? 'block' : 'none';
+            });
+            const mark = document.getElementById('nameRequiredMark');
+            if (mark) mark.style.display = isVilla ? 'inline' : 'none';
+        }
+        typeSelect?.addEventListener('change', updatePropertyTypeUI);
+        updatePropertyTypeUI();
 
-// ── Image Upload Preview ──────────────────────────────────────
-const input    = document.getElementById('imageInput');
-const previews = document.getElementById('imagePreviews');
-const zone     = document.getElementById('uploadZone');
-let fileList   = [];
+        // ── Amenity Checkboxes ────────────────────────────────────────
+        document.querySelectorAll('.amenity-check').forEach(label => {
+            label.addEventListener('click', (e) => {
+                e.preventDefault();
+                const cb = label.querySelector('input[type="checkbox"]');
+                const icon = label.querySelector('.check-icon');
+                cb.checked = !cb.checked;
+                label.classList.toggle('checked', cb.checked);
+                icon.textContent = cb.checked ? '✓' : '';
+            });
+        });
 
-input.addEventListener('change', handleFiles);
+        // ── Image Upload Preview ──────────────────────────────────────
+        const input = document.getElementById('imageInput');
+        const previews = document.getElementById('imagePreviews');
+        const zone = document.getElementById('uploadZone');
+        let fileList = [];
 
-zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('drag-over'); });
-zone.addEventListener('dragleave', ()  => zone.classList.remove('drag-over'));
-zone.addEventListener('drop', e => {
-    e.preventDefault();
-    zone.classList.remove('drag-over');
-    handleFiles({ target: { files: e.dataTransfer.files } });
-});
+        input.addEventListener('change', handleFiles);
 
-function handleFiles(e) {
-    const newFiles = Array.from(e.target.files);
-    fileList = [...fileList, ...newFiles];
-    renderPreviews();
-}
+        zone.addEventListener('dragover', e => {
+            e.preventDefault();
+            zone.classList.add('drag-over');
+        });
+        zone.addEventListener('dragleave', () => zone.classList.remove('drag-over'));
+        zone.addEventListener('drop', e => {
+            e.preventDefault();
+            zone.classList.remove('drag-over');
+            handleFiles({
+                target: {
+                    files: e.dataTransfer.files
+                }
+            });
+        });
 
-function renderPreviews() {
-    previews.innerHTML = '';
-    fileList.forEach((file, index) => {
-        const reader = new FileReader();
-        reader.onload = ev => {
-            const div = document.createElement('div');
-            div.className = 'preview-item';
-            div.innerHTML = `
+        function handleFiles(e) {
+            const newFiles = Array.from(e.target.files);
+            fileList = [...fileList, ...newFiles];
+            renderPreviews();
+        }
+
+        function renderPreviews() {
+            previews.innerHTML = '';
+            fileList.forEach((file, index) => {
+                const reader = new FileReader();
+                reader.onload = ev => {
+                    const div = document.createElement('div');
+                    div.className = 'preview-item';
+                    div.innerHTML = `
                 <img src="${ev.target.result}" alt="preview">
                 ${index === 0 ? '<span class="primary-badge">Primary</span>' : ''}
                 <button type="button" class="preview-remove" onclick="removeImage(${index})">✕</button>
             `;
-            previews.appendChild(div);
-        };
-        reader.readAsDataURL(file);
-    });
+                    previews.appendChild(div);
+                };
+                reader.readAsDataURL(file);
+            });
 
-    // Rebuild DataTransfer to keep file input in sync
-    const dt = new DataTransfer();
-    fileList.forEach(f => dt.items.add(f));
-    input.files = dt.files;
-}
+            // Rebuild DataTransfer to keep file input in sync
+            const dt = new DataTransfer();
+            fileList.forEach(f => dt.items.add(f));
+            input.files = dt.files;
+        }
 
-function removeImage(index) {
-    fileList.splice(index, 1);
-    renderPreviews();
-}
-</script>
+        function removeImage(index) {
+            fileList.splice(index, 1);
+            renderPreviews();
+        }
+    </script>
 @endpush
+

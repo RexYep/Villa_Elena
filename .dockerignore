@@ -1,0 +1,44 @@
+# Keeps the Docker build context identical to what Render's build sees (a
+# fresh `git clone`) instead of whatever happens to be sitting on this
+# machine. Without this file, a local `docker compose build` silently
+# COPYs the local vendor/ (installed WITH dev packages), node_modules/,
+# .env, and log files into the image — clobbering the clean `--no-dev`
+# install and producing a build that behaves differently from Render's,
+# defeating the entire point of building the same Dockerfile locally.
+
+.git
+.gitignore
+.dockerignore
+
+vendor
+node_modules
+public/build
+public/hot
+public/storage
+
+.env
+.env.*
+!.env.example
+
+storage/*.log
+storage/framework/cache/*
+storage/framework/sessions/*
+storage/framework/testing/*
+storage/framework/views/*
+storage/logs/*
+storage/pail
+storage/*.key
+storage/*.pem
+
+.phpunit.cache
+.phpunit.result.cache
+tests
+
+.idea
+.vscode
+.fleet
+.nova
+.zed
+
+docker-compose.yml
+docker-compose.override.yml

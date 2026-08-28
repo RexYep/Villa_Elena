@@ -13,6 +13,7 @@ use App\Http\Controllers\Admin\InsightsController;
 use App\Http\Controllers\Admin\ForecastController;
 use App\Http\Controllers\Admin\CalendarController;
 use App\Http\Controllers\Admin\NotificationController;
+use App\Http\Controllers\Admin\PromotionController;
 
 
 Route::prefix('admin')
@@ -51,6 +52,18 @@ Route::get('bookings/lookup', function (\Illuminate\Http\Request $request) {
     Route::post('properties/{property}/block-dates', [PropertyController::class, 'blockDates'])->name('properties.block');
     Route::delete('properties/images/{image}', [PropertyController::class, 'deleteImage'])->name('properties.images.destroy');
 
+    // Promotions (seasonal discounts) — admin-only sa layunin: ang promo
+    // ay direktang pagbaba ng kita, kaya hindi ito inilalagay sa staff
+    // portal kahit awtomatikong nakikinabang doon ang walk-in booking.
+    Route::get('promotions',                       [PromotionController::class, 'index'])->name('promotions.index');
+    Route::get('promotions/create',                [PromotionController::class, 'create'])->name('promotions.create');
+    Route::post('promotions',                      [PromotionController::class, 'store'])->name('promotions.store');
+    Route::get('promotions/{promotion}/edit',      [PromotionController::class, 'edit'])->name('promotions.edit');
+    Route::put('promotions/{promotion}',           [PromotionController::class, 'update'])->name('promotions.update');
+    Route::patch('promotions/{promotion}/toggle',  [PromotionController::class, 'toggle'])->name('promotions.toggle');
+    Route::post('promotions/{promotion}/notify',   [PromotionController::class, 'notify'])->name('promotions.notify');
+    Route::delete('promotions/{promotion}',        [PromotionController::class, 'destroy'])->name('promotions.destroy');
+
     // Users
     Route::resource('users', UserController::class);
     Route::patch('users/{user}/toggle-status', [UserController::class, 'toggleStatus'])->name('users.toggle');
@@ -60,9 +73,19 @@ Route::get('bookings/lookup', function (\Illuminate\Http\Request $request) {
     Route::post('payments',                     [PaymentController::class, 'store'])->name('payments.store');
     Route::get('payments/{payment}',            [PaymentController::class, 'show'])->name('payments.show');
     Route::post('payments/{payment}/refund',    [PaymentController::class, 'refund'])->name('payments.refund');
+    Route::patch('payments/{payment}/paid-out', [PaymentController::class, 'markRefundPaidOut'])->name('payments.paidOut');
+    // Ipinapasok ng admin ang refund destination para sa guest — kapag
+    // nakuha ito sa text o tawag sa halip na sa form (v5.9).
+    Route::put('payments/{payment}/destination', [PaymentController::class, 'setRefundDestination'])->name('payments.destination');
+    // Ipinapadala ng sistema mismo ang refund sa PayMongo (v5.9 Phase 4).
+    // Hindi ito kapalit ng paidOut sa itaas — nananatili iyon bilang
+    // fallback para sa cash at para sa mga bigong transfer.
+    Route::post('payments/{payment}/send', [PaymentController::class, 'sendRefundTransfer'])->name('payments.send');
 
     // Reports
     Route::get('reports', [ReportController::class, 'index'])->name('reports.index');
+    Route::get('reports/export/pdf', [ReportController::class, 'exportPdf'])->name('reports.export.pdf');
+    Route::get('reports/export/excel', [ReportController::class, 'exportExcel'])->name('reports.export.excel');
 
     // Reviews
 Route::get('reviews',                          [ReviewController::class, 'index'])->name('reviews.index');

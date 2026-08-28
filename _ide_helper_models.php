@@ -47,28 +47,39 @@ namespace App\Models{
  * @property int $user_id
  * @property int $property_id
  * @property \Illuminate\Support\Carbon $check_in_date
+ * @property string $check_in_time
+ * @property \Illuminate\Support\Carbon|null $actual_check_in
  * @property \Illuminate\Support\Carbon $check_out_date
+ * @property string $check_out_time
+ * @property \Illuminate\Support\Carbon|null $actual_check_out
  * @property int $num_nights
  * @property int $num_guests
  * @property numeric $base_amount
  * @property numeric $extras_amount
  * @property numeric $discount_amount
+ * @property int|null $discount_id
  * @property numeric $total_amount
  * @property numeric $amount_paid
  * @property numeric $balance_due
  * @property string $status
  * @property string $payment_status
  * @property string $source
+ * @property int $reschedule_count
  * @property string|null $paymongo_session_id
  * @property string|null $paymongo_payment_type
  * @property string|null $special_requests
  * @property \Illuminate\Support\Carbon|null $cancelled_at
  * @property string|null $cancellation_reason
+ * @property string|null $cancelled_by
  * @property \Illuminate\Support\Carbon|null $created_at
  * @property \Illuminate\Support\Carbon|null $updated_at
+ * @property \Illuminate\Support\Carbon|null $deleted_at
+ * @property-read \App\Models\Discount|null $discount
  * @property-read \Illuminate\Database\Eloquent\Collection<int, \App\Models\BookingExtra> $extras
  * @property-read int|null $extras_count
  * @property-read string $payment_status_badge
+ * @property-read string $payment_status_class
+ * @property-read string $payment_status_label
  * @property-read string $status_badge
  * @property-read \Illuminate\Database\Eloquent\Collection<int, \App\Models\HousekeepingTask> $housekeepingTasks
  * @property-read int|null $housekeeping_tasks_count
@@ -79,17 +90,25 @@ namespace App\Models{
  * @property-read \App\Models\User $user
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Booking newModelQuery()
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Booking newQuery()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Booking onlyTrashed()
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Booking query()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Booking whereActualCheckIn($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Booking whereActualCheckOut($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Booking whereAmountPaid($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Booking whereBalanceDue($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Booking whereBaseAmount($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Booking whereBookingRef($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Booking whereCancellationReason($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Booking whereCancelledAt($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Booking whereCancelledBy($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Booking whereCheckInDate($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Booking whereCheckInTime($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Booking whereCheckOutDate($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Booking whereCheckOutTime($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Booking whereCreatedAt($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Booking whereDeletedAt($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Booking whereDiscountAmount($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Booking whereDiscountId($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Booking whereExtrasAmount($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Booking whereId($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Booking whereNumGuests($value)
@@ -98,12 +117,15 @@ namespace App\Models{
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Booking wherePaymongoPaymentType($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Booking wherePaymongoSessionId($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Booking wherePropertyId($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Booking whereRescheduleCount($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Booking whereSource($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Booking whereSpecialRequests($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Booking whereStatus($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Booking whereTotalAmount($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Booking whereUpdatedAt($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Booking whereUserId($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Booking withTrashed(bool $withTrashed = true)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Booking withoutTrashed()
  */
 	class Booking extends \Eloquent {}
 }
@@ -119,7 +141,7 @@ namespace App\Models{
  * @property numeric $total
  * @property \Illuminate\Support\Carbon|null $created_at
  * @property \Illuminate\Support\Carbon|null $updated_at
- * @property-read \App\Models\Booking $booking
+ * @property-read \App\Models\Booking|null $booking
  * @method static \Illuminate\Database\Eloquent\Builder<static>|BookingExtra newModelQuery()
  * @method static \Illuminate\Database\Eloquent\Builder<static>|BookingExtra newQuery()
  * @method static \Illuminate\Database\Eloquent\Builder<static>|BookingExtra query()
@@ -138,28 +160,57 @@ namespace App\Models{
 
 namespace App\Models{
 /**
+ * Seasonal/automatic promo.
+ *
+ * WALANG itinatype na code ang guest. Ang isang promo ay tumatama kapag
+ * pasok ang CHECK-IN date ng booking sa window nito (`start_date` →
+ * `expiry_date`, pareho kasama) at tugma ang slot (`applies_to`). Iyon
+ * ang ibig sabihin ng "seasonal" dito: petsa ng STAY ang batayan, hindi
+ * petsa ng pag-book — para tugma sa `pricing_rules`, na ganoon din ang
+ * hugis (tingnan ang Property::getPackagePrice()).
+ *
+ * Ang discount ay palaging kinukuwenta laban sa BASE RATE lang (package
+ * price), hindi sa extras — tingnan ang Property::quoteFor().
+ *
  * @property int $id
- * @property string $code
+ * @property string|null $code
  * @property string|null $label
+ * @property string|null $description
  * @property string $type
  * @property numeric $value
+ * @property \Illuminate\Support\Carbon|null $start_date
  * @property int $min_nights
  * @property int|null $usage_limit null = unlimited
  * @property int $used_count
  * @property \Illuminate\Support\Carbon|null $expiry_date
+ * @property string $applies_to
+ * @property bool $is_public
+ * @property \Illuminate\Support\Carbon|null $notified_at
  * @property bool $is_active
  * @property \Illuminate\Support\Carbon|null $created_at
  * @property \Illuminate\Support\Carbon|null $updated_at
+ * @property-read \Illuminate\Database\Eloquent\Collection<int, \App\Models\Booking> $bookings
+ * @property-read int|null $bookings_count
+ * @property-read string $slot_label
+ * @property-read string $state
+ * @property-read string $state_badge
+ * @property-read string $value_label
+ * @property-read string $window_label
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Discount newModelQuery()
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Discount newQuery()
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Discount query()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Discount whereAppliesTo($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Discount whereCode($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Discount whereCreatedAt($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Discount whereDescription($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Discount whereExpiryDate($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Discount whereId($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Discount whereIsActive($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Discount whereIsPublic($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Discount whereLabel($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Discount whereMinNights($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Discount whereNotifiedAt($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Discount whereStartDate($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Discount whereType($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Discount whereUpdatedAt($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Discount whereUsageLimit($value)
@@ -209,9 +260,34 @@ namespace App\Models{
 /**
  * @property int $id
  * @property int $user_id
+ * @property string|null $ip_address
+ * @property string|null $device_label
+ * @property bool $via_new_device_otp
+ * @property \Illuminate\Support\Carbon|null $created_at
+ * @property \Illuminate\Support\Carbon|null $updated_at
+ * @property-read \App\Models\User $user
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|LoginActivity newModelQuery()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|LoginActivity newQuery()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|LoginActivity query()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|LoginActivity whereCreatedAt($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|LoginActivity whereDeviceLabel($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|LoginActivity whereId($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|LoginActivity whereIpAddress($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|LoginActivity whereUpdatedAt($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|LoginActivity whereUserId($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|LoginActivity whereViaNewDeviceOtp($value)
+ */
+	class LoginActivity extends \Eloquent {}
+}
+
+namespace App\Models{
+/**
+ * @property int $id
+ * @property int $user_id
  * @property string|null $type
  * @property string $title
  * @property string $message
+ * @property string|null $link
  * @property bool $is_read
  * @property \Illuminate\Support\Carbon|null $sent_at
  * @property string $status
@@ -224,6 +300,7 @@ namespace App\Models{
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Notification whereCreatedAt($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Notification whereId($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Notification whereIsRead($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Notification whereLink($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Notification whereMessage($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Notification whereSentAt($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Notification whereStatus($value)
@@ -286,9 +363,15 @@ namespace App\Models{
  * @property int|null $received_by
  * @property \Illuminate\Support\Carbon|null $created_at
  * @property \Illuminate\Support\Carbon|null $updated_at
- * @property-read \App\Models\Booking $booking
+ * @property-read \App\Models\Booking|null $booking
  * @property-read string $method_label
+ * @property-read string $type_label
  * @property-read \App\Models\User|null $processedBy
+ * @property-read \App\Models\User|null $receivedBy
+ * @property-read \App\Models\RefundDestination|null $refundDestination
+ * @property-read \Illuminate\Database\Eloquent\Collection<int, \App\Models\RefundTransfer> $refundTransfers
+ * @property-read int|null $refund_transfers_count
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Payment awaitingPayout()
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Payment newModelQuery()
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Payment newQuery()
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Payment query()
@@ -344,7 +427,7 @@ namespace App\Models{
 namespace App\Models{
 /**
  * @property int $id
- * @property string $property_name
+ * @property string|null $property_name
  * @property string $type
  * @property string|null $description
  * @property int $max_capacity
@@ -408,7 +491,7 @@ namespace App\Models{
  * @property int $sort_order
  * @property \Illuminate\Support\Carbon|null $created_at
  * @property \Illuminate\Support\Carbon|null $updated_at
- * @property-read string $url
+ * @property-read string|null $url
  * @property-read \App\Models\Property $property
  * @method static \Illuminate\Database\Eloquent\Builder<static>|PropertyImage newModelQuery()
  * @method static \Illuminate\Database\Eloquent\Builder<static>|PropertyImage newQuery()
@@ -427,36 +510,143 @@ namespace App\Models{
 
 namespace App\Models{
 /**
+ * Saan ipapadala ang isang refund — bangko/e-wallet, account number, at
+ * ang pangalang nakarehistro doon.
+ *
+ * Tingnan ang migration para sa buong dahilan kung bakit hiwalay na
+ * table ito at bakit hindi makukuha ang datos na ito sa QR Ph payment.
+ *
+ * @property int $id
+ * @property int $payment_id
+ * @property string $institution_name
+ * @property string $institution_bic
+ * @property string $account_number
+ * @property string $account_name
+ * @property int|null $provided_by
+ * @property \Illuminate\Support\Carbon $provided_at
+ * @property \Illuminate\Support\Carbon|null $created_at
+ * @property \Illuminate\Support\Carbon|null $updated_at
+ * @property-read string $masked_account_number
+ * @property-read \App\Models\Payment $payment
+ * @property-read \App\Models\User|null $providedBy
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|RefundDestination newModelQuery()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|RefundDestination newQuery()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|RefundDestination query()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|RefundDestination whereAccountName($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|RefundDestination whereAccountNumber($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|RefundDestination whereCreatedAt($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|RefundDestination whereId($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|RefundDestination whereInstitutionBic($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|RefundDestination whereInstitutionName($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|RefundDestination wherePaymentId($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|RefundDestination whereProvidedAt($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|RefundDestination whereProvidedBy($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|RefundDestination whereUpdatedAt($value)
+ */
+	class RefundDestination extends \Eloquent {}
+}
+
+namespace App\Models{
+/**
+ * Isang pagtatangkang ipadala ang isang refund sa pamamagitan ng
+ * PayMongo Send Money (`POST /v2/batch_transfers`).
+ *
+ * Tingnan ang migration para sa dahilan kung bakit hiwalay ito sa
+ * `refund_destinations` at bakit marami ito kada refund.
+ *
+ * @property int $id
+ * @property int $payment_id
+ * @property string|null $transfer_id
+ * @property string|null $batch_transfer_id
+ * @property string $reference_number
+ * @property string $status
+ * @property numeric $amount
+ * @property numeric $fee
+ * @property string $provider
+ * @property string|null $provider_reference_number
+ * @property string|null $provider_error_code
+ * @property string|null $provider_error_message
+ * @property string|null $sub_code
+ * @property string $institution_name
+ * @property string $institution_bic
+ * @property string $account_number
+ * @property string $account_name
+ * @property int|null $initiated_by
+ * @property \Illuminate\Support\Carbon|null $settled_at
+ * @property \Illuminate\Support\Carbon|null $created_at
+ * @property \Illuminate\Support\Carbon|null $updated_at
+ * @property-read string $masked_account_number
+ * @property-read string $receipt_reference
+ * @property-read \App\Models\User|null $initiatedBy
+ * @property-read \App\Models\Payment $payment
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|RefundTransfer newModelQuery()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|RefundTransfer newQuery()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|RefundTransfer query()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|RefundTransfer whereAccountName($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|RefundTransfer whereAccountNumber($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|RefundTransfer whereAmount($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|RefundTransfer whereBatchTransferId($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|RefundTransfer whereCreatedAt($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|RefundTransfer whereFee($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|RefundTransfer whereId($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|RefundTransfer whereInitiatedBy($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|RefundTransfer whereInstitutionBic($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|RefundTransfer whereInstitutionName($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|RefundTransfer wherePaymentId($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|RefundTransfer whereProvider($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|RefundTransfer whereProviderErrorCode($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|RefundTransfer whereProviderErrorMessage($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|RefundTransfer whereProviderReferenceNumber($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|RefundTransfer whereReferenceNumber($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|RefundTransfer whereSettledAt($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|RefundTransfer whereStatus($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|RefundTransfer whereSubCode($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|RefundTransfer whereTransferId($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|RefundTransfer whereUpdatedAt($value)
+ */
+	class RefundTransfer extends \Eloquent {}
+}
+
+namespace App\Models{
+/**
  * @property int $id
  * @property int $booking_id
  * @property int $user_id
  * @property int $property_id
- * @property int $overall_rating
+ * @property int $rating
+ * @property string|null $title
  * @property int|null $cleanliness
  * @property int|null $service
  * @property int|null $value
- * @property string|null $comment
+ * @property string|null $content
  * @property string|null $admin_reply
+ * @property string|null $admin_reply_at
+ * @property string|null $admin_note
+ * @property string|null $flag_reason
  * @property string $status
  * @property \Illuminate\Support\Carbon|null $created_at
  * @property \Illuminate\Support\Carbon|null $updated_at
- * @property-read \App\Models\Booking $booking
+ * @property-read \App\Models\Booking|null $booking
  * @property-read string $stars_html
  * @property-read \App\Models\Property $property
  * @property-read \App\Models\User $user
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Review newModelQuery()
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Review newQuery()
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Review query()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Review whereAdminNote($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Review whereAdminReply($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Review whereAdminReplyAt($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Review whereBookingId($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Review whereCleanliness($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|Review whereComment($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Review whereContent($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Review whereCreatedAt($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Review whereFlagReason($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Review whereId($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|Review whereOverallRating($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Review wherePropertyId($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Review whereRating($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Review whereService($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Review whereStatus($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Review whereTitle($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Review whereUpdatedAt($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Review whereUserId($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Review whereValue($value)
@@ -488,7 +678,7 @@ namespace App\Models{
 namespace App\Models{
 /**
  * @property int $id
- * @property int $user_id
+ * @property int|null $user_id
  * @property string $action e.g. created_booking, updated_property, checked_in_guest
  * @property string|null $target_table
  * @property int|null $target_id
@@ -499,7 +689,7 @@ namespace App\Models{
  * @property string|null $user_agent
  * @property \Illuminate\Support\Carbon|null $created_at
  * @property \Illuminate\Support\Carbon|null $updated_at
- * @property-read \App\Models\User $user
+ * @property-read \App\Models\User|null $user
  * @method static \Illuminate\Database\Eloquent\Builder<static>|StaffLog newModelQuery()
  * @method static \Illuminate\Database\Eloquent\Builder<static>|StaffLog newQuery()
  * @method static \Illuminate\Database\Eloquent\Builder<static>|StaffLog query()
@@ -522,8 +712,36 @@ namespace App\Models{
 namespace App\Models{
 /**
  * @property int $id
+ * @property int $user_id
+ * @property string $token
+ * @property string|null $device_label
+ * @property string|null $ip_address
+ * @property \Illuminate\Support\Carbon|null $last_used_at
+ * @property \Illuminate\Support\Carbon $expires_at
+ * @property \Illuminate\Support\Carbon|null $created_at
+ * @property \Illuminate\Support\Carbon|null $updated_at
+ * @property-read \App\Models\User $user
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|TrustedDevice newModelQuery()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|TrustedDevice newQuery()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|TrustedDevice query()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|TrustedDevice whereCreatedAt($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|TrustedDevice whereDeviceLabel($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|TrustedDevice whereExpiresAt($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|TrustedDevice whereId($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|TrustedDevice whereIpAddress($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|TrustedDevice whereLastUsedAt($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|TrustedDevice whereToken($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|TrustedDevice whereUpdatedAt($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|TrustedDevice whereUserId($value)
+ */
+	class TrustedDevice extends \Eloquent {}
+}
+
+namespace App\Models{
+/**
+ * @property int $id
  * @property string $full_name
- * @property string $email
+ * @property string|null $email
  * @property string $password
  * @property string|null $phone
  * @property string $role
@@ -532,6 +750,7 @@ namespace App\Models{
  * @property string|null $id_type
  * @property string|null $id_number
  * @property int $status 1=Active, 0=Deactivated
+ * @property bool $two_factor_enabled
  * @property \Illuminate\Support\Carbon|null $email_verified_at
  * @property string|null $remember_token
  * @property \Illuminate\Support\Carbon|null $last_login
@@ -539,14 +758,19 @@ namespace App\Models{
  * @property \Illuminate\Support\Carbon|null $updated_at
  * @property-read \Illuminate\Database\Eloquent\Collection<int, \App\Models\Booking> $bookings
  * @property-read int|null $bookings_count
+ * @property-read string|null $profile_image_url
  * @property-read \Illuminate\Database\Eloquent\Collection<int, \App\Models\HousekeepingTask> $housekeepingTasks
  * @property-read int|null $housekeeping_tasks_count
+ * @property-read \Illuminate\Database\Eloquent\Collection<int, \App\Models\LoginActivity> $loginActivities
+ * @property-read int|null $login_activities_count
  * @property-read \Illuminate\Database\Eloquent\Collection<int, \App\Models\Notification> $notifications
  * @property-read int|null $notifications_count
  * @property-read \Illuminate\Database\Eloquent\Collection<int, \App\Models\Review> $reviews
  * @property-read int|null $reviews_count
  * @property-read \Illuminate\Database\Eloquent\Collection<int, \App\Models\StaffLog> $staffLogs
  * @property-read int|null $staff_logs_count
+ * @property-read \Illuminate\Database\Eloquent\Collection<int, \App\Models\TrustedDevice> $trustedDevices
+ * @property-read int|null $trusted_devices_count
  * @method static \Database\Factories\UserFactory factory($count = null, $state = [])
  * @method static \Illuminate\Database\Eloquent\Builder<static>|User newModelQuery()
  * @method static \Illuminate\Database\Eloquent\Builder<static>|User newQuery()
@@ -566,8 +790,9 @@ namespace App\Models{
  * @method static \Illuminate\Database\Eloquent\Builder<static>|User whereRememberToken($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|User whereRole($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|User whereStatus($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|User whereTwoFactorEnabled($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|User whereUpdatedAt($value)
  */
-	class User extends \Eloquent {}
+	class User extends \Eloquent implements \Illuminate\Contracts\Auth\MustVerifyEmail {}
 }
 

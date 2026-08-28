@@ -12,7 +12,12 @@ RUN npm run build
 FROM composer:2 AS vendor
 WORKDIR /app
 COPY composer.json composer.lock ./
-RUN composer install --no-dev --no-scripts --no-autoloader --prefer-dist
+# --ignore-platform-reqs: the `composer:2` image bundles its own PHP (newer,
+# and without gd) purely to resolve/download packages here — --no-scripts
+# means no package code actually executes in this stage. The PHP version and
+# extensions that matter are the runtime image's (Stage 3 below, PHP 8.2 +
+# gd installed), which is what PHP-FPM actually runs on.
+RUN composer install --no-dev --no-scripts --no-autoloader --prefer-dist --ignore-platform-reqs
 COPY . .
 RUN composer dump-autoload --optimize --no-dev
 

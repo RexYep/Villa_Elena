@@ -6,7 +6,6 @@ use App\Http\Controllers\Controller;
 use App\Services\GeminiService;
 use App\Models\Booking;
 use App\Models\Payment;
-use App\Models\Property;
 use App\Models\User;
 use Carbon\Carbon;
 
@@ -23,30 +22,50 @@ class InsightsController extends Controller
         $checkedIn          = Booking::where('status', 'checked_in')->count();
         $cancelledBookings  = Booking::where('status', 'cancelled')->count();
 
-        $revenueThisMonth   = Payment::whereMonth('created_at', $now->month)
-                                ->whereYear('created_at', $now->year)
+        // Bug fix: dating `created_at` (kailan na-insert ang row) ang
+        // ginagamit dito, hindi `payment_date` (kailan talaga nangyari
+        // ang bayad) — parehong pattern ito ng DashboardController at
+        // ForecastController. Dahil ito, kahit anong payment na na-
+        // record NGAYON (kahit para sa lumang booking, hal. backfill o
+        // data seed) ay tila "this month" palagi, at ang totoong nakaraang
+        // buwan ay laging PHP 0 kahit may totoong revenue noon. Dinagdag
+        // din ang `status = success` at hindi refund, para hindi kasama
+        // ang mga pending/failed na payment o ma-double-count ang refund.
+        $revenueThisMonth   = Payment::whereMonth('payment_date', $now->month)
+                                ->whereYear('payment_date', $now->year)
+                                ->where('status', 'success')
+                                ->where('payment_type', '!=', 'refund')
                                 ->sum('amount');
 
-        $revenueLastMonth   = Payment::whereMonth('created_at', $now->copy()->subMonth()->month)
-                                ->whereYear('created_at', $now->copy()->subMonth()->year)
+        $revenueLastMonth   = Payment::whereMonth('payment_date', $now->copy()->subMonth()->month)
+                                ->whereYear('payment_date', $now->copy()->subMonth()->year)
+                                ->where('status', 'success')
+                                ->where('payment_type', '!=', 'refund')
                                 ->sum('amount');
-
-        $totalProperties    = Property::count();
-        $availableProperties = Property::where('status', 'available')->count();
-        $occupiedProperties = Property::where('status', 'occupied')->count();
 
         $totalGuests        = User::where('role', 'customer')->count();
         $newGuestsThisMonth = User::where('role', 'customer')
                                 ->whereMonth('created_at', $now->month)
                                 ->count();
 
-        $occupancyRate = $totalProperties > 0
-            ? round(($occupiedProperties / $totalProperties) * 100, 1)
-            : 0;
+        // Bug fix: "Occupancy Rate" dati ay Property::where('status',
+        // 'occupied')->count() / Property::count() — pero 4 lang ang
+        // total properties dahil kasama sa bilang na iyon ang 3 Room na
+        // hindi naman hiwalay na bookable (info-only records, bahagi ng
+        // Villa). Isang Villa lang talaga ang totoong bookable, kaya
+        // walang kahulugan ang "occupancy rate" na base sa dami ng
+        // property — laging halos 0% o mababa ito kahit puno ang
+        // Villa. Pinalitan ng "Currently Checked In" ($checkedIn sa
+        // itaas, 0 o 1 lang dahil isang Villa lang) — mas tapat na
+        // representasyon ng totoong kalagayan.
 
         // --- Build Prompt ---
    $prompt = "
 You are a data analyst for Villa Elena Private Rental Resort in the Philippines.
+IMPORTANT: Villa Elena is a SINGLE, EXCLUSIVE-USE villa — there is only ONE bookable
+property, rented out in its entirety to one guest group at a time (not a hotel with
+multiple independently bookable rooms). Never mention 'occupancy rate', 'available
+properties', or anything implying multiple bookable units — those concepts don't apply here.
 Analyze the following resort data and give exactly 5 short, factual one-sentence insights.
 
 RULES:
@@ -65,10 +84,6 @@ Currently Checked In: {$checkedIn}
 Cancelled Bookings: {$cancelledBookings}
 Revenue This Month: PHP {$revenueThisMonth}
 Revenue Last Month: PHP {$revenueLastMonth}
-Total Properties: {$totalProperties}
-Available Properties: {$availableProperties}
-Occupied Properties: {$occupiedProperties}
-Occupancy Rate: {$occupancyRate}%
 Total Registered Guests: {$totalGuests}
 New Guests This Month: {$newGuestsThisMonth}
 --- END ---
@@ -83,7 +98,7 @@ Respond with exactly 5 lines. One insight per line. No numbering. No extra text.
             'pendingBookings',
             'revenueThisMonth',
             'revenueLastMonth',
-            'occupancyRate',
+            'checkedIn',
             'totalGuests',
             'newGuestsThisMonth'
         ));

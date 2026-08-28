@@ -7,6 +7,93 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Str;
 
+/**
+ * @property int $id
+ * @property string $booking_ref
+ * @property int $user_id
+ * @property int $property_id
+ * @property \Illuminate\Support\Carbon $check_in_date
+ * @property string $check_in_time
+ * @property \Illuminate\Support\Carbon|null $actual_check_in
+ * @property \Illuminate\Support\Carbon $check_out_date
+ * @property string $check_out_time
+ * @property \Illuminate\Support\Carbon|null $actual_check_out
+ * @property int $num_nights
+ * @property int $num_guests
+ * @property numeric $base_amount
+ * @property numeric $extras_amount
+ * @property numeric $discount_amount
+ * @property int|null $discount_id
+ * @property numeric $total_amount
+ * @property numeric $amount_paid
+ * @property numeric $balance_due
+ * @property string $status
+ * @property string $payment_status
+ * @property string $source
+ * @property int $reschedule_count
+ * @property string|null $paymongo_session_id
+ * @property string|null $paymongo_payment_type
+ * @property string|null $special_requests
+ * @property \Illuminate\Support\Carbon|null $cancelled_at
+ * @property string|null $cancellation_reason
+ * @property string|null $cancelled_by
+ * @property \Illuminate\Support\Carbon|null $created_at
+ * @property \Illuminate\Support\Carbon|null $updated_at
+ * @property \Illuminate\Support\Carbon|null $deleted_at
+ * @property-read \App\Models\Discount|null $discount
+ * @property-read \Illuminate\Database\Eloquent\Collection<int, \App\Models\BookingExtra> $extras
+ * @property-read int|null $extras_count
+ * @property-read string $payment_status_badge
+ * @property-read string $payment_status_class
+ * @property-read string $payment_status_label
+ * @property-read string $status_badge
+ * @property-read \Illuminate\Database\Eloquent\Collection<int, \App\Models\HousekeepingTask> $housekeepingTasks
+ * @property-read int|null $housekeeping_tasks_count
+ * @property-read \Illuminate\Database\Eloquent\Collection<int, \App\Models\Payment> $payments
+ * @property-read int|null $payments_count
+ * @property-read \App\Models\Property $property
+ * @property-read \App\Models\Review|null $review
+ * @property-read \App\Models\User $user
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Booking newModelQuery()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Booking newQuery()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Booking onlyTrashed()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Booking query()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Booking whereActualCheckIn($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Booking whereActualCheckOut($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Booking whereAmountPaid($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Booking whereBalanceDue($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Booking whereBaseAmount($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Booking whereBookingRef($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Booking whereCancellationReason($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Booking whereCancelledAt($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Booking whereCancelledBy($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Booking whereCheckInDate($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Booking whereCheckInTime($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Booking whereCheckOutDate($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Booking whereCheckOutTime($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Booking whereCreatedAt($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Booking whereDeletedAt($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Booking whereDiscountAmount($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Booking whereDiscountId($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Booking whereExtrasAmount($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Booking whereId($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Booking whereNumGuests($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Booking whereNumNights($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Booking wherePaymentStatus($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Booking wherePaymongoPaymentType($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Booking wherePaymongoSessionId($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Booking wherePropertyId($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Booking whereRescheduleCount($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Booking whereSource($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Booking whereSpecialRequests($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Booking whereStatus($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Booking whereTotalAmount($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Booking whereUpdatedAt($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Booking whereUserId($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Booking withTrashed(bool $withTrashed = true)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Booking withoutTrashed()
+ * @mixin \Eloquent
+ */
 class Booking extends Model
 {
     use HasFactory, SoftDeletes;
@@ -26,6 +113,7 @@ class Booking extends Model
         'base_amount',
         'extras_amount',
         'discount_amount',
+        'discount_id',
         'total_amount',
         'amount_paid',
         'balance_due',
@@ -34,9 +122,11 @@ class Booking extends Model
         'paymongo_session_id',
         'paymongo_payment_type',    
         'source',
+        'reschedule_count',
         'special_requests',
         'cancelled_at',
         'cancellation_reason',
+        'cancelled_by',
     ];
 
     protected $casts = [
@@ -155,10 +245,10 @@ class Booking extends Model
      * idinadagdag dito — sapat na ang gap sa pagitan ng dalawang fixed
      * slot (see SLOTS above) bilang cleaning buffer.
      *
-     * @param  int      $propertyId         Karaniwan, ito na lang yung ID ng master "Villa Elena" record.
-     * @param  Carbon   $newCheckIn         Buong datetime ng bagong check-in.
-     * @param  Carbon   $newCheckOut        Buong datetime ng bagong check-out.
-     * @param  int|null $excludeBookingId   Booking ID na hindi isasali sa check (para sa "update" ng existing booking).
+     * @param  int            $propertyId         Karaniwan, ito na lang yung ID ng master "Villa Elena" record.
+     * @param  \Carbon\Carbon $newCheckIn         Buong datetime ng bagong check-in.
+     * @param  \Carbon\Carbon $newCheckOut        Buong datetime ng bagong check-out.
+     * @param  int|null       $excludeBookingId   Booking ID na hindi isasali sa check (para sa "update" ng existing booking).
      */
     public static function hasConflict(
         int $propertyId,
@@ -239,6 +329,55 @@ class Booking extends Model
         return static::recentCancellationCount($userId, $days) >= $threshold;
     }
 
+    /**
+     * Bilang ng beses na AUTO-CANCELLED (`cancelled_by = 'system'`) ang
+     * user na ito sa loob ng nakaraang $days araw — ibang bagay ito sa
+     * recentCancellationCount(), na binibilang ang LAHAT ng cancellation
+     * kahit kusa ng guest. Dito, non-payment holds lang ang binibilang:
+     * paulit-ulit na pag-book nang hindi talaga binabayaran.
+     */
+    public static function recentAutoCancelCount(int $userId, int $days = 30): int
+    {
+        return static::where('user_id', $userId)
+            ->where('cancelled_by', 'system')
+            ->where('cancelled_at', '>=', now()->subDays($days))
+            ->count();
+    }
+
+    /**
+     * Kung kailan lilipas ang cooldown na pumipigil sa isang user na
+     * gumawa ng BAGONG booking, o null kung wala/lumipas na. Naiiba ito
+     * sa hasExcessiveCancellations() (na nage-force ng full payment sa
+     * susunod na booking) — dito, hindi muna sila makakagawa ng bagong
+     * booking, dahil ang inaalala rito ay yung account na paulit-ulit
+     * humahawak ng slot (via unpaid pending booking) nang hindi talaga
+     * nagbabayad, hindi yung mga tapat na nag-cancel.
+     *
+     * Ginagamit sa Portal\PortalController::submitBooking().
+     */
+    public static function bookingCooldownEndsAt(int $userId): ?\Illuminate\Support\Carbon
+    {
+        $threshold   = (int) Setting::get('booking_cooldown_threshold', 3);
+        $windowDays  = (int) Setting::get('booking_cooldown_window_days', 30);
+        $cooldownHrs = (int) Setting::get('booking_cooldown_hours', 24);
+
+        if (static::recentAutoCancelCount($userId, $windowDays) < $threshold) {
+            return null;
+        }
+
+        $lastAutoCancelledAt = static::where('user_id', $userId)
+            ->where('cancelled_by', 'system')
+            ->max('cancelled_at');
+
+        if (! $lastAutoCancelledAt) {
+            return null;
+        }
+
+        $endsAt = \Illuminate\Support\Carbon::parse($lastAutoCancelledAt)->addHours($cooldownHrs);
+
+        return $endsAt->isFuture() ? $endsAt : null;
+    }
+
     // ── Relationships ──────────────────────────────────────────────
 
     public function user()
@@ -256,6 +395,17 @@ class Booking extends Model
         return $this->hasMany(Payment::class);
     }
 
+    /**
+     * Ang seasonal promo na na-apply nang gawin ang booking. Maaaring
+     * null — alinman sa walang promo noon, o binura na ang promo
+     * (nullOnDelete). Ang `discount_amount` ang nananatiling awtoridad
+     * sa kung magkano talaga ang nabawas; ito ay para sa atribusyon.
+     */
+    public function discount()
+    {
+        return $this->belongsTo(Discount::class);
+    }
+
     public function extras()
     {
         return $this->hasMany(BookingExtra::class);
@@ -269,6 +419,90 @@ class Booking extends Model
     public function housekeepingTasks()
     {
         return $this->hasMany(HousekeepingTask::class);
+    }
+
+    // ── Yugto ng refund ────────────────────────────────────────────
+    /**
+     * Nasaan na ang pera ng guest?
+     *
+     * SINASADYANG hiwalay ito sa `payment_status`. Ang `payment_status`
+     * ay sumasagot sa "tapos na ba ang pera ng booking na ito?" at
+     * pinagbabatayan ng mga filter, report at calendar. Ang tanong dito
+     * ay iba: "naipadala na ba talaga ang refund?"
+     *
+     * Dating `refunded` agad ang booking sa oras na ma-approve ang
+     * refund — bago pa man may perang gumalaw — kaya nagmumukhang
+     * tapos na ang isang bagay na hindi pa nga nagsisimula.
+     *
+     * DERIVED ito, hindi naka-imbak. Walang column na puwedeng
+     * mag-drift palayo sa katotohanan: ang `payments` at ang
+     * `refund_transfers` na mismo ang sumasagot.
+     *
+     * @return string  none | owed | processing | failed | refunded
+     */
+    public function refundStage(): string
+    {
+        $refunds = $this->payments->where('payment_type', 'refund');
+
+        if ($refunds->isEmpty()) {
+            return 'none';
+        }
+
+        $outstanding = $refunds->where('status', 'pending');
+
+        // Wala nang hinihintay — lahat ay naipadala na.
+        if ($outstanding->isEmpty()) {
+            return 'refunded';
+        }
+
+        // Ang nasa daan ang nangunguna: may pera nang gumagalaw, at
+        // iyon ang pinaka-kapaki-pakinabang na malaman.
+        foreach ($outstanding as $refund) {
+            if ($refund->hasTransferInFlight()) {
+                return 'processing';
+            }
+        }
+
+        // May sinubukan pero hindi natuloy. Iba ito sa "hindi pa
+        // sinusubukan" — may kailangang ayusin.
+        foreach ($outstanding as $refund) {
+            if ($refund->refundTransfers->isNotEmpty()) {
+                return 'failed';
+            }
+        }
+
+        return 'owed';
+    }
+
+    /**
+     * Ang label na nakikita sa booking details, sa halip na ang
+     * hilaw na `payment_status`.
+     */
+    public function getPaymentStatusLabelAttribute(): string
+    {
+        return match ($this->refundStage()) {
+            'owed'       => 'Refund',
+            'processing' => 'Refund Processing',
+            'failed'     => 'Refund Failed',
+            'refunded'   => 'Refunded',
+            default      => ucfirst((string) $this->payment_status),
+        };
+    }
+
+    /**
+     * Ang CSS class na katugma ng label sa itaas.
+     *
+     * Ang mga umiiral nang `p-*` na class ay ginagamit pa rin kung
+     * saan sila tumutugma, kaya isa lang ang bagong kailangan.
+     */
+    public function getPaymentStatusClassAttribute(): string
+    {
+        return match ($this->refundStage()) {
+            'owed', 'processing' => 'p-refund-progress',
+            'failed'             => 'p-refund-failed',
+            'refunded'           => 'p-refunded',
+            default              => 'p-' . $this->payment_status,
+        };
     }
 
     // ── Helper Methods ─────────────────────────────────────────────
@@ -304,6 +538,65 @@ class Booking extends Model
         return in_array($this->status, ['pending', 'confirmed']);
     }
 
+    /**
+     * Ilang beses lang pwedeng ilipat ng guest ang iisang booking.
+     */
+    public const MAX_RESCHEDULES = 2;
+
+    /**
+     * Ilang araw bago ang check-in huling pwedeng mag-reschedule.
+     *
+     * Sinasadyang KAPAREHO ito ng 100%-refund tier sa
+     * calculateRefundPercentage() (>= 7 araw). Dati, walang cutoff ang
+     * reschedule habang may tiers ang cancellation — kaya kayang iwasan
+     * nang buo ang cancellation penalty: sa halip na mag-cancel 2 oras
+     * bago ang check-in (0% refund), ililipat na lang ang booking sa
+     * susunod na buwan, tapos saka mag-cancel doon habang malayo pa ang
+     * bagong petsa (100% refund). Ang pagpapareho ng dalawang cutoff ang
+     * nagsasara sa butas na iyon — sa sandaling mawala ang 100% tier,
+     * wala na ring reschedule.
+     */
+    public const RESCHEDULE_CUTOFF_DAYS = 7;
+
+    public function isReschedulable(): bool
+    {
+        return $this->rescheduleBlockReason() === null;
+    }
+
+    /**
+     * Ibinabalik ang dahilan kung bakit HINDI pwedeng i-reschedule, o
+     * null kung pwede. Iisang pinagmumulan ito ng katotohanan para sa
+     * controller guard at sa ipinapakitang mensahe sa guest — para hindi
+     * magkaiba ang sinasabi ng UI sa aktwal na ipinapatupad.
+     */
+    public function rescheduleBlockReason(): ?string
+    {
+        if (! $this->isCancellable()) {
+            return 'This booking can no longer be rescheduled.';
+        }
+
+        if ($this->reschedule_count >= self::MAX_RESCHEDULES) {
+            return 'You have already rescheduled this booking '
+                . self::MAX_RESCHEDULES . ' times, which is the maximum allowed. '
+                . 'Please contact us directly if you need to make further changes.';
+        }
+
+        $daysUntilCheckIn = now()->diffInDays($this->checkInDateTime(), false);
+
+        if ($daysUntilCheckIn < self::RESCHEDULE_CUTOFF_DAYS) {
+            return 'Bookings can only be rescheduled at least '
+                . self::RESCHEDULE_CUTOFF_DAYS . ' days before check-in. '
+                . 'Please contact us directly if you need to make changes.';
+        }
+
+        return null;
+    }
+
+    public function reschedulesRemaining(): int
+    {
+        return max(0, self::MAX_RESCHEDULES - (int) $this->reschedule_count);
+    }
+
     public function calculateRefundPercentage(): int
     {
         $now = now();
@@ -337,6 +630,105 @@ class Booking extends Model
     {
         $percentage = $this->calculateRefundPercentage();
         return round(((float) $this->amount_paid) * $percentage / 100, 2);
+    }
+
+    /**
+     * Muling kinukuwenta ang amount_paid / balance_due / payment_status
+     * mula mismo sa Payment records ng booking na ito.
+     *
+     * Dati, kinopya-kopya ang lohikang ito sa pitong magkakaibang lugar
+     * (dalawang cancel path, tatlong record-payment path, reschedule, at
+     * ang PayMongo success callback) — at hindi na sila magkakapareho.
+     * Isang kopya ang nagtatakda ng payment_status na 'partial' kahit
+     * bayad na nang buo ang guest, at isa naman ang hindi binibilang ang
+     * mga refund na hindi pa naibibigay. Iisang kopya na lang ngayon —
+     * tumawag nito sa halip na gumawa ng panibagong kopya.
+     *
+     * Dalawang panuntunan ang ipinapatupad dito:
+     *
+     *   1. Ang mga TUNAY na bayad ay binibilang lang kapag `status`
+     *      ay 'success' — ang isang naiwang 'pending' na gateway payment
+     *      ay hindi pa perang nasa kamay.
+     *
+     *   2. Ang mga REFUND ay binibilang agad-agad, anuman ang `status`
+     *      nila. Sa sandaling maaprubahan ang refund, may utang na ang
+     *      resort sa guest — dapat agad itong makita sa booking kahit
+     *      hindi pa nailalabas ang pera. Ang `status` ng refund row ang
+     *      sumusubaybay sa aktwal na paglabas ng pera (tingnan ang
+     *      Payment::isPaidOut()), hindi kung utang ba ito o hindi.
+     */
+    public function recalculateFinancials(): void
+    {
+        $totalPaid = $this->payments()
+            ->where('payment_type', '!=', 'refund')
+            ->where('status', 'success')
+            ->sum('amount');
+
+        $totalRefunded = $this->payments()
+            ->where('payment_type', 'refund')
+            ->sum('amount');
+
+        $netPaid = max(0, round($totalPaid - $totalRefunded, 2));
+
+        if (in_array($this->status, ['cancelled', 'no_show'])) {
+            // Tapos na ang booking — wala nang babayaran ang guest
+            // anuman ang tier na na-apply.
+            $balanceDue    = 0;
+            $paymentStatus = $netPaid > 0
+                ? ($totalRefunded > 0 ? 'partial' : 'paid')
+                : ($totalRefunded > 0 ? 'refunded' : 'unpaid');
+        } else {
+            $balanceDue = max(0, round((float) $this->total_amount - $netPaid, 2));
+
+            if ($netPaid <= 0) {
+                $paymentStatus = $totalRefunded > 0 ? 'refunded' : 'unpaid';
+            } elseif ($balanceDue <= 0) {
+                $paymentStatus = 'paid';
+            } else {
+                $paymentStatus = 'partial';
+            }
+        }
+
+        $this->update([
+            'amount_paid'    => $netPaid,
+            'balance_due'    => $balanceDue,
+            'payment_status' => $paymentStatus,
+        ]);
+    }
+
+    /**
+     * Ino-confirm ang booking sa sandaling may aktwal na natanggap na
+     * bayad. Tawagin ito PAGKATAPOS ng recalculateFinancials(), para
+     * bago na ang amount_paid.
+     *
+     * WALANG admin approval step ang sistema — ang unang matagumpay na
+     * bayad ang nagko-confirm ng booking. Ipinapatupad na ito ng
+     * PayMongo path mula pa noon, pero ang TATLONG manwal na
+     * record-payment path (admin payments page, admin booking detail,
+     * staff frontdesk) ay tumatawag lang ng recalculateFinancials() —
+     * na humahawak sa amount_paid/balance_due/payment_status at HINDI
+     * sa `status`.
+     *
+     * Delikado ang puwang na iyon dahil pumapasok doon ang
+     * AutoCheckInOutBookings::cancelStalePendingBookings(): kinakansela
+     * nito ang mga booking na 'pending' pa lampas sa grace period.
+     * Resulta: tumatanggap ang staff ng downpayment sa front desk,
+     * nananatiling 'pending' ang booking, tapos kinakansela ito ng
+     * sistema na sinasabi sa guest na "hindi nakumpleto ang
+     * downpayment" — habang hawak na pala ang pera nila. Nangyari ito
+     * kay VE-KX24HC95, na may hawak na ₱2,000.
+     *
+     * @return bool  true kung ito mismo ang nag-flip mula 'pending'
+     */
+    public function confirmOnFirstPayment(): bool
+    {
+        if ($this->status !== 'pending' || $this->amount_paid <= 0) {
+            return false;
+        }
+
+        $this->update(['status' => 'confirmed']);
+
+        return true;
     }
 
     public function getStatusBadgeAttribute(): string

@@ -4,7 +4,7 @@
 // ════════════════════════════════════════════════════════════════
 
 use Illuminate\Support\Facades\Route;
-use App\Http\Controllers\Staff\FrontdeskController;
+use App\Http\Controllers\Staff\FrontDeskController;
 
 Route::prefix('staff')
     ->name('staff.')
@@ -12,21 +12,25 @@ Route::prefix('staff')
     ->group(function () {
 
     // Main frontdesk
-    Route::get('/frontdesk',                    [FrontdeskController::class, 'index'])->name('frontdesk');
+    Route::get('/frontdesk',                    [FrontDeskController::class, 'index'])->name('frontdesk');
+
+    // Slot-by-slot availability grid (Day/Night per date)
+    Route::get('/availability',                 [FrontDeskController::class, 'availability'])->name('availability');
 
     // Check in / out
-    Route::patch('/checkin/{booking}',          [FrontdeskController::class, 'checkIn'])->name('checkin');
-    Route::patch('/checkout/{booking}',         [FrontdeskController::class, 'checkOut'])->name('checkout');
+    Route::patch('/checkin/{booking}',          [FrontDeskController::class, 'checkIn'])->name('checkin');
+    Route::patch('/checkout/{booking}',         [FrontDeskController::class, 'checkOut'])->name('checkout');
 
     // Walk-in booking
-    Route::get('/walkin',                       [FrontdeskController::class, 'walkinForm'])->name('walkin');
-    Route::post('/walkin',                      [FrontdeskController::class, 'storeWalkin'])->name('walkin.store');
+    Route::get('/walkin',                       [FrontDeskController::class, 'walkinForm'])->name('walkin');
+    Route::get('/walkin/quote',                 [FrontDeskController::class, 'priceQuote'])->name('walkin.quote');
+    Route::post('/walkin',                      [FrontDeskController::class, 'storeWalkin'])->name('walkin.store');
 
     // Payment recording
-    Route::post('/bookings/{booking}/payment',  [FrontdeskController::class, 'recordPayment'])->name('payment');
+    Route::post('/bookings/{booking}/payment',  [FrontDeskController::class, 'recordPayment'])->name('payment');
 
     // Housekeeping
-    Route::patch('/tasks/{task}/start',         [FrontdeskController::class, 'startTask'])->name('tasks.start');
-    Route::patch('/tasks/{task}/complete',      [FrontdeskController::class, 'completeTask'])->name('tasks.complete');
+    Route::patch('/tasks/{task}/start',         [FrontDeskController::class, 'startTask'])->name('tasks.start');
+    Route::patch('/tasks/{task}/complete',      [FrontDeskController::class, 'completeTask'])->name('tasks.complete');
 
 });

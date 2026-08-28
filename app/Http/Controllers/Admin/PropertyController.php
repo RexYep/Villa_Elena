@@ -10,6 +10,7 @@ use App\Models\Setting;
 use App\Models\StaffLog;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\Auth;
 
 class PropertyController extends Controller
 {
@@ -94,7 +95,7 @@ class PropertyController extends Controller
             'floor_area_sqm' => $request->floor_area_sqm,
             'amenities'      => $isVilla ? ($request->amenities ?? []) : [],
             'is_featured'    => $request->boolean('is_featured'),
-            'created_by'     => auth()->id(),
+            'created_by'     => Auth::id(),
         ]);
 
         // Handle image uploads
@@ -227,7 +228,7 @@ class PropertyController extends Controller
             'end_date'    => $request->end_date,
             'reason'      => $request->reason,
             'notes'       => $request->notes,
-            'created_by'  => auth()->id(),
+            'created_by'  => Auth::id(),
         ]);
 
         return back()->with('success', 'Dates blocked successfully.');
