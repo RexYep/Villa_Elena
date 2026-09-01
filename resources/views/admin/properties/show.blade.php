@@ -67,7 +67,7 @@
         .status-pill {
             padding: 4px 12px;
             border-radius: 20px;
-            font-size: 11px;
+            font-size: 13px;
             font-weight: 700;
             text-transform: uppercase;
             letter-spacing: .5px;
@@ -140,7 +140,7 @@
         }
 
         .mini-card .lbl {
-            font-size: 11px;
+            font-size: 13px;
             color: var(--muted);
             margin-top: 5px;
             text-transform: uppercase;
@@ -202,7 +202,7 @@
         }
 
         .info-item label {
-            font-size: 11px;
+            font-size: 13px;
             font-weight: 600;
             color: var(--muted);
             text-transform: uppercase;
@@ -225,7 +225,7 @@
             background: var(--sand);
             border-radius: 20px;
             padding: 4px 12px;
-            font-size: 12px;
+            font-size: 14px;
             color: var(--text-main);
             margin: 3px;
         }
@@ -432,7 +432,7 @@
                     @if ($property->description)
                         <div style="margin-top:18px; padding-top:18px; border-top:1px solid var(--border);">
                             <label class="text-muted-theme section-label"
-                                style="font-size:11px; display:block; margin-bottom:8px;">Description</label>
+                                style="font-size: 13px; display:block; margin-bottom:8px;">Description</label>
                             <p style="font-size:14px; color:var(--text-main); line-height:1.7;">
                                 {{ $property->description }}</p>
                         </div>
@@ -441,11 +441,11 @@
                     @if (!empty($property->amenities))
                         <div style="margin-top:18px; padding-top:18px; border-top:1px solid var(--border);">
                             <label class="text-muted-theme section-label"
-                                style="font-size:11px; display:block; margin-bottom:8px;">Amenities</label>
+                                style="font-size: 13px; display:block; margin-bottom:8px;">Amenities</label>
                             <div>
                                 @foreach ($property->amenities as $amenity)
                                     <span class="amenity-tag"><i class="bi bi-check-circle-fill"
-                                            style="color:#16a34a; font-size:11px;"></i> {{ $amenity }}</span>
+                                            style="color:#16a34a; font-size: 13px;"></i> {{ $amenity }}</span>
                                 @endforeach
                             </div>
                         </div>
@@ -458,7 +458,7 @@
                 <div class="panel-head">
                     <h3>Photos</h3>
                     <a href="{{ route('admin.properties.edit', $property) }}"
-                        style="font-size:12px; color:var(--gold); text-decoration:none; font-weight:600;">
+                        style="font-size: 14px; color:var(--gold); text-decoration:none; font-weight:600;">
                         <i class="bi bi-plus-lg"></i> Add Photos
                     </a>
                 </div>
@@ -471,7 +471,7 @@
                                         class="gallery-img {{ $image->is_primary ? 'gallery-primary' : '' }}">
                                     @if ($image->is_primary)
                                         <span
-                                            style="position:absolute; top:6px; left:6px; background:var(--gold); color:#fff; font-size:9px; font-weight:700; padding:2px 7px; border-radius:10px; text-transform:uppercase; letter-spacing:.3px;">Primary</span>
+                                            style="position:absolute; top:6px; left:6px; background:var(--gold); color:#fff; font-size: 11px; font-weight:700; padding:2px 7px; border-radius:10px; text-transform:uppercase; letter-spacing:.3px;">Primary</span>
                                     @endif
                                 </div>
                             @endforeach
@@ -490,7 +490,7 @@
                 <div class="panel-head">
                     <h3>Recent Bookings</h3>
                     <a href="{{ route('admin.bookings.index') }}?property={{ $property->id }}"
-                        style="font-size:12px; color:#2e5fa3; text-decoration:none; font-weight:500;">
+                        style="font-size: 14px; color:#2e5fa3; text-decoration:none; font-weight:500;">
                         View all <i class="bi bi-arrow-right"></i>
                     </a>
                 </div>
@@ -515,14 +515,14 @@
                                 <tr>
                                     <td>
                                         <a href="{{ route('admin.bookings.show', $booking) }}"
-                                            style="font-weight:600; color:var(--stone); text-decoration:none; font-size:12px;">
+                                            style="font-weight:600; color:var(--stone); text-decoration:none; font-size: 14px;">
                                             {{ $booking->booking_ref }}
                                         </a>
                                     </td>
                                     <td>{{ $booking->user->full_name ?? 'N/A' }}</td>
-                                    <td class="text-muted-theme" style="font-size:12px;">
+                                    <td class="text-muted-theme" style="font-size: 14px;">
                                         {{ $booking->check_in_date->format('M d, Y') }}</td>
-                                    <td class="text-muted-theme" style="font-size:12px;">
+                                    <td class="text-muted-theme" style="font-size: 14px;">
                                         {{ $booking->check_out_date->format('M d, Y') }}</td>
                                     <td>
                                         <span class="booking-status {{ $booking->status }}">
@@ -566,7 +566,7 @@
                                     <p class="text-muted-theme" style="font-size:13px; line-height:1.5;">
                                         {{ $review->comment }}</p>
                                 @endif
-                                <div style="font-size:11px; color:#94a3b8; margin-top:6px;">
+                                <div style="font-size: 13px; color:#94a3b8; margin-top:6px;">
                                     {{ $review->created_at->format('M d, Y') }}</div>
                             </div>
                         @endforeach
@@ -608,7 +608,7 @@
                 @if ($property->pricingRules->isEmpty())
                     <div class="empty-state" style="padding:24px;">
                         <i class="bi bi-tag" style="font-size:24px;"></i>
-                        <p style="font-size:12px; margin-top:6px;">No special pricing rules</p>
+                        <p style="font-size: 14px; margin-top:6px;">No special pricing rules</p>
                     </div>
                 @else
                     <div class="panel-body" style="display:flex; flex-direction:column; gap:8px;">
@@ -616,7 +616,7 @@
                             <div
                                 style="background:#f8fafc; border-radius:9px; padding:10px 14px; border:1px solid var(--border); font-size:13px;">
                                 <div style="font-weight:600;">{{ $rule->name ?? ucfirst($rule->type) }}</div>
-                                <div class="text-muted-theme" style="font-size:12px; margin-top:2px;">
+                                <div class="text-muted-theme" style="font-size: 14px; margin-top:2px;">
                                     ₱{{ number_format($rule->price ?? $rule->amount, 2) }}
                                     @if (isset($rule->start_date))
                                         · {{ \Carbon\Carbon::parse($rule->start_date)->format('M d') }} –
@@ -636,12 +636,12 @@
                 </div>
                 <div class="panel-body">
                     @if ($property->type === 'villa')
-                        <p class="text-muted-theme mb-12" style="font-size:12px;">
+                        <p class="text-muted-theme mb-12" style="font-size: 14px;">
                             Blocking dates here will directly affect the availability visible to customers (since this is
                             the master, bookable Villa).
                         </p>
                     @else
-                        <p class="text-muted-theme mb-12" style="font-size:12px;">
+                        <p class="text-muted-theme mb-12" style="font-size: 14px;">
                             <i class="bi bi-info-circle"></i> Note: this is for internal tracking/reference only for this
                             room. It does not directly affect the whole Villa's availability on the customer-facing site —
                             to block actual booking dates, block them on the master Villa record.
@@ -650,20 +650,20 @@
                     <form method="POST" action="{{ route('admin.properties.block', $property) }}" @csrf <div
                         class="mb-12">
                         <label
-                            style="font-size:11px; font-weight:600; color:#374151; display:block; margin-bottom:5px;">Start
+                            style="font-size: 13px; font-weight:600; color:#374151; display:block; margin-bottom:5px;">Start
                             Date</label>
                         <input type="date" name="start_date" required min="{{ date('Y-m-d') }}"
                             style="width:100%; border:1.5px solid var(--border); border-radius:8px; padding:9px 12px; font-size:13px; font-family:'DM Sans',sans-serif;">
                 </div>
                 <div class="mb-12">
-                    <label style="font-size:11px; font-weight:600; color:#374151; display:block; margin-bottom:5px;">End
+                    <label style="font-size: 13px; font-weight:600; color:#374151; display:block; margin-bottom:5px;">End
                         Date</label>
                     <input type="date" name="end_date" required min="{{ date('Y-m-d') }}"
                         style="width:100%; border:1.5px solid var(--border); border-radius:8px; padding:9px 12px; font-size:13px; font-family:'DM Sans',sans-serif;">
                 </div>
                 <div class="mb-12">
                     <label
-                        style="font-size:11px; font-weight:600; color:#374151; display:block; margin-bottom:5px;">Reason</label>
+                        style="font-size: 13px; font-weight:600; color:#374151; display:block; margin-bottom:5px;">Reason</label>
                     <select name="reason" required
                         style="width:100%; border:1.5px solid var(--border); border-radius:8px; padding:9px 12px; font-size:13px; font-family:'DM Sans',sans-serif; background:#fff;">
                         <option value="maintenance">Maintenance</option>
@@ -673,7 +673,7 @@
                     </select>
                 </div>
                 <div style="margin-bottom:14px;">
-                    <label style="font-size:11px; font-weight:600; color:#374151; display:block; margin-bottom:5px;">Notes
+                    <label style="font-size: 13px; font-weight:600; color:#374151; display:block; margin-bottom:5px;">Notes
                         <span class="text-muted-theme" style="font-weight:400;">(optional)</span></label>
                     <input type="text" name="notes" placeholder="e.g. Repainting the walls"
                         style="width:100%; border:1.5px solid var(--border); border-radius:8px; padding:9px 12px; font-size:13px; font-family:'DM Sans',sans-serif;">
@@ -686,11 +686,11 @@
                 {{-- Existing blocks --}}
                 @if ($property->availabilityBlocks->count() > 0)
                     <div style="margin-top:18px; padding-top:18px; border-top:1px solid var(--border);">
-                        <div class="text-muted-theme section-label" style="font-size:11px; margin-bottom:10px;">Blocked
+                        <div class="text-muted-theme section-label" style="font-size: 13px; margin-bottom:10px;">Blocked
                             Periods</div>
                         @foreach ($property->availabilityBlocks->sortByDesc('start_date')->take(5) as $block)
                             <div
-                                style="background:#fff5f5; border-radius:8px; padding:9px 12px; margin-bottom:6px; border:1px solid #fecaca; font-size:12px;">
+                                style="background:#fff5f5; border-radius:8px; padding:9px 12px; margin-bottom:6px; border:1px solid #fecaca; font-size: 14px;">
                                 <div style="font-weight:600; color:#dc2626;">
                                     {{ \Carbon\Carbon::parse($block->start_date)->format('M d') }} –
                                     {{ \Carbon\Carbon::parse($block->end_date)->format('M d, Y') }}
@@ -710,7 +710,7 @@
             <div>
                 <div style="font-weight:600; color:#dc2626; font-size:14px;"><i
                         class="bi bi-exclamation-triangle me-2"></i>Delete Property</div>
-                <div style="font-size:12px; color:#6b7a8d; margin-top:2px;">This will permanently delete this property and
+                <div style="font-size: 14px; color:#6b7a8d; margin-top:2px;">This will permanently delete this property and
                     all its data.</div>
             </div>
             <button class="btn-danger" onclick="confirmDelete()">

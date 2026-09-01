@@ -74,7 +74,7 @@
 
         .booking-source {
             color: rgba(255, 255, 255, 0.6);
-            font-size: 12px;
+            font-size: 14px;
             margin-top: 3px;
             text-transform: uppercase;
             letter-spacing: 1px;
@@ -99,7 +99,7 @@
         }
 
         .info-item .label {
-            font-size: 11px;
+            font-size: 13px;
             font-weight: 600;
             text-transform: uppercase;
             letter-spacing: .8px;
@@ -116,7 +116,7 @@
         /* Status Badges — semantic, unchanged */
         .status-badge {
             padding: 4px 12px;
-            font-size: 12px;
+            font-size: 14px;
         }
 
         .s-pending {
@@ -264,7 +264,7 @@
         }
 
         .pay-table th {
-            font-size: 11px;
+            font-size: 13px;
             font-weight: 600;
             text-transform: uppercase;
             letter-spacing: .7px;
@@ -286,7 +286,7 @@
 
         /* Form inside card */
         .form-label-sm {
-            font-size: 12px;
+            font-size: 14px;
             font-weight: 600;
             color: var(--text-main);
             margin-bottom: 5px;
@@ -403,10 +403,10 @@
             </div>
         </div>
         <div class="text-center">
-            <div style="color:rgba(255,255,255,0.6);font-size:12px;margin-bottom:4px;">Duration</div>
+            <div style="color:rgba(255,255,255,0.6);font-size: 14px;margin-bottom:4px;">Duration</div>
             <div style="color:#fff;font-family:'Cormorant Garamond',serif;font-size:28px;font-weight:700;">
                 {{ $booking->num_nights }}</div>
-            <div style="color:rgba(255,255,255,0.6);font-size:12px;">night{{ $booking->num_nights != 1 ? 's' : '' }}</div>
+            <div style="color:rgba(255,255,255,0.6);font-size: 14px;">night{{ $booking->num_nights != 1 ? 's' : '' }}</div>
         </div>
         <div style="display:flex;flex-direction:column;gap:8px;align-items:flex-end;">
             <span
@@ -470,7 +470,7 @@
 
                         @if ($booking->status === 'pending')
                             <div class="text-muted-theme"
-                                style="font-size:12px;background:#fef9c3;border-radius:8px;padding:10px 12px;">
+                                style="font-size: 14px;background:#fef9c3;border-radius:8px;padding:10px 12px;">
                                 <i class="bi bi-hourglass-split me-1"></i>
                                 Awaiting payment from the guest — it will automatically become "Confirmed" once the payment
                                 is successful. No action is required unless you wish to cancel.
@@ -490,7 +490,7 @@
                         <h3>Extend Stay</h3>
                     </div>
                     <div class="card-body-custom">
-                        <p class="text-muted-theme mb-12" style="font-size:12px;">
+                        <p class="text-muted-theme mb-12" style="font-size: 14px;">
                             Current check-out: <strong>{{ $booking->check_out_date->format('M d, Y') }}
                                 @if ($booking->check_out_time)
                                     — {{ \Carbon\Carbon::parse($booking->check_out_time)->format('g:i A') }}
@@ -530,7 +530,7 @@
                 <div class="card-header-custom">
                     <h3>Booking Information</h3>
                     <a href="{{ route('admin.bookings.edit', $booking) }}"
-                        style="font-size:12px;color:#2e5fa3;text-decoration:none;font-weight:500;">
+                        style="font-size: 14px;color:#2e5fa3;text-decoration:none;font-weight:500;">
                         <i class="bi bi-pencil"></i> Edit
                     </a>
                 </div>
@@ -581,7 +581,7 @@
                             style="margin-top:16px;padding:12px 14px;background:#fef2f2;border-radius:8px;font-size:13px;color:#dc2626;">
                             <strong style="display:block;margin-bottom:4px;">Cancellation Reason:</strong>
                             {{ $booking->cancellation_reason }}
-                            <span style="color:#94a3b8;font-size:11px;margin-left:8px;">
+                            <span style="color:#94a3b8;font-size: 13px;margin-left:8px;">
                                 {{ $booking->cancelled_at?->format('M d, Y h:i A') }}
                             </span>
                         </div>
@@ -601,7 +601,7 @@
                         </div>
                         <div>
                             <div style="font-weight:600;font-size:16px;">{{ $booking->user->full_name ?? 'N/A' }}</div>
-                            <div class="text-muted-theme" style="font-size:12px;">{{ $booking->user->email ?? '' }}</div>
+                            <div class="text-muted-theme" style="font-size: 14px;">{{ $booking->user->email ?? '' }}</div>
                         </div>
                     </div>
                     <div class="info-grid">
@@ -656,7 +656,7 @@
                                         <td class="text-muted-theme">{{ $payment->payment_date?->format('M d, Y') }}</td>
                                         <td>{{ $payment->method_label }}</td>
                                         <td><span
-                                                style="font-size:11px;background:#f1f5f9;padding:2px 8px;border-radius:10px;">{{ $payment->type_label }}</span>
+                                                style="font-size: 13px;background:#f1f5f9;padding:2px 8px;border-radius:10px;">{{ $payment->type_label }}</span>
                                         </td>
                                         <td
                                             style="text-align:right;font-weight:600;{{ $payment->payment_type === 'refund' ? 'color:#ef4444;' : 'color:#15803d;' }}">
@@ -696,7 +696,7 @@
                                         <td>
                                             {{ $extra->item_name }}
                                             @if ($extra->description)
-                                                <div class="text-muted-theme" style="font-size:11px;">
+                                                <div class="text-muted-theme" style="font-size: 13px;">
                                                     {{ $extra->description }}</div>
                                             @endif
                                         </td>
@@ -848,7 +848,7 @@
                 <div class="card-header-custom">
                     <h3>Property</h3>
                     <a href="{{ route('admin.properties.show', $booking->property_id) }}"
-                        style="font-size:12px;color:#2e5fa3;text-decoration:none;">View →</a>
+                        style="font-size: 14px;color:#2e5fa3;text-decoration:none;">View →</a>
                 </div>
                 <div class="card-body-custom">
                     @if ($booking->property->primaryImage)
@@ -856,7 +856,7 @@
                             style="width:100%;height:140px;object-fit:cover;border-radius:8px;" alt="">
                     @endif
                     <div style="font-weight:600;font-size:15px;">{{ $booking->property->property_name }}</div>
-                    <div class="text-muted-theme" style="font-size:12px;margin-top:3px;">
+                    <div class="text-muted-theme" style="font-size: 14px;margin-top:3px;">
                         {{ ucfirst($booking->property->type) }} ·
                         Max {{ $booking->property->max_capacity }} guests ·
                         ₱{{ number_format($booking->property->base_price, 2) }}/night

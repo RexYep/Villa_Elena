@@ -14,6 +14,7 @@ use App\Http\Controllers\Admin\ForecastController;
 use App\Http\Controllers\Admin\CalendarController;
 use App\Http\Controllers\Admin\NotificationController;
 use App\Http\Controllers\Admin\PromotionController;
+use App\Http\Controllers\Admin\ProfileController;
 
 
 Route::prefix('admin')
@@ -98,6 +99,11 @@ Route::delete('reviews/{review}',             [ReviewController::class, 'destroy
     // Settings
     Route::get('settings', [SettingsController::class, 'index'])->name('settings.index');
     Route::put('settings', [SettingsController::class, 'update'])->name('settings.update');
+
+    // My Account (the admin's own profile — separate from resort-wide Settings)
+    Route::get('profile', [ProfileController::class, 'edit'])->name('profile.edit');
+    Route::put('profile', [ProfileController::class, 'update'])->name('profile.update');
+    Route::put('profile/password', [ProfileController::class, 'updatePassword'])->name('profile.password');
 
     //Insights
     Route::get('/insights', [InsightsController::class, 'index'])->name('insights.index');

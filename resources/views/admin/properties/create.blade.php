@@ -87,7 +87,7 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 11px;
+            font-size: 13px;
             flex-shrink: 0;
         }
 
@@ -135,7 +135,7 @@
         }
 
         .upload-zone small {
-            font-size: 11px;
+            font-size: 13px;
             color: var(--muted);
         }
 
@@ -171,7 +171,7 @@
             color: #fff;
             border: none;
             cursor: pointer;
-            font-size: 11px;
+            font-size: 13px;
             display: flex;
             align-items: center;
             justify-content: center;
@@ -183,7 +183,7 @@
             left: 4px;
             background: var(--gold);
             color: #fff;
-            font-size: 9px;
+            font-size: 11px;
             font-weight: 700;
             padding: 2px 6px;
             border-radius: 4px;
@@ -213,7 +213,7 @@
 
         .toggle-label small {
             display: block;
-            font-size: 11px;
+            font-size: 13px;
             color: var(--muted);
             font-weight: 400;
         }
@@ -398,7 +398,7 @@
                                         value="{{ old('weekend_price') }}" min="0" step="0.01"
                                         placeholder="0.00">
                                 </div>
-                                <small style="font-size:11px; color:#94a3b8; margin-top:4px; display:block;">
+                                <small style="font-size: 13px; color:#94a3b8; margin-top:4px; display:block;">
                                     Applied on Saturdays &amp; Sundays
                                 </small>
                             </div>

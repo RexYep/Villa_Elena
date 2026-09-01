@@ -137,7 +137,7 @@
         }
 
         .stat-lbl {
-            font-size: 12px;
+            font-size: 14px;
             color: var(--muted);
             margin-top: 4px;
             letter-spacing: .3px;
@@ -159,7 +159,7 @@
         }
 
         .card-head a {
-            font-size: 12px;
+            font-size: 14px;
             color: var(--gold);
             text-decoration: none;
             font-weight: 500;
@@ -216,7 +216,7 @@
         }
 
         .booking-property {
-            font-size: 12px;
+            font-size: 14px;
             color: var(--muted);
             margin-top: 1px;
             white-space: nowrap;
@@ -225,7 +225,7 @@
         }
 
         .booking-dates {
-            font-size: 11px;
+            font-size: 13px;
             color: var(--muted);
             margin-top: 3px;
         }
@@ -242,7 +242,7 @@
         }
 
         .booking-bal {
-            font-size: 11px;
+            font-size: 13px;
             color: var(--terracotta);
             margin-top: 2px;
         }
@@ -269,7 +269,7 @@
         }
 
         .upcoming-label {
-            font-size: 10px;
+            font-size: 12px;
             color: rgba(255, 255, 255, .4);
             text-transform: uppercase;
             letter-spacing: 1px;
@@ -291,7 +291,7 @@
 
         .upcoming-nights {
             color: rgba(255, 255, 255, .5);
-            font-size: 12px;
+            font-size: 14px;
             margin-top: 2px;
         }
 
@@ -302,7 +302,7 @@
             color: var(--gold-light);
             padding: 3px 10px;
             border-radius: 20px;
-            font-size: 10px;
+            font-size: 12px;
             font-weight: 600;
             letter-spacing: .5px;
         }
@@ -352,13 +352,13 @@
         }
 
         .notif-msg {
-            font-size: 12px;
+            font-size: 14px;
             color: var(--muted);
             margin-top: 2px;
         }
 
         .notif-time {
-            font-size: 11px;
+            font-size: 13px;
             color: #c4bdb2;
             margin-top: 2px;
         }
@@ -511,7 +511,7 @@
                                 <div class="upcoming-label">Upcoming reservation</div>
                                 <div class="upcoming-property">{{ $booking->property->property_name ?? 'N/A' }}</div>
                                 <div class="upcoming-dates">
-                                    <i class="bi bi-calendar3" style="font-size:11px;"></i>
+                                    <i class="bi bi-calendar3" style="font-size: 13px;"></i>
                                     {{ $booking->check_in_date->format('M d') }} →
                                     {{ $booking->check_out_date->format('M d, Y') }}
                                 </div>
@@ -526,7 +526,7 @@
                             <i class="bi bi-moon-stars"></i>
                             No upcoming stays.<br>
                             <a href="{{ route('home') }}"
-                                style="color:var(--gold);font-size:12px;margin-top:6px;display:inline-block;">
+                                style="color:var(--gold);font-size: 14px;margin-top:6px;display:inline-block;">
                                 Plan your next visit →
                             </a>
                         </div>

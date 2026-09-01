@@ -61,7 +61,7 @@
         }
 
         .stat-lbl {
-            font-size: 11px;
+            font-size: 13px;
             color: var(--muted);
             margin-top: 4px;
         }
@@ -76,7 +76,7 @@
         }
 
         .form-label-sm {
-            font-size: 11px;
+            font-size: 13px;
             font-weight: 600;
             color: var(--text-main);
             display: block;
@@ -107,7 +107,7 @@
 
         thead th {
             padding: 11px 16px;
-            font-size: 11px;
+            font-size: 13px;
             font-weight: 700;
             color: var(--muted);
             text-transform: uppercase;
@@ -140,7 +140,7 @@
         .badge {
             padding: 3px 10px;
             border-radius: 20px;
-            font-size: 10px;
+            font-size: 12px;
             font-weight: 700;
             text-transform: uppercase;
             letter-spacing: .3px;
@@ -238,7 +238,7 @@
             color: var(--gold);
             text-decoration: none;
             font-weight: 600;
-            font-size: 12px;
+            font-size: 14px;
         }
 
         .view-link:hover {
@@ -249,7 +249,7 @@
             color: #dc2626;
             text-decoration: none;
             font-weight: 600;
-            font-size: 12px;
+            font-size: 14px;
         }
 
         /* ── MODAL ── */
@@ -369,7 +369,7 @@
             <div style="flex:1;">
                 <strong>{{ $pendingRefundsCount }} refund{{ $pendingRefundsCount === 1 ? '' : 's' }}
                     ({{ '₱' . number_format($pendingRefunds, 2) }}) awaiting payout.</strong>
-                <div style="font-size:12px;margin-top:2px;">
+                <div style="font-size: 14px;margin-top:2px;">
                     Open each one and use <em>Send Refund</em> — the system transfers the money itself.
                     <em>Mark Paid Out</em> is only for cash, or for money you already sent by hand.
                     @if ($refundsNeedingDetails > 0)
@@ -381,7 +381,7 @@
                 </div>
             </div>
             <a href="{{ route('admin.payments.index', ['status' => 'awaiting_payout']) }}" class="btn-navy"
-                style="padding:8px 16px;font-size:12px;white-space:nowrap;">
+                style="padding:8px 16px;font-size: 14px;white-space:nowrap;">
                 Show these
             </a>
         </div>
@@ -425,14 +425,14 @@
                     <input type="date" name="to" class="form-control form-control-sm" value="{{ request('to') }}">
                 </div>
                 <div style="padding-top:18px;">
-                    <button type="submit" class="btn-navy" style="padding:8px 16px; font-size:12px;">
+                    <button type="submit" class="btn-navy" style="padding:8px 16px; font-size: 14px;">
                         <i class="bi bi-funnel"></i> Filter
                     </button>
                 </div>
                 <div style="padding-top:18px;">
                     <a href="{{ route('admin.payments.index') }}" class="text-muted-theme"
                         style="background:#fff; border:1.5px solid var(--border);
-                              border-radius:7px; padding:8px 14px; font-size:12px; text-decoration:none;
+                              border-radius:7px; padding:8px 14px; font-size: 14px; text-decoration:none;
                               display:inline-block;">
                         Clear
                     </a>
@@ -445,7 +445,7 @@
     <div class="table-card">
         <div class="table-card-header">
             <h3>Payment Records</h3>
-            <span class="text-muted-theme" style="font-size:12px;">{{ $payments->total() }} records</span>
+            <span class="text-muted-theme" style="font-size: 14px;">{{ $payments->total() }} records</span>
         </div>
 
         @if ($payments->isEmpty())
@@ -471,7 +471,7 @@
                 <tbody>
                     @foreach ($payments as $payment)
                         <tr>
-                            <td class="text-muted-theme" style="font-size:12px;">
+                            <td class="text-muted-theme" style="font-size: 14px;">
                                 {{ $payment->created_at->format('M d, Y') }}
                             </td>
                             <td>
@@ -524,7 +524,7 @@
                                 <strong>₱{{ number_format($payment->amount, 2) }}</strong>
                             </td>
                             <td class="text-muted-theme"
-                                style="font-size:12px; max-width:140px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
+                                style="font-size: 14px; max-width:140px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
                                 {{ $payment->notes ?? '—' }}
                             </td>
                             <td style="white-space:nowrap;">
@@ -609,7 +609,7 @@
                         autocomplete="off" oninput="lookupBooking(this.value)">
                     <input type="hidden" name="booking_id" id="bookingIdInput">
                     <div id="bookingInfo" class="text-muted-theme"
-                        style="margin-top:8px; font-size:12px; display:none; background:#f8fafc; border-radius:8px; padding:10px 12px;">
+                        style="margin-top:8px; font-size: 14px; display:none; background:#f8fafc; border-radius:8px; padding:10px 12px;">
                     </div>
                 </div>
                 <div class="two-col mb-12">
@@ -670,7 +670,7 @@
                     <label class="form-label">Refund Amount (₱)</label>
                     <input type="number" name="refund_amount" id="refundAmountInput" class="form-control"
                         min="1" step="0.01" required>
-                    <div class="text-muted-theme" style="font-size:11px; margin-top:4px;">Max: ₱<span
+                    <div class="text-muted-theme" style="font-size: 13px; margin-top:4px;">Max: ₱<span
                             id="refundMax"></span></div>
                 </div>
                 <div class="mb-12">
@@ -716,14 +716,14 @@
                 </div>
 
                 <div id="payoutDest"
-                    style="background:#f8fafc;border-radius:10px;padding:12px 16px;margin-bottom:16px;font-size:12px;line-height:1.7;">
+                    style="background:#f8fafc;border-radius:10px;padding:12px 16px;margin-bottom:16px;font-size: 14px;line-height:1.7;">
                 </div>
 
                 <div class="mb-12">
                     <label class="form-label">Transfer Reference Number</label>
                     <input type="text" name="transfer_reference" id="payoutRef" class="form-control"
                         minlength="4" maxlength="100" placeholder="e.g. 1029384756123" required>
-                    <div class="text-muted-theme" style="font-size:11px; margin-top:4px;">
+                    <div class="text-muted-theme" style="font-size: 13px; margin-top:4px;">
                         Copy it from your GCash / Maya / bank receipt. This is the only proof the
                         money left, so it is stored with the refund.
                     </div>

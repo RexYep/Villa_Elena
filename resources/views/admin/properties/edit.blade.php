@@ -85,7 +85,7 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 11px;
+            font-size: 13px;
             flex-shrink: 0;
         }
 
@@ -132,7 +132,7 @@
         }
 
         .upload-zone small {
-            font-size: 11px;
+            font-size: 13px;
             color: var(--muted);
         }
 
@@ -167,7 +167,7 @@
             color: #fff;
             border: none;
             cursor: pointer;
-            font-size: 11px;
+            font-size: 13px;
             display: flex;
             align-items: center;
             justify-content: center;
@@ -179,7 +179,7 @@
             left: 4px;
             background: var(--gold);
             color: #fff;
-            font-size: 9px;
+            font-size: 11px;
             font-weight: 700;
             padding: 2px 6px;
             border-radius: 4px;
@@ -218,7 +218,7 @@
             color: #fff;
             border: none;
             cursor: pointer;
-            font-size: 12px;
+            font-size: 14px;
             display: flex;
             align-items: center;
             justify-content: center;
@@ -245,7 +245,7 @@
 
         .toggle-label small {
             display: block;
-            font-size: 11px;
+            font-size: 13px;
             color: var(--muted);
             font-weight: 400;
         }
@@ -362,7 +362,7 @@
                             </select>
                             @if ($existingVilla)
                                 <div id="villaWarning"
-                                    style="display:none;margin-top:8px;padding:10px 12px;background:#fef9c3;border:1px solid #fde68a;border-radius:8px;font-size:12px;color:#a16207;">
+                                    style="display:none;margin-top:8px;padding:10px 12px;background:#fef9c3;border:1px solid #fde68a;border-radius:8px;font-size: 14px;color:#a16207;">
                                     <i class="bi bi-exclamation-triangle me-1"></i>
                                     Another master Villa already exists ("{{ $existingVilla->property_name }}"). Only one
                                     bookable whole-Villa record is allowed in the system.
@@ -458,7 +458,7 @@
                     <div class="form-card-body">
 
                         @if ($property->images->count() > 0)
-                            <p class="text-muted-theme mb-12" style="font-size:12px;">
+                            <p class="text-muted-theme mb-12" style="font-size: 14px;">
                                 Current photos — click ✕ to remove
                             </p>
                             <div class="existing-images" id="existingImages">
@@ -479,7 +479,7 @@
                             <hr style="margin:20px 0; border-color:var(--border);">
                         @endif
 
-                        <p class="text-muted-theme" style="font-size:12px;margin-bottom:10px;">
+                        <p class="text-muted-theme" style="font-size: 14px;margin-bottom:10px;">
                             Add new photos:
                         </p>
 

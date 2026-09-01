@@ -2,16 +2,15 @@
 
 namespace App\Http\Controllers;
 
+use App\Helpers\NotificationHelper;
+use App\Mail\BookingConfirmedMail;
 use App\Models\Booking;
 use App\Models\Notification;
 use App\Models\Payment;
-use App\Models\StaffLog;
 use App\Services\PayMongoService;
-use App\Mail\BookingConfirmedMail;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Mail;
-use App\Helpers\NotificationHelper;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Mail;
 
 class PaymentController extends Controller
 {
@@ -28,7 +27,7 @@ class PaymentController extends Controller
         $booking->load('property');
 
         // Deposit amount from settings — minimum 50% ngayon (dating 30%).
-        $depositPct    = (float) \App\Models\Setting::get('deposit_percentage', 50);
+        $depositPct = (float) \App\Models\Setting::get('deposit_percentage', 50);
         $depositAmount = round($booking->total_amount * $depositPct / 100, 2);
         $isDepositOnly = $booking->amount_paid == 0; // first payment = deposit
 
@@ -62,26 +61,26 @@ class PaymentController extends Controller
 
         $booking->load(['property', 'user']);
 
-        $depositPct    = (float) \App\Models\Setting::get('deposit_percentage', 50);
+        $depositPct = (float) \App\Models\Setting::get('deposit_percentage', 50);
         $depositAmount = round($booking->total_amount * $depositPct / 100, 2);
 
-        $amount      = $request->payment_type === 'deposit' ? $depositAmount : $booking->balance_due;
+        $amount = $request->payment_type === 'deposit' ? $depositAmount : $booking->balance_due;
         $description = $request->payment_type === 'deposit'
             ? "Deposit ({$depositPct}%) for {$booking->property->property_name} — {$booking->booking_ref}"
             : "Full balance for {$booking->property->property_name} — {$booking->booking_ref}";
 
         try {
             $session = $this->paymongo->createCheckoutSession([
-                'amount'           => $amount,
-                'description'      => $description,
-                'guest_name'       => $booking->user->full_name,
-                'guest_email'      => $booking->user->email,
-                'guest_phone'      => $booking->user->phone ?? '',
+                'amount' => $amount,
+                'description' => $description,
+                'guest_name' => $booking->user->full_name,
+                'guest_email' => $booking->user->email,
+                'guest_phone' => $booking->user->phone ?? '',
                 'reference_number' => $booking->booking_ref,
-                'booking_id'       => $booking->id,
-                'payment_type'     => $request->payment_type,
+                'booking_id' => $booking->id,
+                'payment_type' => $request->payment_type,
                 'success_url' => route('payment.success', $booking->id),
-                'cancel_url'       => route('payment.cancel',  $booking->id),
+                'cancel_url' => route('payment.cancel', $booking->id),
             ]);
 
             // Store session ID in booking for verification later
@@ -92,104 +91,105 @@ class PaymentController extends Controller
 
             // Redirect to PayMongo hosted checkout page
             $checkoutUrl = $session['attributes']['checkout_url'];
+
             return redirect($checkoutUrl);
 
         } catch (\Exception $e) {
-            return back()->with('error', 'Payment gateway error: ' . $e->getMessage());
+            return back()->with('error', 'Payment gateway error: '.$e->getMessage());
         }
     }
 
     // ── Success Callback ───────────────────────────────────────────
     // GET /pay/{booking}/success
-   public function success(Request $request, Booking $booking)
-{
-    abort_if($booking->user_id !== Auth::id(), 403);
-    $booking->load(['property', 'user']);
+    public function success(Request $request, Booking $booking)
+    {
+        abort_if($booking->user_id !== Auth::id(), 403);
+        $booking->load(['property', 'user']);
 
-    // Get session ID from booking record (stored during createCheckout)
-    $sessionId = $booking->paymongo_session_id;
+        // Get session ID from booking record (stored during createCheckout)
+        $sessionId = $booking->paymongo_session_id;
 
-    if (!$sessionId) {
-        // Nalinis na ang session_id ng recordPaymongoPayment(), kaya
-        // naitala na ito — o wala talagang session mula sa umpisa.
-        return view('payment.success', [
-            'booking'          => $booking,
-            'amountPaid'       => $booking->amount_paid,
-            'paymentType'      => $booking->paymongo_payment_type ?? 'payment',
-            'paymentConfirmed' => $booking->amount_paid > 0,
-        ]);
-    }
-
-    // 'deposit' (the checkout page's request-level choice, meaning
-    // "pay less than the full total") maps to the payments table's
-    // 'partial' payment_type — 'deposit' isn't a valid payment_type
-    // value on its own.
-    $paymentType = $booking->paymongo_payment_type === 'full_payment' ? 'full_payment' : 'partial';
-
-    try {
-
-        $session    = $this->paymongo->getCheckoutSession($sessionId);
-        $attributes = $session['attributes'];
-
-        // Ang AKTWAL na payment object sa loob ng session ang awtoridad
-        // kung bayad na — hindi ang session status.
-        //
-        // Dating tinatanggap ang status na `['paid','active']`, pero ang
-        // 'active' ay nangangahulugang BUKAS pa ang session, hindi bayad
-        // — at ang halaga ay kinukuha sa `line_items`, na siyang
-        // SISINGILIN, hindi ang naibayad. Magkasama, puwedeng magtala
-        // ng buong bayad para sa isang session na walang anumang
-        // natanggap na pera.
-        //
-        // Bihira itong tumama noong GCash pa: hindi ka makakabalik dito
-        // nang hindi dumadaan sa wallet authorization. Sa QR Ph, normal
-        // na normal na — nakikita ng guest ang QR sa isang device at
-        // ini-scan ito sa iba, kaya kayang marating ang page na ito nang
-        // wala pang bayad, o habang nagse-settle pa.
-        $paidPayment = collect($attributes['payments'] ?? [])
-            ->first(fn ($p) => ($p['attributes']['status'] ?? null) === 'paid');
-
-        $amountPaid = $paidPayment
-            ? ($paidPayment['attributes']['amount'] ?? 0) / 100
-            : 0;
-
-        if ($paidPayment && $amountPaid > 0) {
-            $this->recordPaymongoPayment(
-                $booking,
-                $amountPaid,
-                $paidPayment['attributes']['source']['type']
-                    ?? $attributes['payment_method_used']
-                    ?? 'qrph',
-                $paidPayment['id'] ?? $session['id'],
-                $paymentType,
-            );
-
-            $booking->refresh();
+        if (! $sessionId) {
+            // Nalinis na ang session_id ng recordPaymongoPayment(), kaya
+            // naitala na ito — o wala talagang session mula sa umpisa.
+            return view('payment.success', [
+                'booking' => $booking,
+                'amountPaid' => $booking->amount_paid,
+                'paymentType' => $booking->paymongo_payment_type ?? 'payment',
+                'paymentConfirmed' => $booking->amount_paid > 0,
+            ]);
         }
 
-        return view('payment.success', [
-            'booking'          => $booking,
-            'amountPaid'       => $amountPaid,
-            'paymentType'      => $paymentType,
-            'paymentConfirmed' => (bool) $paidPayment,
-        ]);
+        // 'deposit' (the checkout page's request-level choice, meaning
+        // "pay less than the full total") maps to the payments table's
+        // 'partial' payment_type — 'deposit' isn't a valid payment_type
+        // value on its own.
+        $paymentType = $booking->paymongo_payment_type === 'full_payment' ? 'full_payment' : 'partial';
 
-    } catch (\Exception $e) {
-        // Hindi na maabot ang PayMongo — hindi natin masasabing bayad
-        // na, kaya ipapakita ang "hinihintay pa" na estado. Ligtas ito
-        // sa dalawang direksyon: kung nabayaran nga, darating pa rin ito
-        // sa webhook at maaabisuhan ang guest.
-        \Log::error('PayMongo success callback failed for booking '
-            . $booking->booking_ref . ': ' . $e->getMessage());
+        try {
 
-        return view('payment.success', [
-            'booking'          => $booking,
-            'amountPaid'       => 0,
-            'paymentType'      => $paymentType,
-            'paymentConfirmed' => false,
-        ]);
+            $session = $this->paymongo->getCheckoutSession($sessionId);
+            $attributes = $session['attributes'];
+
+            // Ang AKTWAL na payment object sa loob ng session ang awtoridad
+            // kung bayad na — hindi ang session status.
+            //
+            // Dating tinatanggap ang status na `['paid','active']`, pero ang
+            // 'active' ay nangangahulugang BUKAS pa ang session, hindi bayad
+            // — at ang halaga ay kinukuha sa `line_items`, na siyang
+            // SISINGILIN, hindi ang naibayad. Magkasama, puwedeng magtala
+            // ng buong bayad para sa isang session na walang anumang
+            // natanggap na pera.
+            //
+            // Bihira itong tumama noong GCash pa: hindi ka makakabalik dito
+            // nang hindi dumadaan sa wallet authorization. Sa QR Ph, normal
+            // na normal na — nakikita ng guest ang QR sa isang device at
+            // ini-scan ito sa iba, kaya kayang marating ang page na ito nang
+            // wala pang bayad, o habang nagse-settle pa.
+            $paidPayment = collect($attributes['payments'] ?? [])
+                ->first(fn ($p) => ($p['attributes']['status'] ?? null) === 'paid');
+
+            $amountPaid = $paidPayment
+                ? ($paidPayment['attributes']['amount'] ?? 0) / 100
+                : 0;
+
+            if ($paidPayment && $amountPaid > 0) {
+                $this->recordPaymongoPayment(
+                    $booking,
+                    $amountPaid,
+                    $paidPayment['attributes']['source']['type']
+                        ?? $attributes['payment_method_used']
+                        ?? 'qrph',
+                    $paidPayment['id'] ?? $session['id'],
+                    $paymentType,
+                );
+
+                $booking->refresh();
+            }
+
+            return view('payment.success', [
+                'booking' => $booking,
+                'amountPaid' => $amountPaid,
+                'paymentType' => $paymentType,
+                'paymentConfirmed' => (bool) $paidPayment,
+            ]);
+
+        } catch (\Exception $e) {
+            // Hindi na maabot ang PayMongo — hindi natin masasabing bayad
+            // na, kaya ipapakita ang "hinihintay pa" na estado. Ligtas ito
+            // sa dalawang direksyon: kung nabayaran nga, darating pa rin ito
+            // sa webhook at maaabisuhan ang guest.
+            \Log::error('PayMongo success callback failed for booking '
+                .$booking->booking_ref.': '.$e->getMessage());
+
+            return view('payment.success', [
+                'booking' => $booking,
+                'amountPaid' => 0,
+                'paymentType' => $paymentType,
+                'paymentConfirmed' => false,
+            ]);
+        }
     }
-}
 
     // ── Cancel Callback ────────────────────────────────────────────
     // GET /pay/{booking}/cancel
@@ -197,6 +197,7 @@ class PaymentController extends Controller
     {
         abort_if($booking->user_id !== Auth::id(), 403);
         $booking->update(['paymongo_session_id' => null]);
+
         return redirect()->route('customer.bookings.show', $booking)
             ->with('error', 'Payment was cancelled. Your booking is still reserved — you can try again anytime.');
     }
@@ -233,7 +234,7 @@ class PaymentController extends Controller
             $query->where('transfer_id', $transferId);
         }
 
-        $service   = app(\App\Services\RefundTransferService::class);
+        $service = app(\App\Services\RefundTransferService::class);
         $processed = 0;
 
         foreach ($query->get() as $transfer) {
@@ -243,7 +244,7 @@ class PaymentController extends Controller
 
         \Log::info('PayMongo transfer callback handled', [
             'claimed_transfer' => $transferId,
-            'synced'           => $processed,
+            'synced' => $processed,
         ]);
 
         // Palaging 200 — ang isang callback para sa transfer na hindi
@@ -254,10 +255,10 @@ class PaymentController extends Controller
 
     public function webhook(Request $request)
     {
-        $payload   = $request->getContent();
+        $payload = $request->getContent();
         $signature = $request->header('Paymongo-Signature', '');
 
-        if (!$this->paymongo->verifyWebhook($payload, $signature)) {
+        if (! $this->paymongo->verifyWebhook($payload, $signature)) {
             // Kinukuha ang pagkakakilanlan ng event para sa LOG LAMANG —
             // hindi pinagkakatiwalaan at walang ginagawa batay dito.
             //
@@ -271,11 +272,11 @@ class PaymentController extends Controller
             $peek = json_decode($payload, true);
 
             \Log::warning('PayMongo webhook: invalid signature — rejected', [
-                'ip'       => $request->ip(),
+                'ip' => $request->ip(),
                 'event_id' => data_get($peek, 'data.id'),
-                'type'     => data_get($peek, 'data.attributes.type'),
+                'type' => data_get($peek, 'data.attributes.type'),
                 'livemode' => data_get($peek, 'data.attributes.livemode'),
-                'hint'     => data_get($peek, 'data.attributes.livemode') === false
+                'hint' => data_get($peek, 'data.attributes.livemode') === false
                     ? 'Test-mode event while running live keys — expected, safe to ignore.'
                     : 'Check that PAYMONGO_WEBHOOK_SECRET matches the webhook registered for this mode.',
             ]);
@@ -283,7 +284,7 @@ class PaymentController extends Controller
             return response()->json(['error' => 'Invalid signature'], 401);
         }
 
-        $data      = $request->json('data');
+        $data = $request->json('data');
         $eventType = $data['attributes']['type'] ?? '';
 
         if ($eventType !== 'payment.paid') {
@@ -291,21 +292,21 @@ class PaymentController extends Controller
         }
 
         $paymentObject = $data['attributes']['data'] ?? [];
-        $paymentData   = $paymentObject['attributes'] ?? [];
-        $metadata      = $paymentData['metadata'] ?? [];
+        $paymentData = $paymentObject['attributes'] ?? [];
+        $metadata = $paymentData['metadata'] ?? [];
 
         // Ang PayMongo payment ID (`pay_xxx`) — ito rin ang isinusulat
         // ng success callback sa `reference_number`, kaya ito ang
         // nagsisilbing duplicate guard kapag pareho silang tumakbo.
         $paymentRef = $paymentObject['id'] ?? null;
-        $amount     = ($paymentData['amount'] ?? 0) / 100;
+        $amount = ($paymentData['amount'] ?? 0) / 100;
 
         $booking = $this->resolveWebhookBooking($metadata, $paymentData);
 
         if (! $booking || ! $paymentRef) {
             \Log::warning('PayMongo webhook: payment.paid could not be matched to a booking', [
                 'payment_ref' => $paymentRef,
-                'metadata'    => $metadata,
+                'metadata' => $metadata,
             ]);
 
             // 200 pa rin — ang isang hindi matukoy na booking ay hindi
@@ -330,10 +331,10 @@ class PaymentController extends Controller
 
         \Log::info('PayMongo webhook: payment.paid handled', [
             'booking_ref' => $booking->booking_ref,
-            'amount'      => $amount,
+            'amount' => $amount,
             'payment_ref' => $paymentRef,
             // false = naunahan na ng success callback, normal lang ito
-            'recorded'    => $recorded,
+            'recorded' => $recorded,
         ]);
 
         return response()->json(['received' => true]);
@@ -382,7 +383,7 @@ class PaymentController extends Controller
      * Idempotent: ang `reference_number` (PayMongo `pay_xxx`) ang guard
      * laban sa dobleng pagtatala kapag pareho silang tumakbo.
      *
-     * @return bool  true kung bagong payment ang naitala nito
+     * @return bool true kung bagong payment ang naitala nito
      */
     private function recordPaymongoPayment(
         Booking $booking,
@@ -415,9 +416,9 @@ class PaymentController extends Controller
         // PayMongo para sa QR Ph. Kung hindi pala 'qrph' ang literal na
         // value, magpapatuloy pa rin ang bayad at lalabas ito sa log
         // bilang babala — sa halip na tahimik na mabigo.
-        $known  = ['qrph', 'cash'];
+        $known = ['qrph', 'cash'];
         $stored = in_array($method, $known, true) ? $method : 'qrph';
-        $notes  = 'PayMongo online payment';
+        $notes = 'PayMongo online payment';
 
         if ($stored !== $method) {
             $notes .= " (reported by PayMongo as '{$method}')";
@@ -425,14 +426,14 @@ class PaymentController extends Controller
         }
 
         Payment::create([
-            'booking_id'       => $booking->id,
-            'amount'           => $amount,
-            'payment_method'   => $stored,
-            'payment_type'     => $paymentType,
-            'status'           => 'success',
-            'payment_date'     => today(),
+            'booking_id' => $booking->id,
+            'amount' => $amount,
+            'payment_method' => $stored,
+            'payment_type' => $paymentType,
+            'status' => 'success',
+            'payment_date' => today(),
             'reference_number' => $reference,
-            'notes'            => $notes,
+            'notes' => $notes,
         ]);
 
         // Dating hindi binibilang ng kopyang ito ang mga refund, kaya
@@ -464,20 +465,24 @@ class PaymentController extends Controller
         // Notify guest (in-app)
         Notification::create([
             'user_id' => $booking->user_id,
-            'type'    => 'in_app',
-            'title'   => 'Payment Received!',
-            'message' => "Payment of ₱" . number_format($amount, 2) .
+            'type' => 'in_app',
+            'title' => 'Payment Received!',
+            'message' => 'Payment of ₱'.number_format($amount, 2).
                 " for booking {$booking->booking_ref} confirmed.",
-            'link'    => route('customer.bookings.show', $booking, false),
+            'link' => route('customer.bookings.show', $booking, false),
             'is_read' => 0,
-            'status'  => 'sent',
+            'status' => 'sent',
             'sent_at' => now(),
         ]);
 
         // Confirmation Email — ipinapadala LANG kapag ito yung unang
         // beses na naging "confirmed" ang booking (hindi kada
-        // partial/balance payment pagkatapos).
-        if ($wasPending) {
+        // partial/balance payment pagkatapos). Ito ay isang OPTIONAL na
+        // email (hindi katulad ng 2FA/verification/password-reset, na
+        // laging ipinapadala anuman ang preference ng guest) — kaya
+        // ang guest mismo ang nagdedesisyon dito (My Account →
+        // Notifications), hindi isang resort-wide na admin toggle.
+        if ($wasPending && $booking->user->email_notifications_enabled) {
             try {
                 Mail::to($booking->user->email)
                     ->send(new BookingConfirmedMail($booking->fresh(['user', 'property'])));
@@ -485,7 +490,7 @@ class PaymentController extends Controller
                 // Hindi dapat i-fail ang buong request kung may isyu ang
                 // email delivery — naka-log lang, dahil matagumpay
                 // naman talaga ang bayad at booking.
-                \Log::error('Failed sending booking confirmation email: ' . $mailException->getMessage());
+                \Log::error('Failed sending booking confirmation email: '.$mailException->getMessage());
             }
         }
 

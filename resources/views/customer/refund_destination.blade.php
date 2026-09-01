@@ -41,7 +41,7 @@
         }
 
         .summary-dates {
-            font-size: 12px;
+            font-size: 14px;
             color: var(--muted);
             margin-top: 3px;
         }
@@ -59,7 +59,7 @@
         .refund-amount small {
             display: block;
             font-family: 'Jost', sans-serif;
-            font-size: 11px;
+            font-size: 13px;
             font-weight: 500;
             color: var(--muted);
             letter-spacing: .3px;
@@ -88,7 +88,7 @@
         }
 
         .form-label {
-            font-size: 12px;
+            font-size: 14px;
             font-weight: 600;
             color: #374151;
             display: block;
@@ -101,7 +101,7 @@
         }
 
         .form-hint {
-            font-size: 11px;
+            font-size: 13px;
             color: var(--muted);
             margin-top: 6px;
             line-height: 1.5;
@@ -116,7 +116,7 @@
         }
 
         .field-error {
-            font-size: 11px;
+            font-size: 13px;
             color: #dc2626;
             margin-top: 4px;
         }
@@ -125,7 +125,7 @@
             background: #f9f5ee;
             border-radius: 10px;
             padding: 14px 16px;
-            font-size: 12px;
+            font-size: 14px;
             color: var(--muted);
             line-height: 1.6;
             margin-bottom: 16px;
@@ -136,7 +136,7 @@
             border: 1px solid #f5d99b;
             border-radius: 10px;
             padding: 14px 16px;
-            font-size: 12px;
+            font-size: 14px;
             color: #7a5b16;
             line-height: 1.6;
             margin-bottom: 16px;
@@ -181,7 +181,7 @@
         }
 
         .saved-note {
-            font-size: 12px;
+            font-size: 14px;
             color: var(--muted);
             margin-top: 14px;
             text-align: center;

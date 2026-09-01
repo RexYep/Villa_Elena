@@ -47,7 +47,7 @@
     }
 
     .notif-mark-read {
-        font-size: 11px;
+        font-size: 13px;
         color: #C9A84C;
         cursor: pointer;
         background: none;
@@ -120,7 +120,7 @@
     }
 
     .notif-item-msg {
-        font-size: 12px;
+        font-size: 14px;
         color: #6B7A8D;
         margin-top: 2px;
         white-space: nowrap;
@@ -129,7 +129,7 @@
     }
 
     .notif-item-time {
-        font-size: 11px;
+        font-size: 13px;
         color: #94a3b8;
         margin-top: 3px;
     }
@@ -150,7 +150,7 @@
     }
 
     .notif-footer a {
-        font-size: 12px;
+        font-size: 14px;
         color: #C9A84C;
         text-decoration: none;
         font-weight: 600;
@@ -236,7 +236,7 @@
         border: none;
         border-radius: 7px;
         padding: 5px 10px;
-        font-size: 12px;
+        font-size: 14px;
         color: #6B7A8D;
         cursor: pointer;
         font-family: 'DM Sans', sans-serif;
@@ -260,7 +260,7 @@
 
     .search-section-label {
         padding: 8px 20px 4px;
-        font-size: 10px;
+        font-size: 12px;
         font-weight: 700;
         color: #94a3b8;
         text-transform: uppercase;
@@ -305,13 +305,13 @@
     }
 
     .result-sub {
-        font-size: 12px;
+        font-size: 14px;
         color: #6B7A8D;
         margin-top: 1px;
     }
 
     .result-badge {
-        font-size: 10px;
+        font-size: 12px;
         font-weight: 700;
         padding: 2px 8px;
         border-radius: 10px;
@@ -339,7 +339,7 @@
         border: 1px solid #E2E8F0;
         border-radius: 7px;
         padding: 5px 12px;
-        font-size: 12px;
+        font-size: 14px;
         color: #6B7A8D;
         cursor: pointer;
         transition: all .2s;

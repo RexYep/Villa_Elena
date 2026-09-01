@@ -13,7 +13,7 @@
 .period-btn:hover{border-color:var(--terracotta);color:var(--terracotta);}
 .period-btn.active{background:var(--terracotta);color:#fff;border-color:var(--terracotta);}
 .custom-range{display:flex;gap:8px;align-items:center;margin-left:8px;}
-.date-input{border:1.5px solid var(--border);border-radius:8px;padding:7px 10px;font-size:12px;font-family:'DM Sans',sans-serif;background:#fff;color:var(--text-main);}
+.date-input{border:1.5px solid var(--border);border-radius:8px;padding:7px 10px;font-size: 14px;font-family:'DM Sans',sans-serif;background:#fff;color:var(--text-main);}
 
 /* KPI Grid — top accent bars are semantic per-metric colors, unchanged except gold updated to new hex */
 .kpi-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:24px;}
@@ -25,15 +25,15 @@
 .kpi-purple::before{background:linear-gradient(90deg,#7c3aed,#c084fc);}
 .kpi-icon{width:40px;height:40px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:18px;margin-bottom:12px;}
 .kpi-val{font-family:'Cormorant Garamond',serif;font-size:28px;font-weight:700;line-height:1;color:var(--text-main);}
-.kpi-label{font-size:12px;color:var(--muted);margin-top:4px;}
-.kpi-sub{font-size:11px;margin-top:6px;}
+.kpi-label{font-size: 14px;color:var(--muted);margin-top:4px;}
+.kpi-sub{font-size: 13px;margin-top:6px;}
 
 /* Charts */
 .charts-row{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:20px;}
 .chart-card{background:var(--cream);border-radius:14px;border:1px solid var(--border);overflow:hidden;}
 .chart-header{padding:16px 22px;border-bottom:1px solid var(--border);}
 .chart-header h3{font-family:'Cormorant Garamond',serif;font-size:17px;font-weight:600;color:var(--text-main);}
-.chart-header p{font-size:12px;color:var(--muted);margin-top:2px;}
+.chart-header p{font-size: 14px;color:var(--muted);margin-top:2px;}
 .chart-body{padding:20px;position:relative;}
 .chart-full{grid-column:1/-1;}
 
@@ -50,7 +50,7 @@ td{padding:13px 20px;}
 .progress-bar-fill{height:100%;border-radius:100px;background:linear-gradient(90deg,var(--terracotta),var(--gold));}
 
 /* Period label */
-.period-label{font-size:12px;color:var(--muted);margin-bottom:20px;}
+.period-label{font-size: 14px;color:var(--muted);margin-bottom:20px;}
 .period-label strong{color:var(--text-main);}
 
 @media (max-width: 900px) {
@@ -144,7 +144,7 @@ td{padding:13px 20px;}
     <div class="table-card chart-full" style="margin-bottom:20px;">
         <div class="chart-header" style="padding:16px 22px;border-bottom:1px solid var(--border);">
             <h3>Revenue — Last 12 Months</h3>
-            <p class="text-muted-theme" style="font-size:12px;margin-top:2px;">Monthly collected payments (excl. refunds)</p>
+            <p class="text-muted-theme" style="font-size: 14px;margin-top:2px;">Monthly collected payments (excl. refunds)</p>
         </div>
         <div style="padding:20px 24px;">
             <canvas id="revenueChart" height="80"></canvas>
@@ -201,7 +201,7 @@ td{padding:13px 20px;}
     <div class="table-card">
         <div class="table-header">
             <h3>Top Properties by Revenue</h3>
-            <span class="text-muted-theme" style="font-size:12px;">Selected period</span>
+            <span class="text-muted-theme" style="font-size: 14px;">Selected period</span>
         </div>
         @if($topProperties->isEmpty())
             <div class="text-muted-theme" style="text-align:center;padding:40px;font-size:13px;">
@@ -229,7 +229,7 @@ td{padding:13px 20px;}
                     <td style="font-weight:600;color:#15803d;">₱{{ number_format($row->revenue, 2) }}</td>
                     <td class="text-muted-theme">₱{{ number_format($row->bookings > 0 ? $row->revenue / $row->bookings : 0, 2) }}</td>
                     <td style="width:140px;">
-                        <div class="text-muted-theme" style="font-size:11px;margin-bottom:3px;">
+                        <div class="text-muted-theme" style="font-size: 13px;margin-bottom:3px;">
                             {{ round(($row->revenue / ($netRevenue ?: 1)) * 100, 1) }}%
                         </div>
                         <div class="progress-bar-wrap">

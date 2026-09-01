@@ -26,7 +26,7 @@
 
         .hero-sub {
             color: rgba(255, 255, 255, .4);
-            font-size: 12px;
+            font-size: 14px;
             margin-top: 3px;
             text-transform: uppercase;
             letter-spacing: 1px;
@@ -38,7 +38,7 @@
 
         .hero-date-label {
             color: rgba(255, 255, 255, .4);
-            font-size: 11px;
+            font-size: 13px;
             text-transform: uppercase;
             letter-spacing: 1px;
             margin-bottom: 3px;
@@ -69,12 +69,12 @@
 
         .hero-nights-label {
             color: rgba(255, 255, 255, .4);
-            font-size: 12px;
+            font-size: 14px;
         }
 
         .badge {
             padding: 4px 12px;
-            font-size: 11px;
+            font-size: 13px;
         }
 
         .p-unpaid {
@@ -176,13 +176,13 @@
         .pay-table {
             width: 100%;
             border-collapse: collapse;
-            font-size: 12px;
+            font-size: 14px;
         }
 
         .pay-table th {
             color: var(--muted);
             font-weight: 600;
-            font-size: 10px;
+            font-size: 12px;
             text-transform: uppercase;
             letter-spacing: .7px;
             padding: 7px 0;
@@ -214,7 +214,7 @@
         }
 
         .cancel-desc {
-            font-size: 12px;
+            font-size: 14px;
             color: var(--muted);
             margin-bottom: 12px;
             line-height: 1.5;
@@ -422,7 +422,7 @@
                                         <td class="text-muted-theme">{{ $payment->payment_date?->format('M d, Y') }}</td>
                                         <td>{{ $payment->method_label }}</td>
                                         <td><span
-                                                style="background:#f1f5f9;padding:2px 8px;border-radius:10px;font-size:10px;">{{ $payment->type_label }}</span>
+                                                style="background:#f1f5f9;padding:2px 8px;border-radius:10px;font-size: 12px;">{{ $payment->type_label }}</span>
                                         </td>
                                         <td
                                             style="text-align:right;font-weight:600;color:{{ $payment->payment_type === 'refund' ? '#dc2626' : '#15803d' }};">
@@ -448,7 +448,7 @@
                     <div style="font-weight:600;font-size:15px;font-family:'Playfair Display',serif;">
                         {{ $booking->property->property_name ?? 'N/A' }}</div>
                     @if ($booking->property)
-                        <div class="text-muted-theme" style="font-size:12px;margin-top:4px;">
+                        <div class="text-muted-theme" style="font-size: 14px;margin-top:4px;">
                             {{ ucfirst($booking->property->type) }} ·
                             Max {{ $booking->property->max_capacity }} guests
                         </div>
@@ -507,7 +507,7 @@
                                 <i class="bi bi-calendar-event me-1"></i> Reschedule Booking
                             </a>
                             <div
-                                style="font-size:11px;color:var(--muted);text-align:center;margin-top:8px;line-height:1.5;">
+                                style="font-size: 13px;color:var(--muted);text-align:center;margin-top:8px;line-height:1.5;">
                                 {{ $booking->reschedulesRemaining() }} of {{ \App\Models\Booking::MAX_RESCHEDULES }}
                                 reschedules left ·
                                 available until {{ \App\Models\Booking::RESCHEDULE_CUTOFF_DAYS }} days before check-in
@@ -515,7 +515,7 @@
                         @else
                             <div
                                 style="background:#f8fafc;border-radius:10px;padding:13px;text-align:center;
-                                    font-size:12px;color:var(--muted);line-height:1.6;">
+                                    font-size: 14px;color:var(--muted);line-height:1.6;">
                                 <i class="bi bi-calendar-x me-1"></i>
                                 {{ $booking->rescheduleBlockReason() }}
                             </div>

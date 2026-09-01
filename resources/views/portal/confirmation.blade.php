@@ -96,7 +96,7 @@
         }
 
         .ref-label {
-            font-size: 11px;
+            font-size: 13px;
             text-transform: uppercase;
             letter-spacing: 1.5px;
             color: var(--muted);
@@ -208,7 +208,7 @@
         }
 
         .next-steps-title {
-            font-size: 12px;
+            font-size: 14px;
             text-transform: uppercase;
             letter-spacing: 1.5px;
             color: var(--muted);
@@ -233,7 +233,7 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 11px;
+            font-size: 13px;
             font-weight: 700;
             flex-shrink: 0;
         }
@@ -302,7 +302,7 @@
             <div class="detail-row">
                 <span class="lbl">Status</span>
                 <span class="val"><span class="tag-amber"
-                        style="padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700;">Pending
+                        style="padding:3px 10px;border-radius:20px;font-size: 13px;font-weight:700;">Pending
                         Confirmation</span></span>
             </div>
 

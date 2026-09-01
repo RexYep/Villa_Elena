@@ -49,7 +49,7 @@
         }
 
         .form-label {
-            font-size: 12px;
+            font-size: 14px;
             font-weight: 600;
             color: #374151;
             margin-bottom: 6px;
@@ -97,7 +97,7 @@
         }
 
         .invalid-feedback {
-            font-size: 11px;
+            font-size: 13px;
             color: #dc2626;
             margin-top: 3px;
         }
@@ -221,14 +221,14 @@
         .optional-tag {
             color: var(--muted);
             font-weight: 400;
-            font-size: 11px;
+            font-size: 13px;
         }
 
         .new-guest-password-note {
             background: #fef9c3;
             border-radius: 8px;
             padding: 10px 14px;
-            font-size: 12px;
+            font-size: 14px;
             color: #a16207;
             margin-top: 10px;
         }
@@ -373,7 +373,7 @@
                             data-max="{{ $villa->max_capacity }}" id="propertySelect">
                             <span><i class="bi bi-house-heart-fill me-2"
                                     style="color:var(--gold);"></i>{{ $villa->property_name }}</span>
-                            <span class="text-muted-theme" style="font-size:12px;">Max {{ $villa->max_capacity }}
+                            <span class="text-muted-theme" style="font-size: 14px;">Max {{ $villa->max_capacity }}
                                 guests</span>
                         </div>
                     @else
@@ -414,7 +414,7 @@
                     @enderror
                     @if (($prefill['date'] ?? null) && !old('check_in_date'))
                         <div
-                            style="background:var(--tag-green-bg);color:var(--tag-green-fg);border-radius:8px;padding:9px 13px;font-size:12px;margin-top:10px;">
+                            style="background:var(--tag-green-bg);color:var(--tag-green-fg);border-radius:8px;padding:9px 13px;font-size: 14px;margin-top:10px;">
                             <i class="bi bi-check-circle me-1"></i>
                             Pre-filled from the Availability page — this slot was free when you picked it.
                         </div>
@@ -435,7 +435,7 @@
 
                 {{-- Price Preview --}}
                 <div class="price-preview" id="pricePreview" style="display:none;">
-                    <div class="text-muted-theme section-label" style="font-size:12px;margin-bottom:10px;">Price Breakdown
+                    <div class="text-muted-theme section-label" style="font-size: 14px;margin-bottom:10px;">Price Breakdown
                     </div>
                     <div id="nightBreakdown"></div>
                     <div class="price-row total">
@@ -623,18 +623,18 @@
 
             const promoRow = data.discount > 0 ? `
     <div class="price-row" style="color:#15803d;font-weight:600;">
-        <span><i class="bi bi-tag-fill" style="font-size:11px;"></i> ${data.promo_label} (${data.promo_value})</span>
+        <span><i class="bi bi-tag-fill" style="font-size: 13px;"></i> ${data.promo_label} (${data.promo_value})</span>
         <span>−${peso(data.discount)}</span>
     </div>` : '';
 
             preview.innerHTML =
-                `<div class="text-muted-theme section-label" style="font-size:12px;margin-bottom:10px;">Price Breakdown</div>
+                `<div class="text-muted-theme section-label" style="font-size: 14px;margin-bottom:10px;">Price Breakdown</div>
     <div id="nightBreakdown">
     <div class="price-row">
         <span class="text-muted-theme">${data.day_label} check-in${data.is_peak ? ' <span style="color:#b8943f;">★</span>' : ''}</span>
         <span>${peso(data.base)}</span>
     </div>
-    <div class="price-row text-muted-theme" style="font-size:11px;">
+    <div class="price-row text-muted-theme" style="font-size: 13px;">
         <span>Flat package rate (${data.hours.toFixed(1)} oras)</span>
     </div>
     ${promoRow}

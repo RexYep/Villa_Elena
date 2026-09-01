@@ -49,7 +49,7 @@
         }
 
         .stat-chip .lbl {
-            font-size: 11px;
+            font-size: 13px;
             color: var(--muted);
             margin-top: 3px;
         }
@@ -304,13 +304,13 @@
                                     style="font-weight:600;color:var(--stone);text-decoration:none;font-size:13px;">
                                     {{ $booking->booking_ref }}
                                 </a>
-                                <div style="font-size:10px;color:#94a3b8;margin-top:1px;">
+                                <div style="font-size: 12px;color:#94a3b8;margin-top:1px;">
                                     {{ $booking->source }}
                                 </div>
                             </td>
                             <td>
                                 <div class="fw-medium">{{ $booking->user->full_name ?? 'N/A' }}</div>
-                                <div style="font-size:11px;color:#94a3b8;">{{ $booking->user->phone ?? '' }}</div>
+                                <div style="font-size: 13px;color:#94a3b8;">{{ $booking->user->phone ?? '' }}</div>
                             </td>
                             <td style="white-space:nowrap;">{{ $booking->check_in_date->format('M d, Y') }}@if ($booking->check_in_time)
                                     <br><small

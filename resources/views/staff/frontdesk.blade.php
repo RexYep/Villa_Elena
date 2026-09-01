@@ -37,7 +37,7 @@
         }
 
         .live-date {
-            font-size: 11px;
+            font-size: 13px;
             color: var(--muted);
             text-align: right;
         }
@@ -139,14 +139,14 @@
         }
 
         .next-slot-lbl {
-            font-size: 10px;
+            font-size: 12px;
             text-transform: uppercase;
             letter-spacing: .5px;
             color: var(--muted);
         }
 
         .next-slot-val {
-            font-size: 12px;
+            font-size: 14px;
             font-weight: 700;
             margin-top: 2px;
         }
@@ -276,7 +276,7 @@
         }
 
         .clean-sub {
-            font-size: 12px;
+            font-size: 14px;
             color: var(--muted);
             margin-top: 2px;
         }
@@ -303,7 +303,7 @@
         }
 
         .task-ready {
-            font-size: 11px;
+            font-size: 13px;
             margin-top: 3px;
             font-weight: 600;
         }
@@ -358,7 +358,7 @@
         }
 
         .stat-lbl {
-            font-size: 11px;
+            font-size: 13px;
             color: var(--muted);
             margin-top: 3px;
         }
@@ -404,7 +404,7 @@
             background: rgba(255, 255, 255, .2);
             padding: 0 6px;
             border-radius: 10px;
-            font-size: 11px;
+            font-size: 13px;
         }
 
         .tab-btn:not(.active) .cnt {
@@ -489,12 +489,12 @@
         }
 
         .booking-ref {
-            font-size: 12px;
+            font-size: 14px;
             color: var(--muted);
         }
 
         .booking-prop {
-            font-size: 12px;
+            font-size: 14px;
             color: var(--muted);
             margin-top: 2px;
         }
@@ -502,7 +502,7 @@
         .booking-meta {
             display: flex;
             gap: 10px;
-            font-size: 11px;
+            font-size: 13px;
             color: var(--muted);
             margin-top: 3px;
         }
@@ -518,7 +518,7 @@
             border: none;
             border-radius: 8px;
             padding: 8px 16px;
-            font-size: 12px;
+            font-size: 14px;
             font-weight: 600;
             cursor: pointer;
             font-family: 'DM Sans', sans-serif;
@@ -538,7 +538,7 @@
             border: none;
             border-radius: 8px;
             padding: 8px 16px;
-            font-size: 12px;
+            font-size: 14px;
             font-weight: 600;
             cursor: pointer;
             font-family: 'DM Sans', sans-serif;
@@ -554,7 +554,7 @@
 
         .btn-sm {
             padding: 6px 12px;
-            font-size: 11px;
+            font-size: 13px;
             border-radius: 7px;
             border: none;
             cursor: pointer;
@@ -587,7 +587,7 @@
         .badge {
             padding: 3px 10px;
             border-radius: 20px;
-            font-size: 10px;
+            font-size: 12px;
             font-weight: 700;
             text-transform: uppercase;
             letter-spacing: .3px;
@@ -650,7 +650,7 @@
         }
 
         .prop-card-type {
-            font-size: 11px;
+            font-size: 13px;
             color: var(--muted);
             margin-bottom: 8px;
         }
@@ -676,7 +676,7 @@
         }
 
         .prop-guest {
-            font-size: 11px;
+            font-size: 13px;
             color: #374151;
             margin-top: 6px;
         }
@@ -715,13 +715,13 @@
         }
 
         .task-details {
-            font-size: 12px;
+            font-size: 14px;
             color: var(--muted);
             margin-top: 1px;
         }
 
         .task-date {
-            font-size: 11px;
+            font-size: 13px;
             margin-top: 3px;
         }
 
@@ -959,7 +959,7 @@
         <div class="card">
             <div class="card-head">
                 <h3><i class="bi bi-box-arrow-in-right me-2" style="color:#16a34a;"></i>Expected Check-ins Today</h3>
-                <span class="text-muted-theme" style="font-size:12px;">{{ today()->format('M d, Y') }}</span>
+                <span class="text-muted-theme" style="font-size: 14px;">{{ today()->format('M d, Y') }}</span>
             </div>
             <div class="card-body">
                 @forelse($checkIns as $booking)
@@ -994,7 +994,7 @@
                                 </button>
                             </form>
                             <button type="button" class="btn-sm"
-                                style="background:#f0fdf4;color:#16a34a;border:1px solid #bbf7d0;border-radius:7px;padding:6px 11px;font-size:11px;font-weight:600;cursor:pointer;"
+                                style="background:#f0fdf4;color:#16a34a;border:1px solid #bbf7d0;border-radius:7px;padding:6px 11px;font-size: 13px;font-weight:600;cursor:pointer;"
                                 onclick="openPaymentModal({{ $booking->id }}, '{{ $booking->booking_ref }}', {{ $booking->balance_due ?? 0 }})">
                                 <i class="bi bi-cash"></i> Payment
                             </button>
@@ -1050,7 +1050,7 @@
                                 </button>
                             </form>
                             <button type="button" class="btn-sm"
-                                style="background:#f0fdf4;color:#16a34a;border:1px solid #bbf7d0;border-radius:7px;padding:6px 11px;font-size:11px;font-weight:600;cursor:pointer;"
+                                style="background:#f0fdf4;color:#16a34a;border:1px solid #bbf7d0;border-radius:7px;padding:6px 11px;font-size: 13px;font-weight:600;cursor:pointer;"
                                 onclick="openPaymentModal({{ $booking->id }}, '{{ $booking->booking_ref }}', {{ $booking->balance_due ?? 0 }})">
                                 <i class="bi bi-cash"></i> Payment
                             </button>
@@ -1071,7 +1071,7 @@
         <div class="card">
             <div class="card-head">
                 <h3><i class="bi bi-people me-2" style="color:#7c3aed;"></i>Currently Checked In</h3>
-                <span class="text-muted-theme" style="font-size:12px;">{{ $currentGuests->count() }}
+                <span class="text-muted-theme" style="font-size: 14px;">{{ $currentGuests->count() }}
                     guest{{ $currentGuests->count() != 1 ? 's' : '' }}</span>
             </div>
             <div class="card-body">
@@ -1105,7 +1105,7 @@
                             style="display:flex;flex-direction:column;gap:8px;align-items:flex-end;">
                             <span class="badge b-checked_in">Checked In</span>
                             <button type="button" class="btn-sm"
-                                style="background:#f0fdf4;color:#16a34a;border:1px solid #bbf7d0;border-radius:7px;padding:6px 11px;font-size:11px;font-weight:600;cursor:pointer;"
+                                style="background:#f0fdf4;color:#16a34a;border:1px solid #bbf7d0;border-radius:7px;padding:6px 11px;font-size: 13px;font-weight:600;cursor:pointer;"
                                 onclick="openPaymentModal({{ $booking->id }}, '{{ $booking->booking_ref }}', {{ $booking->balance_due ?? 0 }})">
                                 <i class="bi bi-cash"></i> Payment
                             </button>
@@ -1114,7 +1114,7 @@
                                     id="checkoutFormGuests_{{ $booking->id }}"
                                     class="checkout-form-{{ $booking->id }}">
                                     @csrf @method('PATCH')
-                                    <button type="submit" class="btn-checkout" style="font-size:11px;padding:5px 12px;"
+                                    <button type="submit" class="btn-checkout" style="font-size: 13px;padding:5px 12px;"
                                         onclick="return confirm('Check out {{ $booking->user->full_name }}?')">
                                         Check Out Now
                                     </button>
@@ -1137,7 +1137,7 @@
         <div class="card">
             <div class="card-head">
                 <h3><i class="bi bi-clock me-2" style="color:#a16207;"></i>Pending Bookings</h3>
-                <span class="text-muted-theme" style="font-size:12px;">Awaiting payment from guest</span>
+                <span class="text-muted-theme" style="font-size: 14px;">Awaiting payment from guest</span>
             </div>
             <div class="card-body">
                 @forelse($pendingBookings as $booking)
@@ -1270,7 +1270,7 @@
             <div class="modal-head">
                 <div>
                     <div class="modal-title">Record Payment</div>
-                    <div style="color:rgba(255,255,255,.4);font-size:12px;margin-top:2px;" id="modalBookingRef"></div>
+                    <div style="color:rgba(255,255,255,.4);font-size: 14px;margin-top:2px;" id="modalBookingRef"></div>
                 </div>
                 <button onclick="closePaymentModal()" class="modal-close">✕</button>
             </div>
@@ -1288,7 +1288,7 @@
                     <!-- Amount -->
                     <div style="margin-bottom:14px;">
                         <label
-                            style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:6px;">Amount</label>
+                            style="font-size: 14px;font-weight:600;color:#374151;display:block;margin-bottom:6px;">Amount</label>
                         <input type="number" name="amount" id="modalAmount" required min="1" step="0.01"
                             style="border:1.5px solid #e4ddd0;border-radius:8px;padding:10px 14px;font-size:14px;font-family:'DM Sans',sans-serif;width:100%;transition:border-color .2s;"
                             placeholder="Enter amount" onfocus="this.style.borderColor='#2c2416'"
@@ -1298,7 +1298,7 @@
                     <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px;">
                         <div>
                             <label
-                                style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:6px;">Method</label>
+                                style="font-size: 14px;font-weight:600;color:#374151;display:block;margin-bottom:6px;">Method</label>
                             <select name="payment_method" required
                                 style="border:1.5px solid #e4ddd0;border-radius:8px;padding:10px 14px;font-size:13px;font-family:'DM Sans',sans-serif;width:100%;background:#fff;">
                                 <option value="cash">Cash</option>
@@ -1307,7 +1307,7 @@
                         </div>
                         <div>
                             <label
-                                style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:6px;">Type</label>
+                                style="font-size: 14px;font-weight:600;color:#374151;display:block;margin-bottom:6px;">Type</label>
                             <select name="payment_type" required
                                 style="border:1.5px solid #e4ddd0;border-radius:8px;padding:10px 14px;font-size:13px;font-family:'DM Sans',sans-serif;width:100%;background:#fff;">
                                 <option value="balance">Balance Payment</option>
@@ -1318,7 +1318,7 @@
                     </div>
                     <!-- Notes -->
                     <div style="margin-bottom:18px;">
-                        <label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:6px;">Notes
+                        <label style="font-size: 14px;font-weight:600;color:#374151;display:block;margin-bottom:6px;">Notes
                             <span style="color:#6B7A8D;font-weight:400;">(optional)</span></label>
                         <input type="text" name="notes"
                             style="border:1.5px solid #e4ddd0;border-radius:8px;padding:10px 14px;font-size:13px;font-family:'DM Sans',sans-serif;width:100%;"
@@ -1344,7 +1344,7 @@
             <div class="modal-head">
                 <div>
                     <div class="modal-title">Outstanding Balance</div>
-                    <div style="color:rgba(255,255,255,.5);font-size:12px;margin-top:2px;">Guest: <span
+                    <div style="color:rgba(255,255,255,.5);font-size: 14px;margin-top:2px;">Guest: <span
                             id="ccGuestName"></span></div>
                 </div>
                 <button type="button" onclick="closeCheckinConfirmModal()" class="modal-close">✕</button>
@@ -1390,7 +1390,7 @@
                         </div>
                     </div>
                     <label
-                        style="display:flex;align-items:flex-start;gap:8px;font-size:12px;color:#374151;cursor:pointer;margin-bottom:10px;">
+                        style="display:flex;align-items:flex-start;gap:8px;font-size: 14px;color:#374151;cursor:pointer;margin-bottom:10px;">
                         <input type="checkbox" id="ccDeferCheckbox" style="margin-top:2px;">
                         <span>I confirm that I will allow this guest to check in now and that the outstanding balance will
                             be settled before check-out. This is recorded in the staff log.</span>

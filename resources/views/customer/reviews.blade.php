@@ -35,7 +35,7 @@
         }
 
         .review-meta {
-            font-size: 12px;
+            font-size: 14px;
             color: var(--muted);
             margin-top: 2px;
         }
@@ -69,7 +69,7 @@
             border: none;
             border-radius: 8px;
             padding: 8px 16px;
-            font-size: 12px;
+            font-size: 14px;
             font-weight: 600;
             cursor: pointer;
             font-family: 'Jost', sans-serif;
@@ -102,7 +102,7 @@
             border-radius: 10px;
             padding: 12px 14px;
             margin-top: 12px;
-            font-size: 12px;
+            font-size: 14px;
         }
 
         .admin-reply strong {
@@ -144,7 +144,7 @@
                     };
                 @endphp
                 <span
-                    style="background:{{ $badge[0] }};color:{{ $badge[1] }};padding:4px 12px;border-radius:10px;font-size:11px;font-weight:600;white-space:nowrap;">{{ $badge[2] }}</span>
+                    style="background:{{ $badge[0] }};color:{{ $badge[1] }};padding:4px 12px;border-radius:10px;font-size: 13px;font-weight:600;white-space:nowrap;">{{ $badge[2] }}</span>
             </div>
 
             <div class="review-stars">

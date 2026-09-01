@@ -112,6 +112,42 @@ class NotificationHelper
         );
     }
 
+    // ── Preset: Booking Auto-Cancelled by the System (unpaid hold) ──
+    public static function bookingAutoCancelled($booking, string $holdLabel): void
+    {
+        $guestName    = $booking->user->full_name ?? 'Guest';
+        $propertyName = $booking->property->property_name ?? 'Property';
+
+        self::notifyAdmin(
+            "Booking Auto-Cancelled — {$booking->booking_ref}",
+            "{$guestName}'s booking for {$propertyName} was automatically cancelled by the system — " .
+            "the 50% downpayment wasn't completed within the {$holdLabel} hold window. No action needed; " .
+            "the slot has been freed.",
+            route('admin.bookings.show', $booking, false)
+        );
+    }
+
+    // ── Preset: Review Submitted (guest-facing receipt) ─────────────
+    // Dati, flash message lang ang natatanggap ng guest pagka-submit —
+    // nawawala pagkatapos ng isang page load, walang matitirang record
+    // kung na-publish agad o hinihintay pa ang approval. Ito ang
+    // lasting na kopya, iisa lang para sa dalawang resulta.
+    public static function reviewSubmitted($review): void
+    {
+        $propertyName = $review->property->property_name ?? 'Property';
+
+        $message = $review->status === 'approved'
+            ? "Your {$review->rating}-star review for {$propertyName} is now live. Thank you for sharing your experience!"
+            : "Your {$review->rating}-star review for {$propertyName} was submitted and is awaiting a quick review before it goes live.";
+
+        self::notifyGuest(
+            $review->user_id,
+            'Review Submitted',
+            $message,
+            route('customer.reviews.index', [], false)
+        );
+    }
+
     // ── Preset: New Guest Registered ──────────────────────────────
     public static function newGuestRegistered($user): void
     {

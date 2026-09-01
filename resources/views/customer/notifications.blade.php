@@ -51,7 +51,7 @@
         }
 
         .notif-time {
-            font-size: 11px;
+            font-size: 13px;
             color: #c4bdb2;
             margin-top: 5px;
         }

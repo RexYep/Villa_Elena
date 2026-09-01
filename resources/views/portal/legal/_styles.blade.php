@@ -34,7 +34,7 @@
     }
 
     .legal-eyebrow {
-        font-size: 11px;
+        font-size: 13px;
         letter-spacing: 3px;
         text-transform: uppercase;
         color: var(--gold);
@@ -96,7 +96,7 @@
     }
 
     .toc-title {
-        font-size: 11px;
+        font-size: 13px;
         letter-spacing: 2px;
         text-transform: uppercase;
         color: var(--muted);

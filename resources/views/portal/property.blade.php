@@ -119,7 +119,7 @@
 
         /* ── Property Info ── */
         .prop-type {
-            font-size: 11px;
+            font-size: 13px;
             letter-spacing: 2px;
             text-transform: uppercase;
             color: var(--gold);
@@ -230,7 +230,7 @@
             color: var(--stone);
             box-shadow: none;
             text-transform: capitalize;
-            font-size: 12px;
+            font-size: 14px;
             padding: 4px 10px;
         }
 
@@ -259,7 +259,7 @@
         }
 
         .fc .fc-col-header-cell-cushion {
-            font-size: 12px;
+            font-size: 14px;
             font-weight: 600;
             text-transform: uppercase;
             letter-spacing: 0.5px;
@@ -274,7 +274,7 @@
             background: #dc2626;
             border: none;
             color: #fff;
-            font-size: 10px;
+            font-size: 12px;
             padding: 1px 4px;
             cursor: default;
             border-radius: 4px;
@@ -301,7 +301,7 @@
         .cal-legend {
             display: flex;
             gap: 16px;
-            font-size: 12px;
+            font-size: 14px;
             color: var(--muted);
             margin-top: 14px;
         }
@@ -345,13 +345,13 @@
         }
 
         .price-weekend {
-            font-size: 12px;
+            font-size: 14px;
             color: var(--gold);
             margin-bottom: 18px;
         }
 
         .form-label {
-            font-size: 11px;
+            font-size: 13px;
             letter-spacing: 1px;
             text-transform: uppercase;
             color: var(--muted);
@@ -390,7 +390,7 @@
         }
 
         .price-deposit {
-            font-size: 12px;
+            font-size: 14px;
             color: var(--terracotta);
             text-align: center;
             margin-top: 8px;
@@ -453,14 +453,14 @@
         }
 
         .invalid-feedback {
-            font-size: 12px;
+            font-size: 14px;
             color: #dc2626;
             margin-top: 4px;
             display: block;
         }
 
         .duration-note {
-            font-size: 12px;
+            font-size: 14px;
             margin-top: 6px;
             display: none;
             padding: 8px 10px;
@@ -510,7 +510,7 @@
 
         .slot-option-label small {
             display: block;
-            font-size: 11px;
+            font-size: 13px;
             color: var(--muted);
             margin-top: 2px;
             line-height: 1.4;
@@ -522,7 +522,7 @@
         }
 
         .price-preview .estimate-tag {
-            font-size: 10px;
+            font-size: 12px;
             letter-spacing: 1px;
             text-transform: uppercase;
             color: var(--muted);
@@ -531,7 +531,7 @@
         }
 
         .price-preview .estimate-disclaimer {
-            font-size: 11px;
+            font-size: 13px;
             color: var(--muted);
             margin-top: 8px;
             line-height: 1.5;
@@ -550,7 +550,7 @@
         }
 
         .popover-body {
-            font-size: 12px;
+            font-size: 14px;
         }
 
         @media(max-width:900px) {
@@ -707,9 +707,9 @@
         {{-- Right: Booking Card --}}
         <div>
             <div class="booking-card">
-                @if ($property->status !== 'maintenance')
+                @if ($property->status !== 'maintenance' && $allowOnlineBooking)
                     <div class="booking-price">₱{{ number_format($property->base_price, 0) }} <span>/ package</span></div>
-                    <div class="text-muted-theme" style="font-size:11px;margin-bottom:2px;">Day (8AM–5PM) or Night (7PM–6AM)
+                    <div class="text-muted-theme" style="font-size: 13px;margin-bottom:2px;">Day (8AM–5PM) or Night (7PM–6AM)
                         whole-villa stay</div>
                     @if ($property->weekend_price && $property->weekend_price != $property->base_price)
                         <div class="price-weekend">₱{{ number_format($property->weekend_price, 0) }} peak package (Fri–Sun
@@ -793,16 +793,22 @@
                     {{-- Booked dates notice --}}
                     @if ($bookedRanges->count())
                         <div class="text-muted-theme"
-                            style="margin-top:16px;padding-top:16px;border-top:1px solid var(--border);font-size:12px;">
+                            style="margin-top:16px;padding-top:16px;border-top:1px solid var(--border);font-size: 14px;">
                             <i class="bi bi-info-circle me-1"></i>
                             Some dates may not be available. We'll confirm availability when you proceed.
                         </div>
                     @endif
-                @else
+                @elseif ($property->status === 'maintenance')
                     <div class="unavail-banner">
                         <i class="bi bi-x-circle me-2"></i>
                         This property is currently unavailable.<br>
                         <a href="{{ route('home') }}" style="color:#dc2626;font-weight:600;">View other properties →</a>
+                    </div>
+                @else
+                    <div class="unavail-banner">
+                        <i class="bi bi-telephone me-2"></i>
+                        Online booking is temporarily unavailable.<br>
+                        Please contact us directly to reserve your stay.
                     </div>
                 @endif
             </div>

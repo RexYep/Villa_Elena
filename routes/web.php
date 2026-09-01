@@ -1,46 +1,51 @@
 <?php
 
-use Illuminate\Support\Facades\Route;
-use App\Http\Controllers\PaymentController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\Customer\HomeController;
-use App\Http\Controllers\Admin\DashboardController;
-use App\Http\Controllers\Staff\FrontDeskController;
-use App\Http\Controllers\Portal\PortalController;
+use App\Http\Controllers\PaymentController;
 use App\Http\Controllers\Portal\ChatbotController;
+use App\Http\Controllers\Portal\PortalController;
+use Illuminate\Support\Facades\Route;
 
 // ── Public Homepage ────────────────────────────────────────────────────────
-//Route::get('/', [HomeController::class, 'index'])->name('home');
+// Route::get('/', [HomeController::class, 'index'])->name('home');
 
-Route::get('/',                          [PortalController::class, 'home'])->name('home');
-Route::get('properties/{property}',      [PortalController::class, 'propertyDetail'])->name('portal.property');
-Route::get('properties/{property}/price-preview', [PortalController::class, 'pricePreview'])->name('portal.price-preview');
-Route::get('reviews',                    [PortalController::class, 'reviews'])->name('portal.reviews');
+// Anonymous, guest-facing browsing/booking pages — gated behind the
+// "Maintenance Mode" toggle in Admin Settings (see CheckMaintenanceMode).
+// Logged-in admins bypass it; other route groups below (auth, payments,
+// webhooks, cron, staff/customer portals) are deliberately left outside
+// this group so they keep working during maintenance.
+Route::middleware('maintenance.check')->group(function () {
+    Route::get('/', [PortalController::class, 'home'])->name('home');
+    Route::get('properties/{property}', [PortalController::class, 'propertyDetail'])->name('portal.property');
+    Route::get('properties/{property}/price-preview', [PortalController::class, 'pricePreview'])->name('portal.price-preview');
+    Route::get('reviews', [PortalController::class, 'reviews'])->name('portal.reviews');
 
-// Legal pages — naka-link sa footer ng landing page. Dalawa lang sila:
-// nasa loob ng Privacy Policy (#cookies) ang cookie section, dahil
-// strictly-necessary cookies lang ang ginagamit natin.
-Route::get('privacy-policy',              [PortalController::class, 'privacy'])->name('portal.privacy');
-Route::get('terms-of-service',            [PortalController::class, 'terms'])->name('portal.terms');
+    // Legal pages — naka-link sa footer ng landing page. Dalawa lang sila:
+    // nasa loob ng Privacy Policy (#cookies) ang cookie section, dahil
+    // strictly-necessary cookies lang ang ginagamit natin.
+    Route::get('privacy-policy', [PortalController::class, 'privacy'])->name('portal.privacy');
+    Route::get('terms-of-service', [PortalController::class, 'terms'])->name('portal.terms');
 
-Route::post('contact', [PortalController::class, 'submitContact'])
-    ->middleware('throttle:5,60')->name('portal.contact.send');
+    Route::post('contact', [PortalController::class, 'submitContact'])
+        ->middleware('throttle:5,60')->name('portal.contact.send');
 
-// Booking form + submit — requires login (handled inside controller)
-Route::get('book/{property}',            [PortalController::class, 'bookingForm'])->name('portal.book');
-Route::post('book/{property}',           [PortalController::class, 'submitBooking'])
-    ->middleware(['auth', 'verified', 'throttle:5,60'])
-    ->name('portal.book.submit');
-Route::get('booking/confirmed/{booking}',[PortalController::class, 'confirmation'])->name('portal.confirmation');
+    // Booking form + submit — requires login (handled inside controller)
+    Route::get('book/{property}', [PortalController::class, 'bookingForm'])->name('portal.book');
+    Route::post('book/{property}', [PortalController::class, 'submitBooking'])
+        ->middleware(['auth', 'verified', 'throttle:5,60'])
+        ->name('portal.book.submit');
+    Route::get('booking/confirmed/{booking}', [PortalController::class, 'confirmation'])->name('portal.confirmation');
+});
 
 // PayMongo payment routes (auth required)
 Route::middleware('auth')->group(function () {
-    Route::get( '/pay/{booking}',          [PaymentController::class, 'showPaymentPage'])->name('payment.page');
+    Route::get('/pay/{booking}', [PaymentController::class, 'showPaymentPage'])->name('payment.page');
     Route::post('/pay/{booking}/checkout', [PaymentController::class, 'createCheckout'])->name('payment.checkout');
-    Route::get( '/pay/{booking}/success',  [PaymentController::class, 'success'])->name('payment.success');
-    Route::get( '/pay/{booking}/cancel',   [PaymentController::class, 'cancel'])->name('payment.cancel');
+    Route::get('/pay/{booking}/success', [PaymentController::class, 'success'])->name('payment.success');
+    Route::get('/pay/{booking}/cancel', [PaymentController::class, 'cancel'])->name('payment.cancel');
 });
- 
+
 // PayMongo webhook — NO auth, NO CSRF
 Route::post('/webhooks/paymongo', [PaymentController::class, 'webhook'])
     ->name('payment.webhook')
@@ -68,22 +73,21 @@ Route::get('/cron/run-schedule/{token}', function (string $token) {
     return response('ok');
 })->name('cron.run-schedule');
 
-
 // ── Authentication Routes ──────────────────────────────────────────────────
 Route::middleware('guest')->group(function () {
-    Route::get('/login',    [AuthController::class, 'showLogin'])->name('login');
-    Route::post('/login',   [AuthController::class, 'login'])->middleware('throttle:5,1');
+    Route::get('/login', [AuthController::class, 'showLogin'])->name('login');
+    Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:5,1');
 
     Route::get('/register', [AuthController::class, 'showRegister'])->name('register');
-    Route::post('/register',[AuthController::class, 'register'])->middleware('throttle:3,1');
+    Route::post('/register', [AuthController::class, 'register'])->middleware('throttle:3,1');
 
-    Route::get('/forgot-password',  [AuthController::class, 'showForgotPassword'])->name('password.request');
+    Route::get('/forgot-password', [AuthController::class, 'showForgotPassword'])->name('password.request');
     Route::post('/forgot-password', [AuthController::class, 'sendResetLink'])->name('password.email')->middleware('throttle:3,1');
 
-    Route::get('/reset-password/{token}',  [AuthController::class, 'showResetPassword'])->name('password.reset');
-    Route::post('/reset-password',         [AuthController::class, 'resetPassword'])->name('password.update')->middleware('throttle:3,1');
+    Route::get('/reset-password/{token}', [AuthController::class, 'showResetPassword'])->name('password.reset');
+    Route::post('/reset-password', [AuthController::class, 'resetPassword'])->name('password.update')->middleware('throttle:3,1');
 
-    Route::get('/two-factor/verify',  [AuthController::class, 'showTwoFactor'])->name('two-factor.verify');
+    Route::get('/two-factor/verify', [AuthController::class, 'showTwoFactor'])->name('two-factor.verify');
     Route::post('/two-factor/verify', [AuthController::class, 'verifyTwoFactor'])->middleware('throttle:5,1');
     Route::post('/two-factor/resend', [AuthController::class, 'resendTwoFactor'])->name('two-factor.resend')->middleware('throttle:3,1');
 });
@@ -111,8 +115,6 @@ Route::get('/email/verify/{id}/{hash}', [AuthController::class, 'verifyEmail'])
     ->middleware(['signed', 'throttle:6,1'])
     ->name('verification.verify');
 
-
-
 Route::post('/chatbot', [ChatbotController::class, 'reply'])
     ->name('chatbot.reply')
-    ->middleware('throttle:10,1');
+    ->middleware(['throttle:10,1', 'maintenance.check']);

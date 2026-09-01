@@ -61,7 +61,7 @@
         }
 
         .notif-time {
-            font-size: 11px;
+            font-size: 13px;
             color: var(--muted);
             margin-top: 5px;
         }

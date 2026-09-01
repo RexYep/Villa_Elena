@@ -18,7 +18,7 @@
         }
 
         .section-eyebrow {
-            font-size: 12px;
+            font-size: 14px;
             letter-spacing: 3px;
             text-transform: uppercase;
             color: var(--gold);
@@ -144,7 +144,7 @@
         }
 
         .author-location {
-            font-size: 12px;
+            font-size: 14px;
             color: var(--muted);
             margin-top: 2px;
         }
@@ -154,7 +154,7 @@
             border-radius: 10px;
             padding: 12px 14px;
             margin-top: 18px;
-            font-size: 12px;
+            font-size: 14px;
             color: var(--stone);
         }
 
@@ -162,7 +162,7 @@
             color: var(--gold);
             display: block;
             margin-bottom: 3px;
-            font-size: 10px;
+            font-size: 12px;
             text-transform: uppercase;
             letter-spacing: .5px;
         }

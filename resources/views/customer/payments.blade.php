@@ -25,7 +25,7 @@
         .pay-table th {
             color: var(--muted);
             font-weight: 600;
-            font-size: 10px;
+            font-size: 12px;
             text-transform: uppercase;
             letter-spacing: .7px;
             padding: 12px 16px;
@@ -57,13 +57,13 @@
             background: #f1f5f9;
             padding: 2px 8px;
             border-radius: 10px;
-            font-size: 10px;
+            font-size: 12px;
         }
 
         .status-pill {
             padding: 3px 10px;
             border-radius: 10px;
-            font-size: 10px;
+            font-size: 12px;
             font-weight: 600;
         }
 
@@ -126,7 +126,7 @@
                                     <a href="{{ route('customer.bookings.show', $payment->booking) }}" class="booking-link">
                                         {{ $payment->booking->booking_ref }}
                                     </a>
-                                    <div class="text-muted-theme" style="font-size:11px;">
+                                    <div class="text-muted-theme" style="font-size: 13px;">
                                         {{ $payment->booking->property->property_name ?? '' }}</div>
                                 @else
                                     —

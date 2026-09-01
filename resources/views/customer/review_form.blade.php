@@ -42,7 +42,7 @@
         }
 
         .summary-dates {
-            font-size: 12px;
+            font-size: 14px;
             color: var(--muted);
             margin-top: 3px;
         }
@@ -71,7 +71,7 @@
         }
 
         .form-label {
-            font-size: 12px;
+            font-size: 14px;
             font-weight: 600;
             color: #374151;
             display: block;
@@ -115,7 +115,7 @@
         }
 
         .rating-label {
-            font-size: 12px;
+            font-size: 14px;
             color: var(--muted);
             margin-top: 4px;
             height: 16px;
@@ -161,7 +161,7 @@
         }
 
         .char-count {
-            font-size: 11px;
+            font-size: 13px;
             color: var(--muted);
             text-align: right;
             margin-top: 4px;
@@ -220,7 +220,7 @@
                     <input type="hidden" name="rating" id="ratingInput"
                         value="{{ old('rating', $review->rating ?? '') }}">
                     @error('rating')
-                        <div style="font-size:11px;color:#dc2626;margin-top:4px;">{{ $message }}</div>
+                        <div style="font-size: 13px;color:#dc2626;margin-top:4px;">{{ $message }}</div>
                     @enderror
                 </div>
 
@@ -232,7 +232,7 @@
                         value="{{ old('title', $review->title ?? '') }}"
                         placeholder="Summarize your experience (e.g. Amazing stay, beautiful property!)" maxlength="100">
                     @error('title')
-                        <div style="font-size:11px;color:#dc2626;margin-top:4px;">{{ $message }}</div>
+                        <div style="font-size: 13px;color:#dc2626;margin-top:4px;">{{ $message }}</div>
                     @enderror
                 </div>
 
@@ -245,14 +245,14 @@
                         oninput="updateCharCount()">{{ old('content', $review->content ?? '') }}</textarea>
                     <div class="char-count"><span id="charCount">0</span>/1000 characters (min. 20)</div>
                     @error('content')
-                        <div style="font-size:11px;color:#dc2626;margin-top:4px;">{{ $message }}</div>
+                        <div style="font-size: 13px;color:#dc2626;margin-top:4px;">{{ $message }}</div>
                     @enderror
                 </div>
 
                 <button type="submit" class="btn-submit" id="submitBtn">
                     <i class="bi bi-star-fill"></i> {{ isset($review) ? 'Save Changes' : 'Submit Review' }}
                 </button>
-                <div class="text-muted-theme" style="font-size:11px;text-align:center;margin-top:8px;">
+                <div class="text-muted-theme" style="font-size: 13px;text-align:center;margin-top:8px;">
                     @if (isset($review) && $review->status === 'approved')
                         Editing this review will send it back for admin re-approval.
                     @else

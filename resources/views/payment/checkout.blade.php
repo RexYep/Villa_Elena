@@ -325,7 +325,8 @@
                         class="val">{{ $booking->check_out_date->format('M d, Y') }}</span></div>
                 <div class="summary-row"><span class="lbl">Duration</span><span class="val">{{ $booking->num_nights }}
                         night{{ $booking->num_nights != 1 ? 's' : '' }}</span></div>
-                <div class="summary-row total"><span>Total</span><span>₱{{ number_format($booking->total_amount, 2) }}</span>
+                <div class="summary-row total">
+                    <span>Total</span><span>₱{{ number_format($booking->total_amount, 2) }}</span>
                 </div>
                 @if ($booking->amount_paid > 0)
                     <div class="summary-row paid"><span>Already
@@ -351,8 +352,7 @@
                         <div
                             style="background:#fffbeb;border:1px solid #fde68a;border-radius:10px;padding:12px 14px;margin-bottom:14px;font-size:12px;color:#92400e;line-height:1.6;">
                             <i class="bi bi-info-circle me-1"></i>
-                            Dahil sa cancellation history ng account na ito, full payment na lang ang available para sa
-                            booking na ito.
+                            Due to this account's cancellation history, only full payment is available for this booking.
                         </div>
                         <div
                             style="background:var(--sand);border-radius:12px;padding:16px;margin-bottom:20px;text-align:center;">
@@ -408,8 +408,8 @@
                 </div>
                 <div class="qr-hint">
                     <i class="bi bi-qr-code-scan"></i>
-                    <span>Magpapakita kami ng <strong>QR code</strong> — i-scan mo lang ito gamit ang GCash, Maya, o
-                        alinmang bank app na tumatanggap ng QR Ph.</span>
+                    <span>We will display a <strong>QR code</strong> — simply scan it using GCash, Maya, or
+                        any bank app that accepts QR Ph.</span>
                 </div>
 
                 <button type="submit" class="btn-pay" id="payBtn">

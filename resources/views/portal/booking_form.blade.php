@@ -34,7 +34,7 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 12px;
+            font-size: 14px;
             font-weight: 700;
             flex-shrink: 0;
         }
@@ -115,7 +115,7 @@
         }
 
         .form-label {
-            font-size: 12px;
+            font-size: 14px;
             font-weight: 600;
             color: #374151;
             margin-bottom: 6px;
@@ -213,7 +213,7 @@
         .price-row.promo .promo-chip {
             background: var(--tag-green-bg);
             color: var(--tag-green-fg);
-            font-size: 10px;
+            font-size: 12px;
             font-weight: 700;
             letter-spacing: .4px;
             padding: 2px 7px;
@@ -228,7 +228,7 @@
             border-radius: 10px;
             padding: 12px;
             margin: 12px 0;
-            font-size: 12px;
+            font-size: 14px;
             color: var(--terracotta);
             text-align: center;
         }
@@ -249,7 +249,7 @@
         .night-row {
             display: flex;
             justify-content: space-between;
-            font-size: 12px;
+            font-size: 14px;
             padding: 4px 0;
             color: var(--muted);
         }
@@ -291,7 +291,7 @@
         }
 
         .terms-note {
-            font-size: 11px;
+            font-size: 13px;
             color: var(--muted);
             text-align: center;
             margin-top: 8px;
@@ -658,7 +658,7 @@
                     <div class="summary-body">
                         <div class="summary-name">{{ $property->property_name }}</div>
                         <div class="summary-dates">
-                            <i class="bi bi-calendar3" style="font-size:11px;"></i>
+                            <i class="bi bi-calendar3" style="font-size: 13px;"></i>
                             {{ $checkin->format('M d') }} → {{ $checkout->format('M d, Y') }}
                         </div>
 
@@ -681,7 +681,7 @@
                         @if ($discountAmount > 0)
                             <div class="price-row promo">
                                 <span>
-                                    <i class="bi bi-tag-fill" style="font-size:11px;"></i>
+                                    <i class="bi bi-tag-fill" style="font-size: 13px;"></i>
                                     {{ $promo->label }}
                                     <span class="promo-chip">{{ $promo->value_label }}</span>
                                 </span>

@@ -85,13 +85,13 @@
     }
 
     .rt-sub {
-        font-size: 11px;
+        font-size: 13px;
         color: rgba(255, 255, 255, .55);
         line-height: 1.4;
     }
 
     .rt-time {
-        font-size: 10px;
+        font-size: 12px;
         color: rgba(255, 255, 255, .35);
         margin-top: 4px;
     }
@@ -129,7 +129,7 @@
         display: inline-flex;
         align-items: center;
         gap: 5px;
-        font-size: 11px;
+        font-size: 13px;
         color: #10b981;
         font-weight: 500;
     }
@@ -165,7 +165,7 @@
         right: -4px;
         background: #ef4444;
         color: #fff;
-        font-size: 9px;
+        font-size: 11px;
         font-weight: 700;
         border-radius: 10px;
         min-width: 16px;
@@ -372,13 +372,6 @@
                 pill.textContent = data.new_status.charAt(0).toUpperCase() + data.new_status.slice(1);
             }
 
-            // "Available Rooms" KPI on the dashboard
-            if (data.new_status === 'available' && data.old_status !== 'available') {
-                updateStat('rt-available-rooms', 1);
-            } else if (data.old_status === 'available' && data.new_status !== 'available') {
-                updateStat('rt-available-rooms', -1);
-            }
-
             bumpBell();
         });
 
@@ -390,6 +383,14 @@
                 } else if (data.new_status === 'pending' && data.old_status !== 'pending') {
                     updateStat('rt-pending-count', 1);
                 }
+
+                // "Current Guest" KPI shows a name, not a count — just flash
+                // it on a check-in/checkout transition; the name itself
+                // catches up on the next load (stats cache TTL is 60s).
+                if (data.new_status === 'checked_in' || data.old_status === 'checked_in') {
+                    flashElement('rt-guest-card');
+                }
+
                 flashElement('rt-bookings-card');
             }
         });

@@ -28,7 +28,7 @@
         }
 
         .kpi-label {
-            font-size: 12px;
+            font-size: 14px;
             color: var(--muted);
             font-weight: 500;
             margin-bottom: 6px;
@@ -42,7 +42,7 @@
         }
 
         .kpi-sub {
-            font-size: 12px;
+            font-size: 14px;
             color: var(--muted);
             margin-top: 4px;
         }
@@ -75,7 +75,7 @@
             margin-left: auto;
             background: var(--gold);
             color: var(--stone);
-            font-size: 11px;
+            font-size: 13px;
             font-weight: 600;
             padding: 3px 10px;
             border-radius: 20px;
@@ -98,7 +98,7 @@
         .ai-card-footer {
             padding: 14px 24px;
             border-top: 1px solid var(--border);
-            font-size: 12px;
+            font-size: 14px;
             color: var(--muted);
             display: flex;
             align-items: center;

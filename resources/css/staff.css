@@ -60,10 +60,10 @@ body {
     text-decoration: none; display: block;
 }
 .brand-name { font-family: 'Playfair Display', serif; color: var(--text-main); font-size: 18px; font-weight: 700; }
-.brand-role { color: var(--muted); font-size: 11px; letter-spacing: 1px; text-transform: uppercase; margin-top: 2px; }
+.brand-role { color: var(--muted); font-size: 13px; letter-spacing: 1px; text-transform: uppercase; margin-top: 2px; }
 .sidebar-nav { flex: 1; padding: 16px 12px; overflow-y: auto; }
 .nav-label {
-    font-size: 10px; color: var(--muted); text-transform: uppercase;
+    font-size: 12px; color: var(--muted); text-transform: uppercase;
     letter-spacing: 1.5px; padding: 10px 12px 6px; font-weight: 600;
 }
 .nav-item {
@@ -79,7 +79,7 @@ body {
 .nav-item i { font-size: 16px; width: 20px; text-align: center; }
 .nav-badge {
     margin-left: auto; background: var(--gold-dim); color: var(--gold);
-    padding: 1px 8px; border-radius: 100px; font-size: 10px; font-weight: 700;
+    padding: 1px 8px; border-radius: 100px; font-size: 12px; font-weight: 700;
 }
 .nav-badge.red { background: var(--tag-red-bg); color: var(--tag-red-fg); }
 .sidebar-footer { margin-top: auto; padding: 16px 20px; border-top: 1px solid var(--border); }
@@ -90,7 +90,7 @@ body {
     font-weight: 700; font-size: 13px;
 }
 .staff-name { color: var(--text-main); font-size: 13px; font-weight: 500; }
-.staff-tag  { color: var(--muted); font-size: 11px; }
+.staff-tag  { color: var(--muted); font-size: 13px; }
 .logout-btn {
     margin-left: auto; color: var(--muted); font-size: 18px;
     text-decoration: none; transition: color .2s; background: none; border: none; cursor: pointer;

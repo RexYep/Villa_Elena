@@ -15,7 +15,7 @@
         .filter-btn {
             padding: 7px 16px;
             border-radius: 20px;
-            font-size: 12px;
+            font-size: 14px;
             font-weight: 500;
             border: 1.5px solid var(--border);
             color: var(--muted);
@@ -97,7 +97,7 @@
         }
 
         .bc-dates {
-            font-size: 12px;
+            font-size: 14px;
             color: var(--muted);
             margin-top: 4px;
             display: flex;
@@ -119,7 +119,7 @@
         }
 
         .bc-balance {
-            font-size: 11px;
+            font-size: 13px;
             color: var(--terracotta);
             margin-top: 2px;
         }
@@ -192,7 +192,7 @@
                         class="bc-ref">{{ $booking->booking_ref }}</a>
                     <div class="bc-property">{{ $booking->property->property_name ?? 'N/A' }}</div>
                     <div class="bc-dates">
-                        <i class="bi bi-calendar3" style="font-size:11px;"></i>
+                        <i class="bi bi-calendar3" style="font-size: 13px;"></i>
                         {{ $booking->check_in_date->format('M d, Y') }} &rarr;
                         {{ $booking->check_out_date->format('M d, Y') }}
                         &nbsp;·&nbsp; {{ $booking->num_nights }} night{{ $booking->num_nights != 1 ? 's' : '' }}

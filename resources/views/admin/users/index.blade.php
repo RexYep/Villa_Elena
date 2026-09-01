@@ -47,7 +47,7 @@
         }
 
         .stat-chip .lbl {
-            font-size: 11px;
+            font-size: 13px;
             color: var(--muted);
             margin-top: 3px;
         }
@@ -300,7 +300,7 @@
                                             style="font-weight:600;color:var(--stone);text-decoration:none;">
                                             {{ $user->full_name }}
                                         </a>
-                                        <div style="font-size:11px;color:#94a3b8;">{{ $user->email }}</div>
+                                        <div style="font-size: 13px;color:#94a3b8;">{{ $user->email }}</div>
                                     </div>
                                 </div>
                             </td>
@@ -309,7 +309,7 @@
                                 <span class="role-badge role-{{ $user->role }}">{{ ucfirst($user->role) }}</span>
                             </td>
                             <td style="text-align:center;font-weight:500;">{{ $user->bookings_count }}</td>
-                            <td class="text-muted-theme" style="font-size:12px;">
+                            <td class="text-muted-theme" style="font-size: 14px;">
                                 {{ $user->last_login ? $user->last_login->diffForHumans() : 'Never' }}
                             </td>
                             <td>

@@ -7,39 +7,39 @@ use App\Models\Property;
 use App\Models\Setting;
 use App\Models\StaffLog;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Cache;
 
 class SettingsController extends Controller
 {
     public function index()
     {
         $settings = Setting::pluck('setting_value', 'setting_key');
+
         return view('admin.settings.index', compact('settings'));
     }
 
     public function update(Request $request)
     {
         $request->validate([
-            'resort_name'          => 'required|string|max:150',
-            'resort_email'         => 'required|email',
-            'resort_phone'         => 'required|string|max:30',
-            'resort_address'       => 'nullable|string',
-            'resort_description'   => 'nullable|string',
-            'currency'             => 'required|string|max:10',
-            'deposit_percentage'   => 'required|numeric|min:0|max:100',
-            'cancellation_hours'   => 'required|integer|min:0',
+            'resort_name' => 'required|string|max:150',
+            'resort_email' => 'required|email',
+            'resort_phone' => 'required|string|max:30',
+            'resort_address' => 'nullable|string',
+            'resort_description' => 'nullable|string',
+            'currency' => 'required|string|max:10',
+            'deposit_percentage' => 'required|numeric|min:0|max:100',
+            'cancellation_hours' => 'required|integer|min:0',
             'booking_hold_minutes' => 'required|integer|min:1',
-            'booking_cooldown_threshold'   => 'required|integer|min:1',
+            'booking_cooldown_threshold' => 'required|integer|min:1',
             'booking_cooldown_window_days' => 'required|integer|min:1',
-            'booking_cooldown_hours'       => 'required|integer|min:1',
-            'check_in_time'        => 'required|string',
-            'check_out_time'       => 'required|string',
-            'max_advance_days'     => 'required|integer|min:1',
-            'min_stay_nights'      => 'required|integer|min:1',
-            'tax_percentage'       => 'nullable|numeric|min:0|max:100',
-            'facebook_url'         => 'nullable|url',
-            'tiktok_url'           => 'nullable|url',
-            'google_maps_url'      => 'nullable|url',
+            'booking_cooldown_hours' => 'required|integer|min:1',
+            'check_in_time' => 'required|string',
+            'check_out_time' => 'required|string',
+            'max_advance_days' => 'required|integer|min:1',
+            'min_stay_nights' => 'required|integer|min:1',
+            'tax_percentage' => 'nullable|numeric|min:0|max:100',
+            'facebook_url' => 'nullable|url',
+            'tiktok_url' => 'nullable|url',
+            'google_maps_url' => 'nullable|url',
         ]);
 
         $keys = [
@@ -56,7 +56,12 @@ class SettingsController extends Controller
         }
 
         // Boolean toggles
-        $toggles = ['maintenance_mode', 'allow_online_booking', 'require_id_upload', 'send_email_notifications'];
+        // "send_email_notifications" ay hindi na kasama dito simula
+        // v6.x — inilipat na ito sa customer (My Account →
+        // Notifications), dahil sa guest mismo dapat manggaling ang
+        // desisyon kung tatanggap sila ng booking confirmation emails,
+        // hindi sa isang resort-wide na admin switch.
+        $toggles = ['maintenance_mode', 'allow_online_booking', 'require_id_upload'];
         foreach ($toggles as $toggle) {
             Setting::set($toggle, $request->has($toggle) ? '1' : '0');
         }
@@ -72,7 +77,7 @@ class SettingsController extends Controller
         // ang aktwal na ipinapakita sa portal (property.blade.php / home.blade.php)
         // sa listahan ng mga opsyon sa Settings.
         $removed = array_diff($oldAmenities, $amenities);
-        if (!empty($removed)) {
+        if (! empty($removed)) {
             Property::whereNotNull('amenities')->get(['id', 'amenities'])->each(function ($property) use ($removed) {
                 $current = $property->amenities ?? [];
                 $filtered = array_values(array_diff($current, $removed));

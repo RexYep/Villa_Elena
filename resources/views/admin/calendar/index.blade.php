@@ -88,7 +88,7 @@
 
         .filter-bar label {
             color: var(--muted);
-            font-size: 11px;
+            font-size: 13px;
             font-weight: 600;
             letter-spacing: .5px;
             text-transform: uppercase;
@@ -245,7 +245,7 @@
 
         .form-label-sm {
             display: block;
-            font-size: 11px;
+            font-size: 13px;
             font-weight: 600;
             letter-spacing: .5px;
             text-transform: uppercase;
@@ -458,7 +458,7 @@
                 <option value="checked_out">Checked Out</option>
             </select>
         </div>
-        <div class="text-muted-theme" style="margin-left:auto; font-size:12px; align-self:center;">
+        <div class="text-muted-theme" style="margin-left:auto; font-size: 14px; align-self:center;">
             <i class="bi bi-info-circle me-1"></i> Drag bookings to reschedule
         </div>
     </div>

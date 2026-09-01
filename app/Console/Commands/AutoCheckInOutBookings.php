@@ -379,6 +379,14 @@ class AutoCheckInOutBookings extends Command
                 route('customer.bookings.show', $booking, false)
             );
 
+            // Dating wala nito — puro notifyGuest() lang, kaya ang admin
+            // ay walang malay na may na-cancel na booking hangga't hindi
+            // niya binuksan mismo ang bookings list. Sinasadyang ibang
+            // preset ito sa bookingCancelled() (na nagsasabing "guest
+            // cancelled their booking") — mali iyon dito, ang system ang
+            // nag-cancel, hindi ang guest.
+            NotificationHelper::bookingAutoCancelled($booking, $holdLabel);
+
             StaffLog::record('auto_cancelled_stale_booking', 'bookings', $booking->id,
                 "System auto-cancelled unpaid pending booking {$booking->booking_ref} ({$holdMinutes}+ minutes since created, no payment received).");
 

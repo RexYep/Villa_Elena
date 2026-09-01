@@ -42,7 +42,7 @@
         }
 
         .chart-panel p {
-            font-size: 12px;
+            font-size: 14px;
             color: var(--muted);
             margin-bottom: 20px;
         }
@@ -66,7 +66,7 @@
             margin-left: auto;
             background: var(--gold);
             color: #fff;
-            font-size: 11px;
+            font-size: 13px;
             font-weight: 600;
             padding: 3px 10px;
             border-radius: 20px;
@@ -228,7 +228,7 @@
         <div class="panel-body">
             <div class="forecast-text">{!! $forecastHtml !!}</div>
         </div>
-        <div class="text-muted-theme" style="padding: 14px 24px; border-top: 1px solid var(--border); font-size: 12px;">
+        <div class="text-muted-theme" style="padding: 14px 24px; border-top: 1px solid var(--border); font-size: 14px;">
             <i class="bi bi-info-circle me-1"></i>
             Forecast is generated based on your historical booking and revenue data. Use as a guide only.
         </div>

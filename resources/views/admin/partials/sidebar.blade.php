@@ -74,7 +74,7 @@
     </div>
 
     <div class="sidebar-footer">
-        <div class="user-card">
+        <a href="{{ route('admin.profile.edit') }}" class="user-card {{ request()->routeIs('admin.profile.*') ? 'active' : '' }}">
             <div class="user-avatar">
                 {{ strtoupper(substr(Auth::user()->full_name ?? 'A', 0, 1)) }}
             </div>
@@ -82,7 +82,7 @@
                 <div class="name">{{ Auth::user()->full_name ?? 'Admin' }}</div>
                 <div class="role-badge">{{ ucfirst(Auth::user()->role ?? 'admin') }}</div>
             </div>
-        </div>
+        </a>
     </div>
 
 </aside>

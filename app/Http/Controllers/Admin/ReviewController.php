@@ -22,9 +22,6 @@ class ReviewController extends Controller
         if ($request->filled('rating')) {
             $query->where('rating', $request->rating);
         }
-        if ($request->filled('property_id')) {
-            $query->where('property_id', $request->property_id);
-        }
 
         $reviews = $query->paginate(12)->withQueryString();
 
@@ -37,9 +34,7 @@ class ReviewController extends Controller
             'avg_rating' => round(Review::where('status', 'approved')->avg('rating'), 1),
         ];
 
-        $properties = \App\Models\Property::orderBy('property_name')->get(['id', 'property_name']);
-
-        return view('admin.reviews.index', compact('reviews', 'stats', 'properties'));
+        return view('admin.reviews.index', compact('reviews', 'stats'));
     }
 
     // ── Approve Review ─────────────────────────────────────────────

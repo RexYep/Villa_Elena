@@ -7,7 +7,7 @@
     <style>
         body {
             font-family: sans-serif;
-            font-size: 12px;
+            font-size: 13px;
             color: #1a1a1a;
         }
 
@@ -40,7 +40,7 @@
             border: 1px solid #ddd;
             padding: 6px 8px;
             text-align: left;
-            font-size: 11px;
+            font-size: 12px;
         }
 
         th {
@@ -143,7 +143,7 @@
         </table>
     @endif
 
-    <p style="margin-top:20px;color:#888;font-size:10px;">Generated {{ now()->format('M d, Y g:i A') }}</p>
+    <p style="margin-top:20px;color:#888;font-size:11px;">Generated {{ now()->format('M d, Y g:i A') }}</p>
 </body>
 
 </html>

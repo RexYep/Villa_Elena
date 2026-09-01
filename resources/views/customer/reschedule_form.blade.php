@@ -41,7 +41,7 @@
         }
 
         .summary-dates {
-            font-size: 12px;
+            font-size: 14px;
             color: var(--muted);
             margin-top: 3px;
         }
@@ -69,7 +69,7 @@
         }
 
         .form-label {
-            font-size: 12px;
+            font-size: 14px;
             font-weight: 600;
             color: #374151;
             display: block;
@@ -96,7 +96,7 @@
         }
 
         .field-error {
-            font-size: 11px;
+            font-size: 13px;
             color: #dc2626;
             margin-top: 4px;
         }
@@ -105,7 +105,7 @@
             background: #f9f5ee;
             border-radius: 10px;
             padding: 14px 16px;
-            font-size: 12px;
+            font-size: 14px;
             color: var(--muted);
             line-height: 1.6;
             margin-bottom: 16px;

@@ -237,7 +237,7 @@
                 <div class="confetti">📷</div>
                 <div class="pending-circle"><i class="bi bi-hourglass-split"></i></div>
                 <h1>Waiting for Payment</h1>
-                <p>Hindi pa namin nakukumpirma ang bayad para sa booking na ito.</p>
+                <p>We have not yet confirmed the payment for this booking.</p>
             @endif
         </div>
         <div class="card-body">
@@ -255,12 +255,12 @@
                 <div class="pending-note">
                     <i class="bi bi-info-circle-fill"></i>
                     <div>
-                        <strong>Kung nakabayad ka na</strong>, huwag kang mag-alala — awtomatiko naming natatanggap ang
-                        kumpirmasyon mula sa bangko o e-wallet mo, kadalasan sa loob ng ilang minuto. Padadalhan ka namin ng
-                        notification at email pagdating nito.
+                        <strong>If you have already paid</strong>, don't worry—we automatically receive
+                        confirmation from your bank or e-wallet, usually within a few minutes. We will send you a
+                        notification and an email once it arrives.
                         <div style="margin-top:8px;">
-                            <strong>Kung hindi pa</strong>, puwede mong ulitin ang bayad mula sa booking mo — hindi ka
-                            masisingil nang doble.
+                            <strong>If not yet</strong>, you can retry the payment from your booking—you won't
+                            be charged twice.
                         </div>
                     </div>
                 </div>

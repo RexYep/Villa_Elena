@@ -36,11 +36,11 @@
 }
 #rt-fd-banner button {
     background: #d97706; color: #fff; border: none; border-radius: 7px;
-    padding: 6px 14px; font-size: 12px; font-weight: 600; cursor: pointer;
+    padding: 6px 14px; font-size: 14px; font-weight: 600; cursor: pointer;
     font-family: 'DM Sans', sans-serif;
 }
 .rt-fd-handled {
-    font-size: 11px; color: #6B7A8D; font-style: italic;
+    font-size: 13px; color: #6B7A8D; font-style: italic;
 }
 </style>
 

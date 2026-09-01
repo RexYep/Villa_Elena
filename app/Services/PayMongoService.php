@@ -275,21 +275,7 @@ class PayMongoService
     /**
      * Nagpapadala ng ISANG transfer sa pamamagitan ng InstaPay.
      *
-     * MAHALAGA: ang matagumpay na sagot dito ay HINDI nangangahulugang
-     * dumating ang pera. Napatunayan sa live noong 2026-08-23 — isang
-     * transfer ang nakatanggap ng `201` at `status: "pending"`, at
-     * tinanggihan ng tumatanggap na institusyon makalipas ang 2
-     * segundo (`AC06 BlockedAccount`). Ang tawag na ito ay nagsasabi
-     * lamang na tinanggap ang UTOS. Ang aktwal na kapalaran ay
-     * nasa `getTransfer()` o sa callback.
-     *
-     * Kaya kailanman ay huwag markahang naipadala ang isang refund
-     * batay sa ibinabalik nito.
-     *
-     * Ang `$purpose` ay HINDI dekorasyon. Ito ang tanging bagay na
-     * nakitang nagpapasya kung tatanggapin ng GCash (G-Xchange) ang
-     * isang transfer — tingnan ang `RefundTransfer::PURPOSE`.
-     *
+  
      * @param  array  $destination  ['number' => …, 'name' => …, 'bic' => …]
      */
     public function sendTransfer(float $amount, array $destination, string $referenceNumber, string $description = '', ?string $callbackUrl = null, string $provider = 'instapay', string $purpose = ''): array
@@ -310,8 +296,7 @@ class PayMongoService
             'source_account' => [
                 'number' => $account['account_number'],
                 'name'   => $account['account_name'],
-                // Ang sariling BIC ng PayMongo bilang nagpapadalang
-                // institusyon — palaging ito, hindi galing sa wallet.
+               
                 'bic'    => 'PAEYPHM2XXX',
             ],
             'destination_account' => [
@@ -326,9 +311,6 @@ class PayMongoService
             'description'      => $description,
         ];
 
-        // Ipinapadala lang kapag may laman. Ang blangkong `purpose` ay
-        // eksaktong hugis ng bawat transfer nating bumagsak sa GCash,
-        // kaya hindi ito ipinipilit bilang "" sa payload.
         if ($purpose !== '') {
             $payload['purpose'] = $purpose;
         }

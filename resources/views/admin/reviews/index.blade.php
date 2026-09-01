@@ -43,7 +43,7 @@
         }
 
         .stat-lbl {
-            font-size: 11px;
+            font-size: 13px;
             color: var(--muted);
             margin-top: 3px;
         }
@@ -58,7 +58,7 @@
         }
 
         .form-label-sm {
-            font-size: 11px;
+            font-size: 13px;
             font-weight: 600;
             color: var(--text-main);
             display: block;
@@ -72,7 +72,7 @@
             border: 1.5px solid var(--border);
             border-radius: 7px;
             padding: 7px 12px;
-            font-size: 12px;
+            font-size: 14px;
             font-family: 'DM Sans', sans-serif;
             background: #fff;
             color: var(--text-main);
@@ -90,7 +90,7 @@
             border: none;
             border-radius: 7px;
             padding: 7px 18px;
-            font-size: 12px;
+            font-size: 14px;
             font-weight: 600;
             cursor: pointer;
         }
@@ -100,7 +100,7 @@
             border: 1.5px solid var(--border);
             border-radius: 7px;
             padding: 7px 14px;
-            font-size: 12px;
+            font-size: 14px;
             background: #fff;
             text-decoration: none;
             display: inline-block;
@@ -173,7 +173,7 @@
         }
 
         .review-meta {
-            font-size: 11px;
+            font-size: 13px;
             color: var(--muted);
             margin-top: 1px;
         }
@@ -219,7 +219,7 @@
         }
 
         .review-property {
-            font-size: 12px;
+            font-size: 14px;
             color: var(--muted);
             display: flex;
             align-items: center;
@@ -240,7 +240,7 @@
             border: none;
             border-radius: 7px;
             padding: 6px 14px;
-            font-size: 11px;
+            font-size: 13px;
             font-weight: 600;
             cursor: pointer;
             font-family: 'DM Sans', sans-serif;
@@ -258,7 +258,7 @@
             border: none;
             border-radius: 7px;
             padding: 6px 14px;
-            font-size: 11px;
+            font-size: 13px;
             font-weight: 600;
             cursor: pointer;
             font-family: 'DM Sans', sans-serif;
@@ -276,7 +276,7 @@
             border: none;
             border-radius: 7px;
             padding: 6px 14px;
-            font-size: 11px;
+            font-size: 13px;
             font-weight: 600;
             cursor: pointer;
             font-family: 'DM Sans', sans-serif;
@@ -310,12 +310,12 @@
             padding: 10px 12px;
             margin-top: 10px;
             border-left: 3px solid var(--gold);
-            font-size: 12px;
+            font-size: 14px;
             color: var(--text-main);
         }
 
         .admin-reply-label {
-            font-size: 10px;
+            font-size: 12px;
             color: var(--gold);
             font-weight: 700;
             text-transform: uppercase;
@@ -352,7 +352,7 @@
             border: none;
             border-radius: 7px;
             padding: 7px 16px;
-            font-size: 12px;
+            font-size: 14px;
             font-weight: 600;
             cursor: pointer;
             font-family: 'DM Sans', sans-serif;
@@ -451,18 +451,6 @@
                             <option value="{{ $i }}" {{ request('rating') == $i ? 'selected' : '' }}>
                                 {{ $i }} ⭐</option>
                         @endfor
-                    </select>
-                </div>
-                <div class="col-auto" style="min-width:180px;">
-                    <label class="form-label-sm">Property</label>
-                    <select name="property_id" class="form-select-sm form-select">
-                        <option value="">All Properties</option>
-                        @foreach ($properties as $property)
-                            <option value="{{ $property->id }}"
-                                {{ request('property_id') == $property->id ? 'selected' : '' }}>
-                                {{ $property->property_name }}
-                            </option>
-                        @endforeach
                     </select>
                 </div>
                 <div class="col-auto">

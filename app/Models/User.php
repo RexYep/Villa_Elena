@@ -43,6 +43,7 @@ use Illuminate\Support\Facades\Storage;
  * @property-read int|null $staff_logs_count
  * @property-read \Illuminate\Database\Eloquent\Collection<int, \App\Models\TrustedDevice> $trustedDevices
  * @property-read int|null $trusted_devices_count
+ *
  * @method static \Database\Factories\UserFactory factory($count = null, $state = [])
  * @method static \Illuminate\Database\Eloquent\Builder<static>|User newModelQuery()
  * @method static \Illuminate\Database\Eloquent\Builder<static>|User newQuery()
@@ -64,11 +65,16 @@ use Illuminate\Support\Facades\Storage;
  * @method static \Illuminate\Database\Eloquent\Builder<static>|User whereStatus($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|User whereTwoFactorEnabled($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|User whereUpdatedAt($value)
+ *
+ * @property bool $email_notifications_enabled
+ *
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|User whereEmailNotificationsEnabled($value)
+ *
  * @mixin \Eloquent
  */
 class User extends Authenticatable implements MustVerifyEmail
 {
-    use HasFactory, Notifiable, MustVerifyEmailTrait;
+    use HasFactory, MustVerifyEmailTrait, Notifiable;
 
     protected $fillable = [
         'full_name',
@@ -83,6 +89,7 @@ class User extends Authenticatable implements MustVerifyEmail
         'status',
         'last_login',
         'two_factor_enabled',
+        'email_notifications_enabled',
     ];
 
     protected $hidden = [
@@ -91,11 +98,12 @@ class User extends Authenticatable implements MustVerifyEmail
     ];
 
     protected $casts = [
-        'email_verified_at'  => 'datetime',
-        'last_login'         => 'datetime',
-        'password'           => 'hashed',
-        'status'             => 'integer',
+        'email_verified_at' => 'datetime',
+        'last_login' => 'datetime',
+        'password' => 'hashed',
+        'status' => 'integer',
         'two_factor_enabled' => 'boolean',
+        'email_notifications_enabled' => 'boolean',
     ];
 
     // ── Relationships ──────────────────────────────────────────────

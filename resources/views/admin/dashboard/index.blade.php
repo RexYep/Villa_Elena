@@ -20,43 +20,10 @@
         @push('styles')
             @vite(['resources/js/admin-charts.js'])
             <style>
-                /* ── TOPBAR EXTRAS (bell / search) ─────────────────────────── */
-                .topbar-btn {
-                    width: 38px;
-                    height: 38px;
-                    border-radius: 9px;
-                    border: 1px solid var(--border);
-                    background: var(--cream);
-                    color: var(--muted);
-                    display: flex;
-                    align-items: center;
-                    justify-content: center;
-                    cursor: pointer;
-                    transition: all .2s;
-                    position: relative;
-                    font-size: 16px;
-                }
-
-                .topbar-btn:hover {
-                    background: var(--sand);
-                    color: var(--stone);
-                }
-
-                .badge-dot {
-                    position: absolute;
-                    top: 7px;
-                    right: 7px;
-                    width: 7px;
-                    height: 7px;
-                    border-radius: 50%;
-                    background: #ef4444;
-                    border: 1.5px solid white;
-                }
-
                 /* ── KPI CARDS ────────────────────────────────────── */
                 .kpi-grid {
                     display: grid;
-                    grid-template-columns: repeat(4, 1fr);
+                    grid-template-columns: repeat(3, 1fr);
                     gap: 20px;
                     margin-bottom: 28px;
                 }
@@ -119,7 +86,7 @@
                 }
 
                 .kpi-label {
-                    font-size: 12px;
+                    font-size: 14px;
                     font-weight: 500;
                     color: var(--muted);
                     text-transform: uppercase;
@@ -136,8 +103,15 @@
                     margin-bottom: 8px;
                 }
 
+                .guest-name-card .kpi-value {
+                    font-size: 20px;
+                    white-space: nowrap;
+                    overflow: hidden;
+                    text-overflow: ellipsis;
+                }
+
                 .kpi-sub {
-                    font-size: 12px;
+                    font-size: 14px;
                     color: var(--muted);
                     display: flex;
                     align-items: center;
@@ -193,7 +167,7 @@
                 }
 
                 .card-panel-header p {
-                    font-size: 12px;
+                    font-size: 14px;
                     color: var(--muted);
                     margin-top: 1px;
                 }
@@ -203,7 +177,7 @@
                 }
 
                 .badge-pill {
-                    font-size: 11px;
+                    font-size: 13px;
                     padding: 4px 10px;
                     border-radius: 20px;
                     font-weight: 500;
@@ -224,7 +198,7 @@
                 }
 
                 .custom-table th {
-                    font-size: 11px;
+                    font-size: 13px;
                     font-weight: 600;
                     text-transform: uppercase;
                     letter-spacing: 0.8px;
@@ -499,12 +473,15 @@
                     <i class="bi bi-person-hearts kpi-icon"></i>
                 </div>
 
-                <div class="kpi-card purple">
-                    <div class="kpi-label">Available Rooms</div>
-                    <div class="kpi-value" id="rt-available-rooms">{{ $stats['available_rooms'] }}</div>
-                    <div class="kpi-sub"><i class="bi bi-house-check"></i> of {{ $stats['total_properties'] }} properties
+                <div class="kpi-card purple guest-name-card" id="rt-guest-card">
+                    <div class="kpi-label">Current Guest</div>
+                    <div class="kpi-value" title="{{ $stats['current_guest']->user->full_name ?? '' }}">
+                        {{ $stats['current_guest']->user->full_name ?? 'Vacant' }}
                     </div>
-                    <i class="bi bi-houses kpi-icon"></i>
+                    <div class="kpi-sub"><i class="bi bi-house-check"></i>
+                        {{ $stats['current_guest'] ? 'Checked in · out ' . $stats['current_guest']->check_out_date->format('M d, g:iA') : 'No guest checked in' }}
+                    </div>
+                    <i class="bi bi-person-check kpi-icon"></i>
                 </div>
 
             </div>
@@ -560,7 +537,7 @@
                             <p>Latest 5 reservations</p>
                         </div>
                         <a href="{{ route('admin.bookings.index') }}"
-                            style="font-size:12px; color:#2e5fa3; text-decoration:none; font-weight:500;">
+                            style="font-size: 14px; color:#2e5fa3; text-decoration:none; font-weight:500;">
                             View all <i class="bi bi-arrow-right"></i>
                         </a>
                     </div>
@@ -592,12 +569,12 @@
                                         <tr>
                                             <td>
                                                 <div class="fw-medium">{{ $booking->user->full_name ?? 'N/A' }}</div>
-                                                <div style="font-size:11px; color:#94a3b8;">{{ $booking->booking_ref }}
+                                                <div style="font-size: 13px; color:#94a3b8;">{{ $booking->booking_ref }}
                                                 </div>
                                             </td>
                                             <td style="font-size:13px;">{{ $booking->property->property_name ?? 'N/A' }}
                                             </td>
-                                            <td style="font-size:12px; color:#64748b;">
+                                            <td style="font-size: 14px; color:#64748b;">
                                                 {{ $booking->check_in_date->format('M d, Y') }}</td>
                                             <td>
                                                 <span class="status-badge status-{{ $booking->status }}">
@@ -620,10 +597,10 @@
                         <div class="card-panel-header">
                             <div>
                                 <h3>Property Status</h3>
-                                <p>Current room availability</p>
+                                <p>Villa & room housekeeping status</p>
                             </div>
                             <a href="{{ route('admin.properties.index') }}"
-                                style="font-size:12px; color:#2e5fa3; text-decoration:none; font-weight:500;">
+                                style="font-size: 14px; color:#2e5fa3; text-decoration:none; font-weight:500;">
                                 Manage <i class="bi bi-arrow-right"></i>
                             </a>
                         </div>
@@ -646,7 +623,7 @@
                                             <div>
                                                 <div style="font-size:13px; font-weight:500;">
                                                     {{ $property->property_name }}</div>
-                                                <div style="font-size:11px; color:#94a3b8;">{{ ucfirst($property->type) }}
+                                                <div style="font-size: 13px; color:#94a3b8;">{{ ucfirst($property->type) }}
                                                     · {{ $property->max_capacity }} guests</div>
                                             </div>
                                         </div>
@@ -709,10 +686,10 @@
                     new Chart(revenueCtx, {
                         type: 'bar',
                         data: {
-                            labels: ['Oct', 'Nov', 'Dec', 'Jan', 'Feb', 'Mar'],
+                            labels: @json(collect($stats['revenue_by_month'])->pluck('label')),
                             datasets: [{
                                 label: 'Revenue (₱)',
-                                data: [0, 0, 0, 0, 0, 0],
+                                data: @json(collect($stats['revenue_by_month'])->pluck('amount')),
                                 backgroundColor: 'rgba(196,103,58,0.20)',
                                 borderColor: '#c4673a',
                                 borderWidth: 2,
@@ -766,7 +743,12 @@
                         data: {
                             labels: ['Online', 'Walk-in', 'Phone', 'Partner'],
                             datasets: [{
-                                data: [60, 25, 10, 5],
+                                data: [
+                                    {{ $stats['booking_sources']['online'] }},
+                                    {{ $stats['booking_sources']['walk_in'] }},
+                                    {{ $stats['booking_sources']['phone'] }},
+                                    {{ $stats['booking_sources']['partner'] }}
+                                ],
                                 backgroundColor: ['#c4673a', '#b8943f', '#d4aa5a', '#8b6b43'],
                                 borderWidth: 0,
                                 hoverOffset: 6,
@@ -781,7 +763,8 @@
                                 },
                                 tooltip: {
                                     callbacks: {
-                                        label: ctx => ' ' + ctx.label + ': ' + ctx.parsed + '%'
+                                        label: ctx => ' ' + ctx.label + ': ' + ctx.parsed + ' booking' + (ctx
+                                            .parsed === 1 ? '' : 's')
                                     }
                                 }
                             }

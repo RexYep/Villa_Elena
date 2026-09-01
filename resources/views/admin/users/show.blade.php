@@ -81,7 +81,7 @@
 
         .profile-email {
             color: rgba(255, 255, 255, 0.65);
-            font-size: 12px;
+            font-size: 14px;
             margin-top: 3px;
         }
 
@@ -128,7 +128,7 @@
         }
 
         .mini-stat .lbl {
-            font-size: 11px;
+            font-size: 13px;
             color: var(--muted);
             margin-top: 2px;
         }
@@ -161,7 +161,7 @@
         }
 
         .info-row .info-label {
-            font-size: 11px;
+            font-size: 13px;
             color: var(--muted);
             margin-bottom: 2px;
         }
@@ -311,7 +311,7 @@
                     @if (!$user->status)
                         <div style="margin-top:8px;">
                             <span class="tag-red"
-                                style="padding:3px 10px;border-radius:20px;font-size:11px;font-weight:600;">Inactive</span>
+                                style="padding:3px 10px;border-radius:20px;font-size: 13px;font-weight:600;">Inactive</span>
                         </div>
                     @endif
                 </div>
@@ -411,7 +411,7 @@
                 <div class="card-header-custom">
                     <h3>Booking History</h3>
                     <a href="{{ route('admin.bookings.index', ['search' => $user->email]) }}"
-                        style="font-size:12px;color:#2e5fa3;text-decoration:none;font-weight:500;">
+                        style="font-size: 14px;color:#2e5fa3;text-decoration:none;font-weight:500;">
                         View all <i class="bi bi-arrow-right"></i>
                     </a>
                 </div>
@@ -445,7 +445,7 @@
                                             </a>
                                         </td>
                                         <td>{{ $booking->property->property_name ?? 'N/A' }}</td>
-                                        <td class="text-muted-theme" style="font-size:12px;">
+                                        <td class="text-muted-theme" style="font-size: 14px;">
                                             {{ $booking->check_in_date->format('M d, Y') }}
                                         </td>
                                         <td class="text-center">{{ $booking->num_nights }}</td>

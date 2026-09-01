@@ -2,23 +2,23 @@
 
 namespace App\Http\Controllers\Portal;
 
+use App\Events\BookingCreated;
+use App\Events\PropertyAvailabilityChanged;
+use App\Helpers\NotificationHelper;
 use App\Http\Controllers\Controller;
-use App\Models\Property;
+use App\Mail\ContactFormSubmitted;
 use App\Models\Booking;
 use App\Models\Discount;
+use App\Models\Notification;
+use App\Models\Property;
 use App\Models\Review;
 use App\Models\Setting;
 use App\Models\StaffLog;
-use App\Models\Notification;
-use Illuminate\Http\Request;
 use Carbon\Carbon;
-use App\Helpers\NotificationHelper;
-use App\Events\BookingCreated;
-use App\Events\PropertyAvailabilityChanged;
-use App\Mail\ContactFormSubmitted;
-use Illuminate\Support\Facades\Mail;
-use Illuminate\Support\Facades\Log;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Mail;
 
 class PortalController extends Controller
 {
@@ -38,7 +38,7 @@ class PortalController extends Controller
         // Ang mga individual "Room" record (type=room) ay internal
         // reference/detail na lang (housekeeping, images, atbp.) at
         // hindi na sila lalabas bilang hiwalay na bookable listing.
-        $query = Property::with(['images' => fn($q) => $q->where('is_primary', 1)])
+        $query = Property::with(['images' => fn ($q) => $q->where('is_primary', 1)])
             ->where('status', '!=', 'maintenance')
             ->where('type', 'villa');
 
@@ -51,7 +51,7 @@ class PortalController extends Controller
         // Rooms" section sa homepage. Parehong pattern ng eager-load na
         // ginagamit sa Villa listing sa itaas (images na is_primary=1 lang).
         $rooms = Property::where('type', 'room')
-            ->with(['images' => fn($q) => $q->where('is_primary', 1)])
+            ->with(['images' => fn ($q) => $q->where('is_primary', 1)])
             ->orderBy('property_name')
             ->get(['id', 'property_name', 'status', 'floor_area_sqm']);
 
@@ -63,17 +63,17 @@ class PortalController extends Controller
             [$checkin, $checkout] = Booking::slotDateTimes($slot, $request->checkin);
 
             $properties = $properties->filter(
-                fn($property) => !Booking::hasConflict($property->id, $checkin, $checkout)
+                fn ($property) => ! Booking::hasConflict($property->id, $checkin, $checkout)
             )->values();
         }
 
-        $resortName    = Setting::get('resort_name', 'Villa Elena Resort');
-        $resortDesc    = Setting::get('resort_description', 'A private luxury resort getaway.');
-        $resortEmail   = Setting::get('resort_email', 'hello@villaelena.ph');
-        $resortPhone   = Setting::get('resort_phone', '+63 917 123 4567');
+        $resortName = Setting::get('resort_name', 'Villa Elena Resort');
+        $resortDesc = Setting::get('resort_description', 'A private luxury resort getaway.');
+        $resortEmail = Setting::get('resort_email', 'hello@villaelena.ph');
+        $resortPhone = Setting::get('resort_phone', '+63 917 123 4567');
         $resortAddress = Setting::get('resort_address', 'Barangay Pansol, Calamba, Laguna');
-        $facebookUrl   = Setting::get('facebook_url');
-        $tiktokUrl     = Setting::get('tiktok_url');
+        $facebookUrl = Setting::get('facebook_url');
+        $tiktokUrl = Setting::get('tiktok_url');
 
         // Latest approved guest reviews for the "Guest Voices" section.
         $reviews = Review::where('status', 'approved')
@@ -89,10 +89,12 @@ class PortalController extends Controller
         // kanila.
         $promos = Discount::publicActive();
 
+        $allowOnlineBooking = Setting::get('allow_online_booking', '1') === '1';
+
         return view('portal.home', compact(
             'properties', 'rooms', 'resortName', 'resortDesc', 'reviews',
             'resortEmail', 'resortPhone', 'resortAddress', 'facebookUrl', 'tiktokUrl',
-            'promos'
+            'promos', 'allowOnlineBooking'
         ));
     }
 
@@ -104,7 +106,7 @@ class PortalController extends Controller
             ->latest()
             ->paginate(9);
 
-        $avgRating    = round(Review::where('status', 'approved')->avg('rating'), 1);
+        $avgRating = round(Review::where('status', 'approved')->avg('rating'), 1);
         $totalReviews = Review::where('status', 'approved')->count();
 
         return view('portal.reviews', compact('reviews', 'avgRating', 'totalReviews'));
@@ -144,17 +146,17 @@ class PortalController extends Controller
     private function legalContext(): array
     {
         return [
-            'resortName'       => Setting::get('resort_name', 'Villa Elena Private Rental Resort'),
-            'resortEmail'      => Setting::get('resort_email', config('mail.from.address')),
-            'resortPhone'      => Setting::get('resort_phone', '+63 917 123 4567'),
-            'resortAddress'    => Setting::get('resort_address', 'Barangay Pansol, Calamba, Laguna'),
-            'villa'            => Property::where('type', 'villa')->first(),
-            'depositPct'       => (float) Setting::get('deposit_percentage', 50),
-            'holdMinutes'      => Booking::pendingHoldMinutes(),
-            'slots'            => Booking::SLOTS,
-            'maxReschedules'   => Booking::MAX_RESCHEDULES,
+            'resortName' => Setting::get('resort_name', 'Villa Elena Private Rental Resort'),
+            'resortEmail' => Setting::get('resort_email', config('mail.from.address')),
+            'resortPhone' => Setting::get('resort_phone', '+63 917 123 4567'),
+            'resortAddress' => Setting::get('resort_address', 'Barangay Pansol, Calamba, Laguna'),
+            'villa' => Property::where('type', 'villa')->first(),
+            'depositPct' => (float) Setting::get('deposit_percentage', 50),
+            'holdMinutes' => Booking::pendingHoldMinutes(),
+            'slots' => Booking::SLOTS,
+            'maxReschedules' => Booking::MAX_RESCHEDULES,
             'rescheduleCutoff' => Booking::RESCHEDULE_CUTOFF_DAYS,
-            'lastUpdated'      => Carbon::parse(self::LEGAL_LAST_UPDATED),
+            'lastUpdated' => Carbon::parse(self::LEGAL_LAST_UPDATED),
         ];
     }
 
@@ -162,8 +164,8 @@ class PortalController extends Controller
     public function submitContact(Request $request)
     {
         $request->validate([
-            'name'    => 'required|string|max:150',
-            'email'   => 'required|email',
+            'name' => 'required|string|max:150',
+            'email' => 'required|email',
             'subject' => 'nullable|string|max:150',
             'message' => 'required|string|min:10|max:2000',
         ]);
@@ -178,7 +180,8 @@ class PortalController extends Controller
                 $request->message
             ));
         } catch (\Throwable $e) {
-            Log::error('Contact form email failed: ' . $e->getMessage());
+            Log::error('Contact form email failed: '.$e->getMessage());
+
             return back()->withInput()->with('contact_error', 'Sorry, something went wrong sending your message. Please try again or reach us directly.');
         }
 
@@ -200,17 +203,17 @@ class PortalController extends Controller
             ->where('check_out_date', '>=', today())
             ->orderBy('check_in_date')
             ->get(['id', 'check_in_date', 'check_in_time', 'check_out_date', 'check_out_time'])
-            ->map(fn($b) => [
-                'id'        => $b->id,
-                'from'      => $b->check_in_date->format('Y-m-d'),
+            ->map(fn ($b) => [
+                'id' => $b->id,
+                'from' => $b->check_in_date->format('Y-m-d'),
                 'from_time' => $b->check_in_time ? \Carbon\Carbon::parse($b->check_in_time)->format('g:i A') : null,
-                'to'        => $b->check_out_date->format('Y-m-d'),
-                'to_time'   => $b->check_out_time ? \Carbon\Carbon::parse($b->check_out_time)->format('g:i A') : null,
+                'to' => $b->check_out_date->format('Y-m-d'),
+                'to_time' => $b->check_out_time ? \Carbon\Carbon::parse($b->check_out_time)->format('g:i A') : null,
             ]);
 
-        $checkin  = $request->get('checkin');
-        $guests   = $request->get('guests', 1);
-        $slot     = in_array($request->get('slot'), array_keys(Booking::SLOTS)) ? $request->get('slot') : 'day';
+        $checkin = $request->get('checkin');
+        $guests = $request->get('guests', 1);
+        $slot = in_array($request->get('slot'), array_keys(Booking::SLOTS)) ? $request->get('slot') : 'day';
 
         // Approved guest reviews for this specific property.
         $reviews = Review::where('property_id', $property->id)
@@ -219,12 +222,14 @@ class PortalController extends Controller
             ->latest()
             ->get();
 
-        $avgRating    = $reviews->isNotEmpty() ? round($reviews->avg('rating'), 1) : null;
+        $avgRating = $reviews->isNotEmpty() ? round($reviews->avg('rating'), 1) : null;
         $totalReviews = $reviews->count();
+
+        $allowOnlineBooking = Setting::get('allow_online_booking', '1') === '1';
 
         return view('portal.property', compact(
             'property', 'rooms', 'bookedRanges', 'checkin', 'guests', 'slot',
-            'reviews', 'avgRating', 'totalReviews'
+            'reviews', 'avgRating', 'totalReviews', 'allowOnlineBooking'
         ));
     }
 
@@ -239,12 +244,12 @@ class PortalController extends Controller
     {
         $validator = validator($request->all(), [
             'checkin' => 'required|date',
-            'slot'    => 'required|in:' . implode(',', array_keys(Booking::SLOTS)),
+            'slot' => 'required|in:'.implode(',', array_keys(Booking::SLOTS)),
         ]);
 
         if ($validator->fails()) {
             return response()->json([
-                'valid'   => false,
+                'valid' => false,
                 'message' => 'Kulang o mali ang petsa/slot na napili.',
             ], 422);
         }
@@ -259,57 +264,62 @@ class PortalController extends Controller
         // ay date-level lang, hindi nito nakikita itong kaso.
         if ($checkin->isPast()) {
             return response()->json([
-                'valid'   => false,
-                'message' => 'The ' . Booking::SLOTS[$request->slot]['label'] . ' check-in slot has already passed for today. Please select a different date or slot.',
+                'valid' => false,
+                'message' => 'The '.Booking::SLOTS[$request->slot]['label'].' check-in slot has already passed for today. Please select a different date or slot.',
             ]);
         }
 
         if (Booking::hasConflict($property->id, $checkin, $checkout)) {
             return response()->json([
-                'valid'     => false,
+                'valid' => false,
                 'available' => false,
-                'hours'     => round($hoursStay, 1),
-                'message'   => 'The villa is not available for the selected dates or schedule.',
+                'hours' => round($hoursStay, 1),
+                'message' => 'The villa is not available for the selected dates or schedule.',
             ]);
         }
 
         // Flat/package price + anumang tumatamang seasonal promo — iisang
         // quoteFor() ang ginagamit dito at sa bookingForm()/submitBooking(),
         // kaya hindi puwedeng magkaiba ang ipinakitang presyo sa sisingilin.
-        $quote      = $property->quoteFor($checkin, $request->slot);
+        $quote = $property->quoteFor($checkin, $request->slot);
         $baseAmount = $quote['base'];
         $isPeak = in_array($checkin->dayOfWeek, [5, 6]) || ($checkin->dayOfWeek === 0 && $checkin->format('H:i') < '18:00');
 
         return response()->json([
-            'valid'              => true,
-            'available'          => true,
-            'hours'              => round($hoursStay, 1),
-            'is_peak'            => $isPeak,
+            'valid' => true,
+            'available' => true,
+            'hours' => round($hoursStay, 1),
+            'is_peak' => $isPeak,
             // `price` ay ang AKTWAL na babayaran (may bawas na). Ang
             // `base_price` ang panghati/tinatawid na presyo sa UI.
-            'price'              => $quote['total'],
-            'price_formatted'    => '₱' . number_format($quote['total'], 2),
-            'base_price'         => $baseAmount,
-            'base_formatted'     => '₱' . number_format($baseAmount, 2),
-            'discount'           => $quote['discount'],
-            'discount_formatted' => '₱' . number_format($quote['discount'], 2),
-            'promo_label'        => $quote['promo']?->label,
-            'promo_value_label'  => $quote['promo']?->value_label,
+            'price' => $quote['total'],
+            'price_formatted' => '₱'.number_format($quote['total'], 2),
+            'base_price' => $baseAmount,
+            'base_formatted' => '₱'.number_format($baseAmount, 2),
+            'discount' => $quote['discount'],
+            'discount_formatted' => '₱'.number_format($quote['discount'], 2),
+            'promo_label' => $quote['promo']?->label,
+            'promo_value_label' => $quote['promo']?->value_label,
         ]);
     }
 
     // ── Booking Form ───────────────────────────────────────────────
     public function bookingForm(Property $property, Request $request)
     {
-        if (!Auth::check()) {
+        if (Setting::get('allow_online_booking', '1') !== '1') {
+            return redirect()->route('portal.property', $property)
+                ->with('error', 'Online booking is temporarily unavailable. Please contact us directly to reserve your stay.');
+        }
+
+        if (! Auth::check()) {
             return redirect()->route('login')
                 ->with('info', 'Please log in or create an account to complete your booking.');
         }
 
         $request->validate([
             'checkin' => 'required|date|after_or_equal:today',
-            'slot'    => 'required|in:' . implode(',', array_keys(Booking::SLOTS)),
-            'guests'  => 'required|integer|min:1|max:' . $property->max_capacity,
+            'slot' => 'required|in:'.implode(',', array_keys(Booking::SLOTS)),
+            'guests' => 'required|integer|min:1|max:'.$property->max_capacity,
         ]);
 
         [$checkin, $checkout] = Booking::slotDateTimes($request->slot, $request->checkin);
@@ -320,7 +330,7 @@ class PortalController extends Controller
         // hindi na ito dapat payagan.
         if ($checkin->isPast()) {
             return redirect()->route('portal.property', $property)
-                ->withErrors(['dates' => 'The ' . Booking::SLOTS[$request->slot]['label'] . ' check-in slot has already passed for today. Please select a different date or slot.'])
+                ->withErrors(['dates' => 'The '.Booking::SLOTS[$request->slot]['label'].' check-in slot has already passed for today. Please select a different date or slot.'])
                 ->withInput();
         }
 
@@ -337,16 +347,16 @@ class PortalController extends Controller
         // (hindi na babago kahit anong araw mahulog ang check-out,
         // dahil isang package lang ang binabayaran, hindi per-night).
         // Kasama na rito ang anumang tumatamang seasonal promo.
-        $quote          = $property->quoteFor($checkin, $request->slot);
-        $baseAmount     = $quote['base'];
+        $quote = $property->quoteFor($checkin, $request->slot);
+        $baseAmount = $quote['base'];
         $discountAmount = $quote['discount'];
-        $totalAmount    = $quote['total'];
-        $promo          = $quote['promo'];
+        $totalAmount = $quote['total'];
+        $promo = $quote['promo'];
         $isPeak = in_array($checkin->dayOfWeek, [5, 6]) || ($checkin->dayOfWeek === 0 && $checkin->format('H:i') < '18:00');
         $nightBreakdown = [[
-            'date'    => $checkin->format('M d, Y'),
-            'day'     => $checkin->format('l') . ' ' . $checkin->format('g:i A') . ' check-in',
-            'price'   => $baseAmount,
+            'date' => $checkin->format('M d, Y'),
+            'day' => $checkin->format('l').' '.$checkin->format('g:i A').' check-in',
+            'price' => $baseAmount,
             'weekend' => $isPeak,
         ]];
 
@@ -356,7 +366,7 @@ class PortalController extends Controller
         // Kinukuwenta laban sa DISCOUNTED na total, hindi sa base — kung
         // hindi, mas malaki pa sa kalahati ng aktwal na sinisingil ang
         // hihingin sa guest na may promo.
-        $depositPct    = (float) Setting::get('deposit_percentage', 50);
+        $depositPct = (float) Setting::get('deposit_percentage', 50);
         $depositAmount = round($totalAmount * $depositPct / 100, 2);
 
         $slot = $request->slot;
@@ -372,7 +382,12 @@ class PortalController extends Controller
     // ── Submit Booking ─────────────────────────────────────────────
     public function submitBooking(Property $property, Request $request)
     {
-        if (!Auth::check()) {
+        if (Setting::get('allow_online_booking', '1') !== '1') {
+            return redirect()->route('portal.property', $property)
+                ->with('error', 'Online booking is temporarily unavailable. Please contact us directly to reserve your stay.');
+        }
+
+        if (! Auth::check()) {
             return redirect()->route('login');
         }
 
@@ -397,14 +412,14 @@ class PortalController extends Controller
         if ($cooldownEndsAt = Booking::bookingCooldownEndsAt(Auth::id())) {
             return back()->withErrors([
                 'dates' => 'Several of your recent bookings were auto-cancelled for non-payment. '
-                    . 'Please try again after ' . $cooldownEndsAt->format('M d, Y g:i A') . '.',
+                    .'Please try again after '.$cooldownEndsAt->format('M d, Y g:i A').'.',
             ])->withInput();
         }
 
         $request->validate([
-            'checkin'          => 'required|date|after_or_equal:today',
-            'slot'             => 'required|in:' . implode(',', array_keys(Booking::SLOTS)),
-            'guests'           => 'required|integer|min:1|max:' . $property->max_capacity,
+            'checkin' => 'required|date|after_or_equal:today',
+            'slot' => 'required|in:'.implode(',', array_keys(Booking::SLOTS)),
+            'guests' => 'required|integer|min:1|max:'.$property->max_capacity,
             'special_requests' => 'nullable|string|max:500',
 
             // Kailangang naka-tick ang "I have read the booking policies"
@@ -425,7 +440,7 @@ class PortalController extends Controller
         // hal. nag-tagal ang guest sa Guest Details page kaya lumagpas na
         // ang oras bago pa man mag-submit.
         if ($checkin->isPast()) {
-            return back()->withErrors(['dates' => 'The ' . Booking::SLOTS[$request->slot]['label'] . ' check-in slot has already passed for today. Please select a different date or slot.'])->withInput();
+            return back()->withErrors(['dates' => 'The '.Booking::SLOTS[$request->slot]['label'].' check-in slot has already passed for today. Please select a different date or slot.'])->withInput();
         }
 
         // Final conflict check — walang hiwalay na buffer, ang gap sa
@@ -437,11 +452,11 @@ class PortalController extends Controller
         // Flat/package price + seasonal promo. Muling kinukuwenta dito
         // (hindi tinatanggap mula sa form) — kung galing sa request ang
         // discount, kayang baguhin ng guest ang presyo mismo.
-        $quote          = $property->quoteFor($checkin, $request->slot);
-        $baseAmount     = $quote['base'];
+        $quote = $property->quoteFor($checkin, $request->slot);
+        $baseAmount = $quote['base'];
         $discountAmount = $quote['discount'];
-        $totalAmount    = $quote['total'];
-        $promo          = $quote['promo'];
+        $totalAmount = $quote['total'];
+        $promo = $quote['promo'];
 
         // Ang booking ay ginagawa muna bilang "pending" para ma-reserve
         // ang slot (kasama sa hasConflict() check ng ibang customer),
@@ -450,24 +465,24 @@ class PortalController extends Controller
         // (tingnan: PaymentController::success()). WALANG admin approval
         // step — direktang papunta sa Pay page pagkatapos nito.
         $booking = Booking::create([
-            'user_id'          => Auth::id(),
-            'property_id'      => $property->id,
-            'check_in_date'    => $checkin->format('Y-m-d'),
-            'check_in_time'    => $checkin->format('H:i:s'),
-            'check_out_date'   => $checkout->format('Y-m-d'),
-            'check_out_time'   => $checkout->format('H:i:s'),
-            'num_nights'       => $nights,
-            'num_guests'       => $request->guests,
-            'base_amount'      => $baseAmount,
-            'extras_amount'    => 0,
-            'discount_amount'  => $discountAmount,
-            'discount_id'      => $promo?->id,
-            'total_amount'     => $totalAmount,
-            'amount_paid'      => 0,
-            'balance_due'      => $totalAmount,
-            'status'           => 'pending',
-            'payment_status'   => 'unpaid',
-            'source'           => 'online',
+            'user_id' => Auth::id(),
+            'property_id' => $property->id,
+            'check_in_date' => $checkin->format('Y-m-d'),
+            'check_in_time' => $checkin->format('H:i:s'),
+            'check_out_date' => $checkout->format('Y-m-d'),
+            'check_out_time' => $checkout->format('H:i:s'),
+            'num_nights' => $nights,
+            'num_guests' => $request->guests,
+            'base_amount' => $baseAmount,
+            'extras_amount' => 0,
+            'discount_amount' => $discountAmount,
+            'discount_id' => $promo?->id,
+            'total_amount' => $totalAmount,
+            'amount_paid' => 0,
+            'balance_due' => $totalAmount,
+            'status' => 'pending',
+            'payment_status' => 'unpaid',
+            'source' => 'online',
             'special_requests' => $request->special_requests,
         ]);
 
@@ -485,7 +500,7 @@ class PortalController extends Controller
         try {
             event(new BookingCreated($booking->load(['user', 'property'])));
         } catch (\Exception $e) {
-            Log::error('Failed to broadcast BookingCreated (online booking): ' . $e->getMessage());
+            Log::error('Failed to broadcast BookingCreated (online booking): '.$e->getMessage());
         }
 
         try {
@@ -499,10 +514,10 @@ class PortalController extends Controller
                 bookingId: $booking->id,
             ));
         } catch (\Exception $e) {
-            Log::error('Failed to broadcast PropertyAvailabilityChanged (online booking): ' . $e->getMessage());
+            Log::error('Failed to broadcast PropertyAvailabilityChanged (online booking): '.$e->getMessage());
         }
 
-        NotificationHelper::newBooking($booking->load(['user','property']));
+        NotificationHelper::newBooking($booking->load(['user', 'property']));
         // Notify guest — pinalitan ang wording, dahil hindi na naghihintay
         // ng admin review; ang susunod na hakbang na lang ay ang bayad.
         NotificationHelper::notifyGuest(
@@ -513,7 +528,7 @@ class PortalController extends Controller
         );
 
         StaffLog::record('online_booking', 'bookings', $booking->id,
-            "Online booking {$booking->booking_ref} by " . Auth::user()->full_name);
+            "Online booking {$booking->booking_ref} by ".Auth::user()->full_name);
 
         // Diretso na sa Pay page — mandatory na ang bayad, walang
         // "pay later" o admin approval na hihintayin pa.
@@ -525,6 +540,7 @@ class PortalController extends Controller
     {
         abort_if($booking->user_id !== Auth::id(), 403);
         $booking->load('property');
+
         return view('portal.confirmation', compact('booking'));
     }
 }

@@ -134,7 +134,7 @@ class ReviewController extends Controller
 
         $result = $moderation->evaluate($request->title, $request->content);
 
-        Review::create([
+        $review = Review::create([
             'booking_id'  => $booking->id,
             'user_id'     => Auth::id(),
             'property_id' => $booking->property_id,
@@ -153,6 +153,8 @@ class ReviewController extends Controller
                 route('admin.reviews.index', [], false)
             );
         }
+
+        NotificationHelper::reviewSubmitted($review->load('property'));
 
         $message = $result['approved']
             ? '⭐ Thank you for your review!'

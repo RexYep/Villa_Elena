@@ -122,7 +122,7 @@
                         @error('user_id')
                             <span class="invalid-feedback">{{ $message }}</span>
                         @enderror
-                        <div class="text-muted-theme" style="margin-top:10px;font-size:12px;">
+                        <div class="text-muted-theme" style="margin-top:10px;font-size: 14px;">
                             Guest not in the list? <a href="{{ route('admin.users.create') }}" style="color:#2e5fa3;">Create
                                 new guest account →</a>
                         </div>
@@ -243,7 +243,7 @@
                                 <span id="previewTotal">—</span>
                             </div>
                         </div>
-                        <p class="text-muted-theme" style="font-size:11px;margin-top:10px;text-align:center;">
+                        <p class="text-muted-theme" style="font-size: 13px;margin-top:10px;text-align:center;">
                             Final price calculated on submit based on seasonal pricing rules.
                         </p>
                     </div>

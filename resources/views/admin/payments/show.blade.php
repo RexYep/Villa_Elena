@@ -64,7 +64,7 @@
         .field-lbl {
             display: block;
             margin-bottom: 6px;
-            font-size: 12px;
+            font-size: 14px;
             font-weight: 600;
             color: var(--muted);
         }
@@ -93,7 +93,7 @@
 
         .amount-label {
             color: rgba(255, 255, 255, .55);
-            font-size: 11px;
+            font-size: 13px;
             text-transform: uppercase;
             letter-spacing: 1.5px;
             margin-bottom: 8px;
@@ -122,7 +122,7 @@
         .badge {
             padding: 4px 12px;
             border-radius: 20px;
-            font-size: 11px;
+            font-size: 13px;
             font-weight: 700;
             text-transform: uppercase;
             letter-spacing: .3px;
@@ -240,7 +240,7 @@
                         class="val">{{ $payment->payment_date?->format('M d, Y') }}</span></div>
                 @if ($payment->reference_number)
                     <div class="info-row"><span class="lbl">Reference</span><span class="val"
-                            style="font-size:12px;word-break:break-all;">{{ $payment->reference_number }}</span></div>
+                            style="font-size: 14px;word-break:break-all;">{{ $payment->reference_number }}</span></div>
                 @endif
                 {{-- Magkaibang bagay ang dalawang ito, at magkatabi sila
                      nang sinasadya: ang `reference_number` ay ang PAPASOK
@@ -250,7 +250,7 @@
                      patunay na aktwal na gumalaw ang pera. --}}
                 @if ($payment->transaction_ref)
                     <div class="info-row"><span class="lbl">Transfer Ref</span><span class="val"
-                            style="font-size:12px;word-break:break-all;font-family:monospace;">{{ $payment->transaction_ref }}</span>
+                            style="font-size: 14px;word-break:break-all;font-family:monospace;">{{ $payment->transaction_ref }}</span>
                     </div>
                 @endif
                 @if ($payment->notes)
@@ -325,14 +325,14 @@
                             <details style="display:inline;">
                                 <summary style="cursor:pointer;list-style:none;">
                                     {{ $destination->masked_account_number }}
-                                    <span style="font-size:11px;color:var(--muted);">(show)</span>
+                                    <span style="font-size: 13px;color:var(--muted);">(show)</span>
                                 </summary>
                                 <span style="font-family:monospace;font-size:14px;">{{ $destination->account_number }}</span>
                             </details>
                         </span>
                     </div>
                     <div class="info-row"><span class="lbl">Provided</span>
-                        <span class="val" style="font-size:12px;">
+                        <span class="val" style="font-size: 14px;">
                             {{ $destination->provided_at?->format('M d, Y g:i A') }}
                             @if ($destination->providedBy)
                                 · by {{ $destination->providedBy->full_name }}
@@ -344,7 +344,7 @@
                         <div style="margin-top:18px;padding-top:18px;border-top:1px solid var(--border);">
 
                             @if ($payment->isOverduePayout())
-                                <div style="font-size:12px;color:#b91c1c;font-weight:600;margin-bottom:12px;">
+                                <div style="font-size: 14px;color:#b91c1c;font-weight:600;margin-bottom:12px;">
                                     <i class="bi bi-exclamation-triangle me-1"></i>
                                     This has been waiting {{ $payment->daysAwaitingPayout() }} days.
                                 </div>
@@ -384,7 +384,7 @@
                                         ({{ $destination->masked_account_number }}).
                                     </div>
 
-                                    <div style="font-size:11px;color:var(--muted);margin-bottom:12px;">
+                                    <div style="font-size: 13px;color:var(--muted);margin-bottom:12px;">
                                         @if ($destination->isInstant())
                                             Goes out over <strong>InstaPay</strong> from the PayMongo wallet and
                                             usually lands within seconds.
@@ -409,12 +409,12 @@
                                         {{-- Babala, hindi harang. Ang paghaharang dito ay
                                              minsan nang naging mali, at pinigilan sana nito
                                              ang pagtuklas na gumagana pala ito sa dashboard. --}}
-                                        <div class="alert alert-warning" style="margin:0 0 12px;font-size:12px;">
+                                        <div class="alert alert-warning" style="margin:0 0 12px;font-size: 14px;">
                                             <strong>Heads up:</strong> {{ $warning }}
                                         </div>
                                     @endif
 
-                                    <label style="display:flex;gap:8px;align-items:flex-start;font-size:12px;margin-bottom:14px;cursor:pointer;">
+                                    <label style="display:flex;gap:8px;align-items:flex-start;font-size: 14px;margin-bottom:14px;cursor:pointer;">
                                         <input type="checkbox" required style="margin-top:2px;">
                                         <span>I have checked the account number and name above against what the guest gave us.</span>
                                     </label>
@@ -456,7 +456,7 @@
                                  walang saysay na itago ang tanging magagawa. --}}
                             <details style="margin-top:16px;"
                                 {{ $payment->canSendTransfer() ? '' : 'open' }}>
-                                <summary style="cursor:pointer;font-size:12px;font-weight:600;color:var(--stone);">
+                                <summary style="cursor:pointer;font-size: 14px;font-weight:600;color:var(--stone);">
                                     I sent it myself — record it by hand
                                 </summary>
 
@@ -465,7 +465,7 @@
                                     @csrf
                                     @method('PATCH')
 
-                                    <div style="font-size:12px;color:var(--muted);margin-bottom:12px;">
+                                    <div style="font-size: 14px;color:var(--muted);margin-bottom:12px;">
                                         Only use this if you already sent
                                         <strong>₱{{ number_format($payment->amount, 2) }}</strong>
                                         to the account above from your own GCash / Maya / bank app.
@@ -475,7 +475,7 @@
                                     <input type="text" name="transfer_reference" class="form-control"
                                         minlength="4" maxlength="100" placeholder="e.g. 1029384756123" required
                                         value="{{ old('transfer_reference') }}">
-                                    <div style="font-size:11px;color:var(--muted);margin:4px 0 14px;">
+                                    <div style="font-size: 13px;color:var(--muted);margin:4px 0 14px;">
                                         From your receipt. This is the only proof the money left.
                                     </div>
 
@@ -486,7 +486,7 @@
                             </details>
                         </div>
                     @else
-                        <div style="margin-top:14px;font-size:12px;color:var(--muted);">
+                        <div style="margin-top:14px;font-size: 14px;color:var(--muted);">
                             This refund has been paid out. These are the details it was sent to,
                             and they can no longer be changed.
                         </div>
@@ -509,7 +509,7 @@
                                 {{ $payment->refundDestination ? 'Correct these details' : 'Enter details on the guest\'s behalf' }}
                             </summary>
 
-                            <div style="font-size:12px;color:var(--muted);margin:10px 0 14px;">
+                            <div style="font-size: 14px;color:var(--muted);margin:10px 0 14px;">
                                 The guest has been asked for this in-app. Only fill it in here if they
                                 gave it to you another way — by text or over the phone.
                             </div>
@@ -529,7 +529,7 @@
                                             </option>
                                         @endforeach
                                     </select>
-                                    <div style="font-size:11px;color:var(--muted);margin-top:4px;">
+                                    <div style="font-size: 13px;color:var(--muted);margin-top:4px;">
                                         GCash is listed as <strong>G-Xchange, Inc.</strong>
                                     </div>
                                 </div>
@@ -546,7 +546,7 @@
                                     <input type="text" name="account_name" class="form-control"
                                         placeholder="Juan Dela Cruz" required
                                         value="{{ old('account_name', $payment->refundDestination->account_name ?? $payment->booking->user->full_name ?? '') }}">
-                                    <div style="font-size:11px;color:var(--muted);margin-top:4px;">
+                                    <div style="font-size: 13px;color:var(--muted);margin-top:4px;">
                                         Exactly as registered on the account — a wrong name makes the transfer fail.
                                     </div>
                                 </div>
@@ -560,7 +560,7 @@
                 @endif
 
                 @if (! $payment->refundDestination && ! $payment->isAwaitingPayout())
-                    <div style="font-size:12px;color:var(--muted);">
+                    <div style="font-size: 14px;color:var(--muted);">
                         This refund was paid out before refund destinations were recorded,
                         so there is no record of where the money was sent.
                     </div>
@@ -584,7 +584,7 @@
                         @foreach ($payment->refundTransfers as $transfer)
                             <tr style="border-bottom:1px solid var(--border);">
                                 <td style="padding:12px 16px;vertical-align:top;">
-                                    <div style="font-size:12px;font-weight:600;">
+                                    <div style="font-size: 14px;font-weight:600;">
                                         @if ($transfer->isSucceeded())
                                             <span class="badge" style="background:#dcfce7;color:#166534;">DELIVERED</span>
                                         @elseif ($transfer->isPending())
@@ -593,14 +593,14 @@
                                             <span class="badge" style="background:#fee2e2;color:#991b1b;">FAILED</span>
                                         @endif
                                     </div>
-                                    <div style="font-size:11px;color:var(--muted);margin-top:6px;">
+                                    <div style="font-size: 13px;color:var(--muted);margin-top:6px;">
                                         {{ $transfer->created_at?->format('M d, Y g:i A') }}
                                         @if ($transfer->initiatedBy)
                                             · by {{ $transfer->initiatedBy->full_name }}
                                         @endif
                                     </div>
                                 </td>
-                                <td style="padding:12px 16px;vertical-align:top;font-size:12px;">
+                                <td style="padding:12px 16px;vertical-align:top;font-size: 14px;">
                                     <div>
                                         ₱{{ number_format((float) $transfer->amount, 2) }}
                                         to {{ $transfer->institution_name }}
@@ -611,11 +611,11 @@
                                     </div>
 
                                     @if ($transfer->isSucceeded())
-                                        <div style="margin-top:6px;font-family:monospace;font-size:11px;">
+                                        <div style="margin-top:6px;font-family:monospace;font-size: 13px;">
                                             {{ $transfer->receipt_reference }}
                                         </div>
                                         @if ((float) $transfer->fee > 0)
-                                            <div style="color:var(--muted);font-size:11px;margin-top:2px;">
+                                            <div style="color:var(--muted);font-size: 13px;margin-top:2px;">
                                                 Fee ₱{{ number_format((float) $transfer->fee, 2) }}
                                             </div>
                                         @endif
@@ -627,7 +627,7 @@
                                              tanging bagay na magagamit ng admin kapag
                                              kinausap niya ang PayMongo o ang bangko. --}}
                                         @if ($transfer->provider_error_code)
-                                            <div style="color:var(--muted);font-size:11px;margin-top:2px;">
+                                            <div style="color:var(--muted);font-size: 13px;margin-top:2px;">
                                                 Code {{ $transfer->provider_error_code }} · no fee charged
                                             </div>
                                         @endif
@@ -651,16 +651,16 @@
                 <thead>
                     <tr style="background:#f8fafc;">
                         <th class="text-muted-theme"
-                            style="padding:10px 16px;font-size:11px;font-weight:700;text-transform:uppercase;border-bottom:1px solid var(--border);">
+                            style="padding:10px 16px;font-size: 13px;font-weight:700;text-transform:uppercase;border-bottom:1px solid var(--border);">
                             Date</th>
                         <th class="text-muted-theme"
-                            style="padding:10px 16px;font-size:11px;font-weight:700;text-transform:uppercase;border-bottom:1px solid var(--border);">
+                            style="padding:10px 16px;font-size: 13px;font-weight:700;text-transform:uppercase;border-bottom:1px solid var(--border);">
                             Method</th>
                         <th class="text-muted-theme"
-                            style="padding:10px 16px;font-size:11px;font-weight:700;text-transform:uppercase;border-bottom:1px solid var(--border);">
+                            style="padding:10px 16px;font-size: 13px;font-weight:700;text-transform:uppercase;border-bottom:1px solid var(--border);">
                             Type</th>
                         <th class="text-muted-theme"
-                            style="padding:10px 16px;font-size:11px;font-weight:700;text-transform:uppercase;border-bottom:1px solid var(--border);text-align:right;">
+                            style="padding:10px 16px;font-size: 13px;font-weight:700;text-transform:uppercase;border-bottom:1px solid var(--border);text-align:right;">
                             Amount</th>
                     </tr>
                 </thead>

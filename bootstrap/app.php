@@ -21,6 +21,7 @@ return Application::configure(basePath: dirname(__DIR__))
   ->withMiddleware(function (Middleware $middleware) {
     $middleware->alias([
         'role' => \App\Http\Middleware\RoleMiddleware::class,
+        'maintenance.check' => \App\Http\Middleware\CheckMaintenanceMode::class,
     ]);
 
     // Trust the reverse proxy (ngrok) so Laravel reads the

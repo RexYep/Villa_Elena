@@ -116,7 +116,7 @@
         }
 
         .settings-card-header p {
-            font-size: 12px;
+            font-size: 14px;
             color: var(--muted);
             margin-top: 2px;
         }
@@ -156,7 +156,7 @@
         }
 
         .toggle-info .toggle-desc {
-            font-size: 12px;
+            font-size: 14px;
             color: var(--muted);
             margin-top: 2px;
         }
@@ -239,7 +239,7 @@
         }
 
         .submit-info {
-            font-size: 12px;
+            font-size: 14px;
             color: var(--muted);
         }
 
@@ -317,9 +317,6 @@
                 </button>
                 <button type="button" class="tab-link" onclick="showTab('payments')">
                     <i class="bi bi-credit-card"></i> Payments
-                </button>
-                <button type="button" class="tab-link" onclick="showTab('notifications')">
-                    <i class="bi bi-bell"></i> Notifications
                 </button>
                 <button type="button" class="tab-link" onclick="showTab('amenities')">
                     <i class="bi bi-stars"></i> Amenities
@@ -542,33 +539,6 @@
                     </div>
                 </div>
 
-                {{-- Notifications --}}
-                <div class="settings-section" id="tab-notifications">
-                    <div class="settings-card">
-                        <div class="settings-card-header">
-                            <div class="icon tag-cyan"><i class="bi bi-bell"></i></div>
-                            <div>
-                                <h3>Notification Preferences</h3>
-                                <p>Control when and how notifications are sent</p>
-                            </div>
-                        </div>
-                        <div class="settings-card-body">
-                            <div class="toggle-row">
-                                <div class="toggle-info">
-                                    <div class="toggle-title">Email Notifications</div>
-                                    <div class="toggle-desc">Send booking confirmations, reminders, and updates via email
-                                    </div>
-                                </div>
-                                <label class="toggle-switch">
-                                    <input type="checkbox" name="send_email_notifications" value="1"
-                                        {{ ($settings['send_email_notifications'] ?? '1') === '1' ? 'checked' : '' }}>
-                                    <span class="toggle-slider"></span>
-                                </label>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
                 {{-- Amenities --}}
                 <div class="settings-section" id="tab-amenities">
                     <div class="settings-card">
@@ -656,7 +626,7 @@
                 <div class="settings-section" id="tab-system">
                     <div class="settings-card">
                         <div class="settings-card-header">
-                            <div class="icon tag-red"><i class="bi bi-shield-gear"></i></div>
+                            <div class="icon tag-red"><i class="bi bi-gear-wide-connected"></i></div>
                             <div>
                                 <h3>System Settings</h3>
                                 <p>Maintenance mode and advanced controls</p>
@@ -690,22 +660,22 @@
                         <div class="settings-card-body">
                             <div class="two-col">
                                 <div>
-                                    <div class="text-muted-theme" style="font-size:12px;margin-bottom:3px;">Laravel
+                                    <div class="text-muted-theme" style="font-size: 14px;margin-bottom:3px;">Laravel
                                         Version</div>
                                     <div class="fw-medium">{{ app()->version() }}</div>
                                 </div>
                                 <div>
-                                    <div class="text-muted-theme" style="font-size:12px;margin-bottom:3px;">PHP Version
+                                    <div class="text-muted-theme" style="font-size: 14px;margin-bottom:3px;">PHP Version
                                     </div>
                                     <div class="fw-medium">{{ phpversion() }}</div>
                                 </div>
                                 <div>
-                                    <div class="text-muted-theme" style="font-size:12px;margin-bottom:3px;">Environment
+                                    <div class="text-muted-theme" style="font-size: 14px;margin-bottom:3px;">Environment
                                     </div>
                                     <div class="fw-medium">{{ app()->environment() }}</div>
                                 </div>
                                 <div>
-                                    <div class="text-muted-theme" style="font-size:12px;margin-bottom:3px;">Server Time
+                                    <div class="text-muted-theme" style="font-size: 14px;margin-bottom:3px;">Server Time
                                     </div>
                                     <div class="fw-medium">{{ now()->format('M d, Y h:i A') }}</div>
                                 </div>

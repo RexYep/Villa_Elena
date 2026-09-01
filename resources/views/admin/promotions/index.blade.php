@@ -57,7 +57,7 @@
         }
 
         .promo-desc {
-            font-size: 11px;
+            font-size: 13px;
             color: var(--muted);
             margin-top: 2px;
             max-width: 280px;
@@ -69,7 +69,7 @@
         .badge.bg-warning  { background: #fef3c7 !important; color: #92400e; }
 
         .visibility-tag {
-            font-size: 11px;
+            font-size: 13px;
             color: var(--muted);
             display: inline-flex;
             align-items: center;
@@ -139,12 +139,12 @@
                                 </div>
                             </td>
                             <td><span class="promo-value">{{ $promo->value_label }}</span></td>
-                            <td class="text-muted-theme" style="font-size:12px;">{{ $promo->window_label }}</td>
-                            <td class="text-muted-theme" style="font-size:12px;">{{ $promo->slot_label }}</td>
+                            <td class="text-muted-theme" style="font-size: 14px;">{{ $promo->window_label }}</td>
+                            <td class="text-muted-theme" style="font-size: 14px;">{{ $promo->slot_label }}</td>
                             <td style="text-align:center;">
                                 {{ $promo->bookings_count }}
                                 @if ($promo->usage_limit)
-                                    <span class="text-muted-theme" style="font-size:11px;">/ {{ $promo->usage_limit }}</span>
+                                    <span class="text-muted-theme" style="font-size: 13px;">/ {{ $promo->usage_limit }}</span>
                                 @endif
                             </td>
                             <td>{!! $promo->state_badge !!}</td>

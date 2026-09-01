@@ -319,7 +319,7 @@
             background: var(--gold);
             color: var(--stone);
             font-weight: 700;
-            font-size: 12px;
+            font-size: 14px;
             letter-spacing: .5px;
             padding: 3px 10px;
             border-radius: 999px;
@@ -465,7 +465,7 @@
         }
 
         .section-eyebrow {
-            font-size: 12px;
+            font-size: 14px;
             letter-spacing: 3px;
             text-transform: uppercase;
             color: var(--gold);
@@ -560,7 +560,7 @@
             color: #fff;
             padding: 6px 16px;
             border-radius: 50px;
-            font-size: 12px;
+            font-size: 14px;
             font-weight: 500;
             letter-spacing: 0.5px;
             backdrop-filter: blur(8px);
@@ -572,7 +572,7 @@
             right: 18px;
             padding: 6px 14px;
             border-radius: 50px;
-            font-size: 12px;
+            font-size: 14px;
             font-weight: 600;
         }
 
@@ -625,7 +625,7 @@
             color: var(--muted);
             padding: 4px 14px;
             border-radius: 50px;
-            font-size: 12px;
+            font-size: 14px;
         }
 
         .prop-footer {
@@ -727,7 +727,7 @@
             color: #fff;
             padding: 7px 18px;
             border-radius: 50px;
-            font-size: 12px;
+            font-size: 14px;
             font-weight: 500;
             letter-spacing: .5px;
             backdrop-filter: blur(8px);
@@ -785,7 +785,7 @@
         }
 
         .rooms-status-title {
-            font-size: 12px;
+            font-size: 14px;
             font-weight: 600;
             letter-spacing: .5px;
             text-transform: uppercase;
@@ -1599,7 +1599,7 @@
         }
 
         .author-location {
-            font-size: 12px;
+            font-size: 14px;
             color: var(--muted);
             margin-top: 2px;
         }
@@ -1645,7 +1645,7 @@
         }
 
         .location-item-label {
-            font-size: 12px;
+            font-size: 14px;
             letter-spacing: 2px;
             text-transform: uppercase;
             color: var(--muted);
@@ -1743,7 +1743,7 @@
         }
 
         .contact-item-label {
-            font-size: 11px;
+            font-size: 13px;
             letter-spacing: 2.5px;
             text-transform: uppercase;
             color: rgba(255, 255, 255, 0.4);
@@ -1773,7 +1773,7 @@
         }
 
         .form-label {
-            font-size: 12px;
+            font-size: 14px;
             letter-spacing: 2px;
             text-transform: uppercase;
             color: rgba(255, 255, 255, 0.45);
@@ -1878,7 +1878,7 @@
         }
 
         .footer-col-title {
-            font-size: 12px;
+            font-size: 14px;
             letter-spacing: 2.5px;
             text-transform: uppercase;
             color: rgba(255, 255, 255, 0.4);
@@ -2136,7 +2136,7 @@
         </div>
 
         <div
-            style="position:absolute;bottom:40px;left:50%;transform:translateX(-50%);color:rgba(255,255,255,0.4);font-size:12px;letter-spacing:2px;text-align:center;z-index:3;">
+            style="position:absolute;bottom:40px;left:50%;transform:translateX(-50%);color:rgba(255,255,255,0.4);font-size: 14px;letter-spacing:2px;text-align:center;z-index:3;">
             <div
                 style="width:1px;height:50px;background:linear-gradient(transparent, rgba(255,255,255,0.6), transparent);margin:8px auto;">
             </div>
@@ -2282,7 +2282,7 @@
                             <div class="villa-showcase-price">
                                 ₱{{ number_format($villa->base_price, 0) }} <span>/ package</span>
                                 <div class="text-muted-theme"
-                                    style="font-size:11px;font-family:'Jost',sans-serif;font-weight:400;margin-top:2px;line-height:1.5;">
+                                    style="font-size: 13px;font-family:'Jost',sans-serif;font-weight:400;margin-top:2px;line-height:1.5;">
                                     * Regular: Mon–Thu &amp; Sun after 6PM &nbsp;|&nbsp;
                                     @if ($villa->weekend_price && $villa->weekend_price != $villa->base_price)
                                         * Peak: ₱{{ number_format($villa->weekend_price, 0) }} · Fri, Sat &amp; Sun before
@@ -2292,13 +2292,16 @@
                                     @endif
                                 </div>
                             </div>
-                            @if ($villa->status !== 'maintenance')
+                            @if ($villa->status !== 'maintenance' && $allowOnlineBooking)
                                 <a href="{{ route('portal.property', $villa) }}?checkin={{ $checkin }}&slot={{ $slot }}&guests={{ $guests }}"
                                     class="btn-book-showcase">
                                     <i class="bi bi-calendar-check"></i>
                                     {{ $checkin ? 'Reserve Now' : 'Book Now' }}
                                 </a>
-                            @else
+                            @elseif (!$allowOnlineBooking)
+                                <span class="btn-book-showcase unavailable">
+                                    <i class="bi bi-telephone"></i> Contact Us to Book
+                                </span>
                             @endif
 
                         </div>

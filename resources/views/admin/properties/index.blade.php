@@ -46,7 +46,7 @@
         }
 
         .stat-lbl {
-            font-size: 12px;
+            font-size: 14px;
             color: var(--muted);
             margin-top: 2px;
         }
@@ -157,7 +157,7 @@
         }
 
         .property-type {
-            font-size: 10px;
+            font-size: 12px;
             font-weight: 600;
             text-transform: uppercase;
             letter-spacing: 1.2px;
@@ -176,7 +176,7 @@
         .property-meta {
             display: flex;
             gap: 14px;
-            font-size: 12px;
+            font-size: 14px;
             color: var(--muted);
             margin-bottom: 12px;
         }
@@ -195,7 +195,7 @@
         }
 
         .property-price small {
-            font-size: 12px;
+            font-size: 14px;
             font-weight: 400;
             color: var(--muted);
         }
@@ -363,11 +363,11 @@
                             {{ ucfirst($property->type) }}
                             @if ($property->type === 'villa')
                                 <span class="tag-green"
-                                    style="font-size:9px;font-weight:700;padding:2px 7px;border-radius:10px;margin-left:6px;letter-spacing:.3px;">MASTER
+                                    style="font-size: 11px;font-weight:700;padding:2px 7px;border-radius:10px;margin-left:6px;letter-spacing:.3px;">MASTER
                                     · BOOKABLE</span>
                             @elseif($property->type === 'room')
                                 <span
-                                    style="background:#f1f5f9;color:#64748b;font-size:9px;font-weight:700;padding:2px 7px;border-radius:10px;margin-left:6px;letter-spacing:.3px;">PART
+                                    style="background:#f1f5f9;color:#64748b;font-size: 11px;font-weight:700;padding:2px 7px;border-radius:10px;margin-left:6px;letter-spacing:.3px;">PART
                                     OF VILLA</span>
                             @endif
                         </div>
@@ -394,13 +394,13 @@
                             <div style="display:flex; flex-wrap:wrap; gap:5px;">
                                 @foreach (array_slice($property->amenities, 0, 4) as $amenity)
                                     <span
-                                        style="background:#f1f5f9; color:#64748b; font-size:10px; padding:2px 8px; border-radius:10px;">
+                                        style="background:#f1f5f9; color:#64748b; font-size: 12px; padding:2px 8px; border-radius:10px;">
                                         {{ $amenity }}
                                     </span>
                                 @endforeach
                                 @if (count($property->amenities) > 4)
                                     <span
-                                        style="background:#f1f5f9; color:#64748b; font-size:10px; padding:2px 8px; border-radius:10px;">
+                                        style="background:#f1f5f9; color:#64748b; font-size: 12px; padding:2px 8px; border-radius:10px;">
                                         +{{ count($property->amenities) - 4 }} more
                                     </span>
                                 @endif

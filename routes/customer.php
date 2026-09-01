@@ -49,6 +49,8 @@ Route::prefix('my')
     Route::put('profile/2fa',                 [ProfileController::class, 'toggleTwoFactor'])->name('profile.2fa.toggle');
     Route::delete('profile/devices/{device}', [ProfileController::class, 'removeTrustedDevice'])->name('profile.devices.destroy');
 
+    Route::put('profile/email-notifications', [ProfileController::class, 'toggleEmailNotifications'])->name('profile.email-notifications');
+
 });
 
 // ════════════════════════════════════════════════════════════════
