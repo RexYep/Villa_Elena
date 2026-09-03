@@ -70,7 +70,7 @@ class AuthController extends Controller
                 $user->notify(new TwoFactorCodeNotification($code));
             } catch (\Exception $e) {
                 Log::error('Failed to send 2FA code: ' . $e->getMessage());
-                return back()->withErrors(['email' => 'Hindi maipadala ang verification code ngayon. Subukan ulit mamaya.'])->withInput();
+                return back()->withErrors(['email' => 'The verification code cannot be sent right now. Please try again later.'])->withInput();
             }
 
             $request->session()->put('2fa_user_id', $user->id);
@@ -149,7 +149,7 @@ class AuthController extends Controller
             $user->notify(new TwoFactorCodeNotification($code));
         } catch (\Exception $e) {
             Log::error('Failed to resend 2FA code: ' . $e->getMessage());
-            return back()->with('error', 'Hindi maipadala ang code ngayon. Subukan ulit mamaya.');
+            return back()->with('error', 'The verification code cannot be sent right now. Please try again later.');
         }
 
         return back()->with('success', 'A new code has been sent to your email.');
@@ -283,7 +283,7 @@ class AuthController extends Controller
             $status = Password::sendResetLink($request->only('email'));
         } catch (\Exception $e) {
             Log::error('Failed to send password reset link: ' . $e->getMessage());
-            return back()->withErrors(['email' => 'Hindi maipadala ang reset link ngayon. Subukan ulit mamaya.']);
+            return back()->withErrors(['email' => 'The password reset link cannot be sent right now. Please try again later.']);
         }
 
         return $status === Password::RESET_LINK_SENT
@@ -374,7 +374,7 @@ class AuthController extends Controller
             $request->user()->sendEmailVerificationNotification();
         } catch (\Exception $e) {
             Log::error('Failed to resend verification email: ' . $e->getMessage());
-            return back()->with('error', 'Hindi maipadala ang verification link ngayon. Subukan ulit mamaya.');
+            return back()->with('error', 'The verification link cannot be sent right now. Please try again later.');
         }
 
         return back()->with('success', 'Verification link sent! Please check your email.');

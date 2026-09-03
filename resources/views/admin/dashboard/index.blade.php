@@ -636,6 +636,48 @@
                         </div>
                     </div>
 
+                    {{-- Top Actions — ang tatlong pinakamahalagang mungkahi ngayon.
+                         Nasa dashboard ito dahil ang isang recommendation na
+                         nakatago sa sarili nitong page ay hindi nababasa; dito
+                         ito nakikita ng may-ari sa unang tingin sa umaga. --}}
+                    @if ($topActions->isNotEmpty())
+                        <div class="card-panel" style="margin-bottom:24px">
+                            <div class="card-panel-header">
+                                <div>
+                                    <h3>Recommended Actions</h3>
+                                </div>
+                                <a href="{{ route('admin.prescriptive.index') }}"
+                                    style="font-size:13px;color:var(--terracotta);text-decoration:none">
+                                    View all <i class="bi bi-arrow-right"></i>
+                                </a>
+                            </div>
+                            <div class="card-panel-body">
+                                @foreach ($topActions as $action)
+                                    <a href="{{ route('admin.prescriptive.index') }}"
+                                        style="display:flex;gap:12px;align-items:flex-start;padding:12px 0;text-decoration:none;border-bottom:{{ $loop->last ? 'none' : '1px solid var(--border)' }}">
+                                        <div
+                                            style="flex-shrink:0;width:34px;height:34px;border-radius:9px;display:flex;align-items:center;justify-content:center;background:#fef3c7;color:#b45309">
+                                            <i class="bi bi-lightbulb"></i>
+                                        </div>
+                                        <div style="flex:1;min-width:0">
+                                            <div style="font-size:13.5px;font-weight:600;color:var(--text-main);line-height:1.4">
+                                                {{ $action->title }}
+                                            </div>
+                                            <div style="font-size:12px;color:var(--muted);margin-top:2px">
+                                                {{ $action->window_label }} ·
+                                                {{ strtolower($action->confidence_label) }} confidence
+                                            </div>
+                                        </div>
+                                        <div
+                                            style="flex-shrink:0;font-family:'Cormorant Garamond',serif;font-size:18px;font-weight:700;color:var(--terracotta)">
+                                            {{ $action->impact_label }}
+                                        </div>
+                                    </a>
+                                @endforeach
+                            </div>
+                        </div>
+                    @endif
+
                     {{-- Quick Actions --}}
                     <div class="card-panel">
                         <div class="card-panel-header">

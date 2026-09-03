@@ -36,8 +36,10 @@ namespace App\Models{
  * @method static \Illuminate\Database\Eloquent\Builder<static>|AvailabilityBlock whereReason($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|AvailabilityBlock whereStartDate($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|AvailabilityBlock whereUpdatedAt($value)
+ * @mixin \Eloquent
  */
-	class AvailabilityBlock extends \Eloquent {}
+	#[\AllowDynamicProperties]
+	class IdeHelperAvailabilityBlock {}
 }
 
 namespace App\Models{
@@ -126,8 +128,10 @@ namespace App\Models{
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Booking whereUserId($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Booking withTrashed(bool $withTrashed = true)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Booking withoutTrashed()
+ * @mixin \Eloquent
  */
-	class Booking extends \Eloquent {}
+	#[\AllowDynamicProperties]
+	class IdeHelperBooking {}
 }
 
 namespace App\Models{
@@ -154,8 +158,10 @@ namespace App\Models{
  * @method static \Illuminate\Database\Eloquent\Builder<static>|BookingExtra whereTotal($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|BookingExtra whereUnitPrice($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|BookingExtra whereUpdatedAt($value)
+ * @mixin \Eloquent
  */
-	class BookingExtra extends \Eloquent {}
+	#[\AllowDynamicProperties]
+	class IdeHelperBookingExtra {}
 }
 
 namespace App\Models{
@@ -216,8 +222,10 @@ namespace App\Models{
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Discount whereUsageLimit($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Discount whereUsedCount($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Discount whereValue($value)
+ * @mixin \Eloquent
  */
-	class Discount extends \Eloquent {}
+	#[\AllowDynamicProperties]
+	class IdeHelperDiscount {}
 }
 
 namespace App\Models{
@@ -252,8 +260,10 @@ namespace App\Models{
  * @method static \Illuminate\Database\Eloquent\Builder<static>|HousekeepingTask whereStatus($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|HousekeepingTask whereTaskType($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|HousekeepingTask whereUpdatedAt($value)
+ * @mixin \Eloquent
  */
-	class HousekeepingTask extends \Eloquent {}
+	#[\AllowDynamicProperties]
+	class IdeHelperHousekeepingTask {}
 }
 
 namespace App\Models{
@@ -276,8 +286,10 @@ namespace App\Models{
  * @method static \Illuminate\Database\Eloquent\Builder<static>|LoginActivity whereUpdatedAt($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|LoginActivity whereUserId($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|LoginActivity whereViaNewDeviceOtp($value)
+ * @mixin \Eloquent
  */
-	class LoginActivity extends \Eloquent {}
+	#[\AllowDynamicProperties]
+	class IdeHelperLoginActivity {}
 }
 
 namespace App\Models{
@@ -308,8 +320,10 @@ namespace App\Models{
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Notification whereType($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Notification whereUpdatedAt($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Notification whereUserId($value)
+ * @mixin \Eloquent
  */
-	class Notification extends \Eloquent {}
+	#[\AllowDynamicProperties]
+	class IdeHelperNotification {}
 }
 
 namespace App\Models{
@@ -342,8 +356,10 @@ namespace App\Models{
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Package whereSortOrder($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Package whereUpdatedAt($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Package whereValidityDays($value)
+ * @mixin \Eloquent
  */
-	class Package extends \Eloquent {}
+	#[\AllowDynamicProperties]
+	class IdeHelperPackage {}
 }
 
 namespace App\Models{
@@ -390,8 +406,10 @@ namespace App\Models{
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Payment whereStatus($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Payment whereTransactionRef($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Payment whereUpdatedAt($value)
+ * @mixin \Eloquent
  */
-	class Payment extends \Eloquent {}
+	#[\AllowDynamicProperties]
+	class IdeHelperPayment {}
 }
 
 namespace App\Models{
@@ -420,8 +438,10 @@ namespace App\Models{
  * @method static \Illuminate\Database\Eloquent\Builder<static>|PricingRule whereStartDate($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|PricingRule whereType($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|PricingRule whereUpdatedAt($value)
+ * @mixin \Eloquent
  */
-	class PricingRule extends \Eloquent {}
+	#[\AllowDynamicProperties]
+	class IdeHelperPricingRule {}
 }
 
 namespace App\Models{
@@ -477,8 +497,10 @@ namespace App\Models{
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Property whereType($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Property whereUpdatedAt($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Property whereWeekendPrice($value)
+ * @mixin \Eloquent
  */
-	class Property extends \Eloquent {}
+	#[\AllowDynamicProperties]
+	class IdeHelperProperty {}
 }
 
 namespace App\Models{
@@ -504,8 +526,86 @@ namespace App\Models{
  * @method static \Illuminate\Database\Eloquent\Builder<static>|PropertyImage wherePropertyId($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|PropertyImage whereSortOrder($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|PropertyImage whereUpdatedAt($value)
+ * @mixin \Eloquent
  */
-	class PropertyImage extends \Eloquent {}
+	#[\AllowDynamicProperties]
+	class IdeHelperPropertyImage {}
+}
+
+namespace App\Models{
+/**
+ * Isang PRESCRIPTIVE na mungkahi: "ito ang dapat gawin, ito ang dahilan,
+ * ito ang tinatayang epekto".
+ *
+ * Ang isang row dito ay MUNGKAHI LANG. Wala itong epekto sa presyo, sa
+ * kalendaryo, o sa nakikita ng guest hangga't hindi pumipindot ng Apply
+ * ang admin — doon lang gagawin ng PrescriptiveController ang tunay na
+ * record (Discount / AvailabilityBlock) at itatakda ang `applied_*`.
+ *
+ * @property int $id
+ * @property string $type
+ * @property string $title
+ * @property string $summary
+ * @property array<array-key, mixed>|null $evidence
+ * @property \Illuminate\Support\Carbon $target_start
+ * @property \Illuminate\Support\Carbon $target_end
+ * @property string|null $slot day | night | null = pareho
+ * @property string $action_type create_promo | create_block
+ * @property array<array-key, mixed> $action_payload
+ * @property numeric $expected_impact PHP; positibo = kita o naiwasang lugi
+ * @property numeric $confidence 0-100, base sa laki ng sample
+ * @property int $sample_size ilang historical na obserbasyon ang pinagbatayan
+ * @property string $status
+ * @property string $fingerprint
+ * @property \Illuminate\Support\Carbon|null $generated_at
+ * @property \Illuminate\Support\Carbon|null $applied_at
+ * @property int|null $applied_by
+ * @property string|null $applied_record_type
+ * @property int|null $applied_record_id
+ * @property \Illuminate\Support\Carbon|null $dismissed_at
+ * @property string|null $dismiss_reason
+ * @property numeric|null $realized_impact
+ * @property \Illuminate\Support\Carbon|null $created_at
+ * @property \Illuminate\Support\Carbon|null $updated_at
+ * @property-read \App\Models\User|null $appliedBy
+ * @property-read string $confidence_label
+ * @property-read string $impact_label
+ * @property-read string $slot_label
+ * @property-read string $window_label
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Recommendation decided()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Recommendation newModelQuery()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Recommendation newQuery()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Recommendation open()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Recommendation query()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Recommendation whereActionPayload($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Recommendation whereActionType($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Recommendation whereAppliedAt($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Recommendation whereAppliedBy($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Recommendation whereAppliedRecordId($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Recommendation whereAppliedRecordType($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Recommendation whereConfidence($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Recommendation whereCreatedAt($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Recommendation whereDismissReason($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Recommendation whereDismissedAt($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Recommendation whereEvidence($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Recommendation whereExpectedImpact($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Recommendation whereFingerprint($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Recommendation whereGeneratedAt($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Recommendation whereId($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Recommendation whereRealizedImpact($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Recommendation whereSampleSize($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Recommendation whereSlot($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Recommendation whereStatus($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Recommendation whereSummary($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Recommendation whereTargetEnd($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Recommendation whereTargetStart($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Recommendation whereTitle($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Recommendation whereType($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Recommendation whereUpdatedAt($value)
+ * @mixin \Eloquent
+ */
+	#[\AllowDynamicProperties]
+	class IdeHelperRecommendation {}
 }
 
 namespace App\Models{
@@ -542,8 +642,10 @@ namespace App\Models{
  * @method static \Illuminate\Database\Eloquent\Builder<static>|RefundDestination whereProvidedAt($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|RefundDestination whereProvidedBy($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|RefundDestination whereUpdatedAt($value)
+ * @mixin \Eloquent
  */
-	class RefundDestination extends \Eloquent {}
+	#[\AllowDynamicProperties]
+	class IdeHelperRefundDestination {}
 }
 
 namespace App\Models{
@@ -603,8 +705,10 @@ namespace App\Models{
  * @method static \Illuminate\Database\Eloquent\Builder<static>|RefundTransfer whereSubCode($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|RefundTransfer whereTransferId($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|RefundTransfer whereUpdatedAt($value)
+ * @mixin \Eloquent
  */
-	class RefundTransfer extends \Eloquent {}
+	#[\AllowDynamicProperties]
+	class IdeHelperRefundTransfer {}
 }
 
 namespace App\Models{
@@ -650,8 +754,10 @@ namespace App\Models{
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Review whereUpdatedAt($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Review whereUserId($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Review whereValue($value)
+ * @mixin \Eloquent
  */
-	class Review extends \Eloquent {}
+	#[\AllowDynamicProperties]
+	class IdeHelperReview {}
 }
 
 namespace App\Models{
@@ -671,8 +777,10 @@ namespace App\Models{
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Setting whereSettingKey($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Setting whereSettingValue($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Setting whereUpdatedAt($value)
+ * @mixin \Eloquent
  */
-	class Setting extends \Eloquent {}
+	#[\AllowDynamicProperties]
+	class IdeHelperSetting {}
 }
 
 namespace App\Models{
@@ -705,8 +813,10 @@ namespace App\Models{
  * @method static \Illuminate\Database\Eloquent\Builder<static>|StaffLog whereUpdatedAt($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|StaffLog whereUserAgent($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|StaffLog whereUserId($value)
+ * @mixin \Eloquent
  */
-	class StaffLog extends \Eloquent {}
+	#[\AllowDynamicProperties]
+	class IdeHelperStaffLog {}
 }
 
 namespace App\Models{
@@ -733,8 +843,10 @@ namespace App\Models{
  * @method static \Illuminate\Database\Eloquent\Builder<static>|TrustedDevice whereToken($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|TrustedDevice whereUpdatedAt($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|TrustedDevice whereUserId($value)
+ * @mixin \Eloquent
  */
-	class TrustedDevice extends \Eloquent {}
+	#[\AllowDynamicProperties]
+	class IdeHelperTrustedDevice {}
 }
 
 namespace App\Models{
@@ -751,6 +863,7 @@ namespace App\Models{
  * @property string|null $id_number
  * @property int $status 1=Active, 0=Deactivated
  * @property bool $two_factor_enabled
+ * @property bool $email_notifications_enabled
  * @property \Illuminate\Support\Carbon|null $email_verified_at
  * @property string|null $remember_token
  * @property \Illuminate\Support\Carbon|null $last_login
@@ -778,6 +891,7 @@ namespace App\Models{
  * @method static \Illuminate\Database\Eloquent\Builder<static>|User whereAddress($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|User whereCreatedAt($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|User whereEmail($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|User whereEmailNotificationsEnabled($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|User whereEmailVerifiedAt($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|User whereFullName($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|User whereId($value)
@@ -792,7 +906,9 @@ namespace App\Models{
  * @method static \Illuminate\Database\Eloquent\Builder<static>|User whereStatus($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|User whereTwoFactorEnabled($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|User whereUpdatedAt($value)
+ * @mixin \Eloquent
  */
-	class User extends \Eloquent implements \Illuminate\Contracts\Auth\MustVerifyEmail {}
+	#[\AllowDynamicProperties]
+	class IdeHelperUser {}
 }
 

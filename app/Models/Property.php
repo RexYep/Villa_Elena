@@ -152,11 +152,14 @@ public function images()
 
     public function getPriceForDate(\Carbon\Carbon $date): float
     {
-        // Check if a pricing rule applies for this date
+        // Check if a pricing rule applies for this date.
+        // `whereDate()` para sa parehong dahilan na nakasulat sa
+        // getPackagePrice() sa ibaba — ang isang tumatawag na may datetime
+        // (hindi hatinggabi) ay hindi makakatama sa huling araw ng rule.
         $rule = $this->pricingRules()
             ->where('is_active', 1)
-            ->where('start_date', '<=', $date)
-            ->where('end_date', '>=', $date)
+            ->whereDate('start_date', '<=', $date->toDateString())
+            ->whereDate('end_date', '>=', $date->toDateString())
             ->first();
 
         if ($rule) {
@@ -189,10 +192,23 @@ public function images()
     {
         // Special date-range pricing rule (hal. holiday override) — mananatili
         // itong pinaka-priority kung meron.
+        //
+        // ⚠️ `whereDate()`, HINDI tuwirang paghahambing sa `$checkin`.
+        //
+        // Ang `$checkin` dito ay laging buong DATETIME (8:00 AM o 7:00 PM —
+        // tingnan ang Booking::SLOTS), samantalang ang `end_date` ay DATE.
+        // Sa `end_date >= '2026-10-17 19:00:00'`, ginagawang hatinggabi ng
+        // MySQL ang petsa, kaya 2026-10-17 00:00 >= 2026-10-17 19:00 ay
+        // MALI — hindi kailanman tumatama ang rule sa HULING araw nito.
+        // Dahil 8AM o 7PM ang lahat ng check-in, ang isang ISANG-ARAW na
+        // rule (hal. "Christmas Day rate") ay walang bisa kailanman, at ang
+        // huling araw ng anumang saklaw ay tahimik na bumabalik sa
+        // karaniwang presyo. Napansin ito sa v6.4 nang gumawa ng pricing
+        // rule ang prescriptive engine at hindi nagbago ang quote.
         $rule = $this->pricingRules()
             ->where('is_active', 1)
-            ->where('start_date', '<=', $checkin)
-            ->where('end_date', '>=', $checkin)
+            ->whereDate('start_date', '<=', $checkin->toDateString())
+            ->whereDate('end_date', '>=', $checkin->toDateString())
             ->first();
 
         if ($rule) {

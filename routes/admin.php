@@ -11,6 +11,7 @@ use App\Http\Controllers\Admin\ReviewController;
 use App\Http\Controllers\Admin\SettingsController;
 use App\Http\Controllers\Admin\InsightsController;
 use App\Http\Controllers\Admin\ForecastController;
+use App\Http\Controllers\Admin\PrescriptiveController;
 use App\Http\Controllers\Admin\CalendarController;
 use App\Http\Controllers\Admin\NotificationController;
 use App\Http\Controllers\Admin\PromotionController;
@@ -110,6 +111,19 @@ Route::delete('reviews/{review}',             [ReviewController::class, 'destroy
 
     // Forecast
     Route::get('/forecast', [ForecastController::class, 'index'])->name('forecast.index');
+
+    // Prescriptive Analytics — ADMIN LANG, tulad ng Promotions. Ang mga
+    // aksyon dito ang gumagawa ng totoong Discount/AvailabilityBlock, at
+    // inilalantad ng page ang panloob na datos ng negosyo (mahihinang
+    // petsa, tinatayang kita), kaya wala ito sa staff portal.
+    Route::get('prescriptive',                          [PrescriptiveController::class, 'index'])->name('prescriptive.index');
+    // GET at read-only — walang isinusulat ang simulator, kaya ligtas
+    // itong i-refresh at i-bookmark.
+    Route::get('prescriptive/simulate',                 [PrescriptiveController::class, 'simulate'])->name('prescriptive.simulate');
+    Route::get('prescriptive/accuracy',                 [PrescriptiveController::class, 'accuracy'])->name('prescriptive.accuracy');
+    Route::post('prescriptive/regenerate',              [PrescriptiveController::class, 'regenerate'])->name('prescriptive.regenerate');
+    Route::post('prescriptive/{recommendation}/apply',  [PrescriptiveController::class, 'apply'])->name('prescriptive.apply');
+    Route::post('prescriptive/{recommendation}/dismiss', [PrescriptiveController::class, 'dismiss'])->name('prescriptive.dismiss');
 
     Route::get('search', [DashboardController::class, 'search'])->name('search');
 

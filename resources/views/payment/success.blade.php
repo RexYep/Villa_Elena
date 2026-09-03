@@ -293,7 +293,7 @@
                 <span class="lbl">Payment Status</span>
                 <span class="val">
                     @if ($booking->payment_status === 'paid')
-                        <span class="status-confirmed">Fully Paid ✓</span>
+                        <span class="status-confirmed">Fully Paid</span>
                     @elseif($booking->payment_status === 'partial')
                         <span class="status-partial">Partial — ₱{{ number_format($booking->balance_due, 2) }}
                             remaining</span>
@@ -310,7 +310,7 @@
             </a>
             @if (!$confirmed && $booking->balance_due > 0)
                 <a href="{{ route('payment.page', $booking) }}" class="btn-secondary">
-                    <i class="bi bi-arrow-clockwise"></i> Subukan ulit ang bayad
+                    <i class="bi bi-arrow-clockwise"></i> Try the payment again.
                 </a>
             @endif
             <a href="{{ route('customer.home') }}" class="btn-secondary">← Back to Dashboard</a>

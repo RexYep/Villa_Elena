@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Booking;
 use App\Models\Payment;
 use App\Models\Property;
+use App\Models\Recommendation;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
@@ -56,7 +57,18 @@ class DashboardController extends Controller
             ];
         });
 
-        return view('admin.dashboard.index', compact('stats'));
+        // SADYANG NASA LABAS ng `Cache::remember` sa itaas. Ang mga KPI ay
+        // maaaring maluma nang isang minuto nang walang masamang epekto,
+        // pero ang isang rekomendasyong kaka-apply o kaka-dismiss lang ay
+        // dapat MAWALA agad dito — kung hindi, mukhang hindi tumalab ang
+        // pinindot ng admin. Mura naman ang query: tatlong row, may index.
+        $topActions = Recommendation::open()
+            ->whereDate('target_end', '>=', today())
+            ->orderByDesc('expected_impact')
+            ->limit(3)
+            ->get();
+
+        return view('admin.dashboard.index', compact('stats', 'topActions'));
     }
 
     // ── Global Search ──────────────────────────────────────────────

@@ -26,15 +26,33 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
-        // Render's free plan blocks outbound SMTP ports entirely, so mail
-        // goes through Brevo's HTTPS API instead (config/mail.php's
-        // 'brevo' mailer, MAIL_MAILER=brevo). Only registers a factory —
-        // harmless when a different MAIL_MAILER (e.g. local dev's "log")
-        // is actually selected.
+        // Brevo's HTTPS API is the PRODUCTION transport: Render's free
+        // plan blocks outbound SMTP ports entirely, so the live site
+        // can't use an SMTP mailer at all. Local dev uses MAIL_MAILER=smtp
+        // instead. This only registers a factory — harmless when a
+        // different MAIL_MAILER is selected, since the closure runs only
+        // when the 'brevo' mailer is actually resolved.
         Mail::extend('brevo', function () {
-            return (new BrevoTransportFactory())->create(
-                Dsn::fromString(config('services.brevo.dsn'))
-            );
+            $dsn = config('services.brevo.dsn');
+
+            // Kapag MAIL_MAILER=brevo pero walang MAILER_DSN, null ang
+            // naipapasa sa Dsn::fromString() — at ang lumalabas ay
+            // TypeError na nagturo sa loob ng Symfony ("Argument #1
+            // ($dsn) must be of type string, null given"), na hindi man
+            // lang binabanggit ang totoong problema: kulang lang pala
+            // ang env. Sinasalo na ito rito nang malinaw.
+            if (blank($dsn)) {
+                throw new \RuntimeException(
+                    'MAIL_MAILER is set to "brevo" but MAILER_DSN is empty. Brevo is the '
+                    .'PRODUCTION transport (Render blocks outbound SMTP) — local dev should '
+                    .'use MAIL_MAILER=smtp. To use Brevo here anyway, set '
+                    .'MAILER_DSN=brevo+api://<API-V3-KEY>@default; that key starts with '
+                    .'"xkeysib-", NOT the "xsmtpsib-" SMTP key. Run `php artisan config:clear` '
+                    .'after editing .env.'
+                );
+            }
+
+            return (new BrevoTransportFactory)->create(Dsn::fromString($dsn));
         });
 
         // The app only loads Bootstrap CSS, not Tailwind, so Laravel's
@@ -56,14 +74,15 @@ class AppServiceProvider extends ServiceProvider
         // admin page) both need this data — share it globally here instead of
         // every controller remembering to pass it.
         View::composer(['layouts.admin', 'admin.partials.topbar_features'], function ($view) {
-            if (!Auth::check() || Auth::user()->role !== 'admin') {
+            if (! Auth::check() || Auth::user()->role !== 'admin') {
                 $view->with(['notifications' => collect(), 'unreadCount' => 0]);
+
                 return;
             }
 
             $view->with([
                 'notifications' => Notification::where('user_id', Auth::id())->latest()->take(8)->get(),
-                'unreadCount'   => Notification::where('user_id', Auth::id())->where('is_read', 0)->count(),
+                'unreadCount' => Notification::where('user_id', Auth::id())->where('is_read', 0)->count(),
             ]);
         });
 
@@ -71,11 +90,11 @@ class AppServiceProvider extends ServiceProvider
         // every guest-facing page, not just the dashboard — share it globally
         // so pages that don't already pass it still show the unread dot.
         View::composer('layouts.customer', function ($view) {
-            if (!Auth::check()) {
+            if (! Auth::check()) {
                 return;
             }
 
-            if (!array_key_exists('unreadNotifications', $view->getData())) {
+            if (! array_key_exists('unreadNotifications', $view->getData())) {
                 $view->with('unreadNotifications', Notification::where('user_id', Auth::id())
                     ->where('is_read', 0)
                     ->get());

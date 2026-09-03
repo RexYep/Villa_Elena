@@ -12,6 +12,7 @@ use App\Services\RefundTransferService;
 use Illuminate\Http\Request;
 use Carbon\Carbon;
 use App\Helpers\NotificationHelper;
+use App\Helpers\BookingMailHelper;
 use App\Events\PaymentReceived;
 use Illuminate\Support\Facades\Auth;
 
@@ -233,11 +234,18 @@ class PaymentController extends Controller
         // Tingnan ang Booking::confirmOnFirstPayment() — kung hindi ito
         // tatawagin, kakanselahin ng stale pending sweeper ang booking
         // na may hawak nang pera ng guest.
-        $booking->confirmOnFirstPayment();
+        $wasPending = $booking->confirmOnFirstPayment();
 
         // Pagkatapos ng recompute — kung hindi, ang "Balance due" sa
         // notification ay ang balanse BAGO ang bayad na ito.
         NotificationHelper::paymentRecorded($booking->fresh(), $request->amount, $request->payment_method);
+
+        // Dati, ang manwal na path na ito ay WALANG email kahit kailan —
+        // ang PayMongo path lang ang nagpapadala. Kaya ang guest na
+        // nagbayad ng cash sa front desk ay walang natatanggap na
+        // resibo o kumpirmasyon. Iisa na ang pinagdadaanan ng apat na
+        // payment path.
+        BookingMailHelper::paymentRecorded($booking, (float) $request->amount, $wasPending);
 
         StaffLog::record('payment_recorded', 'bookings', $booking->id,
             "Manual payment ₱{$request->amount} recorded for {$booking->booking_ref}");

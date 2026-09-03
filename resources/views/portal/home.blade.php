@@ -623,9 +623,13 @@
         .amenity-tag {
             background: var(--sand);
             color: var(--muted);
-            padding: 4px 14px;
+            padding: 5px 10px;
             border-radius: 50px;
-            font-size: 14px;
+            font-size: 13px;
+            font-family: 'Jost', sans-serif;
+            letter-spacing: .3px;
+            font-weight: 500;
+            text-align: center;
         }
 
         .prop-footer {
@@ -770,9 +774,9 @@
         }
 
         .villa-showcase-amenities {
-            display: flex;
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
             gap: 8px;
-            flex-wrap: wrap;
             margin-bottom: 24px;
         }
 
@@ -934,7 +938,7 @@
 
         .amenities-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+            grid-template-columns: repeat(4, 1fr);
             gap: 24px;
             margin-top: 52px;
         }
@@ -1138,19 +1142,19 @@
         }
 
         #gallery .section {
-            padding: 100px 40px;
+            padding: 80px 40px;
         }
 
         /* One photo at a time, auto-advancing slideshow */
         .gallery-slideshow {
             position: relative;
-            margin: 52px auto 0;
-            max-width: 1040px;
-            aspect-ratio: 16 / 10;
-            border-radius: 24px;
+            margin: 44px auto 0;
+            max-width: 820px;
+            aspect-ratio: 16 / 9;
+            border-radius: 20px;
             overflow: hidden;
             background: var(--stone);
-            box-shadow: 0 28px 60px rgba(44, 36, 22, 0.18);
+            box-shadow: 0 20px 50px rgba(44, 36, 22, 0.18);
         }
 
         .gallery-slide {
@@ -1303,7 +1307,7 @@
 
         @media (max-width: 900px) {
             .gallery-slideshow {
-                aspect-ratio: 4 / 3;
+                aspect-ratio: 3 / 2;
             }
         }
 
@@ -2281,14 +2285,12 @@
                         <div class="villa-showcase-footer">
                             <div class="villa-showcase-price">
                                 ₱{{ number_format($villa->base_price, 0) }} <span>/ package</span>
-                                <div class="text-muted-theme"
-                                    style="font-size: 13px;font-family:'Jost',sans-serif;font-weight:400;margin-top:2px;line-height:1.5;">
-                                    * Regular: Mon–Thu &amp; Sun after 6PM &nbsp;|&nbsp;
+                                <div style="font-size:12px;font-family:'Jost',sans-serif;font-weight:400;margin-top:6px;line-height:1.7;color:var(--muted);">
+                                    <div>&#x2022; <strong style="color:var(--stone);font-weight:600;">Regular:</strong> Mon–Thu &amp; Sun after 6PM</div>
                                     @if ($villa->weekend_price && $villa->weekend_price != $villa->base_price)
-                                        * Peak: ₱{{ number_format($villa->weekend_price, 0) }} · Fri, Sat &amp; Sun before
-                                        6PM
+                                        <div>&#x2022; <strong style="color:var(--stone);font-weight:600;">Peak:</strong> ₱{{ number_format($villa->weekend_price, 0) }} &middot; Fri, Sat &amp; Sun before 6PM</div>
                                     @else
-                                        * Same rate applies all week
+                                        <div>&#x2022; Same rate applies all week</div>
                                     @endif
                                 </div>
                             </div>

@@ -458,6 +458,112 @@
 
                     <div class="settings-card">
                         <div class="settings-card-header">
+                            <div class="icon" style="background:#fef3c7;color:#b45309;"><i
+                                    class="bi bi-lightbulb"></i></div>
+                            <div>
+                                <h3>Prescriptive Engine</h3>
+                                <p>The assumptions behind Recommendations — every number on that page traces back here
+                                </p>
+                            </div>
+                        </div>
+                        <div class="settings-card-body">
+                            <div class="two-col mb-16">
+                                <div>
+                                    <label class="form-label">History Window (days)</label>
+                                    <input type="number" name="prescriptive_lookback_days" class="form-control"
+                                        value="{{ $settings['prescriptive_lookback_days'] ?? '180' }}" min="30"
+                                        max="730">
+                                    <span class="hint">How far back fill rates are measured. Longer is steadier but
+                                        slower to notice a change in demand.</span>
+                                </div>
+                                <div>
+                                    <label class="form-label">Planning Horizon (days)</label>
+                                    <input type="number" name="prescriptive_lookahead_days" class="form-control"
+                                        value="{{ $settings['prescriptive_lookahead_days'] ?? '45' }}" min="7"
+                                        max="180">
+                                    <span class="hint">How far ahead promo recommendations look.</span>
+                                </div>
+                            </div>
+                            <div class="two-col mb-16">
+                                <div>
+                                    <label class="form-label">Idle Threshold (%)</label>
+                                    <input type="number" name="prescriptive_idle_threshold" class="form-control"
+                                        value="{{ $settings['prescriptive_idle_threshold'] ?? '35' }}" min="1"
+                                        max="99" step="1">
+                                    <span class="hint">A date is only considered weak — and worth discounting — if its
+                                        historical fill rate is below this.</span>
+                                </div>
+                                <div>
+                                    <label class="form-label">Discount Response</label>
+                                    <input type="number" name="prescriptive_elasticity" class="form-control"
+                                        value="{{ $settings['prescriptive_elasticity'] ?? '1.5' }}" min="0"
+                                        max="10" step="0.1">
+                                    <span class="hint"><strong>This is an assumption, not a measurement.</strong>
+                                        Points of extra booking probability gained per 1% of discount. At 1.5, a 10%
+                                        promo is assumed to lift the fill rate by 15 points. Lower it to make the
+                                        engine more cautious.</span>
+                                </div>
+                            </div>
+                            <div class="two-col mb-16">
+                                <div>
+                                    <label class="form-label">Maximum Discount (%)</label>
+                                    <input type="number" name="prescriptive_max_discount" class="form-control"
+                                        value="{{ $settings['prescriptive_max_discount'] ?? '20' }}" min="1"
+                                        max="50" step="1">
+                                    <span class="hint">The engine will never recommend a promo deeper than this.</span>
+                                </div>
+                                <div>
+                                    <label class="form-label">Minimum Worth (₱)</label>
+                                    <input type="number" name="prescriptive_min_impact" class="form-control"
+                                        value="{{ $settings['prescriptive_min_impact'] ?? '500' }}" min="0"
+                                        step="100">
+                                    <span class="hint">Recommendations projected to be worth less than this are not
+                                        shown at all.</span>
+                                </div>
+                            </div>
+                            <div class="two-col mb-16">
+                                <div>
+                                    <label class="form-label">Maintenance Window (days)</label>
+                                    <input type="number" name="prescriptive_maintenance_days" class="form-control"
+                                        value="{{ $settings['prescriptive_maintenance_days'] ?? '2' }}" min="1"
+                                        max="14">
+                                    <span class="hint">How many consecutive days the villa needs when it closes for
+                                        maintenance.</span>
+                                </div>
+                                <div>
+                                    <label class="form-label">Peak Threshold (%)</label>
+                                    <input type="number" name="prescriptive_peak_threshold" class="form-control"
+                                        value="{{ $settings['prescriptive_peak_threshold'] ?? '60' }}" min="1"
+                                        max="100" step="1">
+                                    <span class="hint">A date is only considered strong enough to charge more for if
+                                        its fill rate is above this.</span>
+                                </div>
+                            </div>
+                            <div class="two-col mb-16">
+                                <div>
+                                    <label class="form-label">Peak Discount Response</label>
+                                    <input type="number" name="prescriptive_peak_elasticity" class="form-control"
+                                        value="{{ $settings['prescriptive_peak_elasticity'] ?? '0.6' }}" min="0"
+                                        max="10" step="0.1">
+                                    <span class="hint">Elasticity for <strong>busy</strong> dates, kept separate on
+                                        purpose. Guests booking a peak weekend have a fixed date and are assumed less
+                                        price-sensitive, so this should be <strong>below 1.0</strong> — at 1.0 or
+                                        above, no price increase is ever recommended.</span>
+                                </div>
+                                <div>
+                                    <label class="form-label">Maximum Increase (%)</label>
+                                    <input type="number" name="prescriptive_max_increase" class="form-control"
+                                        value="{{ $settings['prescriptive_max_increase'] ?? '20' }}" min="1"
+                                        max="100" step="1">
+                                    <span class="hint">The engine will never recommend raising a rate by more than
+                                        this.</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="settings-card">
+                        <div class="settings-card-header">
                             <div class="icon tag-purple"><i class="bi bi-toggles"></i></div>
                             <div>
                                 <h3>Booking Options</h3>

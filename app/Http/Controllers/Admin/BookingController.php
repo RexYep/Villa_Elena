@@ -13,6 +13,7 @@ use App\Models\Notification;
 use App\Models\StaffLog;
 use Illuminate\Http\Request;
 use App\Helpers\NotificationHelper;
+use App\Helpers\BookingMailHelper;
 use App\Events\BookingCreated;
 use App\Events\BookingUpdated;
 use App\Events\PropertyAvailabilityChanged;
@@ -564,7 +565,15 @@ class BookingController extends Controller
         // Tingnan ang Booking::confirmOnFirstPayment() — kung hindi ito
         // tatawagin, kakanselahin ng stale pending sweeper ang booking
         // na may hawak nang pera ng guest.
-        $booking->confirmOnFirstPayment();
+        $wasPending = $booking->confirmOnFirstPayment();
+
+        // Dati, walang email ang manwal na path na ito. Pero ang form
+        // dito ay tumatanggap din ng payment_type = 'refund' — at ang
+        // isang refund ay HINDI "natanggap na bayad", kaya hindi dapat
+        // makapag-trigger ng resibo na nagsasabing salamat sa bayad.
+        if ($request->payment_type !== 'refund') {
+            BookingMailHelper::paymentRecorded($booking, (float) $request->amount, $wasPending);
+        }
 
         StaffLog::record('recorded_payment', 'payments', $booking->id,
             "Recorded ₱{$request->amount} payment for {$booking->booking_ref}");

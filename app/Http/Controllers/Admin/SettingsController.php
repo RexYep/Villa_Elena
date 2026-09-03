@@ -40,6 +40,21 @@ class SettingsController extends Controller
             'facebook_url' => 'nullable|url',
             'tiktok_url' => 'nullable|url',
             'google_maps_url' => 'nullable|url',
+
+            // Prescriptive engine — mga PAGPAPALAGAY, hindi sinukat na
+            // katotohanan. Nakalantad sila rito nang sadya: ang unang
+            // itatanong tungkol sa isang rekomendasyon ay "saan galing ang
+            // numerong iyan?", at dapat may maituturong field ang sagot.
+            'prescriptive_lookback_days' => 'required|integer|min:30|max:730',
+            'prescriptive_lookahead_days' => 'required|integer|min:7|max:180',
+            'prescriptive_idle_threshold' => 'required|numeric|min:1|max:99',
+            'prescriptive_elasticity' => 'required|numeric|min:0|max:10',
+            'prescriptive_max_discount' => 'required|numeric|min:1|max:50',
+            'prescriptive_min_impact' => 'required|numeric|min:0',
+            'prescriptive_maintenance_days' => 'required|integer|min:1|max:14',
+            'prescriptive_peak_threshold' => 'required|numeric|min:1|max:100',
+            'prescriptive_peak_elasticity' => 'required|numeric|min:0|max:10',
+            'prescriptive_max_increase' => 'required|numeric|min:1|max:100',
         ]);
 
         $keys = [
@@ -49,6 +64,11 @@ class SettingsController extends Controller
             'booking_cooldown_threshold', 'booking_cooldown_window_days', 'booking_cooldown_hours',
             'check_out_time', 'max_advance_days', 'min_stay_nights',
             'tax_percentage', 'facebook_url', 'tiktok_url', 'google_maps_url',
+            'prescriptive_lookback_days', 'prescriptive_lookahead_days',
+            'prescriptive_idle_threshold', 'prescriptive_elasticity',
+            'prescriptive_max_discount', 'prescriptive_min_impact',
+            'prescriptive_maintenance_days', 'prescriptive_peak_threshold',
+            'prescriptive_peak_elasticity', 'prescriptive_max_increase',
         ];
 
         foreach ($keys as $key) {

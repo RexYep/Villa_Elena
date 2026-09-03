@@ -59,6 +59,10 @@
             <span class="nav-icon"><i class="bi bi-graph-up-arrow"></i></span>
             Forecast
         </a>
+        <a href="{{ route('admin.prescriptive.index') }}" class="nav-item-custom {{ request()->routeIs('admin.prescriptive.*') ? 'active' : '' }}">
+            <span class="nav-icon"><i class="bi bi-lightbulb"></i></span>
+            Recommendations
+        </a>
         <a href="{{ route('admin.reports.index') }}" class="nav-item-custom {{ request()->routeIs('admin.reports.*') ? 'active' : '' }}">
             <span class="nav-icon"><i class="bi bi-bar-chart-line"></i></span>
             Reports

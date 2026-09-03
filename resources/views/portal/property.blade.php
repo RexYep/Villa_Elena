@@ -709,12 +709,6 @@
             <div class="booking-card">
                 @if ($property->status !== 'maintenance' && $allowOnlineBooking)
                     <div class="booking-price">₱{{ number_format($property->base_price, 0) }} <span>/ package</span></div>
-                    <div class="text-muted-theme" style="font-size: 13px;margin-bottom:2px;">Day (8AM–5PM) or Night (7PM–6AM)
-                        whole-villa stay</div>
-                    @if ($property->weekend_price && $property->weekend_price != $property->base_price)
-                        <div class="price-weekend">₱{{ number_format($property->weekend_price, 0) }} peak package (Fri–Sun
-                            before 6PM)</div>
-                    @endif
 
                     <form method="GET" action="{{ route('portal.book', $property) }}" id="bookingForm">
                         <div class="mb-12">

@@ -90,14 +90,32 @@ Please provide:
 1. Expected number of bookings for each of the next 3 months
 2. Expected revenue (in PHP) for each of the next 3 months
 3. 3 key factors that will influence performance
-4. 2 actionable recommendations to maximize revenue
+
+Do NOT recommend specific actions, discounts, price changes, or promo campaigns.
+Your job here is the OUTLOOK only — what is likely to happen and why. Stop there.
 
 Write a clear, professional, formal business report — the kind a resort owner would
 receive from a real analyst, not a casual chat reply. Use proper Markdown: a heading
 per month (###), short paragraphs or bullet points under each, and a closing section
-for the key factors and recommendations. Be specific with numbers.
+for the key factors. Be specific with numbers.
         ";
 
+        // SADYANG HINDI na humihingi ng rekomendasyon ang prompt sa itaas.
+        //
+        // Dati, hinihingan dito ang AI ng "2 actionable recommendations".
+        // Sinusulat iyon ng modelo mula sa pangkalahatang kaalaman nito sa
+        // industriya, hindi kinokompyut mula sa datos ng Villa Elena — kaya
+        // walang masasagot sa tanong na "saan galing ang numerong iyan?",
+        // at hindi ito maaaring isagawa ng sistema.
+        //
+        // Ang gawaing iyon ay nasa /admin/prescriptive na ngayon, kung saan
+        // ang bawat mungkahi ay may kinompyut na inaasahang halaga, may
+        // ipinapakitang ebidensya, at may Apply na tunay na gumagawa ng
+        // Discount o AvailabilityBlock. Mahalagang MANATILING iisa lang ang
+        // pinagmumulan ng payo: kung muling hihingi ang page na ito ng
+        // sariling rekomendasyon, magkakasalungat ang dalawang page at
+        // mawawalan ng saysay pareho.
+        //
         // Multi-month Markdown report — 1024 tokens cuts it off mid-section.
         $forecastRaw = $ai->ask($prompt, 2048);
 

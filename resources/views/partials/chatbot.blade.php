@@ -477,6 +477,38 @@
         opacity: .4;
         cursor: not-allowed;
     }
+
+    /* ── Small screens ────────────────────────────────────────────────
+       #chat-window above is a fixed 380px panel pinned 28px from the
+       right edge, so it needs 408px of viewport just to sit on screen.
+       Narrower than that and it is laid out partly off the LEFT edge
+       (measured left: -42px at a 375px viewport) with its content simply
+       cut off — no scrollbar appears to hint at it either, because a
+       position:fixed box overflowing leftwards never creates one.
+       Anchor it to both edges instead and let the width fall out of that.
+
+       Kept at the end of the block on purpose: this re-declares width /
+       left / right / height, which the base #chat-window rule also sets
+       at the same specificity, so source order is what decides the
+       winner. Placed above the base rule it would silently lose. */
+    @media (max-width: 480px) {
+        #chat-window {
+            left: 12px;
+            right: 12px;
+            width: auto;
+            bottom: 92px;
+            /* A flat 560px does not fit a 667px-tall phone once the
+               bottom offset and the launcher below it are accounted for.
+               Kept a DEFINITE height rather than auto + max-height so the
+               flex column inside (scrolling message list) still resolves. */
+            height: min(560px, calc(100vh - 140px));
+        }
+
+        #chat-bubble {
+            bottom: 20px;
+            right: 20px;
+        }
+    }
 </style>
 
 {{-- Bubble --}}

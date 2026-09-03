@@ -15,6 +15,7 @@ use App\Models\StaffLog;
 use App\Models\User;
 use Illuminate\Http\Request;
 use App\Helpers\NotificationHelper;
+use App\Helpers\BookingMailHelper;
 use Illuminate\Support\Facades\Auth;
 
 
@@ -652,7 +653,11 @@ class FrontDeskController extends Controller
         // Kung hindi ito tatawagin, mananatiling 'pending' ang booking
         // kahit may natanggap nang pera — at kakanselahin ito ng stale
         // pending sweeper.
-        $booking->confirmOnFirstPayment();
+        $wasPending = $booking->confirmOnFirstPayment();
+
+        // Dati, ang front desk ay walang ipinapadalang email — kaya ang
+        // guest na nagbayad ng balanse sa counter ay walang resibo.
+        BookingMailHelper::paymentRecorded($booking, (float) $request->amount, $wasPending);
 
         StaffLog::record('payment_recorded', 'bookings', $booking->id,
             "Payment ₱{$request->amount} recorded for booking {$booking->booking_ref} by " . Auth::user()->full_name);

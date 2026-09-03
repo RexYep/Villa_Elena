@@ -1,12 +1,210 @@
 # Villa Elena Private Rental Resort
 ## Resort Management System — Project Documentation
 
-**Version:** 6.2
+**Version:** 6.5
 **Stack:** PHP 8.2 / Laravel 12 / MySQL 8 / Bootstrap 5
 **Local URL:** `http://127.0.0.1:8000` (`php artisan serve`) or `http://localhost:8000` (Docker — see v5.3)
 **Live URL:** `https://villa-elena.onrender.com` (Render, free tier — testing only, not yet handed to real guests)
 **Database (local):** `villa_elena_db` (MySQL, XAMPP or standalone MySQL — same database either way)
 **Database (live):** Aiven MySQL free tier, database `defaultdb`
+
+---
+
+## What Changed in v6.5 (Read This First)
+
+### Phase 4 — the engine now grades itself
+
+Until now the system only made promises. `expected_impact` was a forecast, and nothing ever came back to check it. `recommendations.realized_impact` has existed since v6.3 and been **permanently NULL**. It is now filled.
+
+**Route:** `GET /admin/prescriptive/accuracy` → `admin.prescriptive.accuracy`
+**Filled by:** `OutcomeTracker::settleDue()`, run from `prescriptive:generate` right after the engine
+
+### The measurement, and the one column that makes it possible
+
+```
+realized_impact = actual_revenue − baseline_projection
+```
+
+`baseline_projection` is a **new column, frozen on the day the recommendation was made**: the revenue expected over that window if nothing were done. This is the whole reason a new column was needed — `expected_impact` only ever stored the *delta*, not the level, and the level is what reality has to be compared against.
+
+**It deliberately is not recomputed at settlement time.** By then the fill rates have moved, so recomputing would produce a different number than the one actually promised. A forecast quietly adjusted after the answer is known is not a forecast.
+
+`actual_revenue` is `base_amount − discount_amount` on bookings that went ahead in that window and slot — **not `total_amount`**, because that includes extras (food, add-on services) which were never part of the projection. Counting them would inflate every result against a baseline that excludes them, and make the engine look cleverer than it is. Cancelled and no-show bookings are excluded; the slot filter matters (a day booking must not score a night recommendation).
+
+Every date in `[target_start, target_end]` was open when the recommendation was generated — advisors only ever group *consecutive open* dates — so any booking found there arrived **after** the forecast. Nothing already-sold is counted as a win.
+
+### 🔴 The honesty problem, and how the page handles it
+
+**This is not a controlled experiment, and the page says so before it shows a single number.** There is no control group: the same September without the promo is unobservable. Everything is measured against the model's *own* baseline, so a result mixes two questions together — did the action work, and was the baseline right?
+
+The accuracy page therefore splits into two sections that must not be merged:
+
+1. **"Is the model honest?"** — measured **only on dismissed/expired** recommendations. Nothing was done, so the gap between forecast and reality is *pure `DemandModel` error*, with no intervention muddying it. This is the cleanest self-test available, and the genuinely valuable number.
+2. **"Did the actions pay off?"** — measured on **applied** recommendations. Useful, but confounded by definition; section 1 is what tells the two apart.
+
+A sample-size warning appears automatically under either section while it holds fewer than 10 settled windows, saying in plain words that it is an early signal and not a result. Expected revenue is a probability spread over a handful of slots — **one booking can flip the sign of a single window** — so only aggregates across many settled recommendations mean anything.
+
+### What is deliberately left unscored
+
+**Maintenance recommendations are never given a `realized_impact`.** The window is closed on purpose, so actual revenue there is always zero, and comparing that to the baseline would just return the projected cost — the plan restated as if it were a result. The real question ("what would a different window have earned?") is unanswerable, because it did not happen. These are marked `settled_at` with a NULL score and shown on the page as *not measurable*, alongside a count. The same applies to any recommendation predating this feature, which has no frozen baseline.
+
+Being visibly unable to score something is better than producing a number that looks like a measurement and is not.
+
+### Verified (2026-09-03)
+
+Settling was exercised against a synthetic past window inside a rolled-back transaction, covering every branch:
+
+| Case | Result |
+|---|---|
+| Applied, ₱120 base − ₱20 discount booked in window | `actual = 100`, `realized = 0` against a ₱100 baseline ✅ |
+| A ₱500 **day-slot** booking in the same window, night-slot recommendation | correctly **excluded** ✅ |
+| Dismissed, window empty apart from a **cancelled** booking | `actual = 0`, `realized = −250` ✅ |
+| Maintenance | settled, score NULL ✅ |
+| Legacy row with no frozen baseline | settled, score NULL ✅ |
+
+The accuracy page was rendered both with settled data and in its empty state.
+
+The live database currently has **nothing settled** — every open window is still in the future — so the page correctly reports how many are waiting rather than inventing a score.
+
+---
+
+## What Changed in v6.4 (Read This First)
+
+### Prescriptive analytics, Phase 3 — and three bugs that only running it could find
+
+Four additions on top of the v6.3 engine, plus a **pre-existing pricing bug** the work exposed.
+
+| Added | Where |
+|---|---|
+| `PeakRateAdvisor` — recommends **raising** rates on strong dates | `app/Services/Prescriptive/Advisors/` |
+| What-If Simulator — the same model, driven by the admin | `GET /admin/prescriptive/simulate` |
+| Dashboard **Recommended Actions** widget (top 3) | `Admin\DashboardController` + dashboard view |
+| AI morning briefing — one call per run, prose only | `app/Services/Prescriptive/BriefingWriter.php` |
+
+### 🔴 A shipped pricing bug: a `pricing_rules` row never applied on its last day
+
+**This predates the prescriptive work and affected the existing Pricing Rules feature directly.**
+
+`Property::getPackagePrice()` compared a **DATE** column against a full **DATETIME**:
+
+```php
+->where('end_date', '>=', $checkin)     // $checkin is 2026-10-17 19:00:00
+```
+
+MySQL widens `end_date` to midnight, so `2026-10-17 00:00 >= 2026-10-17 19:00` is **false**. Since every check-in is 8:00 AM or 7:00 PM (`Booking::SLOTS`), the consequences were:
+
+- A **one-day pricing rule was completely inert** — a "Christmas Day rate" would never once apply.
+- The **last day of any range** silently fell back to the regular rate.
+
+Measured before the fix: a Nov 1–5 rule at ₱888 returned ₱888 on Nov 3 and **₱12** on Nov 5. Both `getPackagePrice()` and `getPriceForDate()` now use `whereDate(...)` against `toDateString()`. Verified across single-day, first day, middle, last day, and the days on either side.
+
+It surfaced because applying a peak-rate recommendation created a correct `pricing_rules` row and **the quote did not move**. A fake would have reported success; only the real end-to-end read caught it.
+
+### Two engine bugs found by running it twice under changing conditions
+
+1. **A cache outage silently wiped the page.** Redis went down in dev, so every advisor threw inside `Setting::get()`, produced no fingerprints — and `expireStale()` dutifully expired **every open card**, leaving one log line as the only trace. Advisors now declare `type()`, and expiry is scoped to the types whose advisor actually *finished*. A silent advisor is not evidence that its recommendations stopped being true.
+2. **Expired recommendations could never come back.** The dedupe rule "never resurrect the dead" was applied to `expired` as well as `applied`/`dismissed` — but `expired` is the engine's own bookkeeping, not a human decision. A card killed because someone booked the date stayed dead **even after that booking was cancelled**. Now only `applied` and `dismissed` are permanent; `expired` revives to `new` when the opportunity is regenerated. Found when 23 regenerated cards came back as `skipped`.
+
+### PeakRateAdvisor — and why it needs its own elasticity
+
+Same optimization as the promo advisor, opposite direction: `E(u) = p(u) × price × (1 + u)`, `p(u) = p × (1 − e·u)`, optimum at `u* = (1 − e)/(2e)`.
+
+**`prescriptive_peak_elasticity` (default 0.6) is deliberately separate from `prescriptive_elasticity` (1.5).** Someone shopping a quiet Tuesday is hunting a bargain — elastic. Someone booking a peak Saturday for a reunion has a fixed date — inelastic. One number for both is guaranteed to be wrong for one of them. The mathematics then gives the mirror-image classic result: **raising price only pays when demand is inelastic (e < 1)**, and the advisor returns early when it is not.
+
+An engine that can only discount is not optimizing revenue — it is giving it away. This is the half that answers *"does your system just hand out discounts?"*
+
+> ⚠️ **`type = 'fixed'`, never `'percentage'`, and this is load-bearing.** A `percentage` pricing rule is computed by `getPackagePrice()` as `base_price × (1 + price/100)` — always against the **base** rate, never `weekend_price`. Peak dates are almost always weekends, so a "+15%" rule on a Saturday yields `4,000 × 1.15 = 4,600` against the ₱6,000 currently charged: **a recommendation to raise prices would quietly cut them.** The advisor emits an absolute amount, `PrescriptiveController::createPricingRule()` forces `'fixed'` as a second layer, and consecutive dates are only merged when their **current price matches** (a Fri+Mon merge would flatten ₱6,000 and ₱4,000 into one number).
+
+### What-If Simulator — `GET /admin/prescriptive/simulate`
+
+The cards answer questions nobody asked. Here the owner picks the dates, slot, and price change and sees what the same `DemandModel` projects. Negative = discount, positive = increase; the matching elasticity is selected automatically and **named on screen**, with an invitation to change it in Settings and re-run to see how sensitive the answer is.
+
+Read-only and `GET` — nothing is written, so it is safe to refresh, bookmark, and demo repeatedly. Range is capped at 90 days: a year of inference on six months of data is not a simulation.
+
+Verified against hand-computed ratios at −50/−30/−10/0/+15/+50%; all six matched to within the probability ceiling's rounding.
+
+### The AI's role, drawn tightly
+
+`BriefingWriter` makes **one Groq call per engine run** — not one per card, and never one per page view (the mistake Insights and Forecast still make, calling the API on every visit). The output is stored in `settings` and simply read by the page.
+
+The prompt hands over the already-computed figures and forbids the model from inventing a number, adding a recommendation, or using markdown. It fails **open**: on any error the briefing is **cleared, not left stale** — a briefing describing recommendations that no longer exist is worse than none — and the page stands on its own, because the cards are the product and the paragraph is decoration. `--no-briefing` skips the call while developing.
+
+Sample of real output, which uses only figures from the card: *"Prioritize scheduling two days of maintenance for October 5–6, 2026, as this window minimizes expected revenue loss to PHP 4 compared to the typical PHP 6."*
+
+### Verified (2026-09-03)
+
+Live local DB throughout. All three action types driven through `apply()` inside rolled-back transactions: promo → `Discount` → `quoteFor()` **drops**; peak rate → `PricingRule` → `quoteFor()` **rises** (₱14 → ₱16.80, after the boundary fix); maintenance → `AvailabilityBlock`. Recommendations, simulator, dashboard, and settings pages all rendered for real. Double-apply refused.
+
+> One test artifact worth knowing: `Setting::set()` inside a rolled-back transaction leaves the **new value in Redis** while the DB reverts, so settings read stale afterwards. Not a product problem — nothing rolls back in production — but it will confuse the next person testing this way. `Cache::forget('setting_<key>')` clears it.
+
+---
+
+## What Changed in v6.3 (Read This First)
+
+### Prescriptive analytics — the thing the project is named after, finally built
+
+The system's full title is *"Web-Based Resort Management System with **Prescriptive Analytics**"*, and until now the prescriptive layer did not exist. What existed was:
+
+| Layer | Where |
+|---|---|
+| Descriptive (*what happened*) | Dashboard KPIs, Reports + PDF/Excel |
+| Diagnostic (*why*) | `/admin/insights` — 5 AI one-liners |
+| Predictive (*what will happen*) | `/admin/forecast` — real 6-month data, LLM-written outlook |
+| Prescriptive (*what to do about it*) | **nothing** |
+
+The closest thing to it was line 4 of the forecast prompt, `"2 actionable recommendations to maximize revenue"`. **That line is now deleted**, and its deletion is the point: those recommendations were written by the model out of general hospitality knowledge, not computed from Villa Elena's data. They could not answer *"where did that number come from?"*, and the system could not act on them. Two competing sources of advice — one computed, one improvised — is worse than one, so the forecast prompt now explicitly says *"Do NOT recommend specific actions, discounts, price changes, or promo campaigns."* Forecast is the **outlook**; `/admin/prescriptive` is the **decision**.
+
+### The rule the whole feature is built on
+
+> **The engine decides (rules + optimization over the resort's own data). Nothing is executed until a human presses Apply.**
+
+`prescriptive:generate` writes rows to **one table, `recommendations`, and nothing else**. No `Discount`, no `PricingRule`, no `AvailabilityBlock`, no `Setting`. It can run every night forever without changing a single price or anything a guest can see. Execution lives only in `Admin\PrescriptiveController::apply()`.
+
+Auto-apply was considered and **rejected**: a system that silently lowers prices is hard to defend and dangerous in a real business. The manual gate is also what makes the feature *measurable* — the accept/dismiss rate is real evidence of usefulness, which auto-apply would destroy.
+
+### The two advisors (Phase 1)
+
+**`IdleDatePromoAdvisor`** — for each open future date × slot, grid-searches candidate discounts and picks the one maximizing expected revenue:
+
+```
+E(d) = p(d) × price × (1 − d)
+p(d) = p × (1 + elasticity × d)      [capped at probability_ceiling]
+```
+
+When `d = 0` wins, **nothing is recommended** — that is the feature working, not failing.
+
+**`MaintenanceWindowAdvisor`** — the villa has to close sometime; the only question is *when*, and every answer has a price. It scores every candidate window in the horizon by `Σ p × price` and picks the cheapest. Reported impact is the **avoidable** cost (average window − best window), not the window's own cost, so it never pretends maintenance is free.
+
+### Three modelling decisions that were arrived at by being wrong first
+
+1. **The discount response is multiplicative, not additive.** The first version used `p + e·d` and every single date came back recommending the maximum 20% — the corner solution. That is the signature of a broken model, not a thrifty villa: additive response claims an 8%-fill date gains the same 15 points as a 30%-fill date. Multiplicative makes `elasticity` the textbook **price elasticity of demand**, puts the optimum in the interior at `d* = 50(e−1)/e` (≈17% at e = 1.5), and reproduces the classic result that **cutting price only pays when demand is elastic (e > 1)**. Do not revert this to additive.
+2. **Fill rates are Jeffreys-smoothed:** `(booked + 0.5) / (sample + 1)`. Under a multiplicative response, a raw `0/26` gives `p = 0`, and zero multiplied by anything stays zero — so the dates with *no* bookings at all, exactly the ones most needing help, could never receive a recommendation. `0/26` means *rare*, not *impossible*. The **raw** counts are still what the evidence text shows the admin.
+3. **Blocked days are excluded from the fill-rate denominator.** A day the villa was closed was never *offered*, so counting it as "not sold" makes healthy days look weak and invents problems to solve.
+
+### Every assumption is admin-editable, on purpose
+
+Settings → **Prescriptive Engine** (`prescriptive_*` keys, same pattern as `booking_hold_minutes`): history window, planning horizon, idle threshold, **discount response (elasticity)**, max discount, minimum worth, maintenance days. The elasticity is a **guess, not a measurement** — Villa Elena has no promo history to fit it against — and every recommendation card says so in its own evidence list. The first question anyone asks about a recommendation is *"where did that number come from?"*, and the answer must be a field the owner can point at, never a constant buried in code.
+
+`config/prescriptive.php` holds the non-admin tunables (discount candidates, probability ceiling, lead times, `max_promo_run_days`, `extra_holidays`).
+
+### Smaller things that matter
+
+- **Philippine holidays are computed, not hardcoded** (`HolidayCalendar`) — fixed dates from RA 9492, plus Easter-derived Holy Week via Meeus/Butcher (no `ext-calendar` needed). Used as a **guard**: never discount a holiday, never schedule maintenance on one. Eid'l Fitr/Adha are deliberately absent (proclaimed yearly on moon sighting) — add them to `config('prescriptive.extra_holidays')`.
+- **Dedupe by `fingerprint`**, so the nightly run updates one card instead of stacking a new one each morning. A dismissed or applied recommendation is **never resurrected** — the admin's "no" is an answer, not an invitation to ask again tomorrow.
+- **Open recommendations that stop being regenerated are auto-expired**, which covers both "the date passed" and "someone booked it".
+- **Apply re-validates before writing.** A card can sit in an open tab for hours; a maintenance block is refused if a booking has since landed inside the window.
+- **Promo runs are capped at 14 days** so *"20% off every night for a month"* can't be approved with one click.
+- The claim is taken in a `lockForUpdate()` transaction **before** the record is created, so a double-click cannot create two promos — same shape as the refund-transfer guard, for the same reason.
+
+### Verified end to end (2026-09-01)
+
+Not just unit-level: `prescriptive:generate` run against the live local DB (54 bookings, 36 in the trailing window), the page rendered for real (`->render()`, 119k chars), and `apply()` driven for both action types inside a rolled-back transaction. Confirmed the full loop: recommendation → Apply → real `Discount` row → **`Property::quoteFor()` drops the price** (₱12 → ₱10.20 on a 15% card) → `Discount::publicActive()` picks it up for the landing banner. Double-apply correctly refused.
+
+> ⚠️ **Note for local demos:** the local villa's `base_price`/`weekend_price` are **₱12/₱16** (small amounts left over from live PayMongo testing), so every promo card is worth pennies and is filtered out by the ₱500 *Minimum Worth* setting. To see promo cards locally, set the villa's real rates (₱4,000/₱6,000) or lower *Minimum Worth*.
+
+### Still to do
+
+Nothing from this list remains — Phase 3 shipped in **v6.4** and Phase 4 (outcome tracking) in **v6.5**, both below.
 
 ---
 
@@ -994,7 +1192,8 @@ Version 3.0 modeled the resort as a **hotel with individually bookable rooms/vil
    - [Dashboard Search & Bell](#615-dashboard-search--bell)
    - [AI Smart Insights](#616-ai-smart-insights)
    - [AI Forecasting](#617-ai-forecasting)
-   - [AI Chatbot](#618-ai-chatbot)
+   - [Prescriptive Analytics (Recommendations)](#618-prescriptive-analytics-recommendations)
+   - [AI Chatbot](#619-ai-chatbot)
    - [Seasonal Promotions (v6.0)](#619-seasonal-promotions-v60)
 7. [Pricing Model (v4.0)](#7-pricing-model-v40)
 8. [Booking Availability & Fixed Slots (v5.1)](#8-booking-availability--fixed-slots-v51)
@@ -1905,21 +2104,57 @@ Generates 5 bullet-point insights from real booking/revenue data using AI.
 
 **Route:** `GET /admin/forecast` → `admin.forecast`
 
-Linear regression algorithm on 6 months of booking and revenue data.
+LLM-written outlook over 6 months of **live** booking and revenue data (the hardcoded `$dummyBookings`/`$dummyRevenue` arrays were replaced on 2026-08-11 — see the Pending/Optional table).
 
-> ⚠️ **Still on dummy data (re-checked v5.0):** `Admin\ForecastController::index()` currently runs entirely on hardcoded arrays (`$dummyBookings`, `$dummyRevenue`, `$totalProperties = 4; // dummy`), not live database queries — this was already listed as pending in v4.0 and hasn't been addressed since.
+> **(v6.3) This page is the outlook only.** The prompt used to ask for *"2 actionable recommendations"*; that request was removed and replaced with an explicit instruction **not** to recommend actions, discounts, price changes, or campaigns. Recommendations are computed — not written by the model — over at [§6.18](#618-prescriptive-analytics-recommendations). If this prompt ever asks for advice again, the two pages will contradict each other and both become untrustworthy.
 
 **Outputs:**
-- Predicted bookings for next month
-- Predicted revenue for next month
-- Booking growth % vs last month
-- Revenue growth % vs last month
-- Peak month identification
-- Bar chart: 6 months historical + 1 month forecast
+- Expected bookings for each of the next 3 months
+- Expected revenue (PHP) for each of the next 3 months
+- 3 key factors influencing performance
+- Bar chart: 6 months historical + forecast
+- Footer link through to Recommendations (what to *do* about the outlook)
 
 ---
 
-### 6.18 AI Chatbot
+### 6.18 Prescriptive Analytics (Recommendations)
+
+**Routes:** `GET /admin/prescriptive` → `admin.prescriptive.index`, plus `regenerate` / `{rec}/apply` / `{rec}/dismiss` (all POST)
+**Generated by:** `prescriptive:generate`, scheduled `dailyAt('01:30')` in `routes/console.php`
+**Admin only** — same reasoning as Promotions (`routes/admin.php`): applying a card creates a real discount, and the page exposes internal business data (weak dates, projected revenue, the elasticity assumption).
+
+The layer that answers **"what should I do?"** — as distinct from Insights (*why*) and Forecast (*what will happen*). Full rationale in **What Changed in v6.3**.
+
+**Pipeline:**
+
+```
+DemandModel          p(date, slot) from smoothed historical fill rates
+                     price via Property::quoteFor()  ← never reimplemented
+   ↓
+Advisors             IdleDatePromoAdvisor     → best discount by expected revenue
+                     PeakRateAdvisor          → best increase (inelastic peak dates)
+                     MaintenanceWindowAdvisor → cheapest window to close
+   ↓
+PrescriptiveEngine   dedupe by fingerprint, refresh open cards, expire stale ones
+   ↓
+recommendations      one table. Nothing else is written. Guests see nothing.
+   ↓
+Apply (a human)      → Discount / AvailabilityBlock + StaffLog + applied_record_id
+```
+
+**Each card carries:** title, plain-language summary, a **"Why this?"** evidence list built from the actual numbers (including the elasticity assumption, named out loud), projected peso impact, confidence (from sample size — the *weakest* day-of-week in the window, not the total), and the target window.
+
+**Confirmation modals state the exact effect**, not "Are you sure?" — including an explicit warning that an applied promo is visible to guests immediately (landing banner + booking price), while a block simply removes dates from the calendar.
+
+**Key files:** `app/Services/Prescriptive/{DemandModel,PrescriptiveEngine,HolidayCalendar,BriefingWriter,OutcomeTracker}.php`, `app/Services/Prescriptive/Advisors/`, `app/Models/Recommendation.php`, `app/Http/Controllers/Admin/PrescriptiveController.php`, `resources/views/admin/prescriptive/{index,simulate,accuracy}.blade.php`, `config/prescriptive.php`.
+
+**Also surfaces in two other places:** the Dashboard's *Recommended Actions* widget (top 3, queried **outside** the 60-second KPI cache so an applied card disappears immediately), and the **What-If Simulator** at `/admin/prescriptive/simulate` — the same `DemandModel`, but with the admin asking the question.
+
+**Outcome tracking (v6.5):** once a window closes, `OutcomeTracker` fills `actual_revenue` and `realized_impact` against the `baseline_projection` frozen when the forecast was made, and `/admin/prescriptive/accuracy` reports it. Read that page's two sections as it labels them: **dismissed/expired** recommendations test the model cleanly, **applied** ones are confounded by the intervention. Maintenance windows are never scored — see v6.5 for why.
+
+---
+
+### 6.19 AI Chatbot
 
 **Route:** `POST /chatbot` → `chatbot.reply`
 **Provider:** Groq API (model from `GROQ_MODEL`, default `openai/gpt-oss-20b`)
@@ -2094,7 +2329,8 @@ app/
 │   │   │   ├── PaymentController.php
 │   │   │   ├── ReviewController.php
 │   │   │   ├── InsightsController.php
-│   │   │   └── ForecastController.php
+│   │   │   ├── ForecastController.php
+│   │   │   └── PrescriptiveController.php
 │   │   ├── Customer/
 │   │   │   ├── HomeController.php
 │   │   │   └── ReviewController.php
@@ -2187,6 +2423,7 @@ resources/views/
 │   ├── reports/       index.blade.php
 │   ├── insights/      index.blade.php
 │   ├── forecast/      index.blade.php
+│   ├── prescriptive/  index.blade.php, simulate.blade.php, accuracy.blade.php
 │   ├── calendar/      index.blade.php   (FullCalendar-based admin calendar)
 │   └── settings/      index.blade.php
 ├── customer/
@@ -2386,6 +2623,12 @@ DELETE /admin/reviews/{review}                admin.reviews.destroy
 GET    /admin/reports                         admin.reports.index
 GET    /admin/insights                        admin.insights
 GET    /admin/forecast                        admin.forecast
+GET    /admin/prescriptive                    admin.prescriptive.index
+GET    /admin/prescriptive/simulate           admin.prescriptive.simulate
+GET    /admin/prescriptive/accuracy           admin.prescriptive.accuracy
+POST   /admin/prescriptive/regenerate         admin.prescriptive.regenerate
+POST   /admin/prescriptive/{rec}/apply        admin.prescriptive.apply
+POST   /admin/prescriptive/{rec}/dismiss      admin.prescriptive.dismiss
 GET    /admin/settings
 PUT    /admin/settings
 GET    /admin/calendar                        admin.calendar.index
@@ -2520,6 +2763,11 @@ DELETE /my/profile/devices/{device}           customer.profile.devices.destroy  
 | **(v5.7)** Docker container silently ran the old `bootstrap/app.php` | The CSRF fix above appeared to do nothing — the container serving `localhost:8000` kept returning 419. Compose Watch syncs `app/`, `resources/`, `routes/`, `config/` and `database/`, but **`bootstrap/` was never in the watch list**, so middleware changes could never reach the container. A variant of the v5.5 stale-container trap, but not fixable by running `--watch`: the path simply wasn't covered | Added a **single-file** sync entry for `./bootstrap/app.php` (deliberately *not* the whole `./bootstrap` directory — `bootstrap/cache/` must never be synced; the host copy reflects a full dev `composer install` and overwrites the image's `--no-dev` manifest, breaking container start with `Class ...ServiceProvider not found`) |
 | **(v5.7)** The success page told every visitor "Payment Successful!" | Unconditional green check and confirmation text, with a blank cell where the payment status belonged whenever the booking was still `unpaid`. Under QR Ph a guest can legitimately reach this page before settlement completes, so the page would confidently confirm a payment the system had not received | Second state added: a waiting notice explaining confirmation arrives automatically (true — the webhook delivers it), the outstanding balance, a "Not yet received" chip in place of the blank cell, and a retry link |
 | **(v5.8)** Every AI feature broke at once, with no change on our side | `GeminiService` hardcoded `llama-3.1-8b-instant`, which Groq **decommissioned**. The API now answers `400 model_not_found`, and `ask()` returns that error string straight to the caller — so the chatbot showed it to guests, insights and forecast rendered it as their "report", and review moderation fell back to the manual queue for every review. Nothing was logged, because the failure branch only returned the string. The forecast had a second, quieter problem waiting: Groq's replacement models are all **reasoning** models whose hidden reasoning is charged against `max_tokens`, so at the default effort the report came back truncated mid-section | Model and reasoning effort moved to config (`GROQ_MODEL`, default `openai/gpt-oss-20b`; `GROQ_REASONING_EFFORT`, default `low`), so the next retirement is an env change rather than a deploy. `ask()` now takes a per-call `$maxTokens` (forecast passes 2048), logs failures with model/status/body while keeping the error-string return the fail-open moderation path depends on, and strips inline `<think>` blocks in case a model that inlines its scratchpad is ever configured. Re-verified end to end on all four call sites — see v5.8 above |
+| **(v6.0)** "Forgot password" always failed with *"Hindi maipadala ang reset link ngayon"* | Not a mail fault at all — that message is just what `AuthController::sendResetLink()`'s catch-all prints. The real error, visible only in `storage/logs/laravel.log`, was `SQLSTATE[42S02] ... Table 'villa_elena_db.password_reset_tokens' doesn't exist`. This project's custom `0001_01_01_000000_create_users_table.php` **replaced** Laravel's default users migration, which is also where the framework creates `password_reset_tokens` — so the password broker had nowhere to store its token and threw before a single mail call was made. The same omission as the v5.2 `sessions`/`cache` gap, from the same replaced migration; it surfaced later only because nobody had exercised the reset flow | New migration `2026_09_02_100000_create_password_reset_tokens_table.php` (guarded with `Schema::hasTable()`, so it is safe on any database that already has the table). Verified with `Mail::fake()`: `Password::sendResetLink()` now returns `passwords.sent` and writes the token row. **Must also be run against Aiven** (`php artisan migrate --force --database=aiven`) — production is missing the table too |
+| **(v6.0)** A guest who paid a 50% downpayment got a confirmation email; paying the **remaining balance** sent nothing at all | `recordPaymongoPayment()` gated the send on `$wasPending` — the return of `confirmOnFirstPayment()`, which is true only for the payment that flips a booking `pending → confirmed`. So exactly one email could ever exist per booking, no matter how many payments followed, and the guest got no receipt and no confirmation that the booking was now fully paid. **Worse, found while confirming it:** the three *manual* payment paths (`Admin\PaymentController::store()`, `Admin\BookingController::recordPayment()`, `Staff\FrontDeskController::recordPayment()`) sent **no email at any point** — a guest paying cash at the front desk never received one, not even the first confirmation. Only the PayMongo path had a send at all | New `App\Helpers\BookingMailHelper::paymentRecorded()` — one gate (`email_notifications_enabled` + try/catch + log) that all four payment paths now call, so they cannot drift apart again. `$wasPending` no longer decides *whether* to send, only *which form*: `BookingConfirmedMail` now takes `$amountPaid` and `$isFirstConfirmation` and renders three variants — "Booking Confirmed" (first payment), "Payment Received" + remaining balance, and "Fully Paid" — with a new *This Payment* row distinguishing the amount just paid from the running total. Refunds are excluded (`Admin\BookingController::recordPayment()` also accepts `payment_type = 'refund'`, which must not trigger a thank-you-for-your-payment receipt). Verified by rendering all three variants for real (per the v5.8 lesson that `compileString()` proves nothing) and by driving two payments through `recordPaymongoPayment()` in a rolled-back transaction: 2 emails, `Booking Confirmed` then `Fully Paid`, where the old code sent 1 |
+| **(v6.0)** The final-payment email read as if the guest had paid more than they did | The receipt showed *This Payment ₱6.00* directly above *Total Paid To Date ₱12.00*, with no row accounting for the ₱6.00 downpayment in between — so the two numbers looked like a contradiction rather than a running total | The summary is now computed in `BookingConfirmedMail::summary()` (PHP, unit-testable) rather than assembled inline in Blade, which just loops the rows it returns. Whenever earlier payments exist it emits a *Previously Paid* row before the current one, so `previous + current = Total Paid` always closes on the page — on partial payments as well as the final one (the current row is labelled *Final Payment* only when it clears the balance, *This Payment* otherwise). Both cases always end with an explicit *Balance Remaining* (**including ₱0.00** — the explicit zero is what answers "do I still owe anything?") and a *Payment Status* row of `Partial Payment`/`Fully Paid`. **`Previously Paid` is derived, never passed in:** `amount_paid − amountPaid`, which is only correct because all four payment paths call `recalculateFinancials()` *before* the mail is built — a new payment path that mails first would silently report it wrong. A first payment deliberately omits the row entirely (a `Previously Paid: ₱0.00` row is noise, and there is no confusion to resolve when nothing was paid earlier) |
+| **(v6.0)** Switching `MAIL_MAILER` to `brevo` sent no mail, and in some flows threw `TypeError: Dsn::fromString(): Argument #1 ($dsn) must be of type string, null given` | Three separate problems stacked. **(1)** `AppServiceProvider`'s `Mail::extend('brevo', …)` passed `config('services.brevo.dsn')` straight into `Dsn::fromString()`. With `MAIL_MAILER=brevo` but no `MAILER_DSN` set, that is `null` — and the resulting `TypeError` pointed into Symfony's internals, naming neither Brevo nor the missing env var. **(2)** The `.env` had `MAIL_MAILER=brevo` paired with Brevo's **SMTP relay** credentials (`smtp-relay.brevo.com`, an `xsmtpsib-` key). Those belong to the `smtp` mailer; the HTTPS API needs an `xkeysib-` **API v3** key, a different credential entirely. Switching was done by commenting out whole blocks, which is exactly how the mailer and its credentials drifted apart. **(3)** Probing the transports directly showed the Brevo relay login was wrong too — `535 5.7.8 Authentication failed`, because the relay's login is the one Brevo issues (`…@smtp-brevo.com`), not the account's Gmail address. So *both* transports were broken, which is why no email went out either way | `brevoDsn()` now resolves `MAILER_DSN` first (production/`render.yaml` keeps working unchanged), else builds the DSN from a plain `BREVO_API_KEY` (`rawurlencode`d — the key sits in a URL's userinfo), else throws a `RuntimeException` naming the missing variable, the `xkeysib-`/`xsmtpsib-` distinction, and the `config:clear` step. `.env`/`.env.example` restructured so **`MAIL_MAILER` alone selects the transport** — smtp settings and `BREVO_API_KEY` coexist without conflicting, so no block-commenting is needed. New `php artisan mail:test <email>` prints the resolved config, refuses an `xsmtpsib-` key in `BREVO_API_KEY`, and surfaces the real exception — the silent-failure mode existed because every mail call site is deliberately wrapped in try/catch (a booking must not 500 over an email), so failures only ever reached `laravel.log`. Verified by building each transport for real: `BREVO_API_KEY`, `MAILER_DSN`, a key needing URL-encoding, and DSN-wins-over-key all produce `brevo+api://api.brevo.com`; nothing set gives the new clear error; and an auth-only probe (`EsmtpTransport::start()`, no message sent) confirmed Gmail authenticates while the Brevo relay does not |
+| **(v6.0)** Mail transports split: **SMTP locally, Brevo in production only** | The two had been getting mixed in one `.env` — `MAIL_MAILER=brevo` paired with SMTP-relay credentials, and a commented "switch" block labelled `#brevo` that actually contained a second copy of the *Gmail SMTP* settings, so uncommenting it silently produced SMTP again. Separately, live probing showed the Brevo SMTP relay rejects the account's Gmail address as a login (`535 5.7.8`; the relay issues its own `…@smtp-brevo.com` login), while Gmail's app password authenticates fine | `.env` is now plainly `MAIL_MAILER=smtp` on Gmail for local dev, with a correctly-labelled **commented** Brevo block (`MAIL_MAILER` + `MAILER_DSN`) documenting that Render supplies both itself. Production is untouched — `render.yaml` still sets `MAIL_MAILER=brevo` + `MAILER_DSN`. `AppServiceProvider` keeps the null-DSN guard so `MAIL_MAILER=brevo` without a DSN raises a `RuntimeException` naming the variable, the "this is the production transport" rule, and the `xkeysib-`/`xsmtpsib-` distinction — instead of the bare `TypeError` from inside Symfony. `.env.example` and `php artisan mail:test` both describe `MAILER_DSN` only, matching `config/services.php` (which wires just `MAILER_DSN`, no `BREVO_API_KEY`). Verified all three: local smtp → `smtp://smtp.gmail.com:587` and a real send; brevo + DSN → `brevo+api://api.brevo.com`; brevo with an empty DSN → the clear error |
 | **(v5.6)** An unexpected PayMongo payment method would have wedged the webhook in a retry loop | `payments.payment_method` was narrowed to `gcash`/`paymaya`/`cash` in v5.5. Any other source type (e.g. `card`, `grab_pay` if ever enabled) would fail the INSERT on the ENUM constraint, return non-2xx, and have PayMongo retry the same doomed event repeatedly — with the payment never recorded | Method is normalised against the allowed set before insert; the original value is preserved in `notes` and logged as a warning. Recording the payment under the closest valid method beats losing it |
 
 ---
@@ -2607,6 +2855,20 @@ DELETE /my/profile/devices/{device}           customer.profile.devices.destroy  
 | 77 | **(v5.7)** QR Ph Verified on Live Keys (2 real ₱2 payments, webhook-delivered) | ✅ Complete |
 | 78 | **(v5.7)** Payment Label + Ordering Cleanup (`type_label`/`method_label`, date-tie fix) | ✅ Complete |
 | 79 | **(v5.7)** Stale-Balance Notification Fixed + Webhook Rejection Diagnostics | ✅ Complete |
+| 80 | **(v6.3)** Prescriptive Engine — `DemandModel`, `PrescriptiveEngine`, `recommendations` table, `prescriptive:generate` (nightly) | ✅ Complete |
+| 81 | **(v6.3)** Idle-Date Promo Advisor (expected-revenue optimization over candidate discounts) | ✅ Complete |
+| 82 | **(v6.3)** Maintenance Window Advisor (minimizes revenue at risk across candidate windows) | ✅ Complete |
+| 83 | **(v6.3)** Recommendations Action Center — evidence, confirmation modal, Apply → real `Discount`/`AvailabilityBlock`, dismiss w/ reason, decision history | ✅ Complete |
+| 84 | **(v6.3)** Prescriptive assumptions exposed in Settings (`prescriptive_*`) + `config/prescriptive.php` | ✅ Complete |
+| 85 | **(v6.3)** Forecast prompt stripped of AI-invented recommendations (single source of advice) | ✅ Complete |
+| 86 | **(v6.4)** Peak Rate Advisor — recommends *raising* rates on strong dates (separate peak elasticity, forced `fixed` rule) | ✅ Complete |
+| 87 | **(v6.4)** What-If Simulator (`/admin/prescriptive/simulate`) — read-only, admin-driven price scenarios | ✅ Complete |
+| 88 | **(v6.4)** Dashboard "Recommended Actions" widget (top 3, outside the KPI cache) | ✅ Complete |
+| 89 | **(v6.4)** AI morning briefing — one Groq call per run, prose only, fails open by clearing | ✅ Complete |
+| 90 | **(v6.4)** 🔴 Pricing-rule boundary bug fixed — DATE vs DATETIME meant a rule never applied on its last day, and a one-day rule never applied at all | ✅ Complete |
+| 91 | **(v6.4)** Engine hardening — expiry scoped to advisors that finished; `expired` cards revive when the opportunity returns | ✅ Complete |
+| 92 | **(v6.5)** Outcome tracking — `baseline_projection` frozen at forecast time, `actual_revenue`/`realized_impact` filled by `OutcomeTracker` after each window closes | ✅ Complete |
+| 93 | **(v6.5)** Accuracy page (`/admin/prescriptive/accuracy`) — model calibration and action outcomes measured separately, with sample-size warnings | ✅ Complete |
 
 ### Pending / Optional
 

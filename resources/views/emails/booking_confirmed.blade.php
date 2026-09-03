@@ -143,17 +143,46 @@
     <div class="container">
         <div class="header">
             <h1>Villa Elena Resort</h1>
-            <p>Booking Confirmation</p>
+            <p>{{ $isFirstConfirmation ? 'Booking Confirmation' : (!$summary['fully_paid'] ? 'Payment Receipt' : 'Payment Complete') }}</p>
         </div>
 
         <div style="text-align:center;">
-            <span class="badge">✓ Booking Confirmed</span>
+            @if ($isFirstConfirmation)
+                <span class="badge">✓ Booking Confirmed</span>
+            @elseif (!$summary['fully_paid'])
+                <span class="badge">✓ Payment Received</span>
+            @else
+                <span class="badge">✓ Fully Paid</span>
+            @endif
         </div>
 
         <div class="body">
             <p class="greeting">Hi {{ $booking->user->full_name }},</p>
-            <p class="greeting">Great news — your payment has been received and your booking is now
-                <strong>confirmed</strong>. We're excited to host you!</p>
+            @php
+                // Binubuo rito ang mga pangungusap para walang
+                // naiiwang puwang bago ang tuldok — kapag pinaghiwalay
+                // ito ng @if/@endif sa gitna ng pangungusap, lumalabas
+                // ang halaga bilang "₱6.00 ." sa email.
+                $paidPhrase = is_null($summary['current_payment'])
+                    ? ''
+                    : ' of ₱' . number_format($summary['current_payment'], 2);
+                $finalWord = $summary['previously_paid'] > 0 ? 'final payment' : 'payment';
+            @endphp
+
+            @if (!$summary['fully_paid'])
+                @if ($isFirstConfirmation)
+                    <p class="greeting">Great news — your payment has been received and your booking is now
+                        <strong>confirmed</strong>. We're excited to host you!</p>
+                @else
+                    <p class="greeting">We've received your payment. Here's an updated summary of your booking.</p>
+                @endif
+                <p class="greeting">This was a <strong>partial payment</strong>{{ $paidPhrase }}. A remaining
+                    balance of <strong>₱{{ number_format($summary['balance'], 2) }}</strong> is still due.</p>
+            @else
+                <p class="greeting">We've received your <strong>{{ $finalWord }}</strong>{{ $paidPhrase }}. Your
+                    booking is now <strong>fully paid</strong>, and there is nothing further due. We're excited to
+                    host you!</p>
+            @endif
 
             <div class="ref-box">
                 <div class="ref-label">Booking Reference</div>
@@ -179,31 +208,33 @@
                     <td class="label">Guests</td>
                     <td class="value">{{ $booking->num_guests }} guest{{ $booking->num_guests != 1 ? 's' : '' }}</td>
                 </tr>
-                <tr>
-                    <td class="label">Total Amount</td>
-                    <td class="value">₱{{ number_format($booking->total_amount, 2) }}</td>
-                </tr>
-                <tr>
-                    <td class="label">Amount Paid</td>
-                    <td class="value">₱{{ number_format($booking->amount_paid, 2) }}</td>
-                </tr>
-                @if ($booking->balance_due > 0)
-                    <tr class="total-row balance-row">
-                        <td>Balance Due (to be paid at check-in)</td>
-                        <td class="value">₱{{ number_format($booking->balance_due, 2) }}</td>
+                {{-- Kinuwenta sa BookingConfirmedMail::summary() — doon
+                     nakatira ang lohika kung paano hinahati ang
+                     "Previously Paid" at "Final Payment". --}}
+                @foreach ($summary['rows'] as [$label, $amount])
+                    <tr>
+                        <td class="label">{{ $label }}</td>
+                        <td class="value">₱{{ number_format($amount, 2) }}</td>
                     </tr>
-                @else
-                    <tr class="total-row">
-                        <td>Status</td>
-                        <td class="value" style="color:#15803d;">Fully Paid</td>
-                    </tr>
-                @endif
+                @endforeach
+                {{-- Laging ipinapakita, pati ang ₱0.00 kapag bayad na
+                     nang buo — ang tahasang zero ang sagot sa tanong na
+                     "may babayaran pa ba ako?". --}}
+                <tr class="{{ $summary['balance'] > 0 ? 'balance-row' : '' }}">
+                    <td class="label">Balance Remaining</td>
+                    <td class="value">₱{{ number_format($summary['balance'], 2) }}</td>
+                </tr>
+                <tr class="total-row">
+                    <td>Payment Status</td>
+                    <td class="value" style="color:{{ $summary['fully_paid'] ? '#15803d' : '#c4673a' }};">
+                        {{ $summary['status_label'] }}</td>
+                </tr>
             </table>
 
-            @if ($booking->balance_due > 0)
+            @if (!$summary['fully_paid'])
                 <div class="note-box">
                     <strong>Reminder:</strong> There is a remaining balance of
-                    ₱{{ number_format($booking->balance_due, 2) }} to be paid before or on the day of check-in.
+                    ₱{{ number_format($summary['balance'], 2) }} to be paid before or on the day of check-in.
                 </div>
             @endif
 

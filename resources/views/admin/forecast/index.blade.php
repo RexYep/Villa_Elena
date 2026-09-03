@@ -231,6 +231,8 @@
         <div class="text-muted-theme" style="padding: 14px 24px; border-top: 1px solid var(--border); font-size: 14px;">
             <i class="bi bi-info-circle me-1"></i>
             Forecast is generated based on your historical booking and revenue data. Use as a guide only.
+            This page is the <strong>outlook</strong> — for what to actually do about it, with the peso value of each
+            option worked out, see <a href="{{ route('admin.prescriptive.index') }}">Recommendations</a>.
         </div>
     </div>
 

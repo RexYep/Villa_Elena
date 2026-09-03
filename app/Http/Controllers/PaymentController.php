@@ -3,14 +3,13 @@
 namespace App\Http\Controllers;
 
 use App\Helpers\NotificationHelper;
-use App\Mail\BookingConfirmedMail;
+use App\Helpers\BookingMailHelper;
 use App\Models\Booking;
 use App\Models\Notification;
 use App\Models\Payment;
 use App\Services\PayMongoService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\Mail;
 
 class PaymentController extends Controller
 {
@@ -475,24 +474,14 @@ class PaymentController extends Controller
             'sent_at' => now(),
         ]);
 
-        // Confirmation Email — ipinapadala LANG kapag ito yung unang
-        // beses na naging "confirmed" ang booking (hindi kada
-        // partial/balance payment pagkatapos). Ito ay isang OPTIONAL na
-        // email (hindi katulad ng 2FA/verification/password-reset, na
-        // laging ipinapadala anuman ang preference ng guest) — kaya
-        // ang guest mismo ang nagdedesisyon dito (My Account →
-        // Notifications), hindi isang resort-wide na admin toggle.
-        if ($wasPending && $booking->user->email_notifications_enabled) {
-            try {
-                Mail::to($booking->user->email)
-                    ->send(new BookingConfirmedMail($booking->fresh(['user', 'property'])));
-            } catch (\Exception $mailException) {
-                // Hindi dapat i-fail ang buong request kung may isyu ang
-                // email delivery — naka-log lang, dahil matagumpay
-                // naman talaga ang bayad at booking.
-                \Log::error('Failed sending booking confirmation email: '.$mailException->getMessage());
-            }
-        }
+        // Confirmation / resibo — ipinapadala sa BAWAT matagumpay na
+        // bayad, hindi lang sa una. Dati, naka-gate ito sa $wasPending,
+        // kaya ang guest na nagbayad ng 50% downpayment ay nakatanggap
+        // ng email pero ang pagbabayad ng natitirang balanse ay tahimik
+        // na — walang resibo, at walang kumpirmasyon na bayad na nang
+        // buo. Ang $wasPending ngayon ay pumipili na lang ng ANYO ng
+        // email (kumpirmasyon vs. resibo), hindi na kung ipapadala ba.
+        BookingMailHelper::paymentRecorded($booking, (float) $amount, $wasPending);
 
         return true;
     }
