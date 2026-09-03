@@ -6,7 +6,7 @@ services:
     dockerfilePath: ./Dockerfile
     envVars:
       - key: APP_NAME
-        value: Villa Elena
+        value: Villa Elena Resort
       - key: APP_ENV
         value: production
       - key: APP_DEBUG
@@ -57,10 +57,12 @@ services:
       - key: CLOUDINARY_URL
         sync: false
 
-      # Realtime dashboard — set BROADCAST_CONNECTION to "pusher" once the
-      # keys below are filled in.
+      # Realtime dashboard. This MUST be "pusher" — it sat at "log" while the
+      # Pusher keys below were already filled in, which disables the bell and
+      # every live dashboard update *silently*: nothing errors, the events
+      # just go to the log channel and no browser ever hears them.
       - key: BROADCAST_CONNECTION
-        value: log
+        value: pusher
       - key: PUSHER_APP_ID
         sync: false
       - key: PUSHER_APP_KEY
@@ -78,7 +80,14 @@ services:
       - key: PAYMONGO_WEBHOOK_SECRET
         sync: false
 
-      # AI chatbot
+      # AI chatbot, insights, forecast, review moderation, and the prescriptive
+      # briefing. Pin GROQ_MODEL to whatever local dev is actually tested
+      # against — leaving it unset falls back to config/services.php's default,
+      # so production quietly runs a different model than the one that was
+      # verified. Groq retires models on a rolling basis (see project.md v5.8):
+      # check GET https://api.groq.com/openai/v1/models before changing it.
+      - key: GROQ_MODEL
+        value: qwen/qwen3.6-27b
       - key: GROQ_API_KEY
         sync: false
       - key: ANTHROPIC_API_KEY
@@ -93,6 +102,10 @@ services:
         sync: false
       - key: MAIL_FROM_ADDRESS
         sync: false
+      # Without this, config/mail.php's default applies and every booking
+      # confirmation goes out from a sender literally named "Example".
+      - key: MAIL_FROM_NAME
+        value: Villa Elena Resort
 
       # Free-tier cron workaround — see routes/web.php /cron/run-schedule.
       - key: CRON_SECRET

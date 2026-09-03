@@ -2965,6 +2965,39 @@ php artisan migrate:fresh --seed --force --database=aiven   # full reset + resee
 
 Push to `main` on GitHub (`RexYep/Villa_Elena`) — Render auto-deploys from there. `render.yaml` is a Blueprint; if the Render service was created manually rather than via Blueprint sync, new env vars added to `render.yaml` need to also be added by hand in the dashboard the first time.
 
+#### 🔴 Check the production schema BEFORE pushing, every time
+
+```bash
+php artisan migrate:status --database=aiven | grep -c Pending
+```
+
+**The number that matters is 0.** On 2026-09-04 it was **16** — Aiven was still on the 2026-08-12 schema while local had moved five doc versions past it. Pushing without noticing would have 500'd the live site instantly: no `refund_transfers`, no seasonal columns on `discounts`, no `qrph` in the `payments.payment_method` ENUM, no `recommendations` table.
+
+Nothing warns about this. `RUN_MIGRATIONS` defaults to `false`, which is correct (migrations should be a decision, not a side effect of every deploy) — but the consequence is that the schema drifts silently for as long as nobody looks, and a green deploy proves only that the container started.
+
+Order of operations, and why it is this way:
+
+1. **Commit first**, but don't push.
+2. **Back up** what production actually holds — a few `DB::connection('aiven')->table(...)->get()` calls dumped to JSON is enough at this data volume, and takes seconds.
+3. **`php artisan migrate --force --database=aiven`** from a dev machine. Preferred over `RUN_MIGRATIONS=true` because the output is in front of you: if migration 9 of 16 fails you see which and why, whereas inside `start.sh` a failure just aborts container start (`set -e`) with the reason buried in Render's log stream.
+4. **Push immediately after.** Between step 3 and the deploy landing, production runs *old code against the new schema* — the exact hazard the v5.5 stale-Docker row describes. It is a small window at this traffic level, not a safe one: old code writing `payment_method = 'gcash'` into an ENUM that now only holds `qrph`/`cash` is a `Data truncated` error.
+5. **Verify the routes, not the build.** A build that goes green says nothing about whether the app works. Curl the new routes: `404` means the old code is still being served, `302` (redirect to login) means the new routes are registered. The landing page returning `200` is a real schema check too — it renders the promo banner through `Discount::publicActive()`, which reads the seasonal columns.
+
+Verified this way on 2026-09-04: 16 migrations applied to Aiven with all data intact (6 users, 1 booking, 1 payment), `payment_method` confirmed as `enum('qrph','cash')`, then pushed; `/admin/prescriptive` went `404 → 302` in about two minutes.
+
+#### Env vars that were missing from `render.yaml` (fixed 2026-09-04)
+
+Found by diffing `render.yaml` against every `env()` call in `config/`. All four fail **silently** — nothing errors, the behaviour is just quietly wrong, which is why they survived several deploys:
+
+| Var | Was | Now | Silent consequence |
+|---|---|---|---|
+| `BROADCAST_CONNECTION` | `log` | `pusher` | The Pusher keys were filled in and the bell still did nothing — events went to the log channel and no browser ever heard them |
+| `MAIL_FROM_NAME` | absent | `Villa Elena Resort` | `config/mail.php`'s default applies, so every booking confirmation was sent from a sender named **`Example`** |
+| `GROQ_MODEL` | absent | `qwen/qwen3.6-27b` | Production fell back to `config/services.php`'s default and ran a *different model* from the one local dev was tested against |
+| `APP_NAME` | `Villa Elena` | `Villa Elena Resort` | Cosmetic — page titles and email footers disagreed with local |
+
+`REDIS_*`, `AIVEN_DB_*`, and the `MAIL_HOST`/`MAIL_USERNAME`/`MAIL_PASSWORD` SMTP block are all deliberately **not** on Render: local-only cache, a dev-machine-only connection, and a transport Render blocks outright.
+
 ### 15.7 Running the same stack locally (Docker, NEW v5.3)
 
 `docker compose up --watch` runs the **same `Dockerfile`** Render builds from — same PHP 8.2-fpm-alpine + nginx + supervisord — so changes that might behave differently under that stack can be caught locally instead of only after a deploy. `php artisan serve` still works exactly as before and isn't affected by any of this; Docker is an additional option, not a replacement.
