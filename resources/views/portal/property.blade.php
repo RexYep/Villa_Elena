@@ -281,8 +281,8 @@
         }
 
         /* List view: i-override ang default light/white hover overlay ng
-       FullCalendar (nagiging invisible ang puting text sa ibabaw
-       nito) — panatilihing pula ang background kahit naka-hover. */
+           FullCalendar (nagiging invisible ang puting text sa ibabaw
+           nito) — panatilihing pula ang background kahit naka-hover. */
         .fc-list-event.booked-event td {
             background: #dc2626 !important;
             color: #fff !important;
@@ -842,7 +842,7 @@
             const box = document.getElementById('pricePreview');
             box.style.display = 'block';
             document.getElementById('previewTag').innerHTML = '<i class="bi bi-hourglass-split"></i> Kinukumpirma...';
-            document.getElementById('previewNights').textContent = 'Sinusuri ang availability...';
+            document.getElementById('previewNights').textContent = 'Checking availability...';
             document.getElementById('previewBase').textContent = '—';
             document.getElementById('previewTotal').textContent = '—';
         }

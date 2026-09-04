@@ -36,6 +36,12 @@
             flex-shrink: 0;
         }
 
+        .summary-logo {
+            width: 34px;
+            height: 34px;
+            object-fit: contain;
+        }
+
         .summary-name {
             font-weight: 600;
             font-size: 15px;
@@ -184,7 +190,7 @@
 
     {{-- Booking Summary --}}
     <div class="booking-summary">
-        <div class="summary-icon">🏝️</div>
+        <div class="summary-icon"><img src="{{ asset('images/logo.png') }}" alt="" class="summary-logo"></div>
         <div>
             <div class="summary-name">{{ $booking->property->property_name }}</div>
             <div class="summary-dates">

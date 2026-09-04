@@ -2,7 +2,8 @@
 
 @section('title', 'Admin Dashboard — Villa Elena Resort')
 @section('page-title', 'Good ' . (now()->hour < 12 ? 'Morning' : (now()->hour < 18 ? 'Afternoon' : 'Evening' )) . ', ' .
-        explode(' ', Auth::user()->full_name)[0] . ' 👋') @section('page-subtitle', now()->format('l, F j, Y') . " ​·​
+        explode(' ', Auth::user()->full_name)[0] . ' 👋') @section('page-subtitle', now()->format('l, F j, Y') .
+            " ​·​
             Here's what's happening at the resort today")
 
         @section('topbar-right')
@@ -515,11 +516,25 @@
                     </div>
                     <div class="card-panel-body">
                         <canvas id="sourceChart" height="180"></canvas>
+
                         <div style="display:flex; flex-wrap:wrap; gap:8px; margin-top:16px; justify-content:center;">
-                            <span class="badge-pill" style="background:#e0f2fe; color:#0369a1;">🌐 Online</span>
-                            <span class="badge-pill" style="background:#dcfce7; color:#15803d;">🚶 Walk-in</span>
-                            <span class="badge-pill" style="background:#fef9c3; color:#a16207;">📞 Phone</span>
-                            <span class="badge-pill" style="background:#f3e8ff; color:#7c3aed;">🤝 Partner</span>
+
+                            <span class="badge-pill" style="background:#e0f2fe; color:#0369a1;">
+                                <i class="bi bi-globe2 me-1"></i> Online
+                            </span>
+
+                            <span class="badge-pill" style="background:#dcfce7; color:#15803d;">
+                                <i class="bi bi-person-walking me-1"></i> Walk-in
+                            </span>
+
+                            <span class="badge-pill" style="background:#fef9c3; color:#a16207;">
+                                <i class="bi bi-telephone-fill me-1"></i> Phone
+                            </span>
+
+                            <span class="badge-pill" style="background:#f3e8ff; color:#7c3aed;">
+                                <i class="bi bi-people-fill me-1"></i> Partner
+                            </span>
+
                         </div>
                     </div>
                 </div>
@@ -623,7 +638,8 @@
                                             <div>
                                                 <div style="font-size:13px; font-weight:500;">
                                                     {{ $property->property_name }}</div>
-                                                <div style="font-size: 13px; color:#94a3b8;">{{ ucfirst($property->type) }}
+                                                <div style="font-size: 13px; color:#94a3b8;">
+                                                    {{ ucfirst($property->type) }}
                                                     · {{ $property->max_capacity }} guests</div>
                                             </div>
                                         </div>
@@ -660,7 +676,8 @@
                                             <i class="bi bi-lightbulb"></i>
                                         </div>
                                         <div style="flex:1;min-width:0">
-                                            <div style="font-size:13.5px;font-weight:600;color:var(--text-main);line-height:1.4">
+                                            <div
+                                                style="font-size:13.5px;font-weight:600;color:var(--text-main);line-height:1.4">
                                                 {{ $action->title }}
                                             </div>
                                             <div style="font-size:12px;color:var(--muted);margin-top:2px">

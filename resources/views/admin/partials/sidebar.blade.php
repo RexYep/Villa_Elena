@@ -1,7 +1,7 @@
 <aside class="sidebar">
 
     <div class="sidebar-brand">
-        <h1>🏝️ Villa Elena</h1>
+        <h1><img src="{{ asset('images/logo.png') }}" alt="" class="brand-mark"> Villa Elena</h1>
         <p>Resort Management</p>
     </div>
 

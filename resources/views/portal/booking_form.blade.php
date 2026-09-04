@@ -295,22 +295,6 @@
             cursor: not-allowed;
         }
 
-        /* Shown only after the guest actually tries to submit without
-           ticking. A disabled button explains nothing — on a phone the tap
-           just does nothing at all, with no way to tell why. */
-        .policy-required-note {
-            display: flex;
-            align-items: flex-start;
-            gap: 7px;
-            margin: 8px 0 2px;
-            padding: 9px 11px;
-            border-radius: 9px;
-            background: var(--tag-red-bg);
-            color: var(--tag-red-fg);
-            font-size: 12.5px;
-            font-weight: 600;
-            line-height: 1.45;
-        }
 
         .terms-note {
             font-size: 13px;
@@ -320,8 +304,19 @@
             line-height: 1.5;
         }
 
-        /* ── Booking policies: consent row + modal ── */
-        .policy-consent {
+        /* ── Booking policies: agree row + modal ──
+           DO NOT put the word "consent" back into this class or id. Brave
+           ships Easylist-Cookie enabled by default ("Block cookie consent
+           notices"), whose cosmetic filters hide elements whose class/id
+           contains `consent` — they are aimed at cookie banners, and this
+           row looked exactly like one. The result: in Brave the whole row
+           vanished, taking the required checkbox with it, so the booking
+           could not be completed at all. Chrome showed it fine, which is
+           why it read as a responsiveness bug at first. The input's
+           name="policies_accepted" is a server contract
+           (PortalController::submitBooking) and is unaffected — filters
+           match class/id, not name. */
+        .policy-agree-row {
             display: flex;
             align-items: flex-start;
             gap: 12px;
@@ -335,23 +330,23 @@
             transition: border-color .2s, background .2s, box-shadow .2s;
         }
 
-        .policy-consent:hover {
+        .policy-agree-row:hover {
             border-color: var(--gold);
             box-shadow: 0 3px 10px rgba(184, 148, 63, .12);
         }
 
-        .policy-consent.is-checked {
+        .policy-agree-row.is-checked {
             background: rgba(184, 148, 63, .07);
             border-color: var(--gold);
         }
 
-        .policy-consent.is-invalid {
+        .policy-agree-row.is-invalid {
             border-color: var(--tag-red-fg);
             background: var(--tag-red-bg);
             box-shadow: none;
         }
 
-        .policy-consent input[type="checkbox"] {
+        .policy-agree-row input[type="checkbox"] {
             width: 18px;
             height: 18px;
             margin-top: 1px;
@@ -360,14 +355,14 @@
             cursor: pointer;
         }
 
-        .policy-consent-text {
+        .policy-agree-text {
             font-size: 13px;
             line-height: 1.55;
             color: var(--stone);
             flex: 1;
         }
 
-        .policy-consent-text label {
+        .policy-agree-text label {
             cursor: pointer;
             margin: 0;
             font-weight: 500;
@@ -545,7 +540,7 @@
                 margin-bottom: 75px;
             }
 
-            .policy-consent {
+            .policy-agree-row {
                 padding: 14px 15px;
                 gap: 12px;
                 margin: 16px 0 6px;
@@ -554,24 +549,24 @@
                 border-radius: 12px;
             }
 
-            .policy-consent input[type="checkbox"] {
+            .policy-agree-row input[type="checkbox"] {
                 width: 20px;
                 height: 20px;
                 margin-top: 1px;
             }
 
-            .policy-consent-text {
+            .policy-agree-text {
                 font-size: 13.5px;
             }
         }
 
         @media (max-width: 480px) {
-            .policy-consent {
+            .policy-agree-row {
                 padding: 14px 12px;
                 gap: 10px;
             }
 
-            .policy-consent input[type="checkbox"] {
+            .policy-agree-row input[type="checkbox"] {
                 width: 22px;
                 height: 22px;
             }
@@ -772,21 +767,15 @@
                              kung nakabalot ito sa <label>, ang pag-click sa link ay
                              magta-tick din ng checkbox, na siya mismong hindi natin
                              gusto: dapat sadyain ng guest ang pag-tick. --}}
-                        <div class="policy-consent {{ $errors->has('policies_accepted') ? 'is-invalid' : '' }}"
-                            id="policyConsent">
+                        <div class="policy-agree-row {{ $errors->has('policies_accepted') ? 'is-invalid' : '' }}"
+                            id="policyAgreeRow">
                             <input type="checkbox" id="policiesAccepted" name="policies_accepted" value="1" required
                                 {{ old('policies_accepted') ? 'checked' : '' }}>
-                            <span class="policy-consent-text">
+                            <span class="policy-agree-text">
                                 <label for="policiesAccepted">I have read the</label>
                                 <button type="button" class="policy-link" data-bs-toggle="modal"
                                     data-bs-target="#policiesModal">booking policies</button>
                             </span>
-                        </div>
-
-                        <div class="policy-required-note" id="policyRequiredNote" hidden>
-                            <i class="bi bi-exclamation-circle-fill" style="margin-top:1px;"></i>
-                            <span>Please tick the box above to confirm you've read the booking
-                                policies — then you can proceed to payment.</span>
                         </div>
 
                         <button type="submit" class="btn-submit" id="submitBooking">
@@ -909,27 +898,16 @@
         (function () {
             const check = document.getElementById('policiesAccepted');
             const submit = document.getElementById('submitBooking');
-            const consent = document.getElementById('policyConsent');
+            const consent = document.getElementById('policyAgreeRow');
             const agree = document.getElementById('policyAgree');
 
             if (!check || !submit) return;
 
-            const note = document.getElementById('policyRequiredNote');
-            const form = submit.closest('form');
-
-            // The button is deliberately NOT disabled any more. A disabled
-            // button is a dead end: it answers a tap with nothing at all,
-            // and on a phone — where the consent row and the button don't
-            // always sit on screen together — there is no way to work out
-            // what is missing. Keep the button live and let the attempt
-            // produce an explanation instead. The server still enforces
-            // this (`required` here, `accepted` in submitBooking()); this
-            // was only ever a UX affordance.
             function sync() {
+                submit.disabled = !check.checked;
                 if (check.checked) {
                     consent?.classList.remove('is-invalid');
                     consent?.classList.add('is-checked');
-                    if (note) note.hidden = true;
                 } else {
                     consent?.classList.remove('is-checked');
                 }
@@ -937,36 +915,7 @@
 
             check.addEventListener('change', sync);
 
-            function demandConsent() {
-                consent?.classList.add('is-invalid');
-                if (note) note.hidden = false;
-                // Bring the guest to the thing they have to act on, rather
-                // than leaving them looking at an unchanged screen.
-                consent?.scrollIntoView({ block: 'center', behavior: 'smooth' });
-                check.focus({ preventScroll: true });
-            }
-
-            // `required` means the browser runs constraint validation first,
-            // so the form's own 'submit' event never fires while the box is
-            // unticked — the native bubble ("Please check this box…") is
-            // anchored to the checkbox instead. On a phone that anchor can
-            // be well off-screen, so the tap looks like it did nothing at
-            // all. Suppress the native bubble and show our own message,
-            // which scrolls the guest to the box it is talking about.
-            check.addEventListener('invalid', (e) => {
-                e.preventDefault();
-                demandConsent();
-            });
-
-            // Fallback for the case where constraint validation is not what
-            // stopped us (e.g. `required` is ever removed from the input).
-            form?.addEventListener('submit', (e) => {
-                if (check.checked) return;
-                e.preventDefault();
-                demandConsent();
-            });
-
-            // Clicking anywhere on the consent box toggles the checkbox for easy mobile tap,
+            // Clicking anywhere on the agree box toggles the checkbox for easy mobile tap,
             // while clicking the modal link button opens the modal without prematurely toggling.
             consent?.addEventListener('click', (e) => {
                 if (e.target.closest('.policy-link') || e.target === check || e.target.closest('label')) return;

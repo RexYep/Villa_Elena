@@ -543,7 +543,7 @@
             <div class="msg-bubble">
                 Mabuhay! 👋 I'm <strong>Elena</strong>, your Villa Elena booking assistant!<br><br>
                 I can help you <strong>find available properties</strong>, check prices, and book your stay. Just tell
-                me your dates and how many guests! 🏝️
+                me your dates and how many guests!
             </div>
         </div>
     </div>

@@ -58,3 +58,14 @@
 /* Small uppercase section/field label — font-size and margin-bottom vary
  * per usage and stay inline; this covers only the identical part. */
 .section-label { font-weight: 600; text-transform: uppercase; letter-spacing: .5px; }
+
+/* Brand logo mark — replaces the 🏝️ emoji that used to stand in for a logo
+ * beside the "Villa Elena" wordmark. Sized in em so it tracks whichever
+ * heading it sits in, including that heading's responsive font-size
+ * overrides; the negative vertical-align seats the circle on the text
+ * baseline instead of hanging it above. */
+.brand-mark {
+    height: 1.15em;
+    width: auto;
+    vertical-align: -0.22em;
+}

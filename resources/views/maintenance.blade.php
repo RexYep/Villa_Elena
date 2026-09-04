@@ -4,6 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Villa Elena — Under Maintenance</title>
+    <link rel="icon" href="{{ asset('favicon.ico') }}" sizes="any">
+    <link rel="apple-touch-icon" href="{{ asset('apple-touch-icon.png') }}">
     <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@600;700&family=DM+Sans:wght@400;500&display=swap" rel="stylesheet">
     <style>
         * { box-sizing: border-box; }
@@ -23,7 +25,8 @@
             max-width: 480px;
         }
         .icon {
-            font-size: 40px;
+            width: 72px;
+            height: 72px;
             margin-bottom: 16px;
         }
         h1 {
@@ -42,7 +45,7 @@
 </head>
 <body>
     <div class="box">
-        <div class="icon">🏝️</div>
+        <img src="{{ asset('images/logo.png') }}" alt="Villa Elena" class="icon">
         <h1>We'll be right back</h1>
         <p>Villa Elena is currently undergoing maintenance. Please check back shortly — we appreciate your patience.</p>
     </div>
