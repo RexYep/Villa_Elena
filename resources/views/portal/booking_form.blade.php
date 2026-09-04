@@ -144,7 +144,12 @@
             border: 1px solid var(--border);
             overflow: hidden;
             position: sticky;
-            top: calc(var(--nav-h)+20px);
+            /* The spaces around "+" are REQUIRED inside calc(). Without them
+               the whole declaration is invalid and the browser drops it, so
+               `top` computed to `auto` and this card never actually stuck —
+               silently, since invalid CSS reports nothing. Verified with
+               CSS.supports('top','calc(72px+20px)') === false. */
+            top: calc(var(--nav-h) + 20px);
         }
 
         .summary-img {
@@ -288,6 +293,23 @@
             background: var(--border);
             color: var(--muted);
             cursor: not-allowed;
+        }
+
+        /* Shown only after the guest actually tries to submit without
+           ticking. A disabled button explains nothing — on a phone the tap
+           just does nothing at all, with no way to tell why. */
+        .policy-required-note {
+            display: flex;
+            align-items: flex-start;
+            gap: 7px;
+            margin: 8px 0 2px;
+            padding: 9px 11px;
+            border-radius: 9px;
+            background: var(--tag-red-bg);
+            color: var(--tag-red-fg);
+            font-size: 12.5px;
+            font-weight: 600;
+            line-height: 1.45;
         }
 
         .terms-note {
@@ -761,6 +783,12 @@
                             </span>
                         </div>
 
+                        <div class="policy-required-note" id="policyRequiredNote" hidden>
+                            <i class="bi bi-exclamation-circle-fill" style="margin-top:1px;"></i>
+                            <span>Please tick the box above to confirm you've read the booking
+                                policies — then you can proceed to payment.</span>
+                        </div>
+
                         <button type="submit" class="btn-submit" id="submitBooking">
                             <i class="bi bi-credit-card"></i> Proceed to Payment
                         </button>
@@ -886,17 +914,57 @@
 
             if (!check || !submit) return;
 
+            const note = document.getElementById('policyRequiredNote');
+            const form = submit.closest('form');
+
+            // The button is deliberately NOT disabled any more. A disabled
+            // button is a dead end: it answers a tap with nothing at all,
+            // and on a phone — where the consent row and the button don't
+            // always sit on screen together — there is no way to work out
+            // what is missing. Keep the button live and let the attempt
+            // produce an explanation instead. The server still enforces
+            // this (`required` here, `accepted` in submitBooking()); this
+            // was only ever a UX affordance.
             function sync() {
-                submit.disabled = !check.checked;
                 if (check.checked) {
                     consent?.classList.remove('is-invalid');
                     consent?.classList.add('is-checked');
+                    if (note) note.hidden = true;
                 } else {
                     consent?.classList.remove('is-checked');
                 }
             }
 
             check.addEventListener('change', sync);
+
+            function demandConsent() {
+                consent?.classList.add('is-invalid');
+                if (note) note.hidden = false;
+                // Bring the guest to the thing they have to act on, rather
+                // than leaving them looking at an unchanged screen.
+                consent?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+                check.focus({ preventScroll: true });
+            }
+
+            // `required` means the browser runs constraint validation first,
+            // so the form's own 'submit' event never fires while the box is
+            // unticked — the native bubble ("Please check this box…") is
+            // anchored to the checkbox instead. On a phone that anchor can
+            // be well off-screen, so the tap looks like it did nothing at
+            // all. Suppress the native bubble and show our own message,
+            // which scrolls the guest to the box it is talking about.
+            check.addEventListener('invalid', (e) => {
+                e.preventDefault();
+                demandConsent();
+            });
+
+            // Fallback for the case where constraint validation is not what
+            // stopped us (e.g. `required` is ever removed from the input).
+            form?.addEventListener('submit', (e) => {
+                if (check.checked) return;
+                e.preventDefault();
+                demandConsent();
+            });
 
             // Clicking anywhere on the consent box toggles the checkbox for easy mobile tap,
             // while clicking the modal link button opens the modal without prematurely toggling.
