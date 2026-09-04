@@ -245,14 +245,24 @@ class AuthController extends Controller
         // registration if it fails — the user is already created and
         // logged in by this point, and can retry from the "resend" link
         // on the verification.notice page.
+        //
+        // The outcome is flashed through because verification.notice is
+        // NOT only reached from here — every login by an unverified user
+        // lands on it too, and that path sends nothing. Without this flag
+        // the page can't tell the two apart, and used to claim a link had
+        // just been sent in both cases.
+        $verificationSent = true;
+
         try {
             $user->sendEmailVerificationNotification();
         } catch (\Exception $e) {
             Log::error('Failed to send verification email: ' . $e->getMessage());
+            $verificationSent = false;
         }
 
         return redirect()->route('verification.notice')
-            ->with('success', 'Welcome to Villa Elena! Please verify your email to continue.');
+            ->with('success', 'Welcome to Villa Elena! Please verify your email to continue.')
+            ->with('verification_sent', $verificationSent);
     }
 
     // ── Logout ─────────────────────────────────────────────────────
@@ -374,10 +384,15 @@ class AuthController extends Controller
             $request->user()->sendEmailVerificationNotification();
         } catch (\Exception $e) {
             Log::error('Failed to resend verification email: ' . $e->getMessage());
-            return back()->with('error', 'The verification link cannot be sent right now. Please try again later.');
+
+            return back()
+                ->with('error', 'The verification link cannot be sent right now. Please try again later.')
+                ->with('verification_sent', false);
         }
 
-        return back()->with('success', 'Verification link sent! Please check your email.');
+        return back()
+            ->with('success', 'Verification link sent! Please check your email.')
+            ->with('verification_sent', true);
     }
 
     // ── Redirect By Role ───────────────────────────────────────────
