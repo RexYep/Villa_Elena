@@ -302,23 +302,36 @@
         .policy-consent {
             display: flex;
             align-items: flex-start;
-            gap: 10px;
-            margin: 14px 0 2px;
-            padding: 12px 13px;
-            background: var(--sand);
-            border: 1px solid var(--border);
-            border-radius: 10px;
-            transition: border-color .2s, background .2s;
+            gap: 12px;
+            margin: 14px 0 4px;
+            padding: 13px 14px;
+            background: #ffffff;
+            border: 1.5px solid rgba(184, 148, 63, .45);
+            border-radius: 12px;
+            box-shadow: 0 2px 6px rgba(44, 36, 22, .04);
+            cursor: pointer;
+            transition: border-color .2s, background .2s, box-shadow .2s;
+        }
+
+        .policy-consent:hover {
+            border-color: var(--gold);
+            box-shadow: 0 3px 10px rgba(184, 148, 63, .12);
+        }
+
+        .policy-consent.is-checked {
+            background: rgba(184, 148, 63, .07);
+            border-color: var(--gold);
         }
 
         .policy-consent.is-invalid {
             border-color: var(--tag-red-fg);
             background: var(--tag-red-bg);
+            box-shadow: none;
         }
 
         .policy-consent input[type="checkbox"] {
-            width: 16px;
-            height: 16px;
+            width: 18px;
+            height: 18px;
             margin-top: 1px;
             flex-shrink: 0;
             accent-color: var(--gold);
@@ -326,27 +339,30 @@
         }
 
         .policy-consent-text {
-            font-size: 12.5px;
-            line-height: 1.6;
+            font-size: 13px;
+            line-height: 1.55;
             color: var(--stone);
+            flex: 1;
         }
 
         .policy-consent-text label {
             cursor: pointer;
             margin: 0;
+            font-weight: 500;
         }
 
         .policy-link {
             background: rgba(184, 148, 63, .16);
             border: none;
-            border-bottom: 1px solid var(--gold);
+            border-bottom: 1.5px solid var(--gold);
             border-radius: 4px;
-            padding: 1px 6px;
+            padding: 2px 7px;
             font: inherit;
             font-weight: 700;
             color: var(--stone);
             cursor: pointer;
             transition: background .2s, color .2s;
+            display: inline-block;
         }
 
         .policy-link:hover,
@@ -504,10 +520,40 @@
 
             .summary-card {
                 position: static;
+                margin-bottom: 75px;
+            }
+
+            .policy-consent {
+                padding: 14px 15px;
+                gap: 12px;
+                margin: 16px 0 6px;
+                border: 2px solid rgba(184, 148, 63, .55);
+                background: #fdfbf7;
+                border-radius: 12px;
+            }
+
+            .policy-consent input[type="checkbox"] {
+                width: 20px;
+                height: 20px;
+                margin-top: 1px;
+            }
+
+            .policy-consent-text {
+                font-size: 13.5px;
             }
         }
 
         @media (max-width: 480px) {
+            .policy-consent {
+                padding: 14px 12px;
+                gap: 10px;
+            }
+
+            .policy-consent input[type="checkbox"] {
+                width: 22px;
+                height: 22px;
+            }
+
             .policy-modal-head,
             .policy-modal-body,
             .policy-modal-foot {
@@ -842,10 +888,23 @@
 
             function sync() {
                 submit.disabled = !check.checked;
-                if (check.checked) consent?.classList.remove('is-invalid');
+                if (check.checked) {
+                    consent?.classList.remove('is-invalid');
+                    consent?.classList.add('is-checked');
+                } else {
+                    consent?.classList.remove('is-checked');
+                }
             }
 
             check.addEventListener('change', sync);
+
+            // Clicking anywhere on the consent box toggles the checkbox for easy mobile tap,
+            // while clicking the modal link button opens the modal without prematurely toggling.
+            consent?.addEventListener('click', (e) => {
+                if (e.target.closest('.policy-link') || e.target === check || e.target.closest('label')) return;
+                check.checked = !check.checked;
+                sync();
+            });
 
             // Ang "I've read these" sa modal ang siya nang nagta-tick —
             // ang mismong pag-dismiss ay hawak ng data-bs-dismiss, kaya
