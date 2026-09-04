@@ -5,8 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <title>@yield('title', 'Villa Elena Resort')</title>
-    <link rel="icon" href="{{ asset('favicon.ico') }}" sizes="any">
-    <link rel="apple-touch-icon" href="{{ asset('apple-touch-icon.png') }}">
+    @include('partials.favicon')
 
     <!-- Google Fonts -->
     <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@500;700&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
@@ -19,8 +18,14 @@
         <div class="auth-image-panel" style="background-image: url('{{ asset('images/' . View::yieldContent('auth_bg', 'login-bg.jpg')) }}');">
             <div class="auth-image-overlay"></div>
             <div class="auth-image-content">
-                <h1><img src="{{ asset('images/logo.png') }}" alt="" class="brand-mark"> Villa Elena</h1>
-                <p>Private Rental Resort</p>
+                {{-- The wordmark is the way back to the public site. Every auth
+                     page gets it for free this way, without each one growing a
+                     "back" link that would compete with its own ("Back to
+                     login", which points somewhere else entirely). --}}
+                <a href="{{ route('home') }}" class="auth-brand-link">
+                    <h1><img src="{{ asset('images/logo.png') }}" alt="" class="brand-mark"> Villa Elena</h1>
+                    <p>Private Rental Resort</p>
+                </a>
                 <span class="auth-image-tagline">@yield('auth_tagline', 'Your dream getaway awaits')</span>
             </div>
         </div>
@@ -29,10 +34,14 @@
         <div class="auth-form-panel">
             <div class="auth-form-inner">
 
-                {{-- Mobile-only logo (hidden on desktop where the image panel shows it) --}}
+                {{-- Mobile-only logo (hidden on desktop where the image panel shows it).
+                     Links home for the same reason the desktop one does — on a phone
+                     the image panel is gone, so this is the only wordmark there is. --}}
                 <div class="auth-logo-mobile">
-                    <h1><img src="{{ asset('images/logo.png') }}" alt="" class="brand-mark"> Villa Elena</h1>
-                    <p>Private Rental Resort</p>
+                    <a href="{{ route('home') }}" class="auth-brand-link">
+                        <h1><img src="{{ asset('images/logo.png') }}" alt="" class="brand-mark"> Villa Elena</h1>
+                        <p>Private Rental Resort</p>
+                    </a>
                 </div>
 
                 <div class="auth-card">

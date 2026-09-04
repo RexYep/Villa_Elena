@@ -530,11 +530,25 @@
 
     {{-- Quick Reply Suggestions --}}
     <div class="quick-replies" id="quick-replies">
-        <button class="qr-btn" onclick="quickSend('What properties are available?')">🏡 Available properties</button>
-        <button class="qr-btn" onclick="quickSend('Book a villa for 2 people this weekend')">📅 Book this
-            weekend</button>
-        <button class="qr-btn" onclick="quickSend('What is the check-in time?')">⏰ Check-in time</button>
-        <button class="qr-btn" onclick="quickSend('How much is the deposit?')">💳 Deposit info</button>
+        <button class="qr-btn" onclick="quickSend('What properties are available?')">
+            <i class="bi bi-house-door me-1"></i>
+            Available properties
+        </button>
+
+        <button class="qr-btn" onclick="quickSend('Book a villa for 2 people this weekend')">
+            <i class="bi bi-calendar-event me-1"></i>
+            Book this weekend
+        </button>
+
+        <button class="qr-btn" onclick="quickSend('What is the check-in time?')">
+            <i class="bi bi-clock me-1"></i>
+            Check-in time
+        </button>
+
+        <button class="qr-btn" onclick="quickSend('How much is the deposit?')">
+            <i class="bi bi-credit-card me-1"></i>
+            Deposit info
+        </button>
     </div>
 
     <div class="chat-messages" id="chat-messages">
@@ -744,3 +758,4 @@
         });
     }
 </script>
+

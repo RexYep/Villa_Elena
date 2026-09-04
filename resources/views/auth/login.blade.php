@@ -79,4 +79,8 @@
         Don't have an account? <a href="{{ route('register') }}">Create one now</a>
     </div>
 
+    <div class="auth-back">
+        <a href="{{ route('home') }}"><i class="bi bi-arrow-left me-1"></i>Back to site</a>
+    </div>
+
 @endsection

@@ -47,6 +47,15 @@ services:
 
       - key: SESSION_DRIVER
         value: database
+      # config/session.php reads this via env() with no default, so leaving it
+      # unset means null — and the session + "Keep me signed in" cookies go out
+      # without the Secure flag. The remember-me cookie is an authentication
+      # credential with a 400-day lifetime (Laravel's $rememberDuration =
+      # 576000 minutes), so it must never be transmittable over plain http.
+      # Render serves only https today; this is what keeps that true if a
+      # plain-http request ever reaches the app.
+      - key: SESSION_SECURE_COOKIE
+        value: true
       - key: CACHE_STORE
         value: database
       - key: QUEUE_CONNECTION

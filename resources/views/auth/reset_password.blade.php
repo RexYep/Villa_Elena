@@ -73,4 +73,13 @@
 
     </form>
 
+    {{-- This page is reached by clicking a link in an email, so it has no
+         page to go "back" to in the browser sense — without this it was the
+         one auth page with no way out at all. Someone who opens the link and
+         then remembers their password, or realises it's for the wrong
+         account, would otherwise have to edit the URL by hand. --}}
+    <div class="auth-footer">
+        Remembered your password? <a href="{{ route('login') }}">Back to login</a>
+    </div>
+
 @endsection

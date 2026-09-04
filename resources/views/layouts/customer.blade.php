@@ -5,8 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <title>@yield('title', 'Villa Elena Resort')</title>
-    <link rel="icon" href="{{ asset('favicon.ico') }}" sizes="any">
-    <link rel="apple-touch-icon" href="{{ asset('apple-touch-icon.png') }}">
+    @include('partials.favicon')
     <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400&family=Jost:wght@300;400;500;600&display=swap" rel="stylesheet">
     @vite(['resources/js/portal.js'])
     @stack('styles')

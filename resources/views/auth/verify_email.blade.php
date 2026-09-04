@@ -49,9 +49,14 @@
         </button>
     </form>
 
+    {{-- Labelled for what it does. This posts to logout, but read "Back" and
+         signed you out — the one place in the auth flow where the label
+         promised navigation and delivered a session change instead. The way
+         back to the public site is the wordmark above, which does not sign
+         you out. --}}
     <form method="POST" action="{{ route('logout') }}" class="mt-3">
         @csrf
-        <button type="submit" class="btn btn-link">Back</button>
+        <button type="submit" class="btn btn-link">Sign out</button>
     </form>
 
 @endsection

@@ -116,4 +116,8 @@
         Already have an account? <a href="{{ route('login') }}">Sign in here</a>
     </div>
 
+    <div class="auth-back">
+        <a href="{{ route('home') }}"><i class="bi bi-arrow-left me-1"></i>Back to site</a>
+    </div>
+
 @endsection

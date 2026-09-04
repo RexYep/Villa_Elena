@@ -244,6 +244,51 @@ body {
     text-decoration: underline;
 }
 
+/* ── Way out of the auth flow ────────────────────────────────────── */
+/* The wordmark links home on both the desktop image panel and the mobile
+ * header — one of the two is always visible (see the 576px breakpoint at the
+ * bottom of this file). color:inherit keeps the panel's white and the card's
+ * stone; the h1/p rules still win for their own colors. */
+/* block, not inline-block: the tagline that follows is itself inline-block, so
+ * an inline-block wrapper let it ride up onto the wordmark's line. fit-content
+ * keeps it block-level (its own line) while shrinking the click target to the
+ * text — a full-width link would make the whole empty row navigate home. */
+.auth-brand-link {
+    display: block;
+    width: fit-content;
+    text-decoration: none;
+    color: inherit;
+}
+
+/* The mobile header is centered with text-align, which positions inline
+ * content but not the shrink-wrapped block above — this re-centers the box. */
+.auth-logo-mobile .auth-brand-link {
+    margin-left: auto;
+    margin-right: auto;
+}
+
+/* An explicit escape hatch, used by login and register only. Those two are
+ * the pages reached straight from the landing nav, and a clickable logo is a
+ * convention a first-time guest on a phone shouldn't have to already know.
+ * The rest of the auth pages belong to login rather than the landing page and
+ * already say "Back to login" — a second, differently-aimed "back" next to
+ * that would read as a contradiction, not a convenience. */
+.auth-back {
+    text-align: center;
+    margin-top: 14px;
+    font-size: 13px;
+}
+
+.auth-back a {
+    color: var(--muted);
+    text-decoration: none;
+}
+
+.auth-back a:hover {
+    color: var(--terracotta);
+    text-decoration: underline;
+}
+
 /* ── Validation ──────────────────────────────────────────────────── */
 .is-invalid {
     border-color: #dc3545 !important;
