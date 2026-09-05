@@ -14,7 +14,43 @@
             max-width: 1320px;
         }
 
-        /* ── Gallery ── */
+        /* ── Property Header (nauuna sa gallery — dapat alam agad ng
+              bisita kung ANO ang tinitingnan niya bago ang mga larawan) ── */
+        .prop-header {
+            margin-bottom: 20px;
+        }
+
+        .prop-type {
+            font-size: 13px;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            color: var(--gold);
+            margin-bottom: 8px;
+        }
+
+        .prop-name {
+            font-family: 'Playfair Display', serif;
+            font-size: 36px;
+            font-weight: 700;
+            margin-bottom: 12px;
+            line-height: 1.1;
+        }
+
+        .prop-meta {
+            display: flex;
+            gap: 20px;
+            font-size: 13px;
+            color: var(--muted);
+            flex-wrap: wrap;
+        }
+
+        .prop-meta span {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        /* ── Gallery (buong lapad — ito ang hero ng page) ── */
         .gallery {
             display: grid;
             grid-template-columns: 2.1fr 1fr;
@@ -22,8 +58,8 @@
             gap: 12px;
             border-radius: 20px;
             overflow: hidden;
-            height: 100%;
-            min-height: 520px;
+            min-height: 460px;
+            margin-bottom: 36px;
         }
 
         .gallery-main {
@@ -78,37 +114,6 @@
             font-weight: 500;
         }
 
-        /* ── Top Grid: Gallery + Availability (side by side) ── */
-        .top-grid {
-            display: grid;
-            grid-template-columns: 1.35fr 1fr;
-            gap: 24px;
-            align-items: stretch;
-            margin-bottom: 36px;
-        }
-
-        .availability-card {
-            background: #fff;
-            border: 1px solid var(--border);
-            border-radius: 20px;
-            padding: 24px;
-            box-shadow: 0 8px 32px rgba(44, 36, 22, .06);
-        }
-
-        .availability-card-title {
-            font-family: 'Playfair Display', serif;
-            font-size: 19px;
-            font-weight: 600;
-            margin-bottom: 4px;
-        }
-
-        .availability-card-sub {
-            font-size: 12.5px;
-            color: var(--muted);
-            margin-bottom: 14px;
-            line-height: 1.5;
-        }
-
         /* ── Layout ── */
         .detail-grid {
             display: grid;
@@ -117,43 +122,11 @@
             align-items: start;
         }
 
-        /* ── Property Info ── */
-        .prop-type {
-            font-size: 13px;
-            letter-spacing: 2px;
-            text-transform: uppercase;
-            color: var(--gold);
-            margin-bottom: 8px;
-        }
-
-        .prop-name {
-            font-family: 'Playfair Display', serif;
-            font-size: 36px;
-            font-weight: 700;
-            margin-bottom: 14px;
-            line-height: 1.1;
-        }
-
-        .prop-meta {
-            display: flex;
-            gap: 20px;
-            font-size: 13px;
-            color: var(--muted);
-            margin-bottom: 24px;
-            flex-wrap: wrap;
-        }
-
-        .prop-meta span {
-            display: flex;
-            align-items: center;
-            gap: 5px;
-        }
-
         .section-title {
             font-family: 'Playfair Display', serif;
             font-size: 20px;
             font-weight: 600;
-            margin-bottom: 14px;
+            margin-bottom: 6px;
             padding-top: 28px;
             border-top: 1px solid var(--border);
         }
@@ -161,6 +134,13 @@
         .section-title:first-of-type {
             border-top: none;
             padding-top: 0;
+        }
+
+        .section-sub {
+            font-size: 13px;
+            color: var(--muted);
+            margin-bottom: 14px;
+            line-height: 1.5;
         }
 
         .description {
@@ -191,7 +171,11 @@
             font-size: 14px;
         }
 
-        /* ── Availability Calendar (FullCalendar, tulad ng ginagamit sa admin) ── */
+        /* ── Availability Calendar (FullCalendar, tulad ng sa admin) ──
+           Walang events dito. Ang bawat araw ay may dalawang slot pill
+           (Day/Night) na ipinipinta ng dayCellDidMount, dahil ang isang
+           pulang bar sa buong araw ay nagsisinungaling: kapag gabi lang
+           ang naka-book, bakante pa rin ang umaga. */
         .fc-wrap {
             background: #fff;
             border: 1px solid var(--border);
@@ -239,22 +223,21 @@
             color: #fff;
         }
 
-        .fc .fc-button-primary:not(:disabled).fc-button-active,
-        .fc .fc-button-primary:not(:disabled):active {
-            background: var(--stone);
-            border-color: var(--stone);
-            color: #fff;
+        .fc .fc-button-primary:disabled {
+            background: var(--sand);
+            border-color: var(--border);
+            color: var(--muted);
+            opacity: .5;
         }
 
         .fc .fc-daygrid-day.fc-day-today {
             background: rgba(184, 148, 63, .08);
         }
 
-        /* Make day numbers more visible */
         .fc .fc-daygrid-day-number {
             font-size: 13px;
             font-weight: 600;
-            padding: 6px 8px;
+            padding: 6px 8px 2px;
             color: var(--stone);
         }
 
@@ -267,41 +250,83 @@
         }
 
         .fc .fc-daygrid-day-frame {
-            min-height: 48px;
+            min-height: 62px;
         }
 
-        .fc-event.booked-event {
-            background: #dc2626;
-            border: none;
+        /* Laging walang laman ang events container — bawiin ang espasyo. */
+        .fc .fc-daygrid-day-events {
+            display: none;
+        }
+
+        .fc .fc-daygrid-day-frame.is-past {
+            background: repeating-linear-gradient(-45deg,
+                    transparent 0 6px,
+                    rgba(44, 36, 22, .04) 6px 12px);
+        }
+
+        .fc .fc-daygrid-day-frame.is-past .fc-daygrid-day-number {
+            color: var(--muted);
+            opacity: .5;
+        }
+
+        /* ── Slot pills ── */
+        .slot-pills {
+            display: flex;
+            flex-direction: column;
+            gap: 3px;
+            padding: 0 5px 5px;
+        }
+
+        .slot-pill {
+            display: block;
+            width: 100%;
+            border: 1px solid transparent;
+            border-radius: 5px;
+            padding: 2px 5px;
+            font-family: 'Jost', sans-serif;
+            font-size: 11px;
+            font-weight: 600;
+            line-height: 1.5;
+            text-align: left;
+            letter-spacing: .2px;
+        }
+
+        button.slot-pill {
+            cursor: pointer;
+            transition: all .15s;
+        }
+
+        .slot-pill.is-open {
+            background: var(--sand);
+            border-color: var(--border);
+            color: var(--stone);
+        }
+
+        button.slot-pill.is-open:hover {
+            background: var(--gold-light);
+            border-color: var(--gold);
             color: #fff;
-            font-size: 12px;
-            padding: 1px 4px;
-            cursor: default;
-            border-radius: 4px;
         }
 
-        /* List view: i-override ang default light/white hover overlay ng
-           FullCalendar (nagiging invisible ang puting text sa ibabaw
-           nito) — panatilihing pula ang background kahit naka-hover. */
-        .fc-list-event.booked-event td {
-            background: #dc2626 !important;
-            color: #fff !important;
+        .slot-pill.is-taken {
+            background: #fee2e2;
+            border-color: #fecaca;
+            color: #b91c1c;
+            text-decoration: line-through;
+            text-decoration-thickness: 1px;
         }
 
-        .fc-list-event.booked-event:hover td {
-            background: #a91d1d !important;
-            color: #fff !important;
-        }
-
-        .fc-list-event.booked-event .fc-list-event-title,
-        .fc-list-event.booked-event .fc-list-event-time {
-            color: #fff !important;
+        .slot-pill.is-selected {
+            background: var(--stone);
+            border-color: var(--stone);
+            color: #fff;
         }
 
         .cal-legend {
             display: flex;
             gap: 16px;
-            font-size: 14px;
+            flex-wrap: wrap;
+            font-size: 13px;
             color: var(--muted);
             margin-top: 14px;
         }
@@ -312,11 +337,12 @@
             gap: 6px;
         }
 
-        .cal-legend i {
+        .cal-legend i.swatch {
             width: 12px;
             height: 12px;
             border-radius: 4px;
             display: inline-block;
+            border: 1px solid transparent;
         }
 
         /* ── Booking Card ── */
@@ -328,6 +354,15 @@
             position: sticky;
             top: calc(var(--nav-h) + 20px);
             box-shadow: 0 8px 32px rgba(44, 36, 22, .08);
+            transition: box-shadow .3s, border-color .3s;
+        }
+
+        /* Kapag may pinili sa calendar, kailangang makita ng bisita na may
+           nangyari sa card — lalo na sa mobile kung saan hindi ito sticky
+           at nasa ibaba pa ng calendar. */
+        .booking-card.is-flash {
+            border-color: var(--gold);
+            box-shadow: 0 8px 32px rgba(184, 148, 63, .35);
         }
 
         .booking-price {
@@ -537,28 +572,8 @@
             line-height: 1.5;
         }
 
-        .popover {
-            font-family: 'Jost', sans-serif;
-            max-width: 240px;
-        }
-
-        .popover-header {
-            font-family: 'Playfair Display', serif;
-            font-size: 13px;
-            background: var(--stone);
-            color: #fff;
-        }
-
-        .popover-body {
-            font-size: 14px;
-        }
-
         @media(max-width:900px) {
             .detail-grid {
-                grid-template-columns: 1fr;
-            }
-
-            .top-grid {
                 grid-template-columns: 1fr;
             }
 
@@ -566,7 +581,6 @@
                 grid-template-columns: 1fr 1fr;
                 grid-template-rows: 240px 140px;
                 min-height: auto;
-                height: auto;
             }
 
             .gallery-main {
@@ -575,6 +589,26 @@
 
             .booking-card {
                 position: static;
+            }
+        }
+
+        /* Sa makikipot na screen ay hindi na kasya ang teksto sa loob ng
+           isang cell — nagiging dalawang manipis na bar na lang ang mga
+           pill (itaas = Day, ibaba = Night, gaya ng nasa legend). */
+        @media(max-width:560px) {
+            .slot-pill {
+                font-size: 0;
+                padding: 0;
+                height: 6px;
+                border-radius: 3px;
+            }
+
+            .slot-pills {
+                padding: 0 4px 4px;
+            }
+
+            .fc .fc-daygrid-day-frame {
+                min-height: 46px;
             }
         }
 
@@ -615,58 +649,45 @@
         </div>
     @endif
 
-    {{-- Gallery + Availability (side by side) --}}
-    <div class="top-grid">
-        <div class="gallery" style="margin-bottom:0;">
-            <div class="gallery-main">
-                @if ($property->primaryImage)
-                    <img src="{{ $property->primaryImage->url }}" class="gallery-img" alt="{{ $property->property_name }}">
-                    @if ($property->images->count() > 1)
-                        <div class="gallery-count"><i class="bi bi-images"></i> {{ $property->images->count() }} photos
-                        </div>
-                    @endif
-                @else
-                    <div class="gallery-placeholder"><i class="bi bi-house"></i></div>
-                @endif
-            </div>
-            @foreach ($property->images->where('is_primary', 0)->take(2) as $img)
-                <div>
-                    <img src="{{ $img->url }}" class="gallery-img" alt="">
-                </div>
-            @endforeach
+    {{-- Header muna, tapos gallery: dapat mabasa ng bisita kung ano ang
+         property bago siya salubungin ng mga larawan. --}}
+    <div class="prop-header">
+        <div class="prop-type">{{ ucfirst($property->type) }}</div>
+        <div class="prop-name">{{ $property->property_name }}</div>
+        <div class="prop-meta">
+            <span><i class="bi bi-people"></i> Up to {{ $property->max_capacity }} guests</span>
+            @if ($property->floor_area)
+                <span><i class="bi bi-arrows-angle-expand"></i> {{ $property->floor_area }} sqm</span>
+            @endif
+            <span><i class="bi bi-geo-alt"></i> Villa Elena Resort</span>
         </div>
+    </div>
 
-        <div class="availability-card">
-            <div class="availability-card-title">Check Availability</div>
-            <p class="availability-card-sub">
-                Tap or click the marked (red) date to view the exact booking time.
-            </p>
-            <div class="fc-wrap">
-                <div id="availabilityCalendar"></div>
-            </div>
-            <div class="cal-legend">
-                <span><i style="background:var(--sand);border:1px solid var(--border);"></i> Available</span>
-                <span><i style="background:#dc2626;"></i> Booked</span>
-            </div>
+    <div class="gallery">
+        <div class="gallery-main">
+            @if ($property->primaryImage)
+                <img src="{{ $property->primaryImage->url }}" class="gallery-img" alt="{{ $property->property_name }}">
+                @if ($property->images->count() > 1)
+                    <div class="gallery-count"><i class="bi bi-images"></i> {{ $property->images->count() }} photos
+                    </div>
+                @endif
+            @else
+                <div class="gallery-placeholder"><i class="bi bi-house"></i></div>
+            @endif
         </div>
+        @foreach ($property->images->where('is_primary', 0)->take(2) as $img)
+            <div>
+                <img src="{{ $img->url }}" class="gallery-img" alt="">
+            </div>
+        @endforeach
     </div>
 
     <div class="detail-grid">
 
         {{-- Left: Property Info --}}
         <div>
-            <div class="prop-type">{{ ucfirst($property->type) }}</div>
-            <div class="prop-name">{{ $property->property_name }}</div>
-            <div class="prop-meta">
-                <span><i class="bi bi-people"></i> Up to {{ $property->max_capacity }} guests</span>
-                @if ($property->floor_area)
-                    <span><i class="bi bi-arrows-angle-expand"></i> {{ $property->floor_area }} sqm</span>
-                @endif
-                <span><i class="bi bi-geo-alt"></i> Villa Elena Resort</span>
-            </div>
-
             @if ($property->description)
-                <div class="section-title" style="border-top:none;padding-top:0;">About This Property</div>
+                <div class="section-title">About This Property</div>
                 <p class="description">{{ $property->description }}</p>
             @endif
 
@@ -689,6 +710,7 @@
                     'breakfast' => 'bi-egg-fried',
                     'spa' => 'bi-flower1',
                 ];
+                $canBookOnline = $property->status !== 'maintenance' && $allowOnlineBooking;
             @endphp
             @if (count($amenities ?? []))
                 <div class="section-title">Amenities</div>
@@ -702,12 +724,34 @@
                 </div>
             @endif
 
+            {{-- Availability --}}
+            <div class="section-title">Availability</div>
+            <p class="section-sub">
+                @if ($canBookOnline)
+                    Every date has two slots. Pick an open one and it fills in your booking.
+                @else
+                    Every date has two slots. Open slots are shown below.
+                @endif
+            </p>
+            <div class="fc-wrap">
+                <div id="availabilityCalendar"></div>
+            </div>
+            <div class="cal-legend">
+                <span><i class="swatch" style="background:var(--sand);border-color:var(--border);"></i> Open</span>
+                <span><i class="swatch" style="background:#fee2e2;border-color:#fecaca;"></i> Booked</span>
+                @if ($canBookOnline)
+                    <span><i class="swatch" style="background:var(--stone);border-color:var(--stone);"></i> Your
+                        pick</span>
+                @endif
+                <span><i class="bi bi-sun"></i> Top = Day &nbsp;·&nbsp; <i class="bi bi-moon-stars"></i> Bottom =
+                    Night</span>
+            </div>
         </div>
 
         {{-- Right: Booking Card --}}
         <div>
-            <div class="booking-card">
-                @if ($property->status !== 'maintenance' && $allowOnlineBooking)
+            <div class="booking-card" id="bookingCard">
+                @if ($canBookOnline)
                     <div class="booking-price">₱{{ number_format($property->base_price, 0) }} <span>/ package</span></div>
 
                     <form method="GET" action="{{ route('portal.book', $property) }}" id="bookingForm">
@@ -771,7 +815,7 @@
 
                         @auth
                             <button type="submit" class="btn-book-now" id="bookBtn">
-                                Check Availability
+                                Reserve Now →
                             </button>
                         @else
                             <button type="button" class="btn-book-now" onclick="window.location='{{ route('login') }}'">
@@ -783,15 +827,6 @@
                             </div>
                         @endauth
                     </form>
-
-                    {{-- Booked dates notice --}}
-                    @if ($bookedRanges->count())
-                        <div class="text-muted-theme"
-                            style="margin-top:16px;padding-top:16px;border-top:1px solid var(--border);font-size: 14px;">
-                            <i class="bi bi-info-circle me-1"></i>
-                            Some dates may not be available. We'll confirm availability when you proceed.
-                        </div>
-                    @endif
                 @elseif ($property->status === 'maintenance')
                     <div class="unavail-banner">
                         <i class="bi bi-x-circle me-2"></i>
@@ -815,6 +850,17 @@
     <script src="https://js.pusher.com/8.2.0/pusher.min.js"></script>
     <script>
         const PRICE_PREVIEW_URL = "{{ route('portal.price-preview', $property) }}";
+        const TODAY_STR = @json(now()->format('Y-m-d'));
+        const SLOT_DEFS = @json(\App\Models\Booking::SLOTS);
+        const SLOT_KEYS = Object.keys(SLOT_DEFS);
+        const SLOT_SHORT = {
+            day: 'Day',
+            night: 'Night'
+        };
+        // Petsa → { slot: booking_id } ng mga SARADONG slot. Ito lang ang
+        // state ng calendar; pinapatch ito ng Pusher updates sa ibaba.
+        const bookedSlots = @json($slotAvailability);
+        const BOOKING_ENABLED = @json($property->status !== 'maintenance' && $allowOnlineBooking);
 
         function getSelectedSlot() {
             const checked = document.querySelector('input[name="slot"]:checked');
@@ -823,6 +869,7 @@
 
         function showSlotNote() {
             const note = document.getElementById('durationNote');
+            if (!note) return;
             const slot = getSelectedSlot();
             if (!slot) {
                 note.className = 'duration-note';
@@ -838,11 +885,18 @@
         let previewAbortController = null;
         let previewDebounceTimer = null;
 
+        function setBookBtn(enabled, label) {
+            const bookBtn = document.getElementById('bookBtn');
+            if (!bookBtn) return;
+            bookBtn.disabled = !enabled;
+            bookBtn.textContent = label;
+        }
+
         function showPreviewLoading() {
             const box = document.getElementById('pricePreview');
             box.style.display = 'block';
-            document.getElementById('previewTag').innerHTML = '<i class="bi bi-hourglass-split"></i> Kinukumpirma...';
-            document.getElementById('previewNights').textContent = 'Checking availability...';
+            document.getElementById('previewTag').innerHTML = '<i class="bi bi-hourglass-split"></i> Checking…';
+            document.getElementById('previewNights').textContent = 'Checking availability…';
             document.getElementById('previewBase').textContent = '—';
             document.getElementById('previewTotal').textContent = '—';
         }
@@ -850,12 +904,11 @@
         function showPreviewError(message) {
             const box = document.getElementById('pricePreview');
             box.style.display = 'block';
-            document.getElementById('previewTag').innerHTML = '<i class="bi bi-exclamation-triangle"></i> Hindi Available';
+            document.getElementById('previewTag').innerHTML = '<i class="bi bi-exclamation-triangle"></i> Unavailable';
             document.getElementById('previewNights').textContent = message;
             document.getElementById('previewBase').textContent = '—';
             document.getElementById('previewTotal').textContent = '—';
-            const bookBtn = document.getElementById('bookBtn');
-            if (bookBtn) bookBtn.disabled = true;
+            setBookBtn(false, 'Not Available');
         }
 
         function fetchServerPreview(ci, slot) {
@@ -899,11 +952,7 @@
                     } else {
                         promoRow.style.display = 'none';
                     }
-                    const bookBtn = document.getElementById('bookBtn');
-                    if (bookBtn) {
-                        bookBtn.disabled = false;
-                        bookBtn.textContent = 'Reserve Now →';
-                    }
+                    setBookBtn(true, 'Reserve Now →');
                 })
                 .catch(err => {
                     if (err.name === 'AbortError') return;
@@ -912,12 +961,18 @@
         }
 
         function updatePreview() {
-            const ci = document.getElementById('checkin').value;
+            const checkinEl = document.getElementById('checkin');
+            if (!checkinEl) return;
+
+            const ci = checkinEl.value;
             const slot = getSelectedSlot();
             showSlotNote();
 
             if (!ci || !slot) {
                 document.getElementById('pricePreview').style.display = 'none';
+                // Huwag iwang naka-disable ang button kapag binura ng guest
+                // ang petsa — wala nang error na ipinapakita sa kanya.
+                setBookBtn(true, 'Reserve Now →');
                 return;
             }
 
@@ -927,27 +982,19 @@
             previewDebounceTimer = setTimeout(() => fetchServerPreview(ci, slot), 350);
         }
 
-        document.getElementById('checkin')?.addEventListener('change', updatePreview);
-        document.querySelectorAll('input[name="slot"]').forEach(el => el.addEventListener('change', updatePreview));
-
-        // Run on load if dates pre-filled
-        updatePreview();
-
         // ── Availability Calendar (FullCalendar) ────────────────────────
-        // Kung may from_time/to_time, gumagawa tayo ng TIMED event (hindi all-day)
-        // para makita ang eksaktong oras kahit sa week/list view. Kung wala,
-        // fallback sa all-day block gaya ng dati (ang "end" ay EXCLUSIVE sa
-        // FullCalendar kaya may +1 araw na dinadagdag para tamang-tama ang
-        // huling naka-highlight na araw).
+        // Read-only ang lumang bersyon nito: kailangang basahin ng bisita
+        // ang petsa rito at manu-manong i-type sa form. Ngayon, ang mga
+        // pill na mismo ang input — pagkapindot, napupunan ang booking card.
         //
         // Ang time strings mula sa backend ay pwedeng "08:00" (24-hr) o
-        // "8:00 AM" (12-hr) depende sa format function na ginagamit sa Model/
-        // Controller — kaya kailangan ng flexible parser dito bago gawing Date
-        // object, kung hindi, magiging "Invalid Date" ito at hindi mag-render
-        // ang event nang walang anumang error na makikita (tahimik na fail).
+        // "8:00 AM" (12-hr) depende sa format function na ginagamit sa
+        // Model/Controller — kaya kailangan ng flexible parser dito bago
+        // gawing Date object, kung hindi, magiging "Invalid Date" ito at
+        // tahimik na mabibigo ang live update nang walang anumang error.
         function parseTimeToHM(timeStr) {
             if (!timeStr) return null;
-            const t = timeStr.trim();
+            const t = String(timeStr).trim();
             // 12-hour format: "8:00 AM", "08:00 PM", "8:00AM"
             let m = t.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
             if (m) {
@@ -961,8 +1008,8 @@
                     min
                 };
             }
-            // 24-hour format: "08:00", "14:30"
-            m = t.match(/^(\d{1,2}):(\d{2})$/);
+            // 24-hour format: "08:00", "14:30", "08:00:00"
+            m = t.match(/^(\d{1,2}):(\d{2})(?::\d{2})?$/);
             if (m) {
                 return {
                     h: parseInt(m[1], 10),
@@ -979,141 +1026,223 @@
             return new Date(y, mo - 1, d, hm.h, hm.min);
         }
 
-        const bookedRangesRaw = @json($bookedRanges);
-        const calendarEvents = bookedRangesRaw.map((r, i) => {
-            const timeLabel = (r.from_time || r.to_time) ?
-                ` (${r.from_time ?? '—'} → ${r.to_time ?? '—'})` :
-                '';
-            const startHM = parseTimeToHM(r.from_time);
-            const endHM = parseTimeToHM(r.to_time);
-            if (startHM && endHM) {
-                return {
-                    id: 'booking-' + r.id,
-                    title: 'Booked' + timeLabel,
-                    start: buildDate(r.from, r.from_time),
-                    end: buildDate(r.to, r.to_time),
-                    allDay: false,
-                    display: 'block',
-                    classNames: ['booked-event'],
-                    extendedProps: {
-                        rangeIndex: i,
-                        booking_id: r.id
-                    }
-                };
-            }
-            const endDate = new Date(r.to + 'T00:00:00');
-            endDate.setDate(endDate.getDate() + 1);
-            return {
-                id: 'booking-' + r.id,
-                title: 'Booked' + timeLabel,
-                start: r.from,
-                end: endDate.toISOString().split('T')[0],
-                display: 'block',
-                classNames: ['booked-event'],
-                extendedProps: {
-                    rangeIndex: i,
-                    booking_id: r.id
+        function toDateStr(date) {
+            // Hindi toISOString(): UTC iyon, kaya nagiging off-by-one ang
+            // petsa sa timezone ng Pilipinas.
+            const m = String(date.getMonth() + 1).padStart(2, '0');
+            const d = String(date.getDate()).padStart(2, '0');
+            return `${date.getFullYear()}-${m}-${d}`;
+        }
+
+        function addDays(dateStr, n) {
+            const [y, mo, d] = dateStr.split('-').map(Number);
+            return toDateStr(new Date(y, mo - 1, d + n));
+        }
+
+        // Window ng isang slot sa isang petsa — kaparehong kalkulasyon ng
+        // Booking::slotDateTimes() sa server.
+        function slotWindow(dateStr, slotKey) {
+            const def = SLOT_DEFS[slotKey];
+            const start = buildDate(dateStr, def.check_in);
+            const end = buildDate(def.overnight ? addDays(dateStr, 1) : dateStr, def.check_out);
+            return [start, end];
+        }
+
+        // ── Selection state ──────────────────────────────────────────────
+        let selected = {
+            date: document.getElementById('checkin')?.value || null,
+            slot: getSelectedSlot()
+        };
+
+        function isTaken(dateStr, slotKey) {
+            return Object.prototype.hasOwnProperty.call(bookedSlots[dateStr] || {}, slotKey);
+        }
+
+        function openSlots(dateStr) {
+            return SLOT_KEYS.filter(k => !isTaken(dateStr, k));
+        }
+
+        function paintDay(dateStr, frame) {
+            frame.querySelectorAll('.slot-pills').forEach(n => n.remove());
+            frame.classList.toggle('is-past', dateStr < TODAY_STR);
+            if (dateStr < TODAY_STR) return;
+
+            const wrap = document.createElement('div');
+            wrap.className = 'slot-pills';
+
+            SLOT_KEYS.forEach(key => {
+                const taken = isTaken(dateStr, key);
+                const canPick = !taken && BOOKING_ENABLED;
+                const pill = document.createElement(canPick ? 'button' : 'span');
+
+                if (canPick) {
+                    pill.type = 'button';
+                    pill.dataset.date = dateStr;
+                    pill.dataset.slot = key;
                 }
+
+                const isSelected = !taken && selected.date === dateStr && selected.slot === key;
+                pill.className = 'slot-pill ' + (taken ? 'is-taken' : 'is-open') +
+                    (isSelected ? ' is-selected' : '');
+                pill.textContent = SLOT_SHORT[key] || key;
+                pill.title = SLOT_DEFS[key].label + (taken ? ' — already booked' : ' — available');
+
+                wrap.appendChild(pill);
+            });
+
+            frame.appendChild(wrap);
+        }
+
+        let availCalendar = null;
+
+        function repaint(dateStr) {
+            if (!dateStr || !availCalendar) return;
+            const frame = document.querySelector(
+                `#availabilityCalendar .fc-daygrid-day[data-date="${dateStr}"] .fc-daygrid-day-frame`);
+            if (frame) paintDay(dateStr, frame);
+        }
+
+        function setSelection(dateStr, slotKey) {
+            const prev = selected.date;
+            selected = {
+                date: dateStr,
+                slot: slotKey
             };
-        });
+            if (prev && prev !== dateStr) repaint(prev);
+            repaint(dateStr);
+        }
+
+        // Pagpili mula sa calendar — ito ang pumupuno sa booking card.
+        function pickSlot(dateStr, slotKey) {
+            if (!BOOKING_ENABLED) return;
+            const checkinEl = document.getElementById('checkin');
+            if (!checkinEl) return;
+
+            checkinEl.value = dateStr;
+            const radio = document.getElementById('slot_' + slotKey);
+            if (radio) radio.checked = true;
+
+            setSelection(dateStr, slotKey);
+            updatePreview();
+
+            const card = document.getElementById('bookingCard');
+            if (!card) return;
+            card.scrollIntoView({
+                behavior: 'smooth',
+                block: 'nearest'
+            });
+            card.classList.add('is-flash');
+            clearTimeout(card._flashTimer);
+            card._flashTimer = setTimeout(() => card.classList.remove('is-flash'), 1400);
+        }
 
         // ── Live availability updates ────────────────────────────────────
         // When someone else books (or cancels) this property while this page
-        // is open, patch the calendar in place instead of leaving it stale
+        // is open, patch the slot map in place instead of leaving it stale
         // until the visitor manually refreshes.
-        function buildLiveEvent(data) {
-            const timeLabel = (data.check_in_time || data.check_out_time) ?
-                ` (${data.check_in_time ?? '—'} → ${data.check_out_time ?? '—'})` :
-                '';
-            const startHM = parseTimeToHM(data.check_in_time);
-            const endHM = parseTimeToHM(data.check_out_time);
-            if (startHM && endHM) {
-                return {
-                    id: 'booking-' + data.booking_id,
-                    title: 'Booked' + timeLabel,
-                    start: buildDate(data.check_in, data.check_in_time),
-                    end: buildDate(data.check_out, data.check_out_time),
-                    allDay: false,
-                    display: 'block',
-                    classNames: ['booked-event'],
-                };
+        function applyBlocked(data) {
+            const start = buildDate(data.check_in, data.check_in_time);
+            const end = buildDate(data.check_out, data.check_out_time);
+            const touched = [];
+
+            // Kaparehong saklaw ng kandidatong petsa na sinusuri ng
+            // PortalController::buildSlotAvailability().
+            let cursor = addDays(data.check_in, -1);
+            const last = addDays(data.check_out, 1);
+
+            while (cursor <= last) {
+                const date = cursor;
+                SLOT_KEYS.forEach(key => {
+                    const [slotStart, slotEnd] = slotWindow(date, key);
+                    if (slotStart < end && slotEnd > start) {
+                        (bookedSlots[date] = bookedSlots[date] || {})[key] = data.booking_id;
+                        touched.push(date);
+                    }
+                });
+                cursor = addDays(cursor, 1);
             }
-            const endDate = new Date(data.check_out + 'T00:00:00');
-            endDate.setDate(endDate.getDate() + 1);
-            return {
-                id: 'booking-' + data.booking_id,
-                title: 'Booked' + timeLabel,
-                start: data.check_in,
-                end: endDate.toISOString().split('T')[0],
-                display: 'block',
-                classNames: ['booked-event'],
-            };
+
+            touched.forEach(repaint);
+        }
+
+        function applyFreed(bookingId) {
+            const touched = [];
+            Object.keys(bookedSlots).forEach(dateStr => {
+                SLOT_KEYS.forEach(key => {
+                    if (bookedSlots[dateStr][key] === bookingId) {
+                        delete bookedSlots[dateStr][key];
+                        touched.push(dateStr);
+                    }
+                });
+                if (!Object.keys(bookedSlots[dateStr]).length) delete bookedSlots[dateStr];
+            });
+            touched.forEach(repaint);
         }
 
         document.addEventListener('DOMContentLoaded', function() {
             const el = document.getElementById('availabilityCalendar');
-            const availCalendar = new FullCalendar.Calendar(el, {
-                plugins: [FullCalendar.dayGridPlugin, FullCalendar.listPlugin],
+            availCalendar = new FullCalendar.Calendar(el, {
+                plugins: [FullCalendar.dayGridPlugin],
                 initialView: 'dayGridMonth',
+                // Prev/next at pamagat lang. Wala nang "today" (hindi na
+                // kailangan — hindi naman puwedeng bumalik sa nakaraan dahil
+                // sa validRange) at wala nang list view (dalawang slot lang
+                // kada araw, wala itong maidadagdag na impormasyon).
                 headerToolbar: {
-                    left: 'prev,next today',
+                    left: 'prev,next',
                     center: 'title',
-                    right: 'dayGridMonth,listMonth'
+                    right: ''
+                },
+                validRange: {
+                    start: TODAY_STR
                 },
                 height: 'auto',
-                aspectRatio: 1.2,
-                slotMinTime: '06:00:00',
-                slotMaxTime: '26:00:00',
-                scrollTime: '08:00:00',
                 editable: false,
                 selectable: false,
-                events: calendarEvents,
-                eventDidMount: function(info) {
-                    // Tap/click-friendly popover (gumagana rin sa mobile, hindi lang hover)
-                    // Ang title mismo ng popover ang nagpapakita ng eksaktong oras
-                    // ng booking (hal. "Booked (8:00 AM → 12:00 PM)").
-                    //
-                    // Manual na kontrol (hindi basta trigger:'click') para awtomatikong
-                    // mawala ang popover pagkalipas ng ilang segundo — hindi na
-                    // kailangang i-click ulit para itago ito.
-                    const popover = new bootstrap.Popover(info.el, {
-                        title: info.event.title,
-                        content: 'Naka-book ang Villa sa petsa/oras na ito.',
-                        trigger: 'manual',
-                        placement: 'top',
-                        container: 'body'
-                    });
-
-                    info.el.addEventListener('click', function(e) {
-                        e.stopPropagation();
-                        const alreadyOpen = info.el.classList.contains('popover-open');
-
-                        // Isara muna ang ibang bukas na popover (isa lang dapat bukas kada oras)
-                        document.querySelectorAll('.popover-open').forEach(other => {
-                            if (other !== info.el) {
-                                bootstrap.Popover.getInstance(other)?.hide();
-                                other.classList.remove('popover-open');
-                                clearTimeout(other._popoverTimer);
-                            }
-                        });
-
-                        if (alreadyOpen) {
-                            popover.hide();
-                            info.el.classList.remove('popover-open');
-                            clearTimeout(info.el._popoverTimer);
-                        } else {
-                            popover.show();
-                            info.el.classList.add('popover-open');
-                            clearTimeout(info.el._popoverTimer);
-                            info.el._popoverTimer = setTimeout(() => {
-                                popover.hide();
-                                info.el.classList.remove('popover-open');
-                            }, 4000);
-                        }
-                    });
+                events: [],
+                dayCellDidMount: function(info) {
+                    const frame = info.el.querySelector('.fc-daygrid-day-frame');
+                    if (frame) paintDay(toDateStr(info.date), frame);
                 }
             });
             availCalendar.render();
+
+            // Isang delegated listener na lang (imbes na dateClick) para
+            // hindi dumoble ang pagputok kapag ang pill mismo ang pinindot.
+            el.addEventListener('click', function(e) {
+                const pill = e.target.closest('.slot-pill.is-open[data-date]');
+                if (pill) {
+                    pickSlot(pill.dataset.date, pill.dataset.slot);
+                    return;
+                }
+
+                const cell = e.target.closest('.fc-daygrid-day');
+                if (!cell) return;
+                const dateStr = cell.getAttribute('data-date');
+                if (!dateStr || dateStr < TODAY_STR) return;
+
+                // Pagpindot kahit saan sa cell: panatilihin ang kasalukuyang
+                // slot kung bukas pa ito, kung hindi, ang unang bukas.
+                const open = openSlots(dateStr);
+                if (!open.length) return;
+                pickSlot(dateStr, open.includes(selected.slot) ? selected.slot : open[0]);
+            });
+
+            // Manu-manong pagbabago sa form ay dapat ding masalamin sa
+            // calendar — dalawang view lang sila ng iisang pinili.
+            document.getElementById('checkin')?.addEventListener('change', function() {
+                setSelection(this.value || null, getSelectedSlot());
+                updatePreview();
+            });
+            document.querySelectorAll('input[name="slot"]').forEach(input => {
+                input.addEventListener('change', function() {
+                    setSelection(document.getElementById('checkin')?.value || null, this.value);
+                    updatePreview();
+                });
+            });
+
+            // Run on load if dates pre-filled
+            updatePreview();
 
             // ── Live availability sync (Pusher) ────────────────────────────
             const PUSHER_KEY = '{{ env('PUSHER_APP_KEY') }}';
@@ -1125,15 +1254,12 @@
 
                 channel.bind('availability.changed', function(data) {
                     if (data.action === 'blocked') {
-                        if (!availCalendar.getEventById('booking-' + data.booking_id)) {
-                            availCalendar.addEvent(buildLiveEvent(data));
-                        }
+                        applyBlocked(data);
                     } else if (data.action === 'freed') {
-                        availCalendar.getEventById('booking-' + data.booking_id)?.remove();
+                        applyFreed(data.booking_id);
                     }
                 });
             }
         });
     </script>
 @endpush
-

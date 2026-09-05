@@ -197,19 +197,13 @@ class PortalController extends Controller
         // hindi hiwalay na bookable listing)
         $rooms = Property::where('type', 'room')->orderBy('property_name')->get(['id', 'property_name', 'status']);
 
-        // Get booked date ranges (kasama na ang oras) para sa calendar
-        $bookedRanges = Booking::where('property_id', $property->id)
-            ->whereNotIn('status', ['cancelled', 'no_show'])
-            ->where('check_out_date', '>=', today())
-            ->orderBy('check_in_date')
-            ->get(['id', 'check_in_date', 'check_in_time', 'check_out_date', 'check_out_time'])
-            ->map(fn ($b) => [
-                'id' => $b->id,
-                'from' => $b->check_in_date->format('Y-m-d'),
-                'from_time' => $b->check_in_time ? \Carbon\Carbon::parse($b->check_in_time)->format('g:i A') : null,
-                'to' => $b->check_out_date->format('Y-m-d'),
-                'to_time' => $b->check_out_time ? \Carbon\Carbon::parse($b->check_out_time)->format('g:i A') : null,
-            ]);
+        // Availability para sa calendar. Bawat araw ay may dalawang slot
+        // lang (day/night), kaya ang ipinapadala sa view ay kung aling
+        // SLOT ang sarado kada petsa — hindi hilaw na date range. Kung
+        // date range lang ang ibibigay, magmumukhang buong-araw na sarado
+        // ang isang petsang may gabing booking lang, gayong bakante pa
+        // ang umaga nito.
+        $slotAvailability = $this->buildSlotAvailability($property);
 
         $checkin = $request->get('checkin');
         $guests = $request->get('guests', 1);
@@ -228,9 +222,98 @@ class PortalController extends Controller
         $allowOnlineBooking = Setting::get('allow_online_booking', '1') === '1';
 
         return view('portal.property', compact(
-            'property', 'rooms', 'bookedRanges', 'checkin', 'guests', 'slot',
+            'property', 'rooms', 'slotAvailability', 'checkin', 'guests', 'slot',
             'reviews', 'avgRating', 'totalReviews', 'allowOnlineBooking'
         ));
+    }
+
+    /**
+     * Binubuo ang mapa ng mga SARADONG slot kada petsa, para sa
+     * availability calendar ng public property page.
+     *
+     * Sinasadyang ginagaya nito ang eksaktong lohika ng
+     * Booking::hasConflict() — parehong status filter, parehong
+     * "abandoned pending hold" exemption, at parehong datetime-overlap
+     * test sa pamamagitan ng Booking::slotDateTimes(). Kailangang tugma
+     * ang dalawa: kung mas mahigpit ang calendar, magmumukhang sarado
+     * ang isang slot na tatanggapin naman pala ng server; kung mas
+     * maluwag, mare-reject ang guest matapos na siyang pumili.
+     *
+     * @return array<string, array<string, int>> hal. ['2026-09-10' => ['night' => 42]]
+     */
+    private function buildSlotAvailability(Property $property): array
+    {
+        $bookings = Booking::where('property_id', $property->id)
+            ->whereNotIn('status', ['cancelled', 'no_show'])
+            // Tulad ng sa hasConflict(): ang mga unpaid na booking na
+            // lumagpas na sa "Booking Hold" window ay hindi na nagba-block.
+            ->where(function ($q) {
+                $q->where('status', '!=', 'pending')
+                    ->orWhere('created_at', '>=', now()->subMinutes(Booking::pendingHoldMinutes()));
+            })
+            ->where('check_out_date', '>=', today())
+            ->get(['id', 'check_in_date', 'check_in_time', 'check_out_date', 'check_out_time']);
+
+        if ($bookings->isEmpty()) {
+            return [];
+        }
+
+        // Tunay na check-in/check-out datetime ng bawat booking. Hindi
+        // puwedeng ang slot key lang ang basehan: puwedeng na-extend ng
+        // Admin\BookingController::extendStay() ang checkout, kaya umaabot
+        // ito sa slot na hindi tugma sa check-in time nito.
+        $windows = $bookings->map(fn ($b) => [
+            'id' => $b->id,
+            'start' => Carbon::parse($b->check_in_date->format('Y-m-d').' '.$b->check_in_time),
+            'end' => Carbon::parse($b->check_out_date->format('Y-m-d').' '.$b->check_out_time),
+        ])->all();
+
+        // Ang mga petsang posibleng maapektuhan lang ang sinusuri — bakante
+        // ang lahat ng iba pa. Kasama ang araw bago ang check-in at ang
+        // araw matapos ang check-out, dahil ang overnight na booking ay
+        // tumatawid sa hangganan ng araw.
+        $candidates = [];
+        foreach ($bookings as $b) {
+            $cursor = $b->check_in_date->copy()->subDay();
+            $last = $b->check_out_date->copy()->addDay();
+            while ($cursor->lte($last)) {
+                $candidates[$cursor->format('Y-m-d')] = true;
+                $cursor->addDay();
+            }
+        }
+
+        $todayStr = today()->format('Y-m-d');
+        $map = [];
+
+        foreach (array_keys($candidates) as $date) {
+            if ($date < $todayStr) {
+                continue;
+            }
+
+            // Kasama ang booking id kada saradong slot para magamit ito ng
+            // live (Pusher) na "freed" na update sa calendar: iyon lang ang
+            // paraan para malaman kung aling pill ang aalisin kapag
+            // kinansela ang isang booking habang bukas ang page.
+            $taken = [];
+            foreach (array_keys(Booking::SLOTS) as $slotKey) {
+                [$slotStart, $slotEnd] = Booking::slotDateTimes($slotKey, $date);
+
+                foreach ($windows as $w) {
+                    if ($slotStart->lt($w['end']) && $slotEnd->gt($w['start'])) {
+                        $taken[$slotKey] = $w['id'];
+                        break;
+                    }
+                }
+            }
+
+            if ($taken) {
+                $map[$date] = $taken;
+            }
+        }
+
+        ksort($map);
+
+        return $map;
     }
 
     // ── Live Price Preview (AJAX) ────────────────────────────────

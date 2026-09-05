@@ -1,7 +1,7 @@
 # Villa Elena Private Rental Resort
 ## Resort Management System — Project Documentation
 
-**Version:** 6.7
+**Version:** 6.8
 **Stack:** PHP 8.2 / Laravel 12 / MySQL 8 / Bootstrap 5
 **Local URL:** `http://127.0.0.1:8000` (`php artisan serve`) or `http://localhost:8000` (Docker — see v5.3)
 **Live URL:** `https://villa-elena.onrender.com` (Render, free tier — testing only, not yet handed to real guests)
@@ -10,6 +10,27 @@
 
 ---
 
+## What Changed in v6.8 (Read This First)
+
+### The availability calendar on the property page became an input
+
+`portal/property.blade.php` put a full FullCalendar month grid *beside* the photo gallery in a two-column `.top-grid`, both above the property name. Two dense grids of equal visual weight opened the page, and the calendar was `selectable: false` with no `dateClick` — so a visitor read a date off it and then **retyped that date by hand** into the booking form six inches away. A large widget that looks interactive but is not reads as clutter, which is exactly how it felt.
+
+**Layout.** `.top-grid` is gone. Order is now header (type / name / meta) → full-width gallery → `.detail-grid`, with the calendar demoted into the left column below Amenities as a peer of the other sections. The name is above the fold instead of below the gallery.
+
+**The calendar now fills the form.** Clicking an open slot pill sets `#checkin`, checks the matching slot radio, fires the existing server price preview, and flashes the booking card. The binding is **two-way** — editing the date or slot in the form moves the highlight in the calendar — because they are two views of one selection, not two independent controls.
+
+**Slot-aware cells replaced the "Booked" event bars.** The old calendar drew one red bar across a booked date, which **lied**: a date booked for `night` still has its `day` slot free (the 6:00 AM → 8:00 AM gap). Each day cell now renders two pills, Day over Night, each independently open / booked / selected. There are no FullCalendar events on this page at all any more, so the popovers, the list-view hover overrides, and the `listMonth` toggle all went with them; the toolbar is `prev,next` + title, and `validRange` blocks navigating into the past.
+
+**`PortalController::buildSlotAvailability()` replaced `$bookedRanges`.** The view is handed `['2026-09-14' => ['night' => 108]]` — closed slots per date, with the booking id — instead of raw date ranges. It **deliberately mirrors `Booking::hasConflict()` clause for clause**: same status filter, same abandoned-pending-hold exemption, same datetime-overlap test through `Booking::slotDateTimes()`. That equivalence is the whole point and is the thing to re-check if either side is edited — a stricter calendar shows a slot as closed that the server would accept, a looser one rejects the guest *after* they pick. The old `$bookedRanges` query omitted the pending-hold exemption, so abandoned unpaid holds were being drawn as booked when the booking form itself would have taken them.
+
+Verified by cross-checking all **240 slot-days** (120 days × 2 slots) against `hasConflict()` directly: 0 mismatches. Then verified by real clicks in a browser — a fake would not have caught that the page's `html` carries `scroll-behavior: smooth`, nor proved that clicking a *booked* pill correctly falls through to the cell handler and picks the still-open slot instead.
+
+**Redundant availability signals removed.** Four things answered "is this free?": the calendar, the price preview's server check, a submit button labelled *"Check Availability"*, and a footer note saying *"Some dates may not be available. We'll confirm availability when you proceed"* — which contradicted the calendar directly above it. The note is deleted and the button reads **"Reserve Now →"** from the start, going disabled as **"Not Available"** only when the server preview actually says so. The three Tagalog user-facing strings in that component (`Kinukumpirma...`, `Hindi Available`, and the popover's `Naka-book ang Villa...`) are now English like the rest of the page; code comments stay Tagalog per this repo's convention.
+
+**Live (Pusher) updates still work**, but patch the slot map rather than adding/removing events — `applyBlocked()` recomputes which (date, slot) pairs a broadcast booking covers using the same overlap math, and `applyFreed()` clears entries by booking id, which is why the id is carried in the map.
+
+---
 ## What Changed in v6.6 (Read This First)
 
 ### The first real deploy since v5.2 — and the two mail bugs it exposed
@@ -2277,6 +2298,8 @@ Villa Elena is rented as a **flat-rate package** — one of two fixed slots, Day
 - **Exception — "Extend Stay":** the one place free-choice time still exists is `Admin\BookingController::extendStay()`, which pushes out the check-out of an *already checked-in* guest's existing stay (not a new booking, so it's deliberately exempt from the fixed-slot policy). Its `hasConflict()` call was updated only to drop the removed `$bufferHours` argument — behavior otherwise unchanged.
 
 **Frontend note:** every booking form (`portal/property.blade.php`, `portal/booking_form.blade.php`, `customer/reschedule_form.blade.php`, `admin/bookings/create.blade.php`, `staff/walkin.blade.php`) presents the slot choice as two radio cards ("Day 8AM–5PM" / "Night 7PM–6AM") instead of a time picker; all client-side price-preview JS was rewritten to compute off the selected slot rather than a raw time diff.
+
+**Availability display (v6.8):** the public property page's calendar renders the two slots **per day cell** as independent pills rather than one bar per booking, because a date is rarely wholly free or wholly taken — `night` booked leaves `day` open. The per-date map comes from `PortalController::buildSlotAvailability()`, which mirrors `hasConflict()` exactly (including its abandoned-pending-hold exemption) so the calendar and the booking form can never disagree. Clicking a pill fills the booking form; the two stay in sync both ways. See [What Changed in v6.8](#what-changed-in-v68-read-this-first).
 
 **Auto check-in/out compatibility:** `bookings:auto-checkinout` (`AutoCheckInOutBookings`) needed **zero changes** for this — it already worked purely off the stored `check_in_time`/`check_out_time` values rather than assuming a particular time, so it auto-checks-in/out fixed-slot bookings (including the Night slot's overnight check-out crossing midnight) exactly as it did free-time ones. Verified with a live test run on 2026-08-08.
 

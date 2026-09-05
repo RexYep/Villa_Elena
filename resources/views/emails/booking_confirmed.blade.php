@@ -43,29 +43,14 @@
         }
 
         .badge {
-            display: inline-flex;
-            align-items: center;
-            gap: 7px;
+            display: inline-block;
             background: #dcfce7;
             color: #15803d;
             font-size: 12px;
             font-weight: 700;
-            padding: 7px 16px;
+            padding: 6px 16px;
             border-radius: 20px;
             margin: 24px auto 0;
-        }
-
-        .badge-icon {
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            width: 16px;
-            height: 16px;
-            background: #15803d;
-            color: #ffffff;
-            border-radius: 50%;
-            font-size: 10px;
-            line-height: 1;
         }
 
         .body {
@@ -164,17 +149,11 @@
 
         <div style="text-align:center;">
             @if ($isFirstConfirmation)
-                <span class="badge">
-                    <span class="badge-icon">✓</span> Booking Confirmed
-                </span>
+                <span class="badge">✓ Booking Confirmed</span>
             @elseif (!$summary['fully_paid'])
-                <span class="badge">
-                    <span class="badge-icon">✓</span> Payment Received
-                </span>
+                <span class="badge">✓ Payment Received</span>
             @else
-                <span class="badge">
-                    <span class="badge-icon">✓</span> Fully Paid
-                </span>
+                <span class="badge">✓ Fully Paid</span>
             @endif
         </div>
 
@@ -273,4 +252,3 @@
 </body>
 
 </html>
-
