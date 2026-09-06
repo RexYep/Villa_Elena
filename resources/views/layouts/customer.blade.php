@@ -43,7 +43,11 @@
             @endif
             <span class="user-name">{{ explode(' ', Auth::user()->full_name)[0] }}</span>
         </a>
-        <form method="POST" action="{{ route('logout') }}" style="display:inline">
+        {{-- Walang inline na `display:inline` dito: ang media query na},
+  q{             nagtatago nito sa telepono ay natatalo ng inline style, kaya},
+  q{             nananatiling nakasiksik ang "Sign out" sa topbar kahit nasa},
+  q{             hamburger menu na ito. Ang klase ang humahawak ng display. --}}
+        <form method="POST" action="{{ route('logout') }}" class="nav-logout-form">
             @csrf
             <button type="submit" style="background:none;border:none;cursor:pointer;padding:0;">
                 <span class="logout-link">Sign out</span>

@@ -176,6 +176,12 @@
             gap: 14px;
             padding: 14px 0;
             border-bottom: 1px solid #f4efe6;
+            color: inherit;
+            text-decoration: none;
+        }
+
+        .booking-row:hover .booking-ref {
+            color: var(--gold);
         }
 
         .booking-row:last-child {
@@ -239,6 +245,7 @@
             font-weight: 600;
             font-size: 13px;
             color: var(--stone);
+            margin-top: 5px;
         }
 
         .booking-bal {
@@ -324,9 +331,28 @@
         /* ── Notification Row ── */
         .notif-row {
             display: flex;
+            align-items: flex-start;
             gap: 12px;
             padding: 12px 0;
             border-bottom: 1px solid #f4efe6;
+            color: inherit;
+            text-decoration: none;
+        }
+
+        .notif-body {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .notif-go {
+            align-self: center;
+            font-size: 13px;
+            color: var(--muted);
+            opacity: .5;
+        }
+
+        .notif-row:hover .notif-title {
+            color: var(--gold);
         }
 
         .notif-row:last-child {
@@ -340,10 +366,6 @@
             background: var(--gold);
             margin-top: 5px;
             flex-shrink: 0;
-        }
-
-        .notif-dot-read {
-            background: #d1cdc5;
         }
 
         .notif-title {
@@ -363,12 +385,6 @@
             margin-top: 2px;
         }
 
-        .empty-notif {
-            text-align: center;
-            padding: 24px;
-            color: var(--muted);
-            font-size: 13px;
-        }
 
         @media(max-width:768px) {
             .stats-row {
@@ -379,10 +395,112 @@
                 grid-template-columns: 1fr;
             }
 
+            /* Nakasalansan na ang hero dito, pero ang `justify-content:
+               space-between` at `align-items: center` ng desktop ay naiiwan:
+               ang mga pindutan ay lumulutang sa gitna sa magkaibang lapad —
+               iyon ang hindi pantay na tabi na nakikita sa telepono. Ang
+               `stretch` ang nag-iisang linya na nag-aayos nito. */
             .welcome-hero {
                 flex-direction: column;
-                gap: 20px;
+                align-items: stretch;
+                gap: 18px;
+                padding: 28px 24px;
                 text-align: center;
+            }
+
+            .welcome-text h1 {
+                font-size: clamp(21px, 5.6vw, 30px);
+                line-height: 1.25;
+            }
+
+            .welcome-cta {
+                justify-content: center;
+            }
+
+            /* Pantay ang lapad ng dalawa, hindi sinusukat ng haba ng teksto. */
+            .welcome-cta>a {
+                flex: 1 1 0;
+                justify-content: center;
+                min-width: 0;
+            }
+        }
+
+        /* ── Telepono ── */
+        @media(max-width:560px) {
+            .welcome-hero {
+                padding: 24px 18px;
+            }
+
+            /* Sa lapad na ito ay hindi na kasya nang magkatabi ang dalawang
+               label, kaya salansan — buo ang lapad, kaya pantay pa rin. */
+            .welcome-cta {
+                flex-direction: column;
+            }
+
+            .welcome-cta>a {
+                width: 100%;
+            }
+
+            .stats-row {
+                gap: 10px;
+                margin-bottom: 24px;
+            }
+
+            .stat-card {
+                padding: 16px;
+            }
+
+            .stat-icon {
+                width: 32px;
+                height: 32px;
+                font-size: 15px;
+                margin-bottom: 10px;
+            }
+
+            .stat-val {
+                font-size: 24px;
+            }
+
+            .stat-lbl {
+                font-size: 13px;
+            }
+
+            /* Ang hilera ng booking ay tatlong hanay: thumbnail, detalye, at
+               halaga. Sa ~300px ay hindi na sila magkakasya nang magkatabi —
+               nauubos ang detalye sa apat na linya at nalalampasan ng
+               kanang hanay ang gilid ng screen (26px na overflow sa 360px).
+               Bumababa na lang ang kanang hanay sa sariling linya, nakahanay
+               sa ilalim ng detalye. */
+            .booking-row {
+                flex-wrap: wrap;
+                gap: 10px 12px;
+            }
+
+            /* Kailangan ng `wrap` dito kahit isang linya lang ang balak:
+               ang min-content ng hilerang ito ang nagtatakda kung gaano
+               kakitid puwedeng maging ang buong grid column, at ang
+               badge + halaga + balanse na magkakadikit ay 354px — mas
+               malapad pa sa screen, kaya nag-o-overflow ang BUONG page. */
+            .booking-right {
+                flex: 1 0 100%;
+                display: flex;
+                flex-wrap: wrap;
+                align-items: baseline;
+                gap: 4px 10px;
+                min-width: 0;
+                padding-left: 64px;
+                text-align: left;
+            }
+
+            /* Status sa kaliwa, pera sa kanan — magkatabi ang halaga at ang
+               balanse, dahil iisang bagay ang sinasabi nila. */
+            .booking-amount {
+                margin-top: 0;
+                margin-left: auto;
+            }
+
+            .booking-bal {
+                margin-top: 0;
             }
         }
     </style>
@@ -449,7 +567,7 @@
                 </div>
                 <div class="card-body">
                     @forelse($recentBookings as $booking)
-                        <div class="booking-row">
+                        <a href="{{ route('customer.bookings.show', $booking) }}" class="booking-row">
                             @if ($booking->property?->primaryImage)
                                 <img src="{{ $booking->property->primaryImage->url }}" class="booking-thumb"
                                     alt="">
@@ -457,10 +575,7 @@
                                 <div class="booking-thumb-placeholder"><i class="bi bi-house"></i></div>
                             @endif
                             <div class="booking-info">
-                                <div class="booking-ref">
-                                    <a href="{{ route('customer.bookings.show', $booking) }}"
-                                        style="color:var(--stone);text-decoration:none;">{{ $booking->booking_ref }}</a>
-                                </div>
+                                <div class="booking-ref">{{ $booking->booking_ref }}</div>
                                 <div class="booking-property">{{ $booking->property->property_name ?? 'N/A' }}</div>
                                 <div class="booking-dates">
                                     {{ $booking->check_in_date->format('M d') }} —
@@ -472,13 +587,12 @@
                                 <span class="badge b-{{ $booking->status }}">
                                     {{ ucfirst(str_replace('_', ' ', $booking->status)) }}
                                 </span>
-                                <div class="booking-amount" style="margin-top:5px;">
-                                    ₱{{ number_format($booking->total_amount, 2) }}</div>
+                                <div class="booking-amount">₱{{ number_format($booking->total_amount, 2) }}</div>
                                 @if ($booking->balance_due > 0)
                                     <div class="booking-bal">₱{{ number_format($booking->balance_due, 2) }} due</div>
                                 @endif
                             </div>
-                        </div>
+                        </a>
                     @empty
                         <div class="text-muted-theme" style="text-align:center;padding:40px;">
                             <i class="bi bi-calendar-x"
@@ -534,31 +648,32 @@
                 </div>
             </div>
 
-            {{-- Notifications --}}
-            <div class="card">
-                <div class="card-head">
-                    <h3>Notifications</h3>
-                    <a href="{{ route('customer.notifications') }}">All →</a>
+            {{-- Notifications — nasa dashboard lang ito kapag MAY dapat gawin.
+                 Ang bell sa topbar (at ang nav link) ay parehong tumuturo sa
+                 buong listahan; ang dagdag na halaga ng card na ito ay ang
+                 mapindot agad ang alerto, kaya kapag walang hindi pa nababasa
+                 ay wala rin itong idinaragdag — hindi na ito ipinapakita. --}}
+            @if ($unreadNotifications->isNotEmpty())
+                <div class="card">
+                    <div class="card-head">
+                        <h3>Needs your attention</h3>
+                        <a href="{{ route('customer.notifications') }}">All →</a>
+                    </div>
+                    <div class="card-body">
+                        @foreach ($unreadNotifications as $notif)
+                            <a href="{{ route('customer.notifications.open', $notif) }}" class="notif-row">
+                                <div class="notif-dot-item"></div>
+                                <div class="notif-body">
+                                    <div class="notif-title">{{ $notif->title }}</div>
+                                    <div class="notif-msg">{{ Str::limit($notif->message, 70) }}</div>
+                                    <div class="notif-time">{{ $notif->created_at->diffForHumans() }}</div>
+                                </div>
+                                <i class="bi bi-chevron-right notif-go"></i>
+                            </a>
+                        @endforeach
+                    </div>
                 </div>
-                <div class="card-body">
-                    @forelse($unreadNotifications as $notif)
-                        <div class="notif-row">
-                            <div class="notif-dot-item {{ $notif->read_at ? 'notif-dot-read' : '' }}"></div>
-                            <div>
-                                <div class="notif-title">{{ $notif->title }}</div>
-                                <div class="notif-msg">{{ Str::limit($notif->message, 70) }}</div>
-                                <div class="notif-time">{{ $notif->created_at->diffForHumans() }}</div>
-                            </div>
-                        </div>
-                    @empty
-                        <div class="empty-notif">
-                            <i class="bi bi-bell-slash"
-                                style="font-size:28px;display:block;margin-bottom:6px;opacity:.4;"></i>
-                            No new notifications
-                        </div>
-                    @endforelse
-                </div>
-            </div>
+            @endif
         </div>
 
     </div>

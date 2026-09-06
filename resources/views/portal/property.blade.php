@@ -50,7 +50,16 @@
             gap: 5px;
         }
 
-        /* ── Gallery (buong lapad — ito ang hero ng page) ── */
+        /* ── Gallery (buong lapad — ito ang hero ng page) ──
+           Ang taas ay TINATAKDAAN dito, hindi ipinapasya ng larawan.
+           Dating `min-height: 460px` lang ang nakasulat, at dahil ang
+           taas ng grid ay indefinite, ang `height:100%` ng <img> ay
+           bumabagsak pabalik sa intrinsic nitong sukat — kaya isang
+           798×600 na litrato ang lumalaki nang 1240×932 sa laptop: mas
+           mataas pa sa buong viewport, at ini-upscale nang lampas sa
+           sariling resolusyon (kaya malabo). Ang clamp ay sumusunod sa
+           lapad ng screen; ang `max-height` ang humahawak sa mga pandak
+           na laptop screen, kung saan ang vw lang ay hindi sapat. */
         .gallery {
             display: grid;
             grid-template-columns: 2.1fr 1fr;
@@ -58,7 +67,8 @@
             gap: 12px;
             border-radius: 20px;
             overflow: hidden;
-            min-height: 460px;
+            height: clamp(280px, 38vw, 520px);
+            max-height: 56vh;
             margin-bottom: 36px;
         }
 
@@ -188,6 +198,20 @@
             font-family: 'Jost', sans-serif;
         }
 
+        /* Ang mga araw at header ng FullCalendar ay <a> — kung hindi ito
+           ire-reset, minamana nila ang asul at may-salungguhit na estilo ng
+           mga link ng portal, kaya mukhang pindutin sila kahit hindi. */
+        .fc a {
+            color: inherit;
+            text-decoration: none;
+        }
+
+        /* Buong linggong lumipas na — walang pill, walang maipapakita.
+           Sa telepono, isang buong hilera ito ng nasayang na taas. */
+        .fc .fc-daygrid-body tr.week-all-past {
+            display: none;
+        }
+
         .fc .fc-toolbar-title {
             font-family: 'Playfair Display', serif;
             font-size: 16px;
@@ -278,7 +302,9 @@
         }
 
         .slot-pill {
-            display: block;
+            display: flex;
+            align-items: center;
+            gap: 4px;
             width: 100%;
             border: 1px solid transparent;
             border-radius: 5px;
@@ -291,12 +317,29 @@
             letter-spacing: .2px;
         }
 
+        /* Araw/gabi na icon: ito ang natitirang palatandaan kapag masikip
+           na ang cell para sa buong salita. */
+        .slot-pill i {
+            flex: none;
+            font-size: 10px;
+            line-height: 1;
+        }
+
+        .slot-pill-txt {
+            overflow: hidden;
+            white-space: nowrap;
+        }
+
         button.slot-pill {
             cursor: pointer;
             transition: all .15s;
         }
 
-        .slot-pill.is-open {
+        /* Ang mga kulay ng estado ay hinahati ng pill sa grid at ng susi sa
+           legend — iisang deklarasyon, para hindi sila magkahiwalay kapag
+           may binago sa isa. */
+        .slot-pill.is-open,
+        .legend-swatch.is-open {
             background: var(--sand);
             border-color: var(--border);
             color: var(--stone);
@@ -308,41 +351,110 @@
             color: #fff;
         }
 
-        .slot-pill.is-taken {
+        .slot-pill.is-taken,
+        .legend-swatch.is-taken {
             background: #fee2e2;
             border-color: #fecaca;
             color: #b91c1c;
+        }
+
+        .slot-pill.is-taken .slot-pill-txt {
             text-decoration: line-through;
             text-decoration-thickness: 1px;
         }
 
-        .slot-pill.is-selected {
+        .slot-pill.is-selected,
+        .legend-swatch.is-selected {
             background: var(--stone);
             border-color: var(--stone);
             color: #fff;
         }
 
+        /* ── Legend ──
+           Dalawang magkaibang tanong ang sinasagot nito, kaya dalawang
+           pangkat — hindi isang patag na hanay ng apat na magkakapantay
+           na bagay: (1) ANO ang dalawang slot, at (2) ANO ang ibig sabihin
+           ng kulay. Ang "Top = Day · Bottom = Night" ay wala na: nakasulat
+           na mismo sa mga pill ang "Day"/"Night", kaya ang posisyon ay
+           hindi na kailangang isaulo. Ang oras naman ang talagang hindi
+           nakikita sa grid — iyon ang pumalit. */
         .cal-legend {
             display: flex;
-            gap: 16px;
             flex-wrap: wrap;
+            gap: 10px 30px;
+            margin-top: 14px;
+            padding: 12px 16px;
+            background: #fff;
+            border: 1px solid var(--border);
+            border-radius: 12px;
             font-size: 13px;
             color: var(--muted);
-            margin-top: 14px;
         }
 
-        .cal-legend span {
+        .legend-group {
             display: flex;
             align-items: center;
-            gap: 6px;
+            flex-wrap: wrap;
+            gap: 6px 16px;
         }
 
-        .cal-legend i.swatch {
-            width: 12px;
-            height: 12px;
-            border-radius: 4px;
-            display: inline-block;
+        /* Nakapirming lapad para pumila ang unang item ng dalawang pangkat
+           sa iisang gilid — dalawang hilerang magkatugma ang nababasa nang
+           mas mabilis kaysa dalawang nagsisimula sa magkaibang puwesto. */
+        .legend-group-label {
+            min-width: 86px;
+            font-size: 10.5px;
+            font-weight: 700;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+            color: var(--stone);
+            opacity: .45;
+        }
+
+        .cal-legend .legend-slot,
+        .cal-legend .legend-state {
+            display: flex;
+            align-items: center;
+            gap: 7px;
+        }
+
+        /* Ang salitang Open/Booked/Your pick ang mismong sagot dito, kaya
+           buo ang kulay nito; ang oras ang pangalawang detalye. */
+        .cal-legend .legend-state {
+            color: var(--stone);
+        }
+
+        .legend-slot i {
+            color: var(--gold);
+            font-size: 14px;
+        }
+
+        .legend-slot b {
+            color: var(--stone);
+            font-weight: 600;
+        }
+
+        /* Kaparehong hugis at kulay ng tunay na pill sa grid, hindi basta
+           parisukat na patse — para tumugma ang tinitingnan sa itinuturo. */
+        .legend-swatch {
+            flex: none;
+            position: relative;
+            width: 26px;
+            height: 14px;
             border: 1px solid transparent;
+            border-radius: 5px;
+        }
+
+        /* Ang guhit sa gitna ang ikalawang senyas ng "booked" — hindi lang
+           kulay, na hindi mapagkakatiwalaan sa colour-blind na mata at sa
+           mababang liwanag ng screen sa labas. */
+        .legend-swatch.is-taken::after {
+            content: '';
+            position: absolute;
+            left: 4px;
+            right: 4px;
+            top: 50%;
+            border-top: 1px solid currentColor;
         }
 
         /* ── Booking Card ── */
@@ -577,10 +689,19 @@
                 grid-template-columns: 1fr;
             }
 
+            /* Isang hanay na ang layout dito, kaya ang mga hilera na ang
+               nagtatakda ng taas — sumusukat sa lapad ng screen imbes na
+               nakapako sa 240/140, at wala nang vh cap (walang sticky na
+               booking card na kailangang makasabay sa fold). */
             .gallery {
                 grid-template-columns: 1fr 1fr;
-                grid-template-rows: 240px 140px;
-                min-height: auto;
+                grid-template-rows:
+                    min(clamp(190px, 34vw, 300px), 34vh)
+                    min(clamp(105px, 19vw, 170px), 19vh);
+                height: auto;
+                max-height: none;
+                gap: 10px;
+                border-radius: 16px;
             }
 
             .gallery-main {
@@ -590,25 +711,79 @@
             .booking-card {
                 position: static;
             }
+
+            /* Isang hanay na lang ang layout dito, kaya ang buong lapad ng
+               screen ang pinakamahalagang resource ng kalendaryo: pitong
+               cell iyon, at bawat pixel ay teksto sa loob ng pill. Kinakain
+               nito pabalik ang padding ng `.main` (20px sa lapad na ito). */
+            .fc-wrap {
+                margin-left: -20px;
+                margin-right: -20px;
+                border-radius: 12px;
+                border-left: 0;
+                border-right: 0;
+                padding: 14px 10px;
+            }
         }
 
-        /* Sa makikipot na screen ay hindi na kasya ang teksto sa loob ng
-           isang cell — nagiging dalawang manipis na bar na lang ang mga
-           pill (itaas = Day, ibaba = Night, gaya ng nasa legend). */
+        /* Dating ginagawang 6px na walang-labas na bar ang mga pill dito
+           (font-size:0). Ang resulta: sa telepono ay hindi na mababasa ang
+           availability — ang mismong impormasyong hinahanap ng bisita sa
+           bahaging ito. Ngayon ay lumiliit na lang sila: mas maliit na
+           teksto, mas masikip na padding, at ang buong lapad ng screen ang
+           ginagamit — hindi na nawawala ang label. */
         @media(max-width:560px) {
-            .slot-pill {
-                font-size: 0;
-                padding: 0;
-                height: 6px;
-                border-radius: 3px;
+            .fc .fc-toolbar-title {
+                font-size: 15px;
             }
 
-            .slot-pills {
-                padding: 0 4px 4px;
+            .fc .fc-button {
+                font-size: 13px;
+                padding: 3px 9px;
+            }
+
+            .fc .fc-col-header-cell-cushion {
+                font-size: 11px;
+                letter-spacing: 0;
+                padding: 6px 2px;
+            }
+
+            .fc .fc-daygrid-day-number {
+                font-size: 11px;
+                padding: 4px 5px 2px;
             }
 
             .fc .fc-daygrid-day-frame {
-                min-height: 46px;
+                min-height: 58px;
+            }
+
+            .slot-pills {
+                padding: 0 3px 4px;
+                gap: 2px;
+            }
+
+            .slot-pill {
+                font-size: 10px;
+                padding: 2px 3px;
+                gap: 3px;
+                letter-spacing: 0;
+            }
+
+            .slot-pill i {
+                font-size: 9px;
+            }
+
+            .cal-legend {
+                gap: 10px 14px;
+                font-size: 12px;
+                margin-top: 12px;
+                padding: 10px 12px;
+            }
+
+            /* Walang puwang na maipapamigay sa isang nakapirming hanay ng
+               label sa telepono — bumabalik ito sa sariling sukat. */
+            .legend-group-label {
+                min-width: 0;
             }
         }
 
@@ -617,17 +792,48 @@
                 font-size: 26px;
             }
 
+            .fc-wrap {
+                margin-left: -16px;
+                margin-right: -16px;
+                padding: 12px 6px;
+            }
+
             .slot-options {
                 grid-template-columns: 1fr;
             }
 
+            /* Isang explicit na hilera lang — ang pangunahing larawan.
+               Ang mga pangalawa ay pumapasok sa mga IMPLICIT na hilera,
+               kaya lumilitaw lang ang mga ito kung may larawan ngang
+               ilalagay doon. Nakapirming tatlong hilera dati, kaya ang
+               property na may iisang litrato ay may ~200px na blangko sa
+               ilalim nito sa telepono. */
             .gallery {
                 grid-template-columns: 1fr;
-                grid-template-rows: 200px 120px 120px;
+                grid-template-rows: clamp(180px, 50vw, 260px);
+                grid-auto-rows: clamp(100px, 27vw, 150px);
+                gap: 8px;
+                border-radius: 14px;
+                margin-bottom: 24px;
             }
 
             .gallery-main {
                 grid-row: auto;
+            }
+        }
+
+        /* Pinakamaliliit na telepono (~360px): hindi na sabay kasya ang
+           icon at ang salita sa loob ng ~48px na cell. Ang salita ang
+           nananatili — ito ang hindi kailangang hulaan. */
+        @media(max-width:380px) {
+            .slot-pill i {
+                display: none;
+            }
+
+            .slot-pill {
+                font-size: 9.5px;
+                padding: 2px;
+                justify-content: center;
             }
         }
     </style>
@@ -736,15 +942,32 @@
             <div class="fc-wrap">
                 <div id="availabilityCalendar"></div>
             </div>
+            @php
+                // Ang mga oras ay galing sa Booking::SLOTS, hindi nakasulat
+                // nang paulit-ulit sa view: kung magbago ang slot, hindi
+                // puwedeng magsinungaling ang legend tungkol dito.
+                $legendSlots = \App\Models\Booking::SLOTS;
+                $slotTime = fn($t) => \Carbon\Carbon::parse($t)->format('g:i A');
+            @endphp
             <div class="cal-legend">
-                <span><i class="swatch" style="background:var(--sand);border-color:var(--border);"></i> Open</span>
-                <span><i class="swatch" style="background:#fee2e2;border-color:#fecaca;"></i> Booked</span>
-                @if ($canBookOnline)
-                    <span><i class="swatch" style="background:var(--stone);border-color:var(--stone);"></i> Your
-                        pick</span>
-                @endif
-                <span><i class="bi bi-sun"></i> Top = Day &nbsp;·&nbsp; <i class="bi bi-moon-stars"></i> Bottom =
-                    Night</span>
+                <div class="legend-group">
+                    <span class="legend-group-label">Slots</span>
+                    @foreach ($legendSlots as $key => $def)
+                        <span class="legend-slot">
+                            <i class="bi {{ $key === 'night' ? 'bi-moon-stars' : 'bi-sun' }}"></i>
+                            <b>{{ ucfirst($key) }}</b>
+                            {{ $slotTime($def['check_in']) }} – {{ $slotTime($def['check_out']) }}{{ $def['overnight'] ? ' next day' : '' }}
+                        </span>
+                    @endforeach
+                </div>
+                <div class="legend-group">
+                    <span class="legend-group-label">Availability</span>
+                    <span class="legend-state"><i class="legend-swatch is-open"></i> Open</span>
+                    <span class="legend-state"><i class="legend-swatch is-taken"></i> Booked</span>
+                    @if ($canBookOnline)
+                        <span class="legend-state"><i class="legend-swatch is-selected"></i> Your pick</span>
+                    @endif
+                </div>
             </div>
         </div>
 
@@ -856,6 +1079,12 @@
         const SLOT_SHORT = {
             day: 'Day',
             night: 'Night'
+        };
+        // Kaparehong icon ng nasa legend — sa telepono, ito ang kumakapit
+        // sa mata bago pa mabasa ang 10px na label.
+        const SLOT_ICONS = {
+            day: 'bi-sun',
+            night: 'bi-moon-stars'
         };
         // Petsa → { slot: booking_id } ng mga SARADONG slot. Ito lang ang
         // state ng calendar; pinapatch ito ng Pusher updates sa ibaba.
@@ -1084,8 +1313,21 @@
                 const isSelected = !taken && selected.date === dateStr && selected.slot === key;
                 pill.className = 'slot-pill ' + (taken ? 'is-taken' : 'is-open') +
                     (isSelected ? ' is-selected' : '');
-                pill.textContent = SLOT_SHORT[key] || key;
-                pill.title = SLOT_DEFS[key].label + (taken ? ' — already booked' : ' — available');
+
+                // Icon + label. Sa pinakamaliit na screen ay tinatago ng CSS
+                // ang icon, kaya hindi puwedeng ito lang ang nagsasabi ng
+                // slot — ang label ang laging naroon.
+                const icon = document.createElement('i');
+                icon.className = 'bi ' + (SLOT_ICONS[key] || 'bi-clock');
+                icon.setAttribute('aria-hidden', 'true');
+                const label = document.createElement('span');
+                label.className = 'slot-pill-txt';
+                label.textContent = SLOT_SHORT[key] || key;
+                pill.append(icon, label);
+
+                const state = taken ? ' — already booked' : ' — available';
+                pill.title = SLOT_DEFS[key].label + state;
+                pill.setAttribute('aria-label', dateStr + ' ' + (SLOT_SHORT[key] || key) + state);
 
                 wrap.appendChild(pill);
             });
@@ -1094,6 +1336,27 @@
         }
 
         let availCalendar = null;
+
+        // Ang unang hilera ng isang buwan ay madalas pawang lumipas na
+        // (hinaharangan ng validRange) — walang pill, walang mapipindot,
+        // puro guhit-guhit na kahon lang. Itago ito para ang nakikita agad
+        // ng bisita ay ang mga petsang puwede pa niyang piliin.
+        function hidePastWeekRows() {
+            document.querySelectorAll('#availabilityCalendar .fc-daygrid-body tr')
+                .forEach(function(row) {
+                    const cells = row.querySelectorAll('.fc-daygrid-day');
+                    if (!cells.length) return;
+                    // Ang mga cell na labas sa validRange ay WALANG
+                    // data-date — kaya hindi sapat ang "lahat ay nakaraan
+                    // na"; wala silang petsang maikukumpara. Ang tanong ay:
+                    // may kahit isa bang araw dito na mapipili pa?
+                    const hasPickable = Array.from(cells).some(function(cell) {
+                        const d = cell.getAttribute('data-date');
+                        return d && d >= TODAY_STR;
+                    });
+                    row.classList.toggle('week-all-past', !hasPickable);
+                });
+        }
 
         function repaint(dateStr) {
             if (!dateStr || !availCalendar) return;
@@ -1197,13 +1460,19 @@
                     start: TODAY_STR
                 },
                 height: 'auto',
+                // Huwag pilitin ang anim na hilera: ang ikaanim ay madalas
+                // pawang susunod na buwan — isang hilerang walang sinasabi,
+                // at sa telepono ay isang buong screenful ng pag-scroll.
+                fixedWeekCount: false,
                 editable: false,
                 selectable: false,
                 events: [],
                 dayCellDidMount: function(info) {
                     const frame = info.el.querySelector('.fc-daygrid-day-frame');
                     if (frame) paintDay(toDateStr(info.date), frame);
-                }
+                },
+                // Tumatakbo pagkatapos maitayo ang grid ng bawat buwan.
+                datesSet: hidePastWeekRows
             });
             availCalendar.render();
 

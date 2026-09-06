@@ -30,6 +30,84 @@ Verified by cross-checking all **240 slot-days** (120 days × 2 slots) against `
 
 **Live (Pusher) updates still work**, but patch the slot map rather than adding/removing events — `applyBlocked()` recomputes which (date, slot) pairs a broadcast booking covers using the same overlap math, and `applyFreed()` clears entries by booking id, which is why the id is carried in the map.
 
+### Follow-up: on a phone, that calendar showed no availability at all
+
+The mobile breakpoint set `.slot-pill { font-size: 0; height: 6px }` below 560px, on the reasoning that "Day" / "Night" can't fit in a ~43px cell. What it actually produced was fourteen unlabelled 6px bars per week — **the one piece of information the section exists to show was deleted on the device most guests browse from**, and the colour difference between a beige open bar and a pink booked one at that size is not readable. A pill you can't read is also a pill you can't aim a thumb at.
+
+The labels are back on every width down to 320px, bought with space rather than surrendered:
+
+- **The calendar takes the page gutters back.** Below 900px the layout is one column, so `.fc-wrap` gets negative side margins equal to `.main`'s padding (`-20px`, then `-16px` under 480px) and drops its own padding to 10px/6px. That is ~+8px per cell — the difference between "Night" fitting and not. Verified for horizontal overflow at 320 / 360 / 390 / 414 / 480 / 540 / 768 / 900 / 1024: `scrollWidth == clientWidth` at all nine, and **0 of 56 pill labels clipped** (`scrollWidth > clientWidth`) at the three narrowest.
+- **Pills are `flex` with a sun / moon icon + label**, matching the legend's *Top = Day · Bottom = Night*. The icon is the first thing dropped (under 380px), never the word — position and colour already carry the rest, but the word is the part that shouldn't have to be inferred. `is-taken`'s line-through moved onto the label span so it doesn't strike the icon.
+- **Type scales instead of vanishing**: 11px → 10px → 9.5px, with the day numbers and weekday headers coming down with it.
+- **`.fc a { color: inherit; text-decoration: none }`** — FullCalendar's day numbers and weekday headers are anchors, and were inheriting the portal's blue underlined link style, so every date looked tappable-as-a-link on every width. This was wrong on desktop too.
+
+**Two empty rows are gone**, worth roughly a third of a phone screen: `fixedWeekCount: false` drops the padded sixth week, and `hidePastWeekRows()` (on `datesSet`) hides any week with nothing pickable in it — the current month's first row is usually entirely before today and blocked by `validRange`. Those out-of-range cells carry **no `data-date` attribute**, so the test can't be "every cell is in the past"; it is "no cell in this row has a date `>= today`".
+
+Verified by rendering the real page in 390 / 360 / 540px frames and clicking a pill: `#checkin` filled, the slot radio checked, the card flashed and the price preview fired — the delegated handler still resolves because it uses `closest()`, and the click now lands on the icon or the label span rather than the pill itself.
+
+### Follow-up: the gallery decided its own height, and picked 932px
+
+The hero gallery was `min-height: 460px` with `grid-template-rows: 1fr 1fr` and `.gallery-img { height: 100% }`. A grid container with no definite height makes those `1fr` rows — and therefore the `height: 100%` on the image — resolve against nothing, so the image fell back to its **intrinsic** size. On a 1366×641 laptop the villa's 798×600 photo rendered at **1240×932**: one and a half viewports tall for a single picture, and upscaled 1.55× past its own resolution, so it was blurry as well as enormous. `min-height` was only ever a floor; nothing was a ceiling. The taller the source photo, the worse it got.
+
+The height is now the layout's decision, not the file's:
+
+```css
+.gallery { height: clamp(280px, 38vw, 520px); max-height: 56vh; }
+```
+
+The clamp tracks screen width; `max-height` handles the case width alone can't see — a **short** window, where 38vw still resolves to something taller than the screen. Measured share of the viewport, one photo and three: 1920×1080 → 48%, 1440×900 → 56%, 1366×768 → 56%, 1366×641 → 56% (was **145%**), 1024×768 → 51%. `object-fit: cover` was already there, so a bounded box crops rather than stretches — the framing improved as a side effect, since the old stretched box was showing mostly roof and sky.
+
+Below 900px the rows take over (`height: auto`), each capped the same two ways: `min(clamp(190px, 34vw, 300px), 34vh)`. The `vh` half only bites on a short, wide window — 900×700 went 69% → 54%, while 768×1024 stayed at 41%.
+
+**One explicit row, not three.** The ≤480px rule declared `grid-template-rows: 200px 120px 120px` for a property that may well have one photo, leaving ~200px of empty grid under it — real, since this villa currently has exactly one image. Only the main tile's row is explicit now; the secondary tiles land in **implicit** rows (`grid-auto-rows`), which exist only if there is something to put in them. One photo on a 390px phone: 422px of gallery → 195px. Three: 422px.
+
+Verified at 13 viewport sizes from 320×700 to 1920×1080, with the DOM patched to three tiles as well as the one this property has, checking gallery height, per-tile height, and `scrollWidth == clientWidth` at each.
+
+### Follow-up: the calendar legend was answering two questions in one flat row
+
+It read: *Open · Booked · Your pick · ☀ Top = Day · ☾ Bottom = Night* — five sibling items of equal weight covering **two unrelated questions** (what does this colour mean, and which pill is which slot). Worse, half of it had gone stale: once the pills carried the words "Day" and "Night" themselves, *"Top = Day, Bottom = Night"* was teaching a positional code the guest no longer has to learn.
+
+It is now two labelled groups:
+
+- **SLOTS** — `☀ Day 8:00 AM – 5:00 PM` and `☾ Night 7:00 PM – 6:00 AM next day`. This replaces the top/bottom instruction with the thing the grid genuinely cannot show: **the times**, and the fact that night check-out is the *following* morning — the single most misread part of the two-slot model. The strings are built from `Booking::SLOTS`, not typed into the view, so a slot change can't leave the legend lying (the booking card's own `<small>` times are still hardcoded; worth folding into the same source next time that file is touched).
+- **AVAILABILITY** — Open / Booked / Your pick.
+
+**The keys are pill-shaped, not square patches**, and the three state colours are now declared **once** for both (`.slot-pill.is-open, .legend-swatch.is-open { … }`), so the key cannot drift from the grid it explains. The Booked key also carries a strike line through it, mirroring the pill's struck label — the same second signal, for the same reason: colour alone fails a colour-blind guest, and fails anyone reading a phone in sunlight.
+
+The group labels share a fixed 86px column so both rows start at the same edge; on phones (≤560px) that column collapses to its natural width, since there is no spare space to spend on alignment there. 122px tall at 390px and at 320px, no overflow at either.
+
+### The customer dashboard on a phone
+
+`customer/home.blade.php` had one `@media(max-width:768px)` block containing three rules. What it left behind:
+
+**The hero's buttons were ragged.** Stacking the hero set `flex-direction: column` and `text-align: center` but kept the desktop `align-items: center`, so each button shrank to its own text width — *Browse Properties* wide, *My Bookings* narrower, both floating centred. `align-items: stretch` plus `flex: 1 1 0` on the buttons is the whole fix; under 560px they stack full-width. The heading also went to `clamp(21px, 5.6vw, 30px)`, since 30px broke "Welcome back, Nick" across two lines with an orphan.
+
+**The page scrolled sideways on small phones** — 26px at 360px, with the amount column clipped mid-peso. `.booking-row` is a three-column flex (thumb / details / money) that cannot compress below its content, so the details wrapped to four lines and the money hung off the edge. The money column now drops to its own line under the details at 560px and below. Note the second, subtler half: that first fix *made the overflow worse* (45px), because a grid item's automatic minimum size is its content's min-content width — the badge + amount + balance sitting on one unbreakable line forced the whole `1fr` column to 354px inside a 293px page. `flex-wrap: wrap` on that inner row is what actually removed it. **When a page scrolls sideways, measure the element whose `right` exceeds `clientWidth` and then walk *up* — the overflowing box is usually not the one setting the width.**
+
+**Two nav bugs, on every customer page rather than just this one.** The sign-out form in `layouts/customer.blade.php` carried `style="display:inline"`, which outranks the `@media (max-width: 900px)` rule in `portal.css` that hides `.nav-right > form` — so the sign-out that was *designed* to live in the hamburger menu on phones was also crowding the topbar, and the brand wrapped onto two lines beside it. The inline style is now a class (`.nav-logout-form`, hidden by that same rule) and `.nav-brand` is `white-space: nowrap`.
+
+**Rows became links.** A recent-booking row's only tap target was the reference number; the whole row is an `<a>` now. Same for notification rows, which had no link at all.
+
+### The notifications card was redundant — because it was inert
+
+Three things led to notifications: the nav link, the topbar bell (whose unread dot already works on every page, via the `layouts.customer` view composer), and this card. The card showed five unread items **that could not be clicked**, plus a "No new notifications" empty box that took a third of the sidebar on the days nothing was wrong.
+
+It is not deleted; it is conditional and actionable. It renders only when something is unread, retitled **"Needs your attention"**, and every row opens `customer.notifications.open` — which marks the notification read and jumps to whatever it is about (a refund destination form, a booking). That makes it the one place a guest can *act* on an alert, rather than a third route to the same list. When nothing is unread the card is absent, which is the common case.
+
+Two dead pieces went with it: the row keyed its dot off `$notif->read_at`, **a column that does not exist** (notifications use `is_read` — see §13), and the query it reads is unread-only, so the "read" state it was styling for was unreachable twice over.
+
+### The booking detail page, same two faults
+
+`customer/booking_detail.blade.php` repeated the dashboard's pattern: a flex hero that only *looked* stacked on a phone, and a horizontal-scroll table.
+
+**The hero was six flex siblings** — ref, check-in, arrow, check-out, nights, badges — plus a review CTA. Wrapping them individually produced a different ragged arrangement at every width: at 390px the two dates sat side by side with the nights count stranded next to the badges; at 360px the arrow stayed with check-in while check-out dropped to the next line; the badge column stayed right-aligned while everything else was centred. The review CTA, styled `display:block; margin-top:14px`, is a **flex child** — neither declaration does what it was written to do there, so it rendered as a floating pill inside the row instead of a button.
+
+Fixed by grouping rather than by adding breakpoints: `.hero-stay` holds check-in → check-out → nights (one sentence, so it moves as one), `.hero-badges` holds the two badges, and the CTA became `.hero-cta` with real classes and a CSS `:hover` instead of inline styles and `onmouseover`. Under 600px `.hero-stay` becomes `grid-template-columns: 1fr auto 1fr` with the nights count spanning below — **grid, because flex-wrap decides what drops by what happens to run out of room first**, which is what split the dates in the first place. The arrow's `display: none` was removed: it is the only thing saying the two dates are a span rather than two unrelated days.
+
+**Payment History scrolled sideways** and the page went with it. `.pay-table` was `display: block; overflow-x: auto; white-space: nowrap` under 600px, which ran the headers together ("METHODTYPE"), clipped the amount column mid-peso at 360px, and still contributed a **275px min-content** width — pushing the whole page 38px wider than the screen. Each payment is now a small block of labelled lines (`thead` hidden, `td::before { content: attr(data-label) }`), so nothing scrolls and nothing is cut off. `.info-row` also got a 16px gap, since long values like "Wednesday, September 2, 2026" were touching their labels.
+
+Verified at 320 / 360 / 390 / 768 and on desktop, across three booking states (checked-out with a review CTA, checked-out already reviewed, confirmed with a balance due and the cancel form): `scrollWidth == clientWidth` everywhere.
+
 ---
 ## What Changed in v6.6 (Read This First)
 
@@ -2754,6 +2832,13 @@ DELETE /my/profile/devices/{device}           customer.profile.devices.destroy  
 | **(v4.0)** Customers could only book one room at a time, not the whole Villa | Original design modeled each room as an independently bookable `properties` row | Converted rooms to `type=room` (info-only), created single master `type=villa` record as the only bookable listing |
 | **(v4.0)** No cleaning buffer between back-to-back bookings | Availability check was date-only overlap | Added `check_in_time`/`check_out_time` columns + `Booking::hasConflict()` with a configurable buffer (default 2 hours) |
 | **(v4.0)** Guests could only pick fixed 2-hour time slots (e.g. couldn't select 11:00 AM) | Booking/search forms used `<select>` with hardcoded time options | Replaced with free-choice `<input type="time">`; buffer logic already worked correctly against arbitrary times since it was never actually restricted server-side |
+| **(v6.8)** Booking detail page scrolled sideways on phones, with payment amounts cut off | `.pay-table` used `display:block; overflow-x:auto; white-space:nowrap` under 600px — headers ran together and the table still contributed a 275px min-content width to the page | Table becomes labelled blocks on phones (`thead` hidden, `td::before { content: attr(data-label) }`) |
+| **(v6.8)** Booking detail hero rearranged itself differently at every phone width | Six flex siblings wrapped independently, so the dates, arrow and nights count split apart; the review CTA was a flex child styled `display:block; margin-top` | Parts grouped into `.hero-stay` / `.hero-badges` / `.hero-cta`; under 600px the stay group is a `1fr auto 1fr` grid, so the arrow always sits between the two dates |
+| **(v6.8)** Customer dashboard scrolled sideways on 360px phones, clipping the booking amounts | `.booking-row`'s three-column flex can't compress; and once the money column was wrapped to its own line, its own unbreakable content set a 354px min-content floor for the whole `1fr` grid column | Money column drops below the details at 560px and under, **and** wraps internally (`flex-wrap: wrap`), which removes the min-content floor |
+| **(v6.8)** Customer topbar: brand wrapped to two lines, "Sign out" crowded the phone topbar despite a rule hiding it | `style="display:inline"` on the sign-out form outranks the stylesheet rule in `portal.css`; nothing stopped the brand from wrapping | Inline style replaced with `.nav-logout-form` (hidden by the same rule); `.nav-brand { white-space: nowrap }` |
+| **(v6.8)** Dashboard notification rows styled a "read" state that could never appear | Row used `$notif->read_at` — the table has `is_read`, and the query is unread-only | Dead `read_at` branch and `.notif-dot-read` removed; rows now link to `customer.notifications.open` |
+| **(v6.8)** The property photo rendered 1240×932 — taller than the whole laptop viewport, and upscaled past its own resolution | `.gallery` had `min-height` but no height; with indefinite row heights the image's `height: 100%` fell back to its intrinsic size, so the photo sized the layout | `height: clamp(280px, 38vw, 520px)` + `max-height: 56vh` on desktop; `min(clamp(...), NNvh)` rows below 900px; secondary phone tiles moved to implicit rows so a single-photo property leaves no empty grid |
+| **(v6.8)** The availability calendar showed no availability on phones | The ≤560px breakpoint set `.slot-pill { font-size: 0; height: 6px }`, so both slot labels became unlabelled 6px bars | Labels kept at every width: calendar goes full-bleed into the page gutters below 900px, type scales 11→9.5px, sun/moon icon drops before the word does; `fixedWeekCount: false` + `hidePastWeekRows()` reclaim two empty rows |
 | **(v5.0)** Manually recording a payment as admin crashed | `Admin\PaymentController::store()` called `NotificationHelper::paymentRecorded(...)`, a preset method that had never actually been defined | Added the missing `paymentRecorded()` preset |
 | **(v5.0)** Real, completed payments showed as "Pending" in customer Payment History | 5 different payment-creation code paths (front-desk walk-in, front-desk record-payment, PayMongo success callback, admin manual record, admin refund) never set `status` explicitly, so they silently inherited the column's `pending` default | All 5 sites now set `'status' => 'success'` explicitly; 21 pre-existing mis-stamped rows backfilled via a data migration |
 | **(v5.0)** Admin notification bell only ever worked on the Dashboard page | Bell button + dropdown lived in two disconnected places — Dashboard had its own hand-copied inline copy; every other page had a data-less, visually-unanchored copy at the bottom of `<body>` | Merged into one shared component in `layouts/admin.blade.php`'s topbar (DOM siblings, so the dropdown's `position:absolute` anchors correctly); removed the Dashboard's duplicate; added a global View Composer for the notification data |

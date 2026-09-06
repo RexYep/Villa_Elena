@@ -56,6 +56,58 @@
             font-size: 20px;
         }
 
+        /* Ang dalawang petsa at ang bilang ng gabi ay iisang pangungusap:
+           "mula rito hanggang dito, ganito karami". Magkasama silang
+           gumagalaw kapag naghahanap ng puwang ang flex. */
+        .hero-stay {
+            display: flex;
+            align-items: center;
+            gap: 18px;
+        }
+
+        .hero-badges {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end;
+            gap: 7px;
+        }
+
+        /* Dating inline style + onmouseover ang mga ito. Bilang flex child
+           ay hindi sumusunod ang `display:block` + `margin-top` na inaasahan
+           ng dating estilo — kaya lumulutang ito sa gitna ng hilera imbes
+           na maging sariling pindutan. */
+        .hero-cta {
+            border-radius: 10px;
+            padding: 13px 18px;
+            text-align: center;
+            font-size: 14px;
+            font-weight: 600;
+            text-decoration: none;
+            transition: background .2s, color .2s;
+        }
+
+        .hero-cta-review {
+            background: #f59e0b;
+            color: #fff;
+        }
+
+        .hero-cta-review:hover {
+            background: #d97706;
+            color: #fff;
+        }
+
+        .hero-cta-reviewed {
+            background: rgba(255, 255, 255, .08);
+            color: rgba(255, 255, 255, .75);
+            font-weight: 500;
+            font-size: 13px;
+        }
+
+        .hero-cta-reviewed:hover {
+            background: rgba(255, 255, 255, .14);
+            color: #fff;
+        }
+
         .hero-nights {
             color: #fff;
             text-align: center;
@@ -123,6 +175,7 @@
         .info-row {
             display: flex;
             justify-content: space-between;
+            gap: 16px;
             padding: 9px 0;
             border-bottom: 1px solid #f4efe6;
             font-size: 13px;
@@ -134,6 +187,7 @@
 
         .info-row .lbl {
             color: var(--muted);
+            flex: none;
         }
 
         .info-row .val {
@@ -269,19 +323,108 @@
         }
 
         @media (max-width:600px) {
+            /* `stretch`, hindi `center`: ang bawat pangkat ay kumukuha ng
+               buong lapad at nagsasalansan nang maayos, imbes na lumutang
+               ang bawat isa sa sarili nitong lapad. */
             .booking-hero {
-                justify-content: center;
+                flex-direction: column;
+                align-items: stretch;
                 text-align: center;
+                gap: 16px;
+                padding: 22px 18px;
             }
 
-            .hero-arrow {
+            .hero-ref {
+                font-size: 22px;
+            }
+
+            .hero-sub {
+                font-size: 13px;
+            }
+
+            /* Nananatili ang arrow (dating `display:none` dito): ito ang
+               tanging nagsasabing saklaw ang dalawang petsa at hindi
+               dalawang magkahiwalay na araw. */
+            /* Grid, hindi wrap: sa flex ay kung ano ang unang maubusan ng
+               puwang ang bumababa, kaya sa 360px ay naiiwan ang arrow
+               kasama ng check-in at napupunta ang check-out sa susunod na
+               linya. Dito ay laging magkasama sa isang linya ang tatlo, at
+               laging nasa ilalim ang bilang ng gabi. */
+            .hero-stay {
+                display: grid;
+                grid-template-columns: 1fr auto 1fr;
+                align-items: center;
+                justify-items: center;
+                gap: 8px 12px;
+            }
+
+            .hero-nights {
+                grid-column: 1 / -1;
+            }
+
+            .hero-date-val {
+                font-size: 16px;
+            }
+
+            .hero-nights-val {
+                font-size: 24px;
+            }
+
+            .hero-badges {
+                flex-direction: row;
+                justify-content: center;
+                align-items: center;
+            }
+
+            .hero-cta {
+                width: 100%;
+            }
+
+            /* Dating `display:block; overflow-x:auto; white-space:nowrap` —
+               isang tabla na iniiscroll pahalang sa loob ng card. Dalawang
+               problema: nagdidikit ang mga header ("METHODTYPE") at ang
+               min-content ng tabla ay 275px pa rin, kaya ang BUONG page ang
+               nag-o-overflow (38px sa 360px). Ngayon ay isang maliit na
+               bloke ang bawat bayad, may sariling label kada halaga. */
+            .pay-table thead {
                 display: none;
             }
 
-            .pay-table {
+            .pay-table,
+            .pay-table tbody,
+            .pay-table tr,
+            .pay-table td {
                 display: block;
-                overflow-x: auto;
-                white-space: nowrap;
+                width: auto;
+            }
+
+            .pay-table tr {
+                padding: 10px 0;
+                border-bottom: 1px solid #f4efe6;
+            }
+
+            .pay-table tr:last-child {
+                border-bottom: none;
+            }
+
+            .pay-table td {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                gap: 12px;
+                padding: 3px 0;
+                border: none;
+                text-align: right;
+            }
+
+            .pay-table td::before {
+                content: attr(data-label);
+                flex: none;
+                color: var(--muted);
+                font-size: 12px;
+                font-weight: 600;
+                text-transform: uppercase;
+                letter-spacing: .7px;
             }
         }
     </style>
@@ -313,27 +456,33 @@
         </div>
     @endif
 
-    {{-- Hero --}}
+    {{-- Hero — nakapangkat: ang anim na magkakapatid na kahon dati ay
+         nagsasalansan nang paisa-isa sa telepono, kaya nahihiwalay ang
+         "check-in → check-out" at napupunta ang "1" at "night" sa
+         magkaibang linya. Ang bawat pangkat ay isang bagay na hindi
+         dapat mahati. --}}
     <div class="booking-hero">
-        <div>
+        <div class="hero-id">
             <div class="hero-ref">{{ $booking->booking_ref }}</div>
             <div class="hero-sub">{{ $booking->property->property_name ?? '' }} ·
                 {{ ucfirst(str_replace('_', ' ', $booking->source)) }}</div>
         </div>
-        <div class="hero-dates">
-            <div class="hero-date-label">Check-in</div>
-            <div class="hero-date-val">{{ $booking->check_in_date->format('M d, Y') }}</div>
+        <div class="hero-stay">
+            <div class="hero-dates">
+                <div class="hero-date-label">Check-in</div>
+                <div class="hero-date-val">{{ $booking->check_in_date->format('M d, Y') }}</div>
+            </div>
+            <div class="hero-arrow">→</div>
+            <div class="hero-dates">
+                <div class="hero-date-label">Check-out</div>
+                <div class="hero-date-val">{{ $booking->check_out_date->format('M d, Y') }}</div>
+            </div>
+            <div class="hero-nights">
+                <div class="hero-nights-val">{{ $booking->num_nights }}</div>
+                <div class="hero-nights-label">night{{ $booking->num_nights != 1 ? 's' : '' }}</div>
+            </div>
         </div>
-        <div class="hero-arrow">→</div>
-        <div class="hero-dates">
-            <div class="hero-date-label">Check-out</div>
-            <div class="hero-date-val">{{ $booking->check_out_date->format('M d, Y') }}</div>
-        </div>
-        <div class="hero-nights">
-            <div class="hero-nights-val">{{ $booking->num_nights }}</div>
-            <div class="hero-nights-label">night{{ $booking->num_nights != 1 ? 's' : '' }}</div>
-        </div>
-        <div style="display:flex;flex-direction:column;gap:7px;align-items:flex-end;">
+        <div class="hero-badges">
             <span class="badge b-{{ $booking->status }}">{{ ucfirst(str_replace('_', ' ', $booking->status)) }}</span>
             <span class="badge {{ $booking->payment_status_class }}">{{ $booking->payment_status_label }}</span>
         </div>
@@ -344,19 +493,13 @@
                     ->first();
             @endphp
             @if (!$myReview)
-                <a href="{{ route('customer.reviews.create', $booking) }}"
-                    style="display:block;background:#f59e0b;color:#fff;border-radius:10px;padding:13px;
-               text-align:center;font-size:14px;font-weight:600;text-decoration:none;
-               margin-top:14px;transition:all .2s;"
-                    onmouseover="this.style.background='#d97706'" onmouseout="this.style.background='#f59e0b'">
+                <a href="{{ route('customer.reviews.create', $booking) }}" class="hero-cta hero-cta-review">
                     ⭐ Write a Review
                 </a>
             @else
-                <a href="{{ route('customer.reviews.edit', $myReview) }}"
-                    style="display:block;background:#f8fafc;border-radius:10px;padding:12px;text-align:center;
-                 font-size:13px;color:#6B7A8D;margin-top:14px;text-decoration:none;">
+                <a href="{{ route('customer.reviews.edit', $myReview) }}" class="hero-cta hero-cta-reviewed">
                     <i class="bi bi-check-circle me-1" style="color:#16a34a;"></i>
-                    You already submitted a review for this stay — click to view/edit.
+                    You already reviewed this stay — view or edit it
                 </a>
             @endif
         @endif
@@ -419,12 +562,13 @@
                             <tbody>
                                 @foreach ($booking->payments->sortByDesc(fn($p) => [$p->payment_date, $p->id]) as $payment)
                                     <tr>
-                                        <td class="text-muted-theme">{{ $payment->payment_date?->format('M d, Y') }}</td>
-                                        <td>{{ $payment->method_label }}</td>
-                                        <td><span
+                                        <td class="text-muted-theme" data-label="Date">
+                                            {{ $payment->payment_date?->format('M d, Y') }}</td>
+                                        <td data-label="Method">{{ $payment->method_label }}</td>
+                                        <td data-label="Type"><span
                                                 style="background:#f1f5f9;padding:2px 8px;border-radius:10px;font-size: 12px;">{{ $payment->type_label }}</span>
                                         </td>
-                                        <td
+                                        <td data-label="Amount"
                                             style="text-align:right;font-weight:600;color:{{ $payment->payment_type === 'refund' ? '#dc2626' : '#15803d' }};">
                                             {{ $payment->payment_type === 'refund' ? '-' : '+' }}₱{{ number_format($payment->amount, 2) }}
                                         </td>
