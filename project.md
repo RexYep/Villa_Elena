@@ -75,6 +75,34 @@ It prints which **mode** it is looking at up front (a test key sees only test-mo
 
 A disabled webhook does **not** recover on its own, and nothing in the app can tell that it is disabled — every payment simply stops being recorded. This command is the only way to see that state from here.
 
+### `php artisan paymongo:tunnel` — the watcher
+
+`--disable=tunnels` is a **manual** command. Nothing schedules it, no hook fires it, and `routes/console.php` does not mention it — so parking the ngrok webhook was a thing you had to remember. `paymongo:tunnel` is the automatic version.
+
+```bash
+php artisan paymongo:tunnel                 # watch until Ctrl+C
+php artisan paymongo:tunnel --once          # reconcile once and exit (no exit-disable)
+php artisan paymongo:tunnel --dry-run       # report decisions, touch nothing
+```
+
+It resolves the target webhook from `--webhook`, then `PAYMONGO_TUNNEL_WEBHOOK`, then by matching the host ngrok is currently serving. Every `--interval` seconds (default 10) it probes and reconciles: healthy → enabled, dead → disabled, and it calls PayMongo **only on a transition**, so an idle overnight watch makes no API calls at all. If ngrok hands out a different URL than the one registered (what happens without a reserved domain), it repoints the registration first.
+
+**The ngrok agent is not the signal, and this was measured, not assumed.** The obvious design is to poll `http://127.0.0.1:4040/api/tunnels` and treat "a tunnel exists" as healthy. That is wrong: the agent can be perfectly happy — tunnel listed, agent API answering 200 — while the endpoint still returns **502**, because nothing is listening on the port it forwards to. That is exactly the state this project was found in. So the watcher probes **the registered URL, end to end**, with the same request PayMongo would send. Do not "optimise" this into an agent-API check.
+
+**It refuses to follow anything that is not a tunnel.** `NGROK_HOSTS` gates it, and that guard is not decorative. Without it, `--webhook=<the production hook>` has two independent ways to cause real damage: `reconcile()` would repoint production's registration at ngrok, and the exit path would disable production every time you closed the terminal. One mistyped id away, so the host is checked before the loop starts. `isTestMode()` is checked too — live keys are rejected outright.
+
+**Exit-disable is best-effort on Windows, and you should know which half is guaranteed.** `pcntl` does not exist on Windows; `sapi_windows_set_ctrl_handler` does, and that is what catches Ctrl+C, with `register_shutdown_function` behind it. What no handler can catch is a hard kill — `taskkill /F`, closing the terminal window, losing power. Verified by measurement: a `taskkill /F` test left the webhook `enabled`, exactly as expected.
+
+That residual gap is the *status quo ante*, not a regression: an abandoned watcher leaves the webhook exactly as enabled as never running one. The next `paymongo:tunnel` reconciles it, and `paymongo:webhooks --disable=tunnels` remains the manual broom.
+
+**To make it part of the dev session**, add it to the `dev` script's `concurrently` list in `composer.json`:
+
+```
+"php artisan paymongo:tunnel"      # and add ,tunnel to --names
+```
+
+`--kill-others` then stops it with everything else. Note this makes every `composer dev` mutate the PayMongo account, which is why it is opt-in rather than the default.
+
 ### Two webhooks in the SAME mode means two different secrets
 
 The `_TEST` / `_LIVE` split above solves a *cross-mode* mismatch. It does not solve this one, and the difference is easy to miss: **both** registrations in this account are test-mode, so both sign the `te=` slot — with **different** `whsk_…` values, because a secret belongs to a registration, not to a mode.
@@ -97,7 +125,9 @@ The test-mode account holds a second registration pointing at the dev machine's 
 POST https://vagueness-widow-anchovy.ngrok-free.dev/webhooks/paymongo  → 502  (×3, consistent)
 ```
 
-The domain itself is a **reserved static** ngrok domain, so the URL is not the problem — it does not rotate between sessions. The problem is that the tunnel is only up while someone is actively developing, and PayMongo keeps delivering the other 99% of the time. It is accumulating exactly the failure count that disabled production, just more slowly.
+The domain itself is a **reserved static** ngrok domain, so the URL is not the problem — it does not rotate between sessions. The problem is that the local end is only there while someone is actively developing, and PayMongo keeps delivering the other 99% of the time. It is accumulating exactly the failure count that disabled production, just more slowly.
+
+**A 502 here does not mean "ngrok is not running"** — that was the first reading, and it was too narrow. ngrok's edge returns 502 whenever it cannot reach its *upstream*, which includes a perfectly healthy agent forwarding to a port where nothing is listening (no `php artisan serve`). Both look identical from PayMongo's side, and both count toward disabling; but only the end-to-end probe distinguishes "reachable" from "an agent is running". See `paymongo:tunnel` below.
 
 The blast radius is small and worth stating plainly: `status` is **per webhook**, not per account (that is how one row could read `disabled` while the other read `enabled`), so this cannot take production down. What it costs is the *next* local test session — you start ngrok, make a payment, nothing records, and the reason is a webhook PayMongo quietly switched off days earlier.
 
@@ -110,9 +140,10 @@ So `--disable=tunnels` exists to park it between sessions, and `--enable=<id>` b
 | File | Change |
 |---|---|
 | `app/Http/Controllers/PaymentController.php` | `webhook()` split into an always-200 shell + `handleWebhookEvent()`; `announceWebhookFailure()`, `notifyAdminsQuietly()` added; `transferCallback()` per-transfer `try/catch` |
-| `app/Services/PayMongoService.php` | `verifyWebhook()` made per-mode; `hasWebhookSecret()`, `listWebhooks()`, `updateWebhook()`, `enableWebhook()`, `disableWebhook()` added |
+| `app/Services/PayMongoService.php` | `verifyWebhook()` made per-mode; `hasWebhookSecret()`, `listWebhooks()`, `updateWebhook()`, `enableWebhook()`, `disableWebhook()`, `probeEndpoint()`, `endpointIsDead()` added |
 | `app/Console/Commands/PayMongoWebhooks.php` | New — list, `--webhook`/`--url` repair, `--enable`, `--disable` |
-| `config/services.php` | `webhook_secret_test`, `webhook_secret_live` |
+| `app/Console/Commands/PayMongoTunnel.php` | New — watches the ngrok endpoint and enables/disables the webhook to match |
+| `config/services.php` | `webhook_secret_test`, `webhook_secret_live`, `tunnel_webhook` |
 | `.env.example` | Both new variables, documented |
 
 ---
@@ -214,6 +245,124 @@ Fixed by grouping rather than by adding breakpoints: `.hero-stay` holds check-in
 **Payment History scrolled sideways** and the page went with it. `.pay-table` was `display: block; overflow-x: auto; white-space: nowrap` under 600px, which ran the headers together ("METHODTYPE"), clipped the amount column mid-peso at 360px, and still contributed a **275px min-content** width — pushing the whole page 38px wider than the screen. Each payment is now a small block of labelled lines (`thead` hidden, `td::before { content: attr(data-label) }`), so nothing scrolls and nothing is cut off. `.info-row` also got a 16px gap, since long values like "Wednesday, September 2, 2026" were touching their labels.
 
 Verified at 320 / 360 / 390 / 768 and on desktop, across three booking states (checked-out with a review CTA, checked-out already reviewed, confirmed with a balance due and the cancel form): `scrollWidth == clientWidth` everywhere.
+
+### The bookings list: a filter bar that read as clutter, and cards three times taller than they needed to be
+
+**Six filter chips, wrapping.** `.filter-bar` was `flex-wrap: wrap`, so on a phone the six status chips fell into three ragged rows of different widths (51 / 85 / 99, then 104 / 102, then 95) taking 127px of vertical space before the first booking. Nothing was broken, but it read as scattered pills rather than one control.
+
+Under 560px it is a **3-column grid** of equal chips (two tidy rows, 87px); under 340px, two columns. A horizontally-scrolling chip strip is the other common answer and was rejected: with only six options, hiding half of them behind a swipe costs more than it saves. Verified at 320 / 360 / 375 / 390 that no chip label is clipped (`scrollWidth > clientWidth` on zero of six at every width) — the 340px cut-off is where "Confirmed" stops fitting a third of the row.
+
+**One booking was 307px tall.** The mobile rule was `flex-direction: column` on the whole card, which put the thumbnail alone on the first line, then the details, then the badge, then the amount — barely one and a half bookings per phone screen on a list page whose entire job is scanning. Image and details now stay side by side and only the badge/amount pair drops below, indented to line up with the details: **307px → 158px**, so three and a half fit instead of one and a half. That rule also moved from ≤768 to ≤600 — between those widths there is room for the original three-column row, and the card is 105px there.
+
+**A one-line detail that cost a line.** `.bc-dates` was a flex container holding an icon and a single text node. A text node is one flex item, so it could not break around the icon: the whole date string dropped below it, leaving the calendar icon alone on its own line. Plain inline flow fixed it (68px → 45px).
+
+**Cards became links**, matching the dashboard — the tap target was the reference number alone, in a 68px-tall card mostly made of whitespace.
+
+Verified at 320 / 360 / 375 / 390 / 768 / 1100: zero horizontal overflow, filters still submit (the chips are `<button type="submit" name="status">`, untouched), and the active chip still highlights.
+
+### My Payments: the amount was the column you had to swipe for
+
+`customer/payments.blade.php` had **no media queries at all** — one six-column table (Date / Booking / Method / Type / Status / Amount) inside a `overflow-x: auto` wrapper. That wrapper is why nothing looked broken: the page never overflowed, it just quietly hid the right-hand columns behind a sideways swipe on a phone. The rightmost column is **Amount** — the one number a guest opens this page for.
+
+Under 600px each payment is now a small card: booking reference and amount on the first line (amount pushed right with `margin-left: auto`), property underneath, then date · method · type · status on a third line. Done with `order` on the existing `<td>`s rather than by restructuring the markup, so the desktop table is untouched.
+
+This is the same class of fix as the booking-detail payment table, but the mechanism differs and the difference matters: **there the sideways scroll leaked out and broke the whole page** (the table's min-content width forced the grid column wider than the screen); **here it was properly contained and therefore invisible** — the page measured clean at every width both before and after. A layout that passes an overflow check can still be hiding the content that matters; `scrollWidth == clientWidth` is a floor, not a verdict.
+
+Checked at 320 / 360 / 390 / 768 / 1366, including a refund row (the negative red amount and its Refund pill survive the reflow) and the paginator (164px wide, well inside a 345px viewport). At 768 the desktop table still fits without scrolling — min-content 595px against 713px available — so the stacked layout deliberately stops at 600px.
+
+### My Profile: an upload control that never said it was one
+
+The photo field was a bare `<input type="file">` wearing `.form-control` — Chrome renders that as **"Choose File | No file chosen"**, with no label saying what it is for, no visible change after picking a file, and no button of its own. The only button on the card is **Save Changes**, at the bottom of a seven-field form. A guest who picks a photo gets one piece of feedback — the words "No file chosen" become a filename, inside a small grey box — and no reason to believe anything else is needed.
+
+The control now names itself and finishes its own sentence:
+
+- **"Profile photo"** as a heading, with the format/size limit beside it, and a **Change photo** button (a styled `<label for>`; the real input is visually hidden but still keyboard- and screen-reader-reachable — `clip`, not `display: none`).
+- Choosing a file **shows it immediately in the avatar circle** (`URL.createObjectURL`), prints the filename, and reveals an **Upload photo** button *next to the picture* along with a Cancel that restores the original.
+- **Upload photo is a second `submit` in the same form**, so no new route, no new controller path, and no second way for an avatar to reach the database — `Save Changes` still works exactly as before for anyone who scrolls past it.
+
+Verified by handing the input a real `File` through a `DataTransfer` (the same event a picker fires): preview swaps to a blob URL, the initials placeholder hides, the filename and both buttons appear, and Cancel restores the stored photo and empties the input. The button's `form` still resolves to `PUT /my/profile` with `enctype="multipart/form-data"`, and the input keeps `name="avatar"` and its `accept` list, so `ProfileController::update()` is untouched.
+
+### The same page's phone layout
+
+**The tabs were three unlabelled icons.** `@media (max-width:560px)` hid `.profile-tab-btn span`, leaving a person, a shield and a bell — which is which is a guess. Same inversion as the availability calendar: **the icon is what gives, never the word**. The labels now shrink (12px, tighter padding) and stay; below 400px the *icon* is dropped instead. All three read as words at 320px.
+
+**Two switches were orphaned.** `.toggle-row` and `.device-row` were `flex-wrap: wrap` on mobile, so the 2FA switch and the device Remove button fell below their own descriptive paragraph — separated from the thing they control. Both are now a `1fr auto` grid: the control stays beside its text at every width, without overflowing.
+
+### My Reviews: the layout was fine, the content wasn't
+
+This page has no media queries and, with the data currently seeded, doesn't need any — at 320 / 360 / 390 the card, the status badge, the stars and the two buttons all sit correctly and `scrollWidth == clientWidth`. Checking it against real content is what found the bug.
+
+**A pasted link breaks the page sideways.** Review text is written by guests, and guests paste URLs. Injecting one into the rendered card (`https://photos.example.com/albums/villa-elena-anniversary-weekend-2026-full-resolution-set`) pushed the page **89px wider than the screen at 320px, 49px at 360px, 19px at 390px** — a long unbroken token cannot wrap, so it runs past the card and drags the document with it. No breakpoint fixes that; the word itself has to be allowed to break. `overflow-wrap: anywhere` now covers every free-text field on the card — content, title, the admin reply, the rejection note, plus the property name (admin-entered, same exposure). Re-running the identical injection afterwards: 0px of overflow at all three widths.
+
+**This is the general lesson from this page.** The three pages before it were broken by their own CSS and looked broken in a screenshot. This one looks perfect and stays perfect right up until a guest types something longer than the seed data. **Test a text field with the text a real person would put in it** — a URL, a 60-character property name, a title that fills two lines — not only with the row that happens to be in the database.
+
+Two smaller things while there: `.review-content` was **13px, smaller than the 14px metadata above it** — the review is the point of the card, so it now matches; and the booking reference in the meta line links to that booking, as it already does on the dashboard, the bookings list, and the payments page.
+
+### Notifications: text that was being deleted rather than wrapped
+
+Like the reviews page, this one looks right at every width and reports no page overflow — and like the reviews page, that is only true of the text currently in the database.
+
+**A long token was being silently cut off, and the page still measured clean.** `.notif-body` is `flex: 1` with the default `min-width: auto`, which forbids a flex item from shrinking below its longest word. Give it a payment reference (`qrph_A1B2C3D4E5F6G7H8I9J0K1L2M3N4O5P6`) and the body grows **77px past the right edge of its own card** at 320px — and `.notif-card` is `overflow: hidden`, so the tail is simply clipped. No ellipsis, no scrollbar, `scrollWidth == clientWidth` at the document level: the guest loses the end of the reference and nothing anywhere says so. `min-width: 0` plus `overflow-wrap: anywhere` fixes it (measured after: 272 against a card edge of 289, wrapped inside).
+
+This is the third distinct way a page in this portal has hidden an overflow — a `overflow-x: auto` wrapper (Payments), a plain document-level overrun (Reviews), and now `overflow: hidden` **discarding** the content. Only the middle one is visible to a page-level overflow check. **Measure the element against its own container, not the document against the viewport.**
+
+**Phone padding.** After the icon, the unread dot and 22px of padding, a 320px screen left the message 171px. `14px 16px` padding and a 34px icon below 480px gives it 193px.
+
+### The icon system had never once run
+
+`$icons` mapped `$notif->type` through keys `booking_update`, `payment`, `cancellation`, `reminder`. **All 279 notification rows have `type = 'in_app'`** (as CLAUDE.md says: the other enum values exist but are unused), so no key ever matched and every notification in the system rendered the grey `bi-info-circle` fallback. A colour-coded icon system that had never displayed a single colour.
+
+The title is the only field that actually varies, so the icon is chosen from keywords in it — cancelled/failed → red `x-circle`, refund → indigo, payment → blue `credit-card`, rescheduled → amber, check-in/welcome → green `box-arrow-in-right`, check-out/complete → green `box-arrow-right`, booking → green `calendar-check`, with the same info fallback. On the current data that is four distinct icons on the first page instead of one, and each matches its title ("Check-out Complete → box-arrow-right", "Payment Received! → credit-card").
+
+Keyword matching on a title is a compromise, not a design: the honest fix is for `NotificationHelper` to write a real category. If that ever happens, this `match` is the thing to replace.
+
+### Reschedule form: nothing overflowed, but the slot picker was a 16px target
+
+Measured first, and the layout itself is sound — 0px of horizontal overflow at 320 / 360 / 390 and on desktop, the summary card and the notice box wrap correctly, the submit button is already full-width. Two things were still worth changing.
+
+**The slot choice was two bare Bootstrap radios.** The same decision — Day or Night — is made on `portal/property.blade.php` through `.slot-option` cards: a bordered, fully-tappable label that highlights gold when selected. Here it was `<input type="radio">` plus a text label, so the tap target was the ~16px circle and the two screens disagreed about what the same question looks like. The picker now uses that same card, built from `Booking::SLOTS` rather than hardcoded strings (so the times cannot drift from the model, and Night now says **"7:00 PM – 6:00 AM next day"**, which the old label omitted). Tap area went from a 16px radio to **312 × 67px** at 390px; tapping anywhere on the card selects it, and `:has(input:checked)` moves the highlight.
+
+**The summary card wasted a line on phones.** `flex-wrap: wrap` under 480px dropped the property name below the logo even though both fit side by side (48px icon + ~180px of text at 320px). Now `align-items: flex-start` keeps them on one line, with `overflow-wrap: anywhere` on the name and date line for the same reason as the reviews card.
+
+**Not fixed in that pass — built straight after, see the next section:** this form asked for a date and slot with **no availability feedback at all**. The property page has the slot calendar; here the guest picks blind and only learns the slot is taken when the server rejects the submission. Reusing `PortalController::buildSlotAvailability()` here would close that gap — a bigger change than a responsiveness pass, so it is noted rather than done.
+
+### Built: the reschedule form now shows availability (v6.8)
+
+The gap noted above is closed. The guest no longer picks blind.
+
+**`buildSlotAvailability()` moved out of `PortalController` and into `Booking::slotAvailabilityMap(int $propertyId, ?int $excludeBookingId = null)`.** Two screens needed it, and two copies of that logic would have drifted — which is the exact failure the original doc-comment warns about, since the map has to mirror `hasConflict()` clause for clause. The property page now calls the model; the private method is gone.
+
+**The `$excludeBookingId` parameter is the whole reason this is not a copy-paste.** A booking must not block its own slot when it is the one being rescheduled — precisely what `hasConflict($property, $in, $out, $booking->id)` already does at submit time. Verified on booking 140: with the exclusion its own `night` slot disappears from the closed map while the `day` slot, held by a *different* booking, still blocks.
+
+**`Booking::pastSlotsToday()`** is new alongside it: the server also rejects a check-in that has already started today (`$checkin->isPast()`), and without this the form would offer a slot this morning at nine tonight and only reject it after submission.
+
+**What the form does now.** Each slot card shows live state for the chosen date — *Available* (green), *Already booked* (red), or *Already started today* — and an unavailable card is disabled and dimmed. If the slot you had selected becomes unavailable when you change the date, the selection moves to the open one instead of silently staying on a choice the server will refuse. If both slots are gone, submit is disabled, a notice names the date, and **three real open (date, slot) options appear as chips** that fill the form when tapped — so a fully-booked date is a redirection, not a dead end.
+
+**Verified against the server, not just visually.** Cross-checked the map against `Booking::hasConflict()` over 90 days × 2 slots for the reschedule path (**180 comparisons, 0 mismatches**) and 120 days × 2 slots for the property page after the extraction (**240 comparisons, 0 mismatches**) — the equivalence the original comment asks anyone touching either side to re-check. Then in the browser: the booking's own date offers its own slot, a half-booked date disables only the taken half, a fully-booked date disables both and suggests Oct 16 Day / Oct 16 Night / Oct 17 Day, and clicking a chip fills the form and re-enables the button. No console errors, no overflow at 360 or 390, and the property page's calendar still paints 11 booked and 43 open pills exactly as before.
+
+Note: `Booking.php` and `Customer/BookingController.php` both fail `pint --test` — with the identical fixer list they failed at HEAD, before this change. Left alone rather than reformatting unrelated code inside this diff.
+
+### Refund destination: the amount was last on the page it exists for
+
+The form itself needed nothing — 0px of horizontal overflow at 320 / 360 / 390 and on desktop, in all three states (first entry, editing a saved destination, and the "institution list unreachable" branch). The 95-entry institution `<select>` holds a 73-character option name ("The Hong Kong and Shanghai Banking Corporation Limited, Philippine Branch") without widening anything, because a native select truncates its own label.
+
+**The summary card stacked into three rows on phones.** `flex-wrap: wrap` below 480px put the 💸 icon alone on the first line, the booking reference on the second, and **₱4,000.00 REFUND DUE last** — the number the page exists to confirm, at the bottom of a 238px card. It is now a two-row grid: icon and reference together, then the amount as its own line above a divider with its label pushed to the right, so it reads as the headline it is. 238px → **160px**, and the money is the first thing the eye lands on.
+
+`overflow-wrap: anywhere` on the reference and date line, for the same reason as the reviews and notification cards.
+
+**How this was checked without touching data.** `RefundDestinationController::edit()` requires `isAwaitingPayout()` — a refund whose `status` is still `pending` — and every refund in the local database has already been paid out, so the page 403s for all of them. Rather than inserting a fake pending refund, a temporary local route rendered the view with an **unsaved** `Payment::make()` (plus an optional unsaved `RefundDestination`), which exercises the real Blade, the real institution list, and the real layout while writing nothing. Confirmed afterwards: 9 refund payments and 6 destinations, the same counts as before. The one wrinkle worth remembering is that `route('customer.refunds.destination.update', $payment)` needs a key, so the fabricated model was given an in-memory `id` purely so the form action could be generated.
+
+### Review form: the most important control on the page was the smallest
+
+No media queries and none needed for the layout — 0px of horizontal overflow at 320 / 360 / 390 and on desktop, in both modes (new review and edit). What the measurements found instead was the rating widget.
+
+**27px stars, side by side.** Each `.star-btn` measured **27 × 48px** with 6px gaps: well under the 44px a fingertip needs, with the neighbouring rating right next to it — on the one input the whole page exists to collect. They are now `flex: 1 1 0` with `max-width: 56px`, so the five share the row evenly and take whatever it can give: **42 × 48px at 320px, 50px at 360px, 56px at 390px and above**, and the row can never outgrow the card (266px against 288px of space at 320px).
+
+**The rating label was clipping itself.** `.rating-label { height: 16px }` against a 21px line box, so the descender of "Excellent" / "Average" was cut at every width. The intent — reserve the space so the layout doesn't jump when a rating is picked — is `min-height`, not `height`.
+
+**Five buttons that all said "★".** No accessible name, no pressed state, and the real value in a hidden input: a screen-reader user had five identical unlabelled buttons and no way to tell what was selected. Each now carries `aria-label="3 stars"` and an `aria-pressed` that `setRating()` keeps in sync. The prompt also said *"Click to rate"* on a device where you tap; it now reads "Select a rating".
+
+**Checked and not a bug:** the star hover handler writes inline `style.color`, which outranks the `.active` class, and on a phone `mouseleave` may never fire after a tap. Simulating a real tap sequence (`mouseenter` → `click`, no `mouseleave`, three times including lowering the rating) left the colours correct every time, because the hover paint and the selection paint agree by construction. Worth knowing before anyone "tidies" that handler.
 
 ---
 ## What Changed in v6.6 (Read This First)
@@ -2943,6 +3092,18 @@ DELETE /my/profile/devices/{device}           customer.profile.devices.destroy  
 | **(v4.0)** No cleaning buffer between back-to-back bookings | Availability check was date-only overlap | Added `check_in_time`/`check_out_time` columns + `Booking::hasConflict()` with a configurable buffer (default 2 hours) |
 | **(v4.0)** Guests could only pick fixed 2-hour time slots (e.g. couldn't select 11:00 AM) | Booking/search forms used `<select>` with hardcoded time options | Replaced with free-choice `<input type="time">`; buffer logic already worked correctly against arbitrary times since it was never actually restricted server-side |
 | **(v6.8)** Booking detail page scrolled sideways on phones, with payment amounts cut off | `.pay-table` used `display:block; overflow-x:auto; white-space:nowrap` under 600px — headers ran together and the table still contributed a 275px min-content width to the page | Table becomes labelled blocks on phones (`thead` hidden, `td::before { content: attr(data-label) }`) |
+| **(v6.8)** Bookings list: filter chips fell into three ragged rows on phones; each booking card was 307px tall | `.filter-bar` relied on `flex-wrap`, and the mobile rule stacked the whole card with `flex-direction: column` | Filters become a 3-column grid under 560px (2 under 340px); card keeps thumb + details side by side and drops only the badge/amount below — 307px → 158px |
+| **(v6.8)** Bookings list: the calendar icon sat alone on its own line above the dates | `.bc-dates` was a flex container whose single text node could not wrap around the icon | `.bc-dates` returned to inline flow with a margin on the icon |
+| **(v6.8)** My Payments hid the Amount column behind a sideways swipe on phones | Six-column table with no media queries; the `overflow-x:auto` wrapper contained the overflow so nothing looked broken, but the rightmost column (Amount) was off-screen | Under 600px each payment becomes a card — reference + amount, property, then date/method/type/status — via `order` on the existing cells |
+| **(v6.8)** Guests could not tell how to upload a profile photo | The field was a bare `<input type="file">` with no label, no preview, and no button — the only button on the card is "Save Changes" at the bottom of the form | Named control + "Change photo" label-button, live preview of the chosen file, and an "Upload photo" submit that appears next to the avatar (same form, so `ProfileController::update()` is unchanged) |
+| **(v6.8)** Profile tabs became three unlabelled icons on phones; 2FA and device switches fell below their own descriptions | `@media` hid `.profile-tab-btn span`; `.toggle-row`/`.device-row` used `flex-wrap: wrap` | Tab labels shrink instead of vanishing (the icon drops below 400px); toggle/device rows became a `1fr auto` grid |
+| **(v6.8)** A URL pasted into a review scrolled the whole page sideways (89px at 320px) | Long unbroken tokens can't wrap, so the text ran past the card and widened the document; no breakpoint can fix that | `overflow-wrap: anywhere` on every free-text field of the review card (content, title, admin reply/note, property name) |
+| **(v6.8)** Long references in a notification were silently truncated with no ellipsis or scrollbar | `.notif-body` is `flex: 1` with default `min-width: auto`, so it grew 77px past its card, and `.notif-card { overflow: hidden }` clipped the tail — the document-level overflow check still read 0 | `min-width: 0` + `overflow-wrap: anywhere`; phone padding tightened to give the message 193px instead of 171px at 320px |
+| **(v6.8)** Every notification showed the same grey "info" icon | The icon map keyed on `notifications.type`, whose only value in practice is `in_app`, so no branch ever matched and the fallback always won | Icon and colour derived from keywords in the title (payment / refund / cancelled / check-in / check-out / booking / rescheduled), fallback kept |
+| **(v6.8)** Reschedule form's slot choice was a ~16px radio, and looked nothing like the same choice on the booking page | The form used bare Bootstrap `.form-check` radios instead of the `.slot-option` cards used in `portal/property.blade.php` | Same card pattern, built from `Booking::SLOTS`; tap target 16px → 312×67px, and Night now states "next day" |
+| **(v6.8)** Reschedule form let guests pick a date/slot with no availability shown, failing only on submit | The slot availability map lived as a private method on `PortalController`, so only the property page could use it | Extracted to `Booking::slotAvailabilityMap($propertyId, $excludeBookingId)` (+ `pastSlotsToday()`); the form now marks each slot Available / Already booked / Already started today, disables what can't be picked, and offers the next three open slots as chips |
+| **(v6.8)** Refund destination page put the refund amount last, under a stacked icon and reference | `.booking-summary` used `flex-wrap: wrap` below 480px, so all three parts got their own line | Two-row grid on phones: icon + reference, then the amount as its own divided line with its label right-aligned (238px → 160px) |
+| **(v6.8)** Review form's star rating was a 27px-wide tap target per star, and the rating label was cut off | Stars were fixed-size inline buttons; `.rating-label` used `height: 16px` against a 21px line box | Stars are `flex: 1 1 0` with `max-width: 56px` (42–56px per star, always inside the card); label uses `min-height`; stars gained `aria-label`/`aria-pressed` |
 | **(v6.8)** Booking detail hero rearranged itself differently at every phone width | Six flex siblings wrapped independently, so the dates, arrow and nights count split apart; the review CTA was a flex child styled `display:block; margin-top` | Parts grouped into `.hero-stay` / `.hero-badges` / `.hero-cta`; under 600px the stay group is a `1fr auto 1fr` grid, so the arrow always sits between the two dates |
 | **(v6.8)** Customer dashboard scrolled sideways on 360px phones, clipping the booking amounts | `.booking-row`'s three-column flex can't compress; and once the money column was wrapped to its own line, its own unbreakable content set a 354px min-content floor for the whole `1fr` grid column | Money column drops below the details at 560px and under, **and** wraps internally (`flex-wrap: wrap`), which removes the min-content floor |
 | **(v6.8)** Customer topbar: brand wrapped to two lines, "Sign out" crowded the phone topbar despite a rule hiding it | `style="display:inline"` on the sign-out form outranks the stylesheet rule in `portal.css`; nothing stopped the brand from wrapping | Inline style replaced with `.nav-logout-form` (hidden by the same rule); `.nav-brand { white-space: nowrap }` |

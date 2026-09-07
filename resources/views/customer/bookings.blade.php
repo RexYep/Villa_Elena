@@ -33,12 +33,19 @@
 
         /* ================= BOOKING CARD ================= */
         .booking-card {
+            display: block;
             background: #fff;
             border-radius: 16px;
             border: 1px solid var(--border);
             overflow: hidden;
             margin-bottom: 14px;
             transition: .2s;
+            color: inherit;
+            text-decoration: none;
+        }
+
+        .booking-card:hover .bc-ref {
+            color: var(--gold);
         }
 
         .booking-card:hover {
@@ -83,11 +90,6 @@
             font-weight: 600;
             font-size: 14px;
             color: var(--stone);
-            text-decoration: none;
-        }
-
-        .bc-ref:hover {
-            color: var(--gold);
         }
 
         .bc-property {
@@ -96,14 +98,19 @@
             margin-top: 2px;
         }
 
+        /* Hindi flex: ang buong petsa-at-detalye ay iisang text node, kaya
+           bilang flex item ay hindi ito nahahati — bumabagsak ang buong
+           teksto sa ilalim ng icon at naiiwang mag-isa ang icon sa unang
+           linya. Bilang inline na daloy ay pumipila ito nang maayos. */
         .bc-dates {
             font-size: 14px;
             color: var(--muted);
             margin-top: 4px;
-            display: flex;
-            align-items: center;
-            gap: 6px;
-            flex-wrap: wrap;
+            line-height: 1.6;
+        }
+
+        .bc-dates i {
+            margin-right: 6px;
         }
 
         .bc-right {
@@ -116,6 +123,7 @@
             font-weight: 700;
             font-size: 15px;
             font-family: 'Playfair Display', serif;
+            white-space: nowrap;
         }
 
         .bc-balance {
@@ -139,15 +147,73 @@
         }
 
         /* ================= MOBILE ================= */
-        @media (max-width:768px) {
+        /* Dating `flex-direction: column` ang buong card sa ilalim ng 768px:
+           mag-isa ang thumbnail sa unang linya, tapos ang detalye, tapos ang
+           badge, tapos ang halaga — 307px ang taas ng ISANG booking, kaya
+           dalawa lang ang kasya sa screen ng telepono. Nananatiling magkatabi
+           ang larawan at ang detalye; ang badge at halaga na lang ang bumababa
+           sa sariling linya, magkatabi rin. */
+        @media (max-width:600px) {
             .booking-card-inner {
-                flex-direction: column;
-                align-items: flex-start;
+                flex-wrap: wrap;
+                align-items: center;
+                gap: 12px 14px;
+                padding: 16px;
             }
 
             .bc-right {
+                flex: 1 0 100%;
+                display: flex;
+                flex-wrap: wrap;
+                align-items: center;
+                gap: 4px 10px;
+                min-width: 0;
+                padding-left: 82px;
                 text-align: left;
-                width: 100%;
+            }
+
+            .bc-amount {
+                margin-top: 0;
+                margin-left: auto;
+            }
+
+            .bc-balance {
+                margin-top: 0;
+            }
+        }
+
+        /* Ang anim na chip ay pumapasok sa tatlong hindi pantay na hilera sa
+           telepono (127px ang taas, magkakaibang lapad kada hilera) — mukha
+           itong nakakalat imbes na isang kontrol. Grid: pantay ang lapad,
+           nakahanay ang gilid, at nakikita pa rin ang lahat nang sabay —
+           hindi tulad ng scroll strip na itinatago ang kalahati. */
+        @media (max-width:560px) {
+            .filter-bar {
+                display: grid;
+                grid-template-columns: repeat(3, 1fr);
+                gap: 8px;
+            }
+
+            .filter-btn {
+                padding: 9px 6px;
+                font-size: 13px;
+                min-height: 38px;
+            }
+
+            .bc-img,
+            .bc-img-placeholder {
+                width: 56px;
+                height: 56px;
+            }
+
+            .bc-right {
+                padding-left: 70px;
+            }
+        }
+
+        @media (max-width:340px) {
+            .filter-bar {
+                grid-template-columns: repeat(2, 1fr);
             }
         }
     </style>
@@ -180,7 +246,7 @@
     </form>
 
     @forelse($bookings as $booking)
-        <div class="booking-card">
+        <a href="{{ route('customer.bookings.show', $booking) }}" class="booking-card">
             <div class="booking-card-inner">
                 @if ($booking->property?->primaryImage)
                     <img src="{{ $booking->property->primaryImage->url }}" class="bc-img" alt="">
@@ -188,8 +254,7 @@
                     <div class="bc-img-placeholder"><i class="bi bi-house"></i></div>
                 @endif
                 <div class="bc-info">
-                    <a href="{{ route('customer.bookings.show', $booking) }}"
-                        class="bc-ref">{{ $booking->booking_ref }}</a>
+                    <div class="bc-ref">{{ $booking->booking_ref }}</div>
                     <div class="bc-property">{{ $booking->property->property_name ?? 'N/A' }}</div>
                     <div class="bc-dates">
                         <i class="bi bi-calendar3" style="font-size: 13px;"></i>
@@ -202,13 +267,13 @@
                 <div class="bc-right">
                     <span
                         class="badge b-{{ $booking->status }}">{{ ucfirst(str_replace('_', ' ', $booking->status)) }}</span>
-                    <div class="bc-amount" style="margin-top:7px;">₱{{ number_format($booking->total_amount, 2) }}</div>
+                    <div class="bc-amount">₱{{ number_format($booking->total_amount, 2) }}</div>
                     @if ($booking->balance_due > 0 && $booking->status !== 'cancelled')
                         <div class="bc-balance">₱{{ number_format($booking->balance_due, 2) }} balance due</div>
                     @endif
                 </div>
             </div>
-        </div>
+        </a>
     @empty
         <div class="empty-state">
             <i class="bi bi-calendar-x"></i>

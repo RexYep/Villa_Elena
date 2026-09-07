@@ -187,19 +187,12 @@ class PayMongoWebhooks extends Command
                     continue;
                 }
 
-                $status = $this->probe($url);
+                $status = $paymongo->probeEndpoint($url);
 
-                // MAHALAGA ang pagkakaiba ng 4xx at 5xx/walang-koneksyon.
-                //
-                // Ang 4xx ay nangangahulugang MAY SUMASAGOT — buhay ang
-                // host, tinanggihan lang nito ang request na ito (hal.
-                // isang hindi pirmadong probe sa lumang code na 401 pa).
-                // Iyon ay isyu sa code, at HINDI dahilan para patayin ang
-                // webhook. Ang patay na tunnel ay 5xx mula sa ngrok edge
-                // o wala talagang koneksyon. Kung 4xx ang pinatay dito,
-                // mapapatay ang produksyon mismo — malapit nang mangyari
-                // iyon noong isinulat ito.
-                if ($status !== null && $status < 500) {
+                // Ang panuntunan ng "patay" ay nasa serbisyo —
+                // PayMongoService::endpointIsDead(). Ang 4xx ay
+                // SINASADYANG hindi kasama; tingnan doon kung bakit.
+                if (! $paymongo->endpointIsDead($status)) {
                     $this->line("May sumasagot sa {$url} (HTTP {$status}) — hindi ginagalaw.");
 
                     continue;
@@ -232,27 +225,6 @@ class PayMongoWebhooks extends Command
         }
 
         return $failed === 0 ? self::SUCCESS : self::FAILURE;
-    }
-
-    /**
-     * Isang mabilis na POST sa isang webhook URL para malaman kung
-     * buhay ba ito — ganoon din ang gagawin ng PayMongo.
-     *
-     * Walang pinipirmahan: hindi mahalaga kung tanggapin ang laman,
-     * ang tanong lang ay kung MAY SUMASAGOT BA. Kaya sapat na ang
-     * pag-uuri sa 'may humawak' laban sa 'wala roon'; hindi nito
-     * sinusubukang husgahan kung tama ang sagot.
-     */
-    private function probe(string $url): ?int
-    {
-        try {
-            return \Illuminate\Support\Facades\Http::timeout(15)
-                ->withHeaders(['Content-Type' => 'application/json'])
-                ->post($url, [])
-                ->status();
-        } catch (\Throwable $e) {
-            return null;
-        }
     }
 
     /**

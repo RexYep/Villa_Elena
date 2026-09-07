@@ -97,20 +97,30 @@
             border-color: #dc2626 !important;
         }
 
-        /* Star rating */
+        /* ── Star rating ──
+           Ito ang pinakamahalagang input sa pahina, pero 27px lang ang lapad
+           ng bawat bituin (sinukat) at magkadikit sila — mas maliit sa 44px
+           na minimum para sa daliri, kaya madaling mali ang matamaan.
+           `flex: 1` na may `max-width` ang sagot: hinahati nila ang buong
+           lapad ng hilera (≈45px sa 320px, 56px sa mas malapad) kaya laging
+           kasya at laging kasinglaki hangga't maaari. */
         .star-rating {
             display: flex;
-            gap: 6px;
+            gap: 4px;
             margin-bottom: 4px;
         }
 
         .star-btn {
+            flex: 1 1 0;
+            max-width: 56px;
+            min-height: 48px;
             background: none;
             border: none;
             cursor: pointer;
             font-size: 32px;
+            line-height: 1;
             color: #d1d5db;
-            transition: all .15s;
+            transition: color .15s, transform .15s;
             padding: 0;
         }
 
@@ -120,11 +130,14 @@
             transform: scale(1.1);
         }
 
+        /* `height: 16px` dati — mas maikli sa 21px na kailangan ng sarili
+           nitong linya, kaya pinuputol ang ibaba ng "Excellent". Ang layunin
+           (huwag tumalon ang layout bago pumili) ay `min-height`. */
         .rating-label {
             font-size: 14px;
             color: var(--muted);
             margin-top: 4px;
-            height: 16px;
+            min-height: 21px;
         }
 
         /* Submit */
@@ -218,11 +231,16 @@
                     <label class="form-label">Overall Rating</label>
                     <div class="star-rating" id="starRating">
                         @for ($i = 1; $i <= 5; $i++)
+                            {{-- Limang magkakaparehong "★" ang mga ito sa isang
+                                 screen reader kung walang pangalan, at nasa
+                                 hidden input ang tunay na halaga. --}}
                             <button type="button" class="star-btn" data-value="{{ $i }}"
+                                aria-label="{{ $i }} star{{ $i > 1 ? 's' : '' }}" aria-pressed="false"
                                 onclick="setRating({{ $i }})">★</button>
                         @endfor
                     </div>
-                    <div class="rating-label" id="ratingLabel">Click to rate</div>
+                    {{-- Hindi "Click to rate": sa telepono ay tinatapik ito. --}}
+                    <div class="rating-label" id="ratingLabel">Select a rating</div>
                     <input type="hidden" name="rating" id="ratingInput"
                         value="{{ old('rating', $review->rating ?? '') }}">
                     @error('rating')
@@ -281,6 +299,7 @@
             document.getElementById('ratingLabel').textContent = ratingLabels[value];
             document.querySelectorAll('.star-btn').forEach((btn, i) => {
                 btn.classList.toggle('active', i < value);
+                btn.setAttribute('aria-pressed', i < value ? 'true' : 'false');
             });
         }
 

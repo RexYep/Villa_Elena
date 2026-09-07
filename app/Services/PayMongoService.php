@@ -471,6 +471,46 @@ class PayMongoService
 
     // ── Webhook administration ─────────────────────────────────────
     /**
+     * Isang mabilis na POST sa isang webhook URL — ganoon din ang
+     * gagawin ng PayMongo — para malaman kung may sumasagot ba.
+     *
+     * Walang pinipirmahan: hindi mahalaga kung tanggapin ang laman, ang
+     * tanong lang ay kung may humahawak ba sa kabilang dulo.
+     *
+     * @return int|null ang status code, o null kung walang koneksyon
+     */
+    public function probeEndpoint(string $url, int $timeout = 15): ?int
+    {
+        try {
+            return Http::timeout($timeout)
+                ->withHeaders(['Content-Type' => 'application/json'])
+                ->post($url, [])
+                ->status();
+        } catch (\Throwable $e) {
+            return null;
+        }
+    }
+
+    /**
+     * Wala ba talaga roon ang host?
+     *
+     * MAHALAGA ang pagkakaiba ng 4xx at 5xx/walang-koneksyon. Ang 4xx ay
+     * nangangahulugang MAY SUMASAGOT — buhay ang host, tinanggihan lang
+     * nito ang request na ito. Isyu iyon sa code, at hindi dahilan para
+     * patayin ang isang webhook. Noong `>= 400` pa ang panuntunang ito,
+     * ang produksyon — na 401 pa noon dahil luma pa ang naka-deploy —
+     * ay isang command na lang ang layo sa pagkapatay ng mismong
+     * kasangkapang ginawa para protektahan ito.
+     *
+     * Ang patay ay: 5xx mula sa isang edge (hal. hindi maabot ng ngrok
+     * ang upstream nito), o walang koneksyon.
+     */
+    public function endpointIsDead(?int $status): bool
+    {
+        return $status === null || $status >= 500;
+    }
+
+    /**
      * Inililista ang mga naka-rehistrong webhook para sa mode ng key
      * na hawak natin ngayon (test keys → test webhooks lang).
      *

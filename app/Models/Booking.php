@@ -191,6 +191,128 @@ class Booking extends Model
     ];
 
     /**
+     * Mapa ng mga SARADONG slot kada petsa para sa isang property.
+     *
+     * Dating `PortalController::buildSlotAvailability()` — dalawa na ngayon
+     * ang gumagamit nito (ang availability calendar ng property page at ang
+     * reschedule form ng customer), kaya dito na ito nakatira: dalawang
+     * kopya ng lohikang ito ang siguradong maglalayo sa isa't isa.
+     *
+     * Sinasadyang ginagaya nito ang eksaktong lohika ng hasConflict() —
+     * parehong status filter, parehong "abandoned pending hold" exemption,
+     * parehong datetime-overlap test sa pamamagitan ng slotDateTimes(), at
+     * parehong $excludeBookingId. Kailangang tugma ang dalawa: kung mas
+     * mahigpit ang mapa, magmumukhang sarado ang slot na tatanggapin naman
+     * pala ng server; kung mas maluwag, mare-reject ang guest matapos na
+     * siyang pumili. Kapag may binago sa isa, tingnan ang isa.
+     *
+     * @param  int|null  $excludeBookingId  Hindi hinahayaang harangan ng
+     *         isang booking ang sarili nitong slot — ito ang kaso ng
+     *         reschedule, kaparehong-kapareho ng hasConflict().
+     * @return array<string, array<string, int>> hal. ['2026-09-10' => ['night' => 42]]
+     */
+    public static function slotAvailabilityMap(int $propertyId, ?int $excludeBookingId = null): array
+    {
+        $query = static::where('property_id', $propertyId)
+            ->whereNotIn('status', ['cancelled', 'no_show'])
+            ->where(function ($q) {
+                $q->where('status', '!=', 'pending')
+                    ->orWhere('created_at', '>=', now()->subMinutes(static::pendingHoldMinutes()));
+            })
+            ->where('check_out_date', '>=', today());
+
+        if ($excludeBookingId) {
+            $query->where('id', '!=', $excludeBookingId);
+        }
+
+        $bookings = $query->get(['id', 'check_in_date', 'check_in_time', 'check_out_date', 'check_out_time']);
+
+        if ($bookings->isEmpty()) {
+            return [];
+        }
+
+        // Tunay na check-in/check-out datetime ng bawat booking. Hindi
+        // puwedeng ang slot key lang ang basehan: puwedeng na-extend ng
+        // Admin\BookingController::extendStay() ang checkout, kaya umaabot
+        // ito sa slot na hindi tugma sa check-in time nito.
+        $windows = $bookings->map(fn ($b) => [
+            'id' => $b->id,
+            'start' => \Carbon\Carbon::parse($b->check_in_date->format('Y-m-d').' '.$b->check_in_time),
+            'end' => \Carbon\Carbon::parse($b->check_out_date->format('Y-m-d').' '.$b->check_out_time),
+        ])->all();
+
+        // Ang mga petsang posibleng maapektuhan lang ang sinusuri — bakante
+        // ang lahat ng iba pa. Kasama ang araw bago ang check-in at ang
+        // araw matapos ang check-out, dahil ang overnight na booking ay
+        // tumatawid sa hangganan ng araw.
+        $candidates = [];
+        foreach ($bookings as $b) {
+            $cursor = $b->check_in_date->copy()->subDay();
+            $last = $b->check_out_date->copy()->addDay();
+            while ($cursor->lte($last)) {
+                $candidates[$cursor->format('Y-m-d')] = true;
+                $cursor->addDay();
+            }
+        }
+
+        $todayStr = today()->format('Y-m-d');
+        $map = [];
+
+        foreach (array_keys($candidates) as $date) {
+            if ($date < $todayStr) {
+                continue;
+            }
+
+            // Kasama ang booking id kada saradong slot para magamit ito ng
+            // live (Pusher) na "freed" na update sa calendar: iyon lang ang
+            // paraan para malaman kung aling pill ang aalisin kapag
+            // kinansela ang isang booking habang bukas ang page.
+            $taken = [];
+            foreach (array_keys(static::SLOTS) as $slotKey) {
+                [$slotStart, $slotEnd] = static::slotDateTimes($slotKey, $date);
+
+                foreach ($windows as $w) {
+                    if ($slotStart->lt($w['end']) && $slotEnd->gt($w['start'])) {
+                        $taken[$slotKey] = $w['id'];
+                        break;
+                    }
+                }
+            }
+
+            if ($taken) {
+                $map[$date] = $taken;
+            }
+        }
+
+        ksort($map);
+
+        return $map;
+    }
+
+    /**
+     * Aling mga slot ang lumipas na PARA SA ARAW NA ITO, base sa oras ng
+     * server nang i-render ang page. Ito ang kaparehong pagsusuri ng
+     * `$checkin->isPast()` sa mga controller — kung wala ito, ang isang
+     * bukas na slot kaninang umaga ay mukhang mapipili pa rin ngayong gabi
+     * at tatanggihan lang pagkatapos i-submit.
+     *
+     * @return array<int, string>
+     */
+    public static function pastSlotsToday(): array
+    {
+        $past = [];
+
+        foreach (array_keys(static::SLOTS) as $slotKey) {
+            [$checkIn] = static::slotDateTimes($slotKey, today()->format('Y-m-d'));
+            if ($checkIn->isPast()) {
+                $past[] = $slotKey;
+            }
+        }
+
+        return $past;
+    }
+
+    /**
      * Kinukuha ang buong check-in/check-out Carbon datetime pair para sa
      * isang slot ('day' o 'night'), base sa petsa ng check-in.
      *

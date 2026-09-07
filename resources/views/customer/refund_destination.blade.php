@@ -187,14 +187,40 @@
             text-align: center;
         }
 
+        .summary-name,
+        .summary-dates {
+            overflow-wrap: anywhere;
+        }
+
         @media (max-width:480px) {
+            /* `flex-wrap: wrap` dati: tatlong hilera ang kinalalabasan —
+               mag-isa ang icon, tapos ang reference, tapos ang HALAGA sa
+               pinakadulo. Ang halaga ang buong dahilan ng pahinang ito,
+               kaya hindi ito dapat nasa ilalim ng lahat. Dalawang hilera na
+               lang: icon + reference sa itaas, at ang pera bilang sariling
+               nakalinyang hilera, may label sa tabi. */
             .booking-summary {
-                flex-wrap: wrap;
+                display: grid;
+                grid-template-columns: auto 1fr;
+                align-items: center;
+                gap: 12px 14px;
+                padding: 16px;
             }
 
             .refund-amount {
+                grid-column: 1 / -1;
+                display: flex;
+                align-items: baseline;
+                justify-content: space-between;
+                gap: 10px;
                 margin-left: 0;
+                padding-top: 12px;
+                border-top: 1px solid var(--border);
                 text-align: left;
+            }
+
+            .refund-amount small {
+                display: inline;
             }
         }
     </style>

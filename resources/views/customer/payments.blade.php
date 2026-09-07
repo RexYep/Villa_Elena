@@ -92,6 +92,89 @@
             padding: 60px 20px;
             color: var(--muted);
         }
+
+        .pay-date,
+        .pay-amount {
+            white-space: nowrap;
+        }
+
+        /* ── Telepono ──
+           Anim na hanay ang tabla; sa 390px ay hindi ito kasya, kaya ang
+           buong pahina ay iniiscroll pahalang sa loob ng `overflow-x:auto`
+           na wrapper — at ang HALAGA, ang tanging dahilan kung bakit binuksan
+           ito ng bisita, ang huling hanay: nasa labas ito ng screen hanggang
+           mag-swipe siya. Ang bawat bayad ay nagiging maliit na card:
+           reference at halaga sa unang linya, pangalan ng property sa
+           ikalawa, at ang natitirang detalye sa ikatlo. */
+        @media (max-width:600px) {
+            .pay-table {
+                border-radius: 14px;
+            }
+
+            .pay-table thead {
+                display: none;
+            }
+
+            .pay-table,
+            .pay-table tbody,
+            .pay-table tr,
+            .pay-table td {
+                display: block;
+                width: auto;
+            }
+
+            .pay-table tr {
+                display: flex;
+                flex-wrap: wrap;
+                align-items: baseline;
+                gap: 4px 10px;
+                padding: 14px 16px;
+                border-bottom: 1px solid #f4efe6;
+            }
+
+            .pay-table tr:last-child {
+                border-bottom: none;
+            }
+
+            .pay-table td {
+                padding: 0;
+                border: none;
+            }
+
+            /* Booking (reference + property) */
+            .pay-table td:nth-child(2) {
+                flex: 1 1 auto;
+                min-width: 0;
+                order: 1;
+            }
+
+            /* Halaga — katabi ng reference, hindi nakatago sa dulo */
+            .pay-table td:nth-child(6) {
+                order: 2;
+                margin-left: auto;
+                font-size: 14px;
+            }
+
+            /* Petsa, paraan, uri, katayuan — iisang linya sa ilalim */
+            .pay-table td:nth-child(1) {
+                order: 3;
+                flex: 1 0 100%;
+                color: var(--muted);
+            }
+
+            .pay-table td:nth-child(3) {
+                order: 4;
+                color: var(--muted);
+            }
+
+            .pay-table td:nth-child(4) {
+                order: 5;
+            }
+
+            .pay-table td:nth-child(5) {
+                order: 6;
+            }
+        }
     </style>
 @endpush
 
@@ -120,7 +203,7 @@
                 <tbody>
                     @foreach ($payments as $payment)
                         <tr>
-                            <td class="text-muted-theme">{{ $payment->payment_date?->format('M d, Y') }}</td>
+                            <td class="text-muted-theme pay-date">{{ $payment->payment_date?->format('M d, Y') }}</td>
                             <td>
                                 @if ($payment->booking)
                                     <a href="{{ route('customer.bookings.show', $payment->booking) }}" class="booking-link">
@@ -136,7 +219,7 @@
                             <td><span class="type-pill">{{ $payment->type_label }}</span></td>
                             <td><span class="status-pill s-{{ $payment->status }}">{{ ucfirst($payment->status) }}</span>
                             </td>
-                            <td
+                            <td class="pay-amount"
                                 style="text-align:right;font-weight:600;color:{{ $payment->payment_type === 'refund' ? '#dc2626' : '#15803d' }};">
                                 {{ $payment->payment_type === 'refund' ? '-' : '+' }}₱{{ number_format($payment->amount, 2) }}
                             </td>

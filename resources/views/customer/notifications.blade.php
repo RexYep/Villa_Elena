@@ -34,8 +34,23 @@
             flex-shrink: 0;
         }
 
+        /* Ang `min-width: 0` dito ang pumipigil sa isang tahimik na
+           pagkawala ng teksto. Ang default na `min-width: auto` ng isang
+           flex item ay hindi siya pinapayagang lumiit nang mas maliit pa sa
+           pinakamahabang salita nito — kaya ang isang mahabang reference o
+           email ay nagpapalobo sa kahon LAMPAS sa gilid ng card (77px sa
+           320px, sinukat), at dahil `overflow: hidden` ang `.notif-card`,
+           basta na lang PINUPUTOL ang natitira: walang ellipsis, walang
+           scrollbar, at malinis pa rin ang sukat ng pahina. Kasama ang
+           `overflow-wrap` para mabali mismo ang salita. */
         .notif-body {
             flex: 1;
+            min-width: 0;
+        }
+
+        .notif-title,
+        .notif-msg {
+            overflow-wrap: anywhere;
         }
 
         .notif-title {
@@ -88,6 +103,21 @@
         a.notif-card:hover {
             box-shadow: 0 4px 16px rgba(44, 36, 22, .08);
         }
+
+        /* Sa 320px ay 171px lang ang natitira sa teksto matapos ang icon,
+           ang tuldok at ang padding. Ang padding ang pinakamurang ibigay. */
+        @media (max-width:480px) {
+            .notif-inner {
+                gap: 12px;
+                padding: 14px 16px;
+            }
+
+            .notif-icon-wrap {
+                width: 34px;
+                height: 34px;
+                font-size: 15px;
+            }
+        }
     </style>
 @endpush
 
@@ -97,13 +127,36 @@
 
     @forelse($notifications as $notif)
         @php
-            $icons = [
-                'booking_update' => ['icon' => 'bi-calendar-check', 'bg' => '#dcfce7', 'color' => '#15803d'],
-                'payment' => ['icon' => 'bi-credit-card', 'bg' => '#dbeafe', 'color' => '#1d4ed8'],
-                'cancellation' => ['icon' => 'bi-x-circle', 'bg' => '#fee2e2', 'color' => '#dc2626'],
-                'reminder' => ['icon' => 'bi-bell', 'bg' => '#fef9c3', 'color' => '#a16207'],
-            ];
-            $style = $icons[$notif->type] ?? ['icon' => 'bi-info-circle', 'bg' => '#f1f5f9', 'color' => '#475569'];
+            // Ang lumang bersyon ay nag-uuri ayon sa `$notif->type`, na may
+            // mga susi tulad ng 'booking_update' at 'payment'. Walang tugma
+            // kailanman: lahat ng 279 na row sa notifications ay `in_app`
+            // (tingnan ang CLAUDE.md — ito ang tanging halagang ginagamit sa
+            // praktika), kaya IISANG kulay-abong "info" na icon ang ipinapakita
+            // ng bawat abiso at patay na code ang buong mapa. Ang pamagat ang
+            // tanging bahagi na talagang nagsasabi kung tungkol saan ito.
+            $subject = \Illuminate\Support\Str::lower($notif->title);
+            $style = match (true) {
+                str_contains($subject, 'cancel'), str_contains($subject, 'failed'), str_contains($subject, 'rejected')
+                    => ['icon' => 'bi-x-circle', 'bg' => '#fee2e2', 'color' => '#dc2626'],
+                str_contains($subject, 'refund')
+                    => ['icon' => 'bi-arrow-counterclockwise', 'bg' => '#e0e7ff', 'color' => '#4338ca'],
+                str_contains($subject, 'payment'), str_contains($subject, 'paid')
+                    => ['icon' => 'bi-credit-card', 'bg' => '#dbeafe', 'color' => '#1d4ed8'],
+                str_contains($subject, 'reschedul')
+                    => ['icon' => 'bi-calendar-event', 'bg' => '#fef9c3', 'color' => '#a16207'],
+                str_contains($subject, 'promo'), str_contains($subject, 'offer'), str_contains($subject, 'announcement')
+                    => ['icon' => 'bi-megaphone', 'bg' => '#fef9c3', 'color' => '#a16207'],
+                str_contains($subject, 'check-out'), str_contains($subject, 'checked out'), str_contains($subject, 'complete')
+                    => ['icon' => 'bi-box-arrow-right', 'bg' => '#dcfce7', 'color' => '#15803d'],
+                str_contains($subject, 'check-in'), str_contains($subject, 'checked in'), str_contains($subject, 'welcome'), str_contains($subject, 'arrived')
+                    => ['icon' => 'bi-box-arrow-in-right', 'bg' => '#dcfce7', 'color' => '#15803d'],
+                str_contains($subject, 'booking'), str_contains($subject, 'reservation')
+                    => ['icon' => 'bi-calendar-check', 'bg' => '#dcfce7', 'color' => '#15803d'],
+                str_contains($subject, 'reminder')
+                    => ['icon' => 'bi-bell', 'bg' => '#fef9c3', 'color' => '#a16207'],
+                default
+                    => ['icon' => 'bi-info-circle', 'bg' => '#f1f5f9', 'color' => '#475569'],
+            };
         @endphp
         <a href="{{ route('customer.notifications.open', $notif) }}"
             class="notif-card {{ !$notif->is_read ? 'unread' : '' }}">

@@ -41,6 +41,10 @@ return [
         'webhook_secret_test' => env('PAYMONGO_WEBHOOK_SECRET_TEST', ''),
         'webhook_secret_live' => env('PAYMONGO_WEBHOOK_SECRET_LIVE', ''),
 
+        // Aling webhook ang sinusundan ng `paymongo:tunnel`. Kung
+        // blangko, hinuhulaan ito mula sa host na ibinibigay ng ngrok.
+        'tunnel_webhook' => env('PAYMONGO_TUNNEL_WEBHOOK', ''),
+
         // Ang `purpose` ng bawat Send Money transfer. Tingnan ang
         // `RefundTransfer::PURPOSE` — ito ang field na nagpapasya kung
         // tatanggapin ng GCash ang isang refund, at nasa env ito para

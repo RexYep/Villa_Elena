@@ -28,6 +28,21 @@
             margin-bottom: 8px;
         }
 
+        /* Ang laman ng review ay isinulat ng bisita: puwedeng may nakadikit
+           na URL o mahabang salitang walang puwang. Walang breakpoint ang
+           magliligtas doon — kailangang payagang mabali ang salita mismo,
+           kung hindi ay lumalampas ang teksto sa card at IPINAPAHALANG ang
+           buong pahina (89px sa 320px, 49px sa 360px — sinukat, hindi
+           hinulaan). Ang pangalan ng property ay galing sa admin, kaya
+           kasama rin ito. */
+        .review-property,
+        .review-meta,
+        .review-title,
+        .review-content,
+        .admin-reply {
+            overflow-wrap: anywhere;
+        }
+
         .review-property {
             font-family: 'Playfair Display', serif;
             font-size: 16px;
@@ -38,6 +53,17 @@
             font-size: 14px;
             color: var(--muted);
             margin-top: 2px;
+        }
+
+        .review-booking-link {
+            color: inherit;
+            text-decoration: none;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .review-booking-link:hover {
+            color: var(--gold);
+            border-bottom-color: var(--gold);
         }
 
         .review-stars {
@@ -53,7 +79,7 @@
         }
 
         .review-content {
-            font-size: 13px;
+            font-size: 14px;
             color: #374151;
             line-height: 1.6;
         }
@@ -133,7 +159,11 @@
                 <div>
                     <div class="review-property">{{ $review->booking->property->property_name ?? 'N/A' }}</div>
                     <div class="review-meta">
-                        {{ $review->booking->booking_ref ?? '' }} · {{ $review->created_at->format('M d, Y') }}
+                        @if ($review->booking)
+                            <a href="{{ route('customer.bookings.show', $review->booking) }}"
+                                class="review-booking-link">{{ $review->booking->booking_ref }}</a> ·
+                        @endif
+                        {{ $review->created_at->format('M d, Y') }}
                     </div>
                 </div>
                 @php

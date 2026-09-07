@@ -24,7 +24,15 @@ class BookingController extends Controller
 
         $booking->load('property');
 
-        return view('customer.reschedule_form', compact('booking'));
+        // Kaparehong mapa ng availability na ginagamit ng calendar sa
+        // property page — at kaparehong exclusion ng hasConflict() sa
+        // update() sa ibaba, kaya hindi hinaharangan ng booking na ito ang
+        // sarili nitong slot. Kung wala ito, pumipili nang bulag ang bisita
+        // at saka lang niya nalalaman na sarado ang slot pagka-submit.
+        $slotAvailability = Booking::slotAvailabilityMap($booking->property_id, $booking->id);
+        $pastSlotsToday   = Booking::pastSlotsToday();
+
+        return view('customer.reschedule_form', compact('booking', 'slotAvailability', 'pastSlotsToday'));
     }
 
     // ── Reschedule Booking ──────────────────────────────────────────

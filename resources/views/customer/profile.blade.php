@@ -99,6 +99,102 @@
             flex-shrink: 0;
         }
 
+        .avatar-preview-wrap {
+            flex-shrink: 0;
+        }
+
+        .avatar-controls {
+            min-width: 0;
+        }
+
+        .avatar-title {
+            font-size: 14px;
+            font-weight: 600;
+            color: #374151;
+        }
+
+        /* Nakatago ang tunay na input pero hindi `display:none`: kailangan pa
+               rin siyang maabot ng keyboard at ng screen reader sa pamamagitan ng
+               <label for>. */
+        .avatar-input {
+            position: absolute;
+            width: 1px;
+            height: 1px;
+            padding: 0;
+            margin: -1px;
+            overflow: hidden;
+            clip: rect(0, 0, 0, 0);
+            white-space: nowrap;
+            border: 0;
+        }
+
+        .avatar-actions {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 8px;
+            margin-top: 10px;
+        }
+
+        .btn-choose,
+        .btn-upload {
+            display: inline-flex;
+            align-items: center;
+            gap: 7px;
+            border-radius: 10px;
+            padding: 9px 14px;
+            font-family: 'Jost', sans-serif;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all .2s;
+        }
+
+        .btn-choose {
+            background: var(--sand);
+            border: 1px solid var(--border);
+            color: var(--stone);
+        }
+
+        .btn-choose:hover {
+            background: var(--gold);
+            border-color: var(--gold);
+            color: var(--stone);
+        }
+
+        /* Lumilitaw lang ito kapag may napiling larawan — doon lang naman ito
+               may kahulugan, at doon ito hinahanap ng mata: katabi ng larawan,
+               hindi sa dulo ng form. */
+        .btn-upload {
+            background: var(--stone);
+            border: 1px solid var(--stone);
+            color: #fff;
+        }
+
+        .btn-upload:hover {
+            background: var(--gold);
+            border-color: var(--gold);
+            color: var(--stone);
+        }
+
+        .btn-link-cancel {
+            background: none;
+            border: none;
+            color: var(--muted);
+            font-family: 'Jost', sans-serif;
+            font-size: 13px;
+            cursor: pointer;
+            text-decoration: underline;
+            padding: 4px;
+        }
+
+        .avatar-chosen {
+            font-size: 13px;
+            color: #15803d;
+            margin-top: 8px;
+            overflow-wrap: anywhere;
+        }
+
         .btn-submit {
             background: var(--stone);
             color: #fff;
@@ -294,8 +390,25 @@
         }
 
         @media (max-width:560px) {
-            .profile-tab-btn span {
-                display: none;
+
+            /* Dating `.profile-tab-btn span { display: none }` — tatlong hubad
+                   na icon ang naiiwan sa telepono (tao / kalasag / kampana), at
+                   walang paraan ang bisita para malaman kung alin ang alin.
+                   Lumiliit na lang ngayon ang teksto; ang ICON ang unang binibitiw
+                   sa pinakamakikipot na screen, hindi ang salita. */
+            .profile-tabs {
+                gap: 4px;
+                padding: 4px;
+            }
+
+            .profile-tab-btn {
+                gap: 5px;
+                padding: 9px 6px;
+                font-size: 12px;
+            }
+
+            .profile-tab-btn i {
+                font-size: 13px;
             }
 
             .two-col {
@@ -303,15 +416,31 @@
             }
 
             .avatar-row {
-                flex-wrap: wrap;
+                gap: 14px;
             }
 
+            /* Dating `flex-wrap: wrap` ang dalawang ito. Ang switch at ang
+                   pindutang "Remove" ay bumabagsak sa ilalim ng talata at
+                   naiiwang mag-isa — malayo sa bagay na kinokontrol nila. Ang
+                   grid ay pumipigil sa pagbagsak nang hindi nag-o-overflow. */
+            .toggle-row,
             .device-row {
-                flex-wrap: wrap;
+                display: grid;
+                grid-template-columns: 1fr auto;
+                align-items: start;
+                gap: 12px;
             }
 
-            .toggle-row {
-                flex-wrap: wrap;
+            .toggle-switch {
+                margin-top: 2px;
+            }
+        }
+
+        /* Sa ~360px pababa ay hindi na sabay kasya ang icon at ang salita sa
+               isang tab. Ang salita ang nananatili. */
+        @media (max-width:400px) {
+            .profile-tab-btn i {
+                display: none;
             }
         }
     </style>
@@ -355,16 +484,46 @@
                 </div>
                 <div class="form-card-body">
 
+                    {{-- Dating isang hubad na `<input type="file">` lang ito:
+                         "Choose File / No file chosen", walang label kung para
+                         saan, walang nakikitang pagbabago pagkatapos pumili, at
+                         ang tanging pindutan ay ang "Save Changes" sa dulo ng
+                         mahabang form. Hindi alam ng bisita kung na-upload na
+                         ba o hindi. Ngayon: may pangalan ang kontrol, agad
+                         nakikita ang piniling larawan sa mismong bilog, at
+                         lumilitaw ang "Upload Photo" katabi mismo nito. --}}
                     <div class="avatar-row">
-                        @if ($user->profile_image)
-                            <img src="{{ $user->profile_image_url }}" alt="Avatar" class="avatar-preview">
-                        @else
-                            <div class="avatar-preview">{{ strtoupper(substr($user->full_name, 0, 1)) }}</div>
-                        @endif
-                        <div>
-                            <input type="file" name="avatar" accept="image/png,image/jpeg,image/webp"
-                                class="form-control @error('avatar') is-invalid @enderror">
-                            <div class="hint" style="margin-top:6px;">JPG, PNG or WEBP. Max 3MB.</div>
+                        <div class="avatar-preview-wrap">
+                            <img id="avatarImg" class="avatar-preview" alt="Profile photo"
+                                src="{{ $user->profile_image ? $user->profile_image_url : '' }}"
+                                data-original="{{ $user->profile_image ? $user->profile_image_url : '' }}"
+                                @unless ($user->profile_image) hidden @endunless>
+                            <div id="avatarInitial" class="avatar-preview" @if ($user->profile_image) hidden @endif>
+                                {{ strtoupper(substr($user->full_name, 0, 1)) }}
+                            </div>
+                        </div>
+                        <div class="avatar-controls">
+                            <div class="avatar-title">Profile photo</div>
+                            <div class="hint">JPG, PNG or WEBP · Max 3MB</div>
+
+                            {{-- Ang totoong input ay itinatago (hindi
+                                 `display:none`, para maabot pa rin ito ng
+                                 keyboard at ng screen reader sa pamamagitan ng
+                                 label nito). --}}
+                            <input type="file" name="avatar" id="avatarInput" accept="image/png,image/jpeg,image/webp"
+                                class="avatar-input">
+
+                            <div class="avatar-actions">
+                                <label for="avatarInput" class="btn-choose">
+                                    <i class="bi bi-image"></i> {{ $user->profile_image ? 'Change photo' : 'Choose photo' }}
+                                </label>
+                                <button type="submit" class="btn-upload" id="avatarUploadBtn" hidden>
+                                    <i class="bi bi-upload"></i> Upload photo
+                                </button>
+                                <button type="button" class="btn-link-cancel" id="avatarCancelBtn" hidden>Cancel</button>
+                            </div>
+
+                            <div class="avatar-chosen" id="avatarChosen" hidden></div>
                             @error('avatar')
                                 <div class="field-error">{{ $message }}</div>
                             @enderror
@@ -651,6 +810,69 @@
             document.getElementById('ptab-' + name).classList.add('active');
             btn.classList.add('active');
         }
+
+        // ── Profile photo ────────────────────────────────────────────────
+        // Ang pagpili ng file ay dapat may nakikitang kasagutan agad: ang
+        // bagong larawan sa bilog, ang pangalan ng file, at ang pindutang
+        // talagang mag-a-upload. Kung wala ang tatlong ito, ang tanging
+        // senyas na may nangyari ay ang "No file chosen" na nagbago — sa
+        // isang maliit na kahon na madaling hindi mapansin.
+        (function() {
+            const input = document.getElementById('avatarInput');
+            if (!input) return;
+
+            const img = document.getElementById('avatarImg');
+            const initial = document.getElementById('avatarInitial');
+            const chosen = document.getElementById('avatarChosen');
+            const uploadBtn = document.getElementById('avatarUploadBtn');
+            const cancelBtn = document.getElementById('avatarCancelBtn');
+            const originalSrc = img.dataset.original || '';
+            let objectUrl = null;
+
+            function restore() {
+                if (objectUrl) {
+                    URL.revokeObjectURL(objectUrl);
+                    objectUrl = null;
+                }
+                if (originalSrc) {
+                    img.src = originalSrc;
+                    img.hidden = false;
+                    initial.hidden = true;
+                } else {
+                    img.removeAttribute('src');
+                    img.hidden = true;
+                    initial.hidden = false;
+                }
+                chosen.hidden = true;
+                chosen.textContent = '';
+                uploadBtn.hidden = true;
+                cancelBtn.hidden = true;
+            }
+
+            input.addEventListener('change', function() {
+                const file = this.files && this.files[0];
+                if (!file) {
+                    restore();
+                    return;
+                }
+
+                if (objectUrl) URL.revokeObjectURL(objectUrl);
+                objectUrl = URL.createObjectURL(file);
+                img.src = objectUrl;
+                img.hidden = false;
+                initial.hidden = true;
+
+                chosen.textContent = 'Upload ' + file.name;
+                chosen.hidden = false;
+                uploadBtn.hidden = false;
+                cancelBtn.hidden = false;
+            });
+
+            cancelBtn.addEventListener('click', function() {
+                input.value = '';
+                restore();
+            });
+        })();
     </script>
 @endpush
 
