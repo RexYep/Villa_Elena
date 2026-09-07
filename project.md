@@ -1,12 +1,119 @@
 # Villa Elena Private Rental Resort
 ## Resort Management System — Project Documentation
 
-**Version:** 6.8
+**Version:** 6.9
 **Stack:** PHP 8.2 / Laravel 12 / MySQL 8 / Bootstrap 5
 **Local URL:** `http://127.0.0.1:8000` (`php artisan serve`) or `http://localhost:8000` (Docker — see v5.3)
 **Live URL:** `https://villa-elena.onrender.com` (Render, free tier — testing only, not yet handed to real guests)
 **Database (local):** `villa_elena_db` (MySQL, XAMPP or standalone MySQL — same database either way)
 **Database (live):** Aiven MySQL free tier, database `defaultdb`
+
+---
+
+## What Changed in v6.9 (Read This First)
+
+### PayMongo disabled the production webhook, and the URL was the reason
+
+PayMongo emailed to say the webhook was disabled, listing the usual suspects (4xx/5xx responses, changed body, a firewall in the way). The application log had nothing at all — no rejected signature, no error, no delivery. That absence was the clue: the requests were never reaching the controller.
+
+`php artisan paymongo:webhooks` (new, below) showed why. The production webhook was registered at the **bare origin**:
+
+```
+hook_Gowz…   disabled   https://villa-elena.onrender.com                     ← no path
+hook_Z9mp…   enabled    https://…ngrok-free.dev/webhooks/paymongo            ← correct
+```
+
+`/` is `Route::get('/', …)`. A `POST` there is **405 Method Not Allowed**, produced by the router before any controller runs — which is exactly why nothing was logged. Confirmed against the live deployment:
+
+```
+POST https://villa-elena.onrender.com/                   → 405
+POST https://villa-elena.onrender.com/webhooks/paymongo  → 401   (old code, unsigned probe)
+```
+
+Every delivery 405'd, PayMongo counted the failures, and disabled the endpoint. **So the first question when a webhook goes dead is not "is the secret right?" — it is "where is it actually pointed?"** A wrong URL leaves no trace in the app log, and the secret is the thing everyone reaches for first.
+
+The registration has been corrected to `https://villa-elena.onrender.com/webhooks/paymongo`. It is still **disabled** — re-enable it with `php artisan paymongo:webhooks --enable=all` once the fixes below are deployed, since enabling it against the old code would just get it disabled again.
+
+### The webhook endpoint can no longer return a non-2xx status, ever
+
+The 405 is what disabled it this time, but the endpoint had two of its own ways to earn the same fate, and both are now closed:
+
+- **`401` on a failed signature.** A mode-mismatched secret means *every* delivery fails, so this was never one bad request — it was a guaranteed disable.
+- **`500` on any thrown exception.** A DB hiccup, an unmapped enum, a malformed body (`$request->json('data')` returns `null` or a string, and indexing that is a `TypeError`) — each would have been a 500.
+
+`PaymentController::webhook()` is now a thin shell that calls `handleWebhookEvent()` inside `try/catch (\Throwable)` and always answers `200`. **The structural point is that `handleWebhookEvent()` returns arrays and never calls `response()`** — there is no path through it that can produce a status code at all. What happened is reported in the JSON body (`reason`: `invalid_signature`, `malformed_payload`, `unhandled_event`, `unmatched_booking`, `processing_error`) and in the log, not in the status.
+
+The trade-off is real and deliberate: **PayMongo will not retry an event that fails mid-processing.** A wrong 200 costs one logged warning; a wrong 401 costs the entire endpoint and every payment after it, silently, until someone notices an email. The second is far more expensive. To cover the gap, both the `unmatched_booking` and `processing_error` paths now notify admins (through `notifyAdminsQuietly()`, which swallows its own failures so a broken DB can't turn the notification into the 500 we were trying to avoid) so money that arrived without being recorded is visible to a human.
+
+`transferCallback()` got the same treatment: each `syncStatus()` is wrapped individually, so one bad transfer neither aborts the loop over the others nor 500s the response.
+
+### Webhook secrets are per-mode now
+
+The signature header is `t=…,te=…,li=…` — `te` is signed with the **test** webhook's secret, `li` with the **live** one, and those are two different `whsk_…` values from two separate registrations. The old code computed one HMAC from a single `PAYMONGO_WEBHOOK_SECRET` and tried it against both slots, so a test-mode webhook pointed at a deployment holding the live secret failed 100% of deliveries.
+
+`verifyWebhook()` now maps each slot to its own candidate list:
+
+| Slot | Secrets tried, in order |
+|---|---|
+| `te=` | `PAYMONGO_WEBHOOK_SECRET_TEST`, then `PAYMONGO_WEBHOOK_SECRET` |
+| `li=` | `PAYMONGO_WEBHOOK_SECRET_LIVE`, then `PAYMONGO_WEBHOOK_SECRET` |
+
+The generic variable still works on its own, so single-mode setups are unchanged. Setting both `_TEST` and `_LIVE` lets a test-mode and a live-mode webhook be registered against **the same URL** and both verify — which is what this deployment actually wants, since it runs test keys on the production host. The rejection log now names which secret is missing rather than just saying the signature was bad.
+
+### `php artisan paymongo:webhooks`
+
+New command (`app/Console/Commands/PayMongoWebhooks.php`), in the same spirit as `paymongo:probe-transfer` — production has no shell, so it runs from a dev machine against the PayMongo API using the key in `.env`.
+
+```bash
+php artisan paymongo:webhooks                                   # list: id, status, URL, events
+php artisan paymongo:webhooks --webhook=hook_xxx --url=https://…/webhooks/paymongo
+php artisan paymongo:webhooks --enable=all                      # revive every disabled one
+php artisan paymongo:webhooks --disable=tunnels                 # park every endpoint whose host is gone
+```
+
+It prints which **mode** it is looking at up front (a test key sees only test-mode webhooks — an absent webhook is usually one registered in the other mode, not a missing one), and flags in red any URL whose path is not `/webhooks/paymongo`, printing the exact command to repair it. `--enable` warns before reviving a webhook whose URL is still wrong, because that revival lasts only until the next few deliveries.
+
+A disabled webhook does **not** recover on its own, and nothing in the app can tell that it is disabled — every payment simply stops being recorded. This command is the only way to see that state from here.
+
+### Two webhooks in the SAME mode means two different secrets
+
+The `_TEST` / `_LIVE` split above solves a *cross-mode* mismatch. It does not solve this one, and the difference is easy to miss: **both** registrations in this account are test-mode, so both sign the `te=` slot — with **different** `whsk_…` values, because a secret belongs to a registration, not to a mode.
+
+So if Render's `PAYMONGO_WEBHOOK_SECRET` happens to hold the *ngrok* webhook's secret, production deliveries still fail verification even with everything else correct.
+
+Nothing more is needed in code — `verifyWebhook()` already tries a *list* per slot (`_TEST`, then the generic), so a deployment that must accept both can set one in each variable. In practice the two environments have separate envs and each only needs its own:
+
+| Where | `PAYMONGO_WEBHOOK_SECRET` should be |
+|---|---|
+| Render | `hook_Gowz…`'s secret (the `onrender.com` registration) |
+| Local `.env` | `hook_Z9mp…`'s secret (the ngrok registration) |
+
+PayMongo shows a webhook's secret **only when it is created**, so it cannot be read back from the API or from `paymongo:webhooks` — if it was never saved, the registration has to be recreated to get a new one. After deploying, send a test event from the dashboard and read the log: an `invalid_signature` warning whose hint names the test-mode secret means this is what's wrong.
+### The ngrok webhook is the same trap, one step behind
+
+The test-mode account holds a second registration pointing at the dev machine's ngrok tunnel, and it is **enabled**. Both webhooks live in the same account, so **both receive every test-mode event** — including the ones production generates. While the tunnel is not running, each of those deliveries hits ngrok's edge and comes back **502**:
+
+```
+POST https://vagueness-widow-anchovy.ngrok-free.dev/webhooks/paymongo  → 502  (×3, consistent)
+```
+
+The domain itself is a **reserved static** ngrok domain, so the URL is not the problem — it does not rotate between sessions. The problem is that the tunnel is only up while someone is actively developing, and PayMongo keeps delivering the other 99% of the time. It is accumulating exactly the failure count that disabled production, just more slowly.
+
+The blast radius is small and worth stating plainly: `status` is **per webhook**, not per account (that is how one row could read `disabled` while the other read `enabled`), so this cannot take production down. What it costs is the *next* local test session — you start ngrok, make a payment, nothing records, and the reason is a webhook PayMongo quietly switched off days earlier.
+
+So `--disable=tunnels` exists to park it between sessions, and `--enable=<id>` brings it back. It probes each enabled endpoint first and only disables the ones whose **host is absent** — no connection, or 5xx from an edge.
+
+**A 4xx never counts as absent, and that distinction is load-bearing.** A 4xx means something answered: the host is up and rejected that particular request. When this was first written the rule was `>= 400`, and production — still on the old code, answering `401` to the unsigned probe — was one command away from being disabled by the tool built to protect it. A code problem gets fixed in code, not by deregistering the endpoint.
+
+### Files touched
+
+| File | Change |
+|---|---|
+| `app/Http/Controllers/PaymentController.php` | `webhook()` split into an always-200 shell + `handleWebhookEvent()`; `announceWebhookFailure()`, `notifyAdminsQuietly()` added; `transferCallback()` per-transfer `try/catch` |
+| `app/Services/PayMongoService.php` | `verifyWebhook()` made per-mode; `hasWebhookSecret()`, `listWebhooks()`, `updateWebhook()`, `enableWebhook()`, `disableWebhook()` added |
+| `app/Console/Commands/PayMongoWebhooks.php` | New — list, `--webhook`/`--url` repair, `--enable`, `--disable` |
+| `config/services.php` | `webhook_secret_test`, `webhook_secret_live` |
+| `.env.example` | Both new variables, documented |
 
 ---
 
@@ -2806,6 +2913,9 @@ DELETE /my/profile/devices/{device}           customer.profile.devices.destroy  
 
 | Issue | Cause | Fix Applied |
 |---|---|---|
+| **(v6.9)** PayMongo disabled the production webhook; nothing in the app log | Registered at the bare origin `https://villa-elena.onrender.com` instead of `…/webhooks/paymongo` — `POST /` is 405 from the router, before any controller | URL corrected via `paymongo:webhooks --webhook=… --url=…`; the command now flags any URL whose path isn't `/webhooks/paymongo` |
+| **(v6.9)** Webhook answered `401` on every delivery when the secret didn't match the registered mode | One `PAYMONGO_WEBHOOK_SECRET` was tried against both the `te=` and `li=` slots, but those carry *different* secrets | `verifyWebhook()` maps each slot to its own secret (`_TEST` / `_LIVE`, generic as fallback), so test and live webhooks can share one URL |
+| **(v6.9)** Any exception in webhook processing returned `500`, which PayMongo counts toward disabling | `webhook()` did the work inline, so a DB error, an unmapped enum or a malformed body escaped as a 500 | `handleWebhookEvent()` returns arrays and never calls `response()`; the shell catches `\Throwable` and always answers 200, notifying admins instead |
 | Login showed "deactivated" for all | `status` column compared as string | Integer cast; `isActive()` uses `(int)$this->status === 1` |
 | Migrations failed with FK errors | Same timestamp prefix | Sequential timestamps `200001–200015` |
 | Sessions/cache errors | Default driver expected DB tables | `SESSION_DRIVER=file`, `CACHE_STORE=file` |

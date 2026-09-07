@@ -380,14 +380,26 @@ class PayMongoService
      * tunay na PayMongo event ay 401 sana — tahimik na hindi tatakbo
      * ang webhook kahit tama ang pagkaka-setup nito sa dashboard.
      *
-     * Pareho ang tsinetsek na `te` at `li` para gumana ito sa test at
-     * live mode nang hindi kailangang baguhin ang code.
+     * MAGKAIBA ANG SECRET NG BAWAT MODE. Ang isang test-mode na webhook
+     * at ang live-mode na katapat nito ay dalawang magkahiwalay na
+     * rehistro sa PayMongo, bawat isa'y may sariling `whsk_...`. Dati,
+     * iisang secret ang isinusukat natin sa parehong `te` at `li` slot,
+     * kaya ang pagtuturo ng test-mode na webhook sa isang deployment na
+     * may hawak na live secret ay nangangahulugang BIGO ang signature ng
+     * BAWAT delivery — at pagkaraan ng ilang sunod-sunod na 401, dini-
+     * disable ng PayMongo ang endpoint nang tuluyan. Iyon mismo ang
+     * nangyari (v6.1).
+     *
+     * Kaya bawat slot ngayon ay may sariling listahan ng kandidatong
+     * secret: ang mode-specific muna, tapos ang generic na
+     * `PAYMONGO_WEBHOOK_SECRET` bilang fallback (kaya walang nasisira sa
+     * mga setup na iisa lang ang secret). Kapag nakatakda ang pareho,
+     * puwedeng magkasabay na naka-rehistro ang test at live na webhook
+     * sa iisang URL at pareho silang beripikado.
      */
     public function verifyWebhook(string $payload, string $signature): bool
     {
-        $webhookSecret = config('services.paymongo.webhook_secret', env('PAYMONGO_WEBHOOK_SECRET', ''));
-
-        if ($webhookSecret === '' || $signature === '') {
+        if ($signature === '') {
             return false;
         }
 
@@ -406,14 +418,150 @@ class PayMongoService
             return false;
         }
 
-        $computed = hash_hmac('sha256', $timestamp . '.' . $payload, $webhookSecret);
+        foreach ($this->webhookSecretsByMode() as $mode => $secrets) {
+            if (! isset($parts[$mode])) {
+                continue;
+            }
 
-        foreach (['te', 'li'] as $mode) {
-            if (isset($parts[$mode]) && hash_equals($computed, $parts[$mode])) {
+            foreach ($secrets as $secret) {
+                $computed = hash_hmac('sha256', $timestamp.'.'.$payload, $secret);
+
+                if (hash_equals($computed, $parts[$mode])) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Aling secret ang susubukan sa aling signature slot.
+     *
+     * @return array<string, list<string>>
+     */
+    private function webhookSecretsByMode(): array
+    {
+        $generic = (string) config('services.paymongo.webhook_secret', '');
+        $test    = (string) config('services.paymongo.webhook_secret_test', '');
+        $live    = (string) config('services.paymongo.webhook_secret_live', '');
+
+        return [
+            'te' => array_values(array_unique(array_filter([$test, $generic]))),
+            'li' => array_values(array_unique(array_filter([$live, $generic]))),
+        ];
+    }
+
+    /**
+     * May nakatakda bang kahit isang webhook secret?
+     *
+     * Ginagamit ng webhook handler para pag-ibahin ang "mali ang secret"
+     * sa "walang secret" sa log — magkaiba ang lunas ng dalawa.
+     */
+    public function hasWebhookSecret(): bool
+    {
+        foreach ($this->webhookSecretsByMode() as $secrets) {
+            if ($secrets !== []) {
                 return true;
             }
         }
 
         return false;
     }
-}
+
+    // ── Webhook administration ─────────────────────────────────────
+    /**
+     * Inililista ang mga naka-rehistrong webhook para sa mode ng key
+     * na hawak natin ngayon (test keys → test webhooks lang).
+     *
+     * @return list<array<string, mixed>>
+     */
+    public function listWebhooks(): array
+    {
+        $response = Http::withBasicAuth($this->secretKey, '')
+            ->get("{$this->baseUrl}/webhooks");
+
+        if ($response->failed()) {
+            throw new \Exception('PayMongo Error: '.$response->body());
+        }
+
+        return $response->json('data') ?? [];
+    }
+
+    /**
+     * Binabago ang URL at/o events ng isang naka-rehistrong webhook.
+     *
+     * Bakit kailangan: ang URL ng isang webhook ay itinatakda sa
+     * paggawa nito at madaling mali — kung nakarehistro ito sa bare
+     * origin (`https://halimbawa.com`) sa halip na sa buong path
+     * (`https://halimbawa.com/webhooks/paymongo`), ang bawat delivery ay
+     * POST sa `/`, na 405 Method Not Allowed sa isang route na GET lang
+     * — at pagkaraan ng ilang ganoon, dini-disable ito ng PayMongo.
+     * Iyon mismo ang nangyari sa produksyon (v6.1). Ang pagbuhay dito
+     * nang hindi inaayos muna ang URL ay agad ding madi-disable ulit.
+     *
+     * @param  array<string, mixed>  $attributes  `url` at/o `events`
+     * @return array<string, mixed>
+     */
+    public function updateWebhook(string $webhookId, array $attributes): array
+    {
+        $response = Http::withBasicAuth($this->secretKey, '')
+            ->put("{$this->baseUrl}/webhooks/{$webhookId}", [
+                'data' => ['attributes' => $attributes],
+            ]);
+
+        if ($response->failed()) {
+            throw new \Exception('PayMongo Error: '.$response->body());
+        }
+
+        return $response->json('data') ?? [];
+    }
+
+    /**
+     * Muling binubuhay ang isang na-disable na webhook.
+     *
+     * Dini-disable ng PayMongo ang isang endpoint kapag paulit-ulit
+     * itong sumagot ng 4xx/5xx, at HINDI ito bumabalik nang kusa —
+     * kailangang tawagin ang endpoint na ito (o pindutin ito sa
+     * dashboard). Habang naka-disable, walang darating na kahit anong
+     * event: tahimik na hindi naitatala ang lahat ng bayad.
+     *
+     * @return array<string, mixed>
+     */
+    public function enableWebhook(string $webhookId): array
+    {
+        $response = Http::withBasicAuth($this->secretKey, '')
+            ->post("{$this->baseUrl}/webhooks/{$webhookId}/enable");
+
+        if ($response->failed()) {
+            throw new \Exception('PayMongo Error: '.$response->body());
+        }
+
+        return $response->json('data') ?? [];
+    }
+
+    /**
+     * Pansamantalang pinapatay ang isang webhook.
+     *
+     * Para ito sa mga endpoint na hindi laging bukas — pangunahin, ang
+     * ngrok tunnel ng dev machine. Habang naka-rehistro at enabled ito,
+     * ipinapadala pa rin ng PayMongo ang BAWAT test-mode na event doon,
+     * kasama ang mga galing sa produksyon; at kapag hindi tumatakbo ang
+     * tunnel, 502 ang isinasagot ng ngrok edge sa bawat isa. Iyon ang
+     * eksaktong uri ng bilang na nagpapa-disable ng webhook — kaya mas
+     * mabuting sadyain ang pagpatay kaysa hintaying gawin ito ng
+     * PayMongo sa panahong hindi natin alam.
+     *
+     * @return array<string, mixed>
+     */
+    public function disableWebhook(string $webhookId): array
+    {
+        $response = Http::withBasicAuth($this->secretKey, '')
+            ->post("{$this->baseUrl}/webhooks/{$webhookId}/disable");
+
+        if ($response->failed()) {
+            throw new \Exception('PayMongo Error: '.$response->body());
+        }
+
+        return $response->json('data') ?? [];
+    }}

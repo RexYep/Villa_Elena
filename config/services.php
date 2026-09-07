@@ -30,7 +30,16 @@ return [
     'paymongo' => [
         'public_key' => env('PAYMONGO_PUBLIC_KEY'),
         'secret_key' => env('PAYMONGO_SECRET_KEY'),
+        // Ang webhook secret ay PER-MODE: magkaiba ang ibinibigay ng
+        // PayMongo sa isang test-mode na webhook at sa isang live-mode.
+        // Dati ay iisang slot lang ito, kaya ang pagpapatakbo ng test-
+        // mode na webhook sa isang live-key na deployment (o kabaligtaran)
+        // ay nangangahulugang BIGO ang signature ng BAWAT delivery — at
+        // dini-disable ng PayMongo ang endpoint kapag paulit-ulit iyon.
+        // Puwede nang magkasabay ang dalawa; tingnan ang verifyWebhook().
         'webhook_secret' => env('PAYMONGO_WEBHOOK_SECRET', ''),
+        'webhook_secret_test' => env('PAYMONGO_WEBHOOK_SECRET_TEST', ''),
+        'webhook_secret_live' => env('PAYMONGO_WEBHOOK_SECRET_LIVE', ''),
 
         // Ang `purpose` ng bawat Send Money transfer. Tingnan ang
         // `RefundTransfer::PURPOSE` — ito ang field na nagpapasya kung

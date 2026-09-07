@@ -10,6 +10,7 @@ use App\Models\Payment;
 use App\Services\PayMongoService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Str;
 
 class PaymentController extends Controller
 {
@@ -235,24 +236,92 @@ class PaymentController extends Controller
 
         $service = app(\App\Services\RefundTransferService::class);
         $processed = 0;
+        $failed = 0;
 
         foreach ($query->get() as $transfer) {
-            $service->syncStatus($transfer);
-            $processed++;
+            // Bawat transfer ay hiwalay na sinasalo. Kapag walang
+            // tinukoy na id, LAHAT ng pending ang nililibot dito — at
+            // ang isang sumabog na transfer ay hindi dapat pumigil sa
+            // iba, ni magpabalik ng 500 (tingnan ang webhook()).
+            try {
+                $service->syncStatus($transfer);
+                $processed++;
+            } catch (\Throwable $e) {
+                $failed++;
+                \Log::error("PayMongo transfer callback: failed syncing transfer {$transfer->id}: ".$e->getMessage());
+            }
         }
 
         \Log::info('PayMongo transfer callback handled', [
             'claimed_transfer' => $transferId,
             'synced' => $processed,
+            'failed' => $failed,
         ]);
 
         // Palaging 200 — ang isang callback para sa transfer na hindi
         // natin kilala ay hindi pagkakamali ng PayMongo, at ang pag-
         // sagot ng error ay mag-uudyok lang ng walang saysay na retry.
-        return response()->json(['received' => true, 'synced' => $processed]);
+        return response()->json(['received' => true, 'synced' => $processed, 'failed' => $failed]);
     }
 
+    /**
+     * LAGING 200 ANG ISINASAGOT NG ENDPOINT NA ITO. Sinasadya iyon.
+     *
+     * Awtomatikong DINI-DISABLE ng PayMongo ang isang webhook na
+     * paulit-ulit na sumasagot ng 4xx o 5xx, at HINDI ito bumabalik
+     * nang kusa. Habang naka-disable, wala nang kahit anong event na
+     * dumarating — kaya ang BAWAT online na bayad pagkatapos noon ay
+     * tahimik na hindi naitatala. Ang halaga ng maling 200 ay isang
+     * naitalang babala sa log; ang halaga ng maling 401 ay ang buong
+     * endpoint. Malayong mas mahal ang pangalawa.
+     *
+     * Ganito nga ang nangyari (v6.1): may test-mode na webhook na
+     * nakaturo sa produksyon habang ibang mode ang secret na hawak
+     * doon, kaya bumagsak ang signature ng bawat delivery, 401 ang
+     * naisasagot, at dini-disable ito ng PayMongo — na siyang ipinaalam
+     * nila sa email.
+     *
+     * DALAWA ang inayos: (1) hindi na kailanman non-2xx ang sagot dito,
+     * at (2) mode-aware na ang signature check kaya puwede nang
+     * magkasabay na naka-rehistro ang test at live na webhook sa iisang
+     * URL (tingnan ang PayMongoService::verifyWebhook()).
+     *
+     * Ang kapalit ng laging-200: hindi na uulitin ng PayMongo ang isang
+     * event na bumagsak sa gitna ng pagproseso. Kaya inaabisuhan ang
+     * admin sa bawat ganoong pagkakataon — may perang natanggap na
+     * kailangang itala nang manwal, at ang tahimik na pagkawala niyon
+     * ang tanging bagay na mas masahol pa sa isang retry loop.
+     */
     public function webhook(Request $request)
+    {
+        try {
+            $result = $this->handleWebhookEvent($request);
+        } catch (\Throwable $e) {
+            \Log::error('PayMongo webhook: unhandled error while processing event', [
+                'error' => $e->getMessage(),
+                'file' => $e->getFile().':'.$e->getLine(),
+                'payload' => Str::limit($request->getContent(), 2000),
+            ]);
+
+            $this->announceWebhookFailure($request, $e);
+
+            $result = ['received' => true, 'handled' => false, 'reason' => 'processing_error'];
+        }
+
+        return response()->json($result, 200);
+    }
+
+    /**
+     * Ang aktwal na pagproseso ng event.
+     *
+     * Malayang magtapon ito ng exception — sinasalo ito ng webhook() at
+     * ginagawang 200. Ang hiwalay na method ang siyang dahilan kung
+     * bakit walang paraan na makalusot ang isang non-2xx mula rito:
+     * walang `response()` sa loob, arrays lang ang ibinabalik.
+     *
+     * @return array<string, mixed>
+     */
+    private function handleWebhookEvent(Request $request): array
     {
         $payload = $request->getContent();
         $signature = $request->header('Paymongo-Signature', '');
@@ -264,35 +333,55 @@ class PaymentController extends Controller
             // Dating "invalid signature attempt" + IP lang ang naitatala,
             // kaya kinailangan pang tingnan ang ngrok inspector para
             // malaman kung ano ang tinanggihan. Ang `livemode` ang
-            // karaniwang sagot: ang mga test event mula sa PayMongo
-            // dashboard ay pumipirma sa `te=` slot gamit ang test secret,
-            // kaya tama lang na hindi tumugma habang naka-live keys —
-            // inaasahan iyon, hindi problema. Sinasabi na ito ng log.
+            // karaniwang sagot: ang test event ay pumipirma sa `te=` slot
+            // gamit ang TEST na webhook secret, at ang live sa `li=` gamit
+            // ang LIVE — MAGKAIBANG secret sila, kaya kailangang nakatakda
+            // ang tugma sa mode ng webhook na naka-rehistro.
             $peek = json_decode($payload, true);
+            $livemode = data_get($peek, 'data.attributes.livemode');
 
-            \Log::warning('PayMongo webhook: invalid signature — rejected', [
+            \Log::warning('PayMongo webhook: invalid signature — event ignored', [
                 'ip' => $request->ip(),
                 'event_id' => data_get($peek, 'data.id'),
                 'type' => data_get($peek, 'data.attributes.type'),
-                'livemode' => data_get($peek, 'data.attributes.livemode'),
-                'hint' => data_get($peek, 'data.attributes.livemode') === false
-                    ? 'Test-mode event while running live keys — expected, safe to ignore.'
-                    : 'Check that PAYMONGO_WEBHOOK_SECRET matches the webhook registered for this mode.',
+                'livemode' => $livemode,
+                'hint' => match (true) {
+                    ! $this->paymongo->hasWebhookSecret() => 'No webhook secret is configured at all — set PAYMONGO_WEBHOOK_SECRET (or the _TEST / _LIVE variant).',
+                    $livemode === false => 'Test-mode event: it signs the te= slot with that TEST webhook\'s secret. Put it in PAYMONGO_WEBHOOK_SECRET_TEST.',
+                    $livemode === true => 'Live-mode event: it signs the li= slot with that LIVE webhook\'s secret. Put it in PAYMONGO_WEBHOOK_SECRET_LIVE.',
+                    default => 'Check that the configured secret matches the webhook registered for this mode.',
+                },
             ]);
 
-            return response()->json(['error' => 'Invalid signature'], 401);
+            // 200 pa rin — tingnan ang paliwanag sa webhook(). Hindi
+            // pinoproseso ang event; tinatanggihan lang nang tahimik.
+            return ['received' => true, 'handled' => false, 'reason' => 'invalid_signature'];
         }
 
         $data = $request->json('data');
-        $eventType = $data['attributes']['type'] ?? '';
 
-        if ($eventType !== 'payment.paid') {
-            return response()->json(['received' => true]);
+        // Hindi laging array ang laman nito: ang isang malformed o
+        // hindi-JSON na body ay nagbibigay ng null o string dito, at ang
+        // pag-index doon ay TypeError — ibig sabihin 500, ibig sabihin
+        // patungo sa pagka-disable. Sinusuri bago hawakan.
+        if (! is_array($data)) {
+            \Log::warning('PayMongo webhook: payload had no usable `data` object', [
+                'payload' => Str::limit($payload, 500),
+            ]);
+
+            return ['received' => true, 'handled' => false, 'reason' => 'malformed_payload'];
         }
 
-        $paymentObject = $data['attributes']['data'] ?? [];
-        $paymentData = $paymentObject['attributes'] ?? [];
-        $metadata = $paymentData['metadata'] ?? [];
+        $eventType = data_get($data, 'attributes.type', '');
+
+        if ($eventType !== 'payment.paid') {
+            return ['received' => true, 'handled' => false, 'reason' => 'unhandled_event'];
+        }
+
+        $paymentObject = data_get($data, 'attributes.data');
+        $paymentObject = is_array($paymentObject) ? $paymentObject : [];
+        $paymentData = is_array($paymentObject['attributes'] ?? null) ? $paymentObject['attributes'] : [];
+        $metadata = is_array($paymentData['metadata'] ?? null) ? $paymentData['metadata'] : [];
 
         // Ang PayMongo payment ID (`pay_xxx`) — ito rin ang isinusulat
         // ng success callback sa `reference_number`, kaya ito ang
@@ -308,10 +397,17 @@ class PaymentController extends Controller
                 'metadata' => $metadata,
             ]);
 
-            // 200 pa rin — ang isang hindi matukoy na booking ay hindi
-            // maaayos ng pag-uulit ng PayMongo, at ang non-2xx ay
-            // magti-trigger lang ng walang kwentang retry loop.
-            return response()->json(['received' => true]);
+            // Hindi maaayos ng pag-uulit ng PayMongo ang isang hindi
+            // matukoy na booking — pero may perang natanggap na walang
+            // kinakabitan, kaya kailangan itong makita ng tao.
+            $this->notifyAdminsQuietly(
+                'Unmatched online payment',
+                'A PayMongo payment.paid event ('.($paymentRef ?: 'no reference').', ₱'.
+                number_format($amount, 2).') could not be matched to any booking. '.
+                'Check PayMongo and record it manually if the money arrived.',
+            );
+
+            return ['received' => true, 'handled' => false, 'reason' => 'unmatched_booking'];
         }
 
         // 'deposit' ang tawag dito sa checkout request level; 'partial'
@@ -336,7 +432,47 @@ class PaymentController extends Controller
             'recorded' => $recorded,
         ]);
 
-        return response()->json(['received' => true]);
+        return ['received' => true, 'handled' => true, 'recorded' => $recorded];
+    }
+
+    /**
+     * Ipinapaalam sa admin ang isang event na bumagsak sa pagproseso.
+     *
+     * Kailangan ito dahil sa laging-200: hindi na uulitin ng PayMongo
+     * ang event, kaya kung may perang dumating, ito na lang ang tanging
+     * senyales bukod sa log.
+     */
+    private function announceWebhookFailure(Request $request, \Throwable $e): void
+    {
+        $peek = json_decode($request->getContent(), true);
+
+        $this->notifyAdminsQuietly(
+            'Online payment webhook failed',
+            'A PayMongo webhook event ('.(data_get($peek, 'data.attributes.type') ?: 'unknown type').
+            ') could not be processed: '.Str::limit($e->getMessage(), 180).
+            ' PayMongo will not retry it — check the payment and record it manually if needed.',
+        );
+    }
+
+    /**
+     * Nag-a-abiso sa admin nang hindi kailanman nagtatapon.
+     *
+     * Ito ay tinatawag mula sa mga failure path ng webhook, kabilang ang
+     * catch-all — at kung ang database mismo ang bumagsak, sasabog din
+     * ang notification na ito. Hindi dapat iyon pumatay sa 200 na sagot,
+     * kaya nasasalo rin ang sarili niyang pagkabigo.
+     */
+    private function notifyAdminsQuietly(string $title, string $message): void
+    {
+        try {
+            NotificationHelper::notifyAdmin(
+                $title,
+                $message,
+                route('admin.payments.index', [], false),
+            );
+        } catch (\Throwable $inner) {
+            \Log::error('PayMongo webhook: could not notify admins of the failure: '.$inner->getMessage());
+        }
     }
 
     /**
