@@ -10,6 +10,7 @@ use App\Models\Payment;
 use App\Services\PayMongoService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Str;
 
 class PaymentController extends Controller
@@ -42,6 +43,17 @@ class PaymentController extends Controller
 
     // ── Create PayMongo Checkout Session ──────────────────────────
     // POST /pay/{booking}/checkout
+    //
+    // Ang bawat hakbang dito ay tungkol sa IISANG tanong: paano
+    // masisiguro na ang isang guest na nag-double-click, nag-refresh, o
+    // bumalik sa page dahil mabagal ang internet ay hindi masisingil
+    // nang dalawang beses.
+    //
+    // Ang guard laban sa dobleng PAGTATALA ng iisang bayad ay nasa
+    // recordPaymongoPayment() (at sa unique index sa ilalim nito). Ito
+    // naman ang guard laban sa dalawang MAGKAIBANG singil — na hindi
+    // kayang hulihin ng idempotency, dahil dalawang tunay na bayad
+    // iyon na may magkaibang `pay_xxx`.
     public function createCheckout(Request $request, Booking $booking)
     {
         abort_if($booking->user_id !== Auth::id(), 403);
@@ -50,53 +62,151 @@ class PaymentController extends Controller
             'payment_type' => 'required|in:deposit,full_payment',
         ]);
 
-        // Anti-abuse: server-side re-check (hindi lang basta umaasa sa
-        // UI) — kung naka-flag ang guest sa excessive cancellations,
-        // hindi papayagang "deposit" ang piliin kahit i-bypass ang form.
-        if ($request->payment_type === 'deposit'
-            && $booking->amount_paid == 0
-            && Booking::hasExcessiveCancellations($booking->user_id)) {
-            return back()->with('error', 'Dahil sa cancellation history mo, kailangan ng full payment para sa booking na ito — hindi available ang deposit option.');
+        // Serialisado kada booking. Ang dalawang sabay na POST (ang
+        // klasikong dobleng pindot sa mabagal na koneksiyon) ay
+        // parehong makakakita ng "walang session pa" at parehong
+        // gagawa ng isa — dalawang buhay na QR para sa iisang booking.
+        // Hindi ito puwedeng DB transaction: may HTTP call sa PayMongo
+        // sa loob, at ang pagpapatakbo niyon sa loob ng transaction ang
+        // eksaktong pagkakamaling nakalista sa §PayMongo ng CLAUDE.md.
+        $lock = Cache::lock("paymongo-checkout:{$booking->id}", 20);
+
+        if (! $lock->get()) {
+            return back()->with('info', 'Your payment is already being set up — please wait a moment before trying again.');
         }
-
-        $booking->load(['property', 'user']);
-
-        $depositPct = (float) \App\Models\Setting::get('deposit_percentage', 50);
-        $depositAmount = round($booking->total_amount * $depositPct / 100, 2);
-
-        $amount = $request->payment_type === 'deposit' ? $depositAmount : $booking->balance_due;
-        $description = $request->payment_type === 'deposit'
-            ? "Deposit ({$depositPct}%) for {$booking->property->property_name} — {$booking->booking_ref}"
-            : "Full balance for {$booking->property->property_name} — {$booking->booking_ref}";
 
         try {
-            $session = $this->paymongo->createCheckoutSession([
-                'amount' => $amount,
-                'description' => $description,
-                'guest_name' => $booking->user->full_name,
-                'guest_email' => $booking->user->email,
-                'guest_phone' => $booking->user->phone ?? '',
-                'reference_number' => $booking->booking_ref,
-                'booking_id' => $booking->id,
-                'payment_type' => $request->payment_type,
-                'success_url' => route('payment.success', $booking->id),
-                'cancel_url' => route('payment.cancel', $booking->id),
-            ]);
+            // Sariwang basa sa loob ng lock: baka nakarating na ang
+            // webhook mula noong na-render ang page na ito.
+            $booking->refresh()->load(['property', 'user']);
 
-            // Store session ID in booking for verification later
-            $booking->update([
-                'paymongo_session_id' => $session['id'],
-                'paymongo_payment_type' => $request->payment_type,
-            ]);
+            // Hindi lang sa showPaymentPage() dapat ito.
+            //
+            // Dati, ang tsekeng ito ay nasa GET lang — kaya ang isang
+            // lumang tab o ang Back button ay makakapag-POST pa rin
+            // dito para sa isang BAYAD NA booking. At dahil ang deposit
+            // ay kinukuwenta mula sa `total_amount` (hindi sa balanse),
+            // ang resulta ay isang bagong ₱2,000 na singil sa isang
+            // booking na walang na ngang utang. Iyon ay dobleng bayad
+            // na hindi na kailangan pa ng anumang race para mangyari.
+            if ($booking->balance_due <= 0) {
+                return redirect()->route('customer.bookings.show', $booking)
+                    ->with('info', "Booking {$booking->booking_ref} is already fully paid — there is nothing left to pay.");
+            }
 
-            // Redirect to PayMongo hosted checkout page
-            $checkoutUrl = $session['attributes']['checkout_url'];
+            if (in_array($booking->status, ['cancelled', 'checked_out'], true)) {
+                return redirect()->route('customer.bookings.show', $booking)
+                    ->with('error', 'This booking can no longer be paid for.');
+            }
 
-            return redirect($checkoutUrl);
+            // Anti-abuse: server-side re-check (hindi lang basta umaasa sa
+            // UI) — kung naka-flag ang guest sa excessive cancellations,
+            // hindi papayagang "deposit" ang piliin kahit i-bypass ang form.
+            if ($request->payment_type === 'deposit'
+                && $booking->amount_paid == 0
+                && Booking::hasExcessiveCancellations($booking->user_id)) {
+                return back()->with('error', 'Dahil sa cancellation history mo, kailangan ng full payment para sa booking na ito — hindi available ang deposit option.');
+            }
 
-        } catch (\Exception $e) {
-            return back()->with('error', 'Payment gateway error: '.$e->getMessage());
+            // May bukas pa bang session? Ibalik iyon sa halip na gumawa
+            // ng bago — ganito nagiging hindi nakakapinsala ang dobleng
+            // pindot: iisang QR ang nakikita ng guest sa dalawang
+            // pagkakataon, kaya kahit anong gawin niya, iisang singil.
+            if ($reuse = $this->reusableCheckout($booking, $request->payment_type)) {
+                return $reuse;
+            }
+
+            $depositPct = (float) \App\Models\Setting::get('deposit_percentage', 50);
+            $depositAmount = round($booking->total_amount * $depositPct / 100, 2);
+
+            // Ang deposit ay kinukuwenta mula sa `total_amount`, kaya
+            // kailangan itong takpan ng natitirang balanse — kung hindi,
+            // ang isang guest na may bahagyang bayad na ay masisingil ng
+            // mas malaki pa sa utang niya.
+            $amount = $request->payment_type === 'deposit'
+                ? min($depositAmount, (float) $booking->balance_due)
+                : (float) $booking->balance_due;
+
+            $description = $request->payment_type === 'deposit'
+                ? "Deposit ({$depositPct}%) for {$booking->property->property_name} — {$booking->booking_ref}"
+                : "Full balance for {$booking->property->property_name} — {$booking->booking_ref}";
+
+            try {
+                $session = $this->paymongo->createCheckoutSession([
+                    'amount' => $amount,
+                    'description' => $description,
+                    'guest_name' => $booking->user->full_name,
+                    'guest_email' => $booking->user->email,
+                    'guest_phone' => $booking->user->phone ?? '',
+                    'reference_number' => $booking->booking_ref,
+                    'booking_id' => $booking->id,
+                    'payment_type' => $request->payment_type,
+                    'success_url' => route('payment.success', $booking->id),
+                    'cancel_url' => route('payment.cancel', $booking->id),
+                ]);
+
+                // Store session ID in booking for verification later
+                $booking->update([
+                    'paymongo_session_id' => $session['id'],
+                    'paymongo_payment_type' => $request->payment_type,
+                ]);
+
+                // Redirect to PayMongo hosted checkout page
+                $checkoutUrl = $session['attributes']['checkout_url'];
+
+                return redirect($checkoutUrl);
+
+            } catch (\Exception $e) {
+                return back()->with('error', 'Payment gateway error: '.$e->getMessage());
+            }
+        } finally {
+            $lock->release();
         }
+    }
+
+    /**
+     * Ang naunang checkout session ng booking na ito, kung magagamit pa.
+     *
+     * Tatlong posibleng sagot:
+     *   - Bukas pa at pareho ang uri  → i-redirect doon (walang bagong singil)
+     *   - Bayad na                    → papuntahin sa success page, na siyang
+     *                                   magtatala nito (baka hindi pa nakakarating
+     *                                   ang webhook — ito ang eksaktong kaso ng
+     *                                   guest na nag-scan sa ibang device tapos
+     *                                   nag-refresh dahil walang nangyari)
+     *   - Wala/expired/iba ang uri    → null, gagawa ng bago ang caller
+     *
+     * Kapag hindi maabot ang PayMongo, `null` din ang isinasagot: mas
+     * mabuti nang gumawa ng bagong session (na kayang bayaran ng guest)
+     * kaysa mag-error nang tuluyan. Ang tunay na proteksiyon laban sa
+     * dobleng singil sa ganoong sitwasyon ay ang balance check sa itaas.
+     */
+    private function reusableCheckout(Booking $booking, string $paymentType)
+    {
+        if (! $booking->paymongo_session_id || $booking->paymongo_payment_type !== $paymentType) {
+            return null;
+        }
+
+        try {
+            $session = $this->paymongo->getCheckoutSession($booking->paymongo_session_id);
+        } catch (\Throwable $e) {
+            \Log::warning("Could not re-read checkout session {$booking->paymongo_session_id} for {$booking->booking_ref}: ".$e->getMessage());
+
+            return null;
+        }
+
+        $attributes = $session['attributes'] ?? [];
+
+        $alreadyPaid = collect($attributes['payments'] ?? [])
+            ->contains(fn ($p) => ($p['attributes']['status'] ?? null) === 'paid');
+
+        if ($alreadyPaid) {
+            return redirect()->route('payment.success', $booking);
+        }
+
+        return ! empty($attributes['checkout_url'])
+            ? redirect($attributes['checkout_url'])
+            : null;
     }
 
     // ── Success Callback ───────────────────────────────────────────
@@ -531,6 +641,16 @@ class PaymentController extends Controller
             return false;
         }
 
+        // Unang sala: ang naitala na ba ang BAYAD NA ITO?
+        //
+        // Ito ang normal na daan — sabay na dumarating ang webhook at
+        // ang success callback para sa iisang `pay_xxx`. Isang SELECT
+        // lang ito, kaya hindi ito sapat mag-isa: dalawang request na
+        // sabay tumatakbo ay parehong makakakita ng "wala pa". Kaya may
+        // UNIQUE (booking_id, reference_number) sa ilalim nito, na
+        // sinasalo sa baba. Panatilihin silang dalawa: ang SELECT ang
+        // umiiwas sa halos lahat ng kaso nang walang exception, at ang
+        // index ang sumasagip sa natitira.
         $alreadyRecorded = Payment::where('booking_id', $booking->id)
             ->where('reference_number', $reference)
             ->exists();
@@ -560,16 +680,25 @@ class PaymentController extends Controller
             \Log::warning("PayMongo returned an unmapped payment method '{$method}' for booking {$booking->booking_ref}; stored as '{$stored}'.");
         }
 
-        Payment::create([
-            'booking_id' => $booking->id,
-            'amount' => $amount,
-            'payment_method' => $stored,
-            'payment_type' => $paymentType,
-            'status' => 'success',
-            'payment_date' => today(),
-            'reference_number' => $reference,
-            'notes' => $notes,
-        ]);
+        try {
+            Payment::create([
+                'booking_id' => $booking->id,
+                'amount' => $amount,
+                'payment_method' => $stored,
+                'payment_type' => $paymentType,
+                'status' => 'success',
+                'payment_date' => today(),
+                'reference_number' => $reference,
+                'notes' => $notes,
+            ]);
+        } catch (\Illuminate\Database\UniqueConstraintViolationException $e) {
+            // Nauna sa atin ang kabilang path sa pagitan ng SELECT sa
+            // itaas at ng INSERT na ito. Naitala na ang bayad — walang
+            // nawala, at walang dapat gawin. Hindi ito error.
+            \Log::info("PayMongo payment {$reference} for {$booking->booking_ref} was already recorded concurrently — duplicate insert refused by the unique index.");
+
+            return false;
+        }
 
         // Dating hindi binibilang ng kopyang ito ang mga refund, kaya
         // kung may naunang refund ang booking na ito, babalik sa dating

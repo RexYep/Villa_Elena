@@ -41,7 +41,14 @@ Route::middleware('maintenance.check')->group(function () {
 // PayMongo payment routes (auth required)
 Route::middleware('auth')->group(function () {
     Route::get('/pay/{booking}', [PaymentController::class, 'showPaymentPage'])->name('payment.page');
-    Route::post('/pay/{booking}/checkout', [PaymentController::class, 'createCheckout'])->name('payment.checkout');
+    // Naka-throttle: ang bawat POST dito ay dating gumagawa ng bagong
+    // PayMongo checkout session. Hinahawakan na ito ng lock at ng
+    // session reuse sa createCheckout(), pero walang dahilan para
+    // tanggapin ang dose-dosenang session-creation kada minuto mula sa
+    // iisang guest — at hindi libre sa gateway ang bawat isa.
+    Route::post('/pay/{booking}/checkout', [PaymentController::class, 'createCheckout'])
+        ->middleware('throttle:8,1')
+        ->name('payment.checkout');
     Route::get('/pay/{booking}/success', [PaymentController::class, 'success'])->name('payment.success');
     Route::get('/pay/{booking}/cancel', [PaymentController::class, 'cancel'])->name('payment.cancel');
 });

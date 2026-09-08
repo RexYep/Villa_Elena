@@ -94,6 +94,8 @@ use Illuminate\Support\Str;
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Booking withTrashed(bool $withTrashed = true)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Booking withoutTrashed()
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Booking whereSlotHold($value)
+ * @property \Illuminate\Support\Carbon|null $overpayment_notified_at
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Booking whereOverpaymentNotifiedAt($value)
  * @mixin \Eloquent
  */
 class Booking extends Model
@@ -137,6 +139,9 @@ class Booking extends Model
         'actual_check_in' => 'datetime',
         'actual_check_out'=> 'datetime',
         'cancelled_at'    => 'datetime',
+        // Hindi ito fillable — kagaya ng slot_hold, ang model lang ang
+        // nagtatakda nito (flagOverpayment()).
+        'overpayment_notified_at' => 'datetime',
         'base_amount'    => 'decimal:2',
         'extras_amount'  => 'decimal:2',
         'discount_amount'=> 'decimal:2',
@@ -1124,6 +1129,82 @@ class Booking extends Model
             'balance_due'    => $balanceDue,
             'payment_status' => $paymentStatus,
         ]);
+
+        $this->flagOverpayment();
+    }
+
+    /**
+     * Sobra ba sa presyo ng booking ang naibayad na?
+     *
+     * Ang `balance_due` ay may `max(0, ...)` — sinasadya iyon (walang
+     * negatibong utang), pero ibig sabihin din, ang isang sobrang bayad
+     * ay MUKHANG kapareho lang ng isang tamang-tamang bayad: `paid`,
+     * balanse ₱0. Iyon ang dahilan kung bakit kayang maganap ang isang
+     * dobleng singil nang walang kahit anong bakas sa app. Dito
+     * nakukuha ang pagkakaibang iyon.
+     */
+    public function overpaidAmount(): float
+    {
+        return max(0, round((float) $this->amount_paid - (float) $this->total_amount, 2));
+    }
+
+    public function isOverpaid(): bool
+    {
+        return $this->overpaidAmount() > 0;
+    }
+
+    /**
+     * Inaabisuhan ang admin kapag may sobrang bayad — MINSAN lang kada
+     * pangyayari, hindi kada recalculation.
+     *
+     * Hindi awtomatikong gumagawa ng refund: ang pagpapasya kung
+     * ibabalik ba ito, o ilalagay sa extra charges, o may ibang
+     * kaayusan, ay sa tao. Ang tanging kasalanan ng sistema dati ay ang
+     * hindi man lang pagsabi.
+     *
+     * Nililinis ang timestamp kapag hindi na sobra ang bayad (nairefund
+     * na, o tumaas ang total dahil sa extras), kaya ang susunod na
+     * sobrang bayad ay maaabisuhan ulit.
+     */
+    protected function flagOverpayment(): void
+    {
+        $excess = $this->overpaidAmount();
+
+        if ($excess <= 0) {
+            if ($this->overpayment_notified_at !== null) {
+                static::whereKey($this->getKey())->update(['overpayment_notified_at' => null]);
+                $this->overpayment_notified_at = null;
+            }
+
+            return;
+        }
+
+        if ($this->overpayment_notified_at !== null) {
+            return;
+        }
+
+        // Direktang query update: hindi dapat pumutok ang saving() hook
+        // (at ang slot_hold recompute nito) dahil lang sa isang flag.
+        static::whereKey($this->getKey())->update(['overpayment_notified_at' => now()]);
+        $this->overpayment_notified_at = now();
+
+        \Illuminate\Support\Facades\Log::warning(
+            "Overpayment on {$this->booking_ref}: paid ₱{$this->amount_paid} against a total of ₱{$this->total_amount} (₱{$excess} excess)."
+        );
+
+        $booking = $this;
+
+        \Illuminate\Support\Facades\DB::afterCommit(function () use ($booking, $excess) {
+            \App\Helpers\NotificationHelper::notifyAdmin(
+                "Overpayment — {$booking->booking_ref}",
+                'Booking '.$booking->booking_ref.' has been paid ₱'.number_format($excess, 2)
+                .' more than its total of ₱'.number_format((float) $booking->total_amount, 2)
+                .' (₱'.number_format((float) $booking->amount_paid, 2).' received). '
+                .'This usually means the guest was charged twice. Check the payments list for the booking '
+                .'and return the excess through the Payments page.',
+                route('admin.bookings.show', $booking, false)
+            );
+        });
     }
 
     /**

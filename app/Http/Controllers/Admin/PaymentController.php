@@ -206,9 +206,26 @@ class PaymentController extends Controller
             'payment_type'   => 'required|in:full_payment,partial,balance',
             'payment_date'   => 'required|date',
             'notes'          => 'nullable|string|max:300',
+            'confirm_duplicate' => 'nullable|boolean',
         ]);
 
         $booking = Booking::findOrFail($request->booking_id);
+
+        // Walang guard dito dati — `min:1` lang. Kaya ang pagtatala ng
+        // bayad na naibayad na pala online ay tahimik na nagdadagdag ng
+        // pangalawang row, at ang sobra ay nawawala sa paningin dahil
+        // ini-clamp ng recalculateFinancials() ang balanse sa 0.
+        $problem = Payment::manualEntryProblem(
+            $booking,
+            (float) $request->amount,
+            $request->payment_method,
+            $request->boolean('confirm_duplicate'),
+            $request->payment_date,
+        );
+
+        if ($problem) {
+            return back()->withErrors($problem)->withInput();
+        }
 
     $payment = Payment::create([
     'booking_id'     => $booking->id,

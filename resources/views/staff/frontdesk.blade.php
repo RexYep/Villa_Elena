@@ -805,6 +805,12 @@
     @if (session('error'))
         <div class="alert alert-danger"><i class="bi bi-exclamation-circle me-2"></i>{{ session('error') }}</div>
     @endif
+    {{-- Wala nito dati: nasa modal ang "Record Payment" form, kaya ang
+         anumang validation error nito ay tahimik na nawawala pagkatapos
+         ng redirect — mukhang walang nangyari kay staff. --}}
+    @if ($errors->any())
+        <div class="alert alert-danger"><i class="bi bi-exclamation-circle me-2"></i>{{ $errors->first() }}</div>
+    @endif
 
     <div id="rt-fd-banner">
         <span><i class="bi bi-arrow-repeat me-1"></i> Another staff member made changes here — refresh to see the
@@ -1324,6 +1330,15 @@
                             style="border:1.5px solid #e4ddd0;border-radius:8px;padding:10px 14px;font-size:13px;font-family:'DM Sans',sans-serif;width:100%;"
                             placeholder="e.g. Cash received at frontdesk">
                     </div>
+                    <!-- Kailangan lang kapag may kamukhang bayad na naitala
+                         ngayong araw para sa booking na ito — hinaharangan ang
+                         pagtatala hangga't hindi ito nakatik. -->
+                    <label
+                        style="display:flex;align-items:flex-start;gap:8px;font-size:13px;color:#4b5563;margin-bottom:18px;">
+                        <input type="checkbox" name="confirm_duplicate" value="1" style="margin-top:3px;">
+                        <span>This is a <strong>separate</strong> payment — tick only if the guest really paid this
+                            amount again today.</span>
+                    </label>
                     <!-- Submit -->
                     <button type="submit"
                         style="background:#2c2416;color:#fff;border:none;border-radius:9px;padding:13px;font-size:14px;font-weight:600;cursor:pointer;width:100%;font-family:'DM Sans',sans-serif;transition:all .2s;"

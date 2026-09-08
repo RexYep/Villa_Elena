@@ -696,6 +696,16 @@
                     <input type="text" name="notes" class="form-control"
                         placeholder="e.g. Cash received at frontdesk">
                 </div>
+                {{-- Kailangan lang ito kapag may kamukhang bayad na naitala
+                     ngayong araw — hinaharangan ang pagtatala hangga't hindi
+                     ito nakatik, para hindi maitala nang dalawang beses ang
+                     iisang bayad. --}}
+                <label class="form-label"
+                    style="display:flex; align-items:flex-start; gap:8px; font-weight:400; margin-bottom:12px;">
+                    <input type="checkbox" name="confirm_duplicate" value="1" style="margin-top:3px;">
+                    <span>This is a <strong>separate</strong> payment — tick only if the guest really paid this
+                        amount again today.</span>
+                </label>
                 <button type="submit" class="btn-submit"><i class="bi bi-check-circle me-2"></i> Record Payment</button>
             </form>
         </div>

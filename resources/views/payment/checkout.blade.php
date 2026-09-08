@@ -437,6 +437,46 @@
             el.classList.add('selected');
             document.getElementById('selectedPaymentType').value = type;
         }
+
+        // Isang pindot lang, isang singil.
+        //
+        // Sa mabagal na koneksiyon, mukhang walang nangyari matapos ang
+        // unang pindot, kaya pinipindot ulit ito ng guest — at ang bawat
+        // POST ay dating gumagawa ng sariling PayMongo checkout session,
+        // kaya dalawang buhay na QR para sa iisang booking. Ang server
+        // ang totoong tagapagpatupad nito (may lock at may session reuse
+        // ang createCheckout()); dito lang ito ginagawang kitang-kita,
+        // para hindi na muling pindutin ng guest.
+        (function () {
+            const form = document.getElementById('payForm');
+            const btn = document.getElementById('payBtn');
+
+            if (!form || !btn) return;
+
+            form.addEventListener('submit', function (e) {
+                if (form.dataset.submitted === '1') {
+                    e.preventDefault();
+                    return;
+                }
+
+                form.dataset.submitted = '1';
+                btn.disabled = true;
+                btn.innerHTML =
+                    '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Opening secure checkout…';
+            });
+
+            // Kapag bumalik ang guest gamit ang Back button, ibinabalik
+            // ng browser ang page mula sa bfcache — kasama ang naka-
+            // disable na button. Kung hindi ito ibabalik sa dati,
+            // mukhang sira ang page at wala silang magagawa.
+            window.addEventListener('pageshow', function (event) {
+                if (!event.persisted) return;
+
+                form.dataset.submitted = '';
+                btn.disabled = false;
+                btn.innerHTML = '<i class="bi bi-lock-fill"></i> Pay Now via PayMongo';
+            });
+        })();
     </script>
 @endpush
 

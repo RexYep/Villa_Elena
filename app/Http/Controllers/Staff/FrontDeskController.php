@@ -634,7 +634,24 @@ class FrontDeskController extends Controller
             'payment_method' => 'required|in:cash,qrph',
             'payment_type'   => 'required|in:full_payment,partial,balance',
             'notes'          => 'nullable|string|max:300',
+            'confirm_duplicate' => 'nullable|boolean',
         ]);
+
+        // May overpayment guard na ang paggawa ng walk-in booking sa
+        // itaas, pero WALA ang path na ito — kaya ang pagtatala ng
+        // bayad na naibayad na online ng guest ay tahimik na nagiging
+        // pangalawang bayad. Iisang tsek na ngayon ang pinagdadaanan ng
+        // tatlong manwal na path (tingnan ang Payment::manualEntryProblem()).
+        $problem = Payment::manualEntryProblem(
+            $booking->fresh(),
+            (float) $request->amount,
+            $request->payment_method,
+            $request->boolean('confirm_duplicate'),
+        );
+
+        if ($problem) {
+            return back()->withErrors($problem)->withInput();
+        }
 
         Payment::create([
             'booking_id'     => $booking->id,

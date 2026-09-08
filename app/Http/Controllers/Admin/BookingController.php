@@ -575,7 +575,23 @@ class BookingController extends Controller
             'payment_method' => 'required|in:qrph,cash',
             'payment_type'   => 'required|in:full_payment,partial,refund',
             'notes'          => 'nullable|string',
+            'confirm_duplicate' => 'nullable|boolean',
         ]);
+
+        // Ang refund ay palabas na pera — hindi ito sinusukat laban sa
+        // balanse, at normal lang na maulit.
+        if ($request->payment_type !== 'refund') {
+            $problem = Payment::manualEntryProblem(
+                $booking->fresh(),
+                (float) $request->amount,
+                $request->payment_method,
+                (bool) $request->boolean('confirm_duplicate'),
+            );
+
+            if ($problem) {
+                return back()->withErrors($problem)->withInput();
+            }
+        }
 
         Payment::create([
             'booking_id'     => $booking->id,

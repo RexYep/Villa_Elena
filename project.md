@@ -1,12 +1,109 @@
 # Villa Elena Private Rental Resort
 ## Resort Management System — Project Documentation
 
-**Version:** 7.0
+**Version:** 7.1
 **Stack:** PHP 8.2 / Laravel 12 / MySQL 8 / Bootstrap 5
 **Local URL:** `http://127.0.0.1:8000` (`php artisan serve`) or `http://localhost:8000` (Docker — see v5.3)
 **Live URL:** `https://villa-elena.onrender.com` (Render, free tier — testing only, not yet handed to real guests)
 **Database (local):** `villa_elena_db` (MySQL, XAMPP or standalone MySQL — same database either way)
 **Database (live):** Aiven MySQL free tier, database `defaultdb`
+
+---
+
+## What Changed in v7.1 (Read This First)
+
+### Guarding against a guest paying twice
+
+Asked after v7.0: is there anything stopping a customer from being charged twice when their connection is bad? **Partly.** One safeguard existed and was doing real work; the ones that stop an actual second charge did not.
+
+**What already worked.** `recordPaymongoPayment()` is idempotent on `reference_number` (the PayMongo `pay_xxx` id), which is what stops the webhook and the success callback from both writing the same payment. That is the common case and it worked.
+
+**The distinction that matters, and that the old code blurred:**
+
+| | What it is | What catches it |
+|---|---|---|
+| **Duplicate recording** | *One* payment written twice | `reference_number` idempotency — worked, now backed by a UNIQUE index |
+| **Duplicate charging** | *Two* payments, different `pay_xxx` | Nothing. Idempotency cannot see this — both references are genuinely different |
+
+Everything below is about the second row.
+
+### The routes to a real double charge
+
+**1. Nothing stopped a second checkout session.** Every `POST /pay/{booking}/checkout` unconditionally created a fresh PayMongo session and overwrote `paymongo_session_id`. The Pay button was a plain submit with no disable-on-click — so on the slow connection where nothing appears to happen, a second click produced a second session and a second live QR for one booking.
+
+**2. A stale page could charge a fully-paid booking.** `showPaymentPage()` aborts on `balance_due <= 0`; `createCheckout()` never re-checked. And the deposit is a percentage of `total_amount`, not of the balance:
+
+```php
+$depositAmount = round($booking->total_amount * $depositPct / 100, 2);
+$amount = $request->payment_type === 'deposit' ? $depositAmount : $booking->balance_due;
+```
+
+So a back-button or second tab on a paid booking still produced a live ₱2,000 charge. No concurrency required.
+
+**3. The idempotency check had no backstop.** It is a SELECT followed by an INSERT — the same shape as the v7.0 booking race. Here the window is not theoretical: the webhook arrives *while the guest is landing on the success page*, which is precisely when both paths run at once.
+
+**4. An overpayment left no trace.** `recalculateFinancials()` clamps with `max(0, total - netPaid)`, so a booking paid twice shows `balance_due` ₱0 and status `paid` — indistinguishable from one paid correctly. That is why a double charge could happen and never be noticed.
+
+**5. Manual recording had no guard at all** — `'amount' => 'required|numeric|min:1'`, no maximum, no duplicate detection. Staff recording a cash payment the guest had already paid online silently created a second row. (The walk-in *booking* path had an overpayment guard; the *payment* path did not.)
+
+### Layer 1 — prevent the second charge
+
+`createCheckout()` now holds `Cache::lock("paymongo-checkout:{$booking->id}")` for the whole decision. Not a DB transaction: there is an HTTP call to PayMongo inside, and running that inside a transaction is the specific mistake §10 already warns about. Inside the lock it re-reads the booking, refuses when `balance_due <= 0` or the booking is cancelled/checked-out, caps the deposit at `min($depositAmount, $balance_due)`, and asks `reusableCheckout()` before creating anything:
+
+- **still open, same type** → redirect to the existing `checkout_url`. A double click now shows the guest *the same QR twice*, so no matter what they do there is one charge.
+- **already paid** → redirect to `payment.success`, which records it. This is exactly the guest who scanned on another device, saw nothing happen, and came back.
+- **absent, expired, or PayMongo unreachable** → create a new one.
+
+The Pay button disables itself on submit with a spinner, and re-enables on `pageshow` when the browser restores it from bfcache (otherwise Back leaves a dead button). `POST /pay/{booking}/checkout` is throttled at 8/min.
+
+### Layer 2 — make duplicate recording structurally impossible
+
+`payments (booking_id, reference_number)` is now UNIQUE. `recordPaymongoPayment()` keeps its SELECT (it avoids the exception in almost every case) and catches `UniqueConstraintViolationException` around the INSERT, treating it as "already recorded" and returning `false`. That is a normal outcome of the race, not an error.
+
+Manual payments keep `reference_number` NULL, and MySQL does not enforce a unique index when any part of the key is NULL — so staff can still record any number of cash payments.
+
+Verified with five concurrent processes recording the same reference:
+
+```
+worker 2: RECORDED the payment
+worker 1: skipped — already recorded      worker 3: skipped — already recorded
+worker 4: skipped — already recorded      worker 5: skipped — already recorded
+```
+
+One row written, four clean skips, no exceptions.
+
+### Layer 3 — surface what still gets through
+
+`Booking::flagOverpayment()` runs at the end of `recalculateFinancials()` — the single choke point every payment path already calls, so no path can forget it. When `amount_paid > total_amount` it logs, notifies admins **once** (guarded by the new `bookings.overpayment_notified_at`), and shows a banner on the admin booking page. It deliberately does **not** auto-refund: whether the excess is returned, applied to extras, or handled some other way is a human decision. The system's only failure before was not mentioning it.
+
+The flag is cleared when the excess is refunded, so a later episode alerts again. Verified end to end:
+
+```
+paid=6000.00 total=4000.00 balance=0.00 status=paid
+isOverpaid=true excess=2000 notified_at='2026-09-08 19:56:28'
+admin alerts: 1
+after a 2nd recalculation, admin alerts: 1
+… after refunding the excess: isOverpaid=false notified_at=NULL
+```
+
+Note the second line: `balance=0.00 status=paid` is exactly the state that used to hide this.
+
+All three manual paths now share `Payment::manualEntryProblem()`. The two checks answer different questions and so behave differently — **over the balance is wrong** and is blocked outright, while **a look-alike is only suspicious** (a guest genuinely can hand over ₱1,000 twice in one day) and needs a `confirm_duplicate` tick. Refunds skip both. Verified, including that it does not over-block:
+
+```
+2nd identical cash 1000 (no confirm): BLOCKED
+2nd identical cash 1000 (confirmed):  allowed
+different amount 1500 cash:           allowed
+different method qrph 1000:           allowed
+over the balance (4000 of 3000 left): BLOCKED
+```
+
+Two of these forms live in modals and **neither page rendered `$errors`** — so before this, a blocked payment would have looked to staff like nothing happened, and they would simply have tried again. `admin/bookings/show.blade.php` and `staff/frontdesk.blade.php` now display validation errors.
+
+### Notes
+
+- `Cache::lock()` needs a lock-capable store. Production is the `database` driver and the `cache_locks` table exists; verified there directly (second acquire returns `false`, releases correctly). Local dev is Redis, which must be running (`docker compose up -d redis`) — already true for `Setting::get()`, so this adds no new dependency.
+- The migration **refuses to run** if a duplicate `(booking_id, reference_number)` already exists, listing the offending payment ids, rather than editing anything. Unlike the v7.0 `slot_hold` migration, which excluded a colliding booking from its index and carried on, these are financial records — silently rewriting a payment's reference to make an index fit would damage the audit trail. Both databases were checked first and are clean (local 82 payments, production 12; zero duplicates, zero overpaid bookings), so it applies without incident.
 
 ---
 
@@ -1822,6 +1919,26 @@ Managed via Laravel migrations with sequential timestamps to resolve foreign key
 | 16 | **`trusted_devices`** ← **NEW v5.0** | Devices a customer has verified via 2FA email OTP; lets a device skip OTP on future logins and lets the customer view/revoke them |
 | 17 | **`login_activities`** ← **NEW v5.0** | Read-only per-login history (device, IP, timestamp, whether it required OTP) shown on the customer Profile page |
 
+### v7.1 Schema Changes
+
+`2026_09_08_110000_add_payment_duplicate_guards.php` — two guards against a guest paying twice.
+
+```sql
+ALTER TABLE payments
+  ADD UNIQUE KEY payments_booking_id_reference_number_unique (booking_id, reference_number);
+
+ALTER TABLE bookings
+  ADD COLUMN overpayment_notified_at TIMESTAMP NULL AFTER balance_due;
+```
+
+**Why the unique index is safe for cash.** `reference_number` is NULL on every manual payment, and MySQL does not enforce a unique index when any part of the key is NULL — so staff can record as many cash payments as they like. Only payments carrying a real gateway reference (`pay_xxx`) are constrained.
+
+**Why it exists at all.** The idempotency check in `recordPaymongoPayment()` is a SELECT followed by an INSERT, the same shape as the v7.0 booking race. The window here is not theoretical: the webhook arrives while the guest is landing on the success page, which is exactly when both paths run concurrently.
+
+**`overpayment_notified_at`** exists so the admin is told once per episode rather than on every recalculation. `Booking::flagOverpayment()` sets it and clears it when the excess is refunded.
+
+**This migration refuses to run rather than repair.** If a duplicate `(booking_id, reference_number)` already exists it throws, listing the offending payment ids. The v7.0 `slot_hold` migration took the opposite approach — excluding a colliding booking from its index and continuing — and that was right *there*: the booking stayed whole and visible. Payments are financial records; quietly rewriting a payment's reference so an index will fit would damage the audit trail. Both databases were checked before shipping (local 82 payments, production 12) and neither has a duplicate.
+
 ### v7.0 Schema Changes
 
 `2026_09_08_100000_add_slot_hold_to_bookings_table.php` — the database-level guarantee that one slot holds at most one live booking.
@@ -3213,6 +3330,12 @@ DELETE /my/profile/devices/{device}           customer.profile.devices.destroy  
 
 | Issue | Cause | Fix Applied |
 |---|---|---|
+| **(v7.1)** Nothing stopped a guest being charged twice on a slow connection | Every `POST /pay/{booking}/checkout` unconditionally created a new PayMongo session and overwrote `paymongo_session_id`, and the Pay button was a plain submit with no disable-on-click — a second click meant a second live QR for one booking | `createCheckout()` holds a `Cache::lock` per booking and reuses a still-open session (or redirects to `payment.success` if it turns out already paid) instead of creating a second; button disables on submit and re-enables from bfcache; route throttled at 8/min |
+| **(v7.1)** A stale checkout page could charge a fully-paid booking | `showPaymentPage()` guarded `balance_due <= 0` but `createCheckout()` never re-checked — and the deposit is a percentage of `total_amount`, not of the balance, so it stayed non-zero after full payment | `createCheckout()` re-reads the booking inside the lock, refuses when nothing is due, and caps the deposit at `min($depositAmount, $balance_due)` |
+| **(v7.1)** The `reference_number` idempotency had no backstop | A SELECT then an INSERT, with the webhook arriving exactly while the success callback runs — the same shape as the v7.0 booking race, in the one place it is most likely to fire | `payments (booking_id, reference_number)` UNIQUE; the insert catches `UniqueConstraintViolationException` and treats it as already-recorded. Verified with five concurrent processes: one row, four clean skips |
+| **(v7.1)** An overpayment was completely invisible | `recalculateFinancials()` clamps `balance_due` with `max(0, …)`, so a booking paid twice looked identical to one paid correctly — `paid`, ₱0 due | `Booking::flagOverpayment()` at the end of `recalculateFinancials()` logs, notifies admins once (`overpayment_notified_at`), and shows a banner on the booking page; the flag clears when the excess is refunded |
+| **(v7.1)** Manual payment recording had no guard of any kind | `'amount' => 'required|numeric|min:1'` on all three paths — no maximum and no duplicate detection, so recording a payment the guest had already made online silently created a second row | All three share `Payment::manualEntryProblem()`: over the balance is blocked outright, a same-amount/method/day repeat needs a `confirm_duplicate` tick; refunds skip both |
+| **(v7.1)** Payment validation errors were invisible to staff | The record-payment forms on `admin/bookings/show` and `staff/frontdesk` are in modals, and neither page rendered `$errors` — a rejected payment looked like nothing had happened, so staff would just try again | Both pages now display `$errors->first()` |
 | **(v7.0)** Two accounts booked and paid for the exact same date + slot (`VE-4C7INQOG` / `VE-YHLBMLUU`, 2026-09-15 Day, identical `created_at`) | `Booking::hasConflict()` was correct but is a **SELECT** — every caller checked, then created, with no lock and no constraint across the gap, so two simultaneous submits both saw a free slot before either row existed | `Booking::reserveSlot()` does the check and the write in one transaction under `lockForUpdate()` on the `properties` row; all six booking-creating/moving paths go through it. Reproduced and verified fixed with six concurrent OS processes |
 | **(v7.0)** Admin calendar drag-and-drop could drop one booking directly on top of another | `Admin\CalendarController::moveBooking()` had **no availability check at all** — found while auditing for the race above | Routed through `reserveSlot()`; returns `409` with a reason, and the `eventDrop` handler now shows that message instead of a generic one |
 | **(v7.0)** A guest whose hold expired could pay through their still-open PayMongo link and be confirmed onto a slot another guest had since taken | `recordPaymongoPayment()` → `confirmOnFirstPayment()` promoted `pending` → `confirmed` without re-checking availability. Needed no concurrency at all | `confirmOnFirstPayment()` re-checks first; the payment is still recorded (never discard money), the booking stays `pending` — which the stale sweeper skips, since `amount_paid > 0` — and admins are notified to decide |

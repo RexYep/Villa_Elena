@@ -291,6 +291,84 @@ class Payment extends Model
      * "Full payment" sa apat na magkakaibang pahina para sa iisang
      * halaga.
      */
+    // ── Manual-entry guards (v7.1) ─────────────────────────────────
+    //
+    // Ang online path ay protektado ng idempotency sa `reference_number`
+    // at ng unique index sa ilalim nito. Ang manwal na pagtatala ay
+    // walang katumbas na proteksiyon: `min:1` lang ang validation, kaya
+    // ang isang staff na nagtala ng bayad na naibayad na online — o
+    // dalawang staff na sabay nagtala ng iisang cash — ay lumilikha ng
+    // pangalawang row nang walang anumang babala.
+    //
+    // Dalawang magkahiwalay na tanong ang mga ito, at magkaiba ang
+    // tamang sagot sa bawat isa: ang lumampas sa balanse ay MALI
+    // (hinaharangan), samantalang ang kamukhang bayad ay
+    // KAHINA-HINALA lang (kailangan ng kumpirmasyon — totoong
+    // nangyayari na dalawang beses magbayad ng magkaparehong halaga ang
+    // isang guest sa iisang araw).
+
+    /**
+     * Lalampas ba sa natitirang balanse ang halagang ito?
+     */
+    public static function exceedsBalance(Booking $booking, float $amount): bool
+    {
+        return round($amount, 2) > round((float) $booking->balance_due, 2);
+    }
+
+    /**
+     * May naitala na bang kamukhang bayad para sa booking na ito —
+     * parehong halaga, parehong paraan, parehong araw?
+     */
+    public static function looksLikeDuplicate(Booking $booking, float $amount, string $method, ?string $date = null): bool
+    {
+        return static::where('booking_id', $booking->id)
+            ->where('amount', round($amount, 2))
+            ->where('payment_method', $method)
+            ->whereDate('payment_date', $date ? \Carbon\Carbon::parse($date)->toDateString() : today())
+            ->where('payment_type', '!=', 'refund')
+            ->exists();
+    }
+
+    /**
+     * Ang dalawang tsek sa itaas, pinagsama sa anyong maibabalik agad
+     * ng controller bilang validation errors — o `null` kung malinis.
+     *
+     * Iisang kopya nito ang umiiral dahil TATLONG manwal na path ang
+     * gumagamit (admin booking page, admin payments page, staff front
+     * desk). Tatlong kopya ng parehong lohika ay siguradong maglalayo,
+     * at ang naglalayong kopya ng isang guard ay katumbas ng walang
+     * guard sa path na naiwan.
+     *
+     * @return array<string, string>|null
+     */
+    public static function manualEntryProblem(
+        Booking $booking,
+        float $amount,
+        string $method,
+        bool $confirmedDuplicate = false,
+        ?string $date = null
+    ): ?array {
+        if (static::exceedsBalance($booking, $amount)) {
+            return ['amount' =>
+                'This payment of ₱'.number_format($amount, 2).' is more than the remaining balance of ₱'
+                .number_format((float) $booking->balance_due, 2).' on '.$booking->booking_ref.'. '
+                .((float) $booking->balance_due <= 0
+                    ? 'This booking is already fully paid — check whether the guest already paid online before recording this again.'
+                    : 'Record only what is actually owed; if the guest handed over more, give the change rather than recording it.'),
+            ];
+        }
+
+        if (! $confirmedDuplicate && static::looksLikeDuplicate($booking, $amount, $method, $date)) {
+            return ['amount' =>
+                'A payment of ₱'.number_format($amount, 2).' by '.static::methodLabelFor($method)
+                .' is already recorded for '.$booking->booking_ref.' on this date. If this is a second, separate '
+                .'payment, tick "This is a separate payment" to confirm. If not, the guest has already paid.',
+            ];
+        }
+
+        return null;
+    }
+
     public static function methodLabelFor(?string $method): string
     {
         return match($method) {

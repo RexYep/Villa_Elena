@@ -541,6 +541,25 @@
     @if (session('success'))
         <div class="alert alert-success"><i class="bi bi-check-circle me-2"></i>{{ session('success') }}</div>
     @endif
+    {{-- Wala nito dati: ang mga validation error ng "Record Payment" na
+         panel sa ibaba (hal. lampas sa balanse, o kamukhang bayad na
+         naitala na) ay tahimik na nawawala — mukhang walang nangyari sa
+         admin, kaya susubukan niya ulit. --}}
+    @if ($errors->any())
+        <div class="alert alert-danger">
+            <i class="bi bi-exclamation-circle me-2"></i>{{ $errors->first() }}
+        </div>
+    @endif
+    @if ($booking->isOverpaid())
+        <div class="alert alert-warning">
+            <i class="bi bi-cash-stack me-2"></i>
+            <strong>Overpaid by ₱{{ number_format($booking->overpaidAmount(), 2) }}.</strong>
+            This booking has received ₱{{ number_format($booking->amount_paid, 2) }} against a total of
+            ₱{{ number_format($booking->total_amount, 2) }} — usually a sign the guest was charged twice.
+            Check the payments below and return the excess through the
+            <a href="{{ route('admin.payments.index') }}">Payments page</a>.
+        </div>
+    @endif
     @if (session('error'))
         <div class="alert alert-danger"><i class="bi bi-exclamation-circle me-2"></i>{{ session('error') }}</div>
     @endif
@@ -1004,6 +1023,14 @@
                                 <input type="text" name="notes" class="form-control-sm-custom"
                                     placeholder="e.g. QR Ph ref #123456">
                             </div>
+                            {{-- Kailangan lang kapag may kamukhang bayad na
+                                 naitala ngayong araw para sa booking na ito. --}}
+                            <label
+                                style="display:flex; align-items:flex-start; gap:8px; font-size:13px; color:#475569; margin-bottom:14px;">
+                                <input type="checkbox" name="confirm_duplicate" value="1" style="margin-top:3px;">
+                                <span>This is a <strong>separate</strong> payment — tick only if the guest really
+                                    paid this amount again today.</span>
+                            </label>
                             <button type="submit" class="btn-record">
                                 <i class="bi bi-check-circle me-1"></i> Record Payment
                             </button>
