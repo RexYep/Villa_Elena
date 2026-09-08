@@ -104,11 +104,21 @@
                     margin-bottom: 8px;
                 }
 
+                /* Two wrapped lines rather than one ellipsised one. Every layout
+                   below 1200px puts this card in a half-width column, where a
+                   nowrap name lost its surname at every one of those widths —
+                   "Ma. Cristina Villanueva-Ba…" is not a useful answer to "who is
+                   in the villa right now". The clamp still guards a runaway name,
+                   and the full value stays in the title attribute either way. */
                 .guest-name-card .kpi-value {
                     font-size: 20px;
-                    white-space: nowrap;
+                    line-height: 1.25;
+                    display: -webkit-box;
+                    -webkit-line-clamp: 2;
+                    line-clamp: 2;
+                    -webkit-box-orient: vertical;
                     overflow: hidden;
-                    text-overflow: ellipsis;
+                    overflow-wrap: anywhere;
                 }
 
                 .kpi-sub {
@@ -177,6 +187,39 @@
                     padding: 20px 24px;
                 }
 
+                /* Chart.js sizes a responsive canvas from its container's WIDTH via
+                   an aspect ratio, so on a narrow column the bar chart went squat
+                   and the doughnut — whose aspect ratio is 1 — became a circle as
+                   tall as the column was wide (measured: 663px at a 768px viewport,
+                   a full screen of nothing but pie). Pinning an explicit height here
+                   and turning maintainAspectRatio off in the chart config makes the
+                   height a layout decision instead of a by-product of the width. */
+                /* The table supplies its own row padding, so this body only needs the
+                   side gutters. Was an inline style, which outranked every media
+                   query below and kept 24px gutters on a 390px screen.
+
+                   It is also the horizontal scroller, at every width — not just on
+                   mobile. This panel is half a row on desktop too, so a four-column
+                   table never fit there either; it was simply clipped by
+                   .card-panel's overflow:hidden, losing the Status column off the
+                   right edge with nothing to indicate it existed. Scrolling the
+                   body rather than the whole panel also leaves the header and its
+                   "View all" link where they are. */
+                .card-panel-body.table-body {
+                    padding: 0 16px;
+                    overflow-x: auto;
+                    -webkit-overflow-scrolling: touch;
+                }
+
+                .chart-box {
+                    position: relative;
+                    height: 260px;
+                }
+
+                .chart-box.donut {
+                    height: 230px;
+                }
+
                 .badge-pill {
                     font-size: 13px;
                     padding: 4px 10px;
@@ -198,19 +241,32 @@
                     font-size: 13px;
                 }
 
+                /* 8px side padding, not 12px. Four columns × two sides made 96px of
+                   the table's width pure gutter, which was enough on its own to
+                   push it past this half-row panel and clip the Status column. */
                 .custom-table th {
                     font-size: 13px;
                     font-weight: 600;
                     text-transform: uppercase;
                     letter-spacing: 0.8px;
                     color: var(--muted);
-                    padding: 0 12px 12px;
+                    padding: 0 8px 12px;
                     border-bottom: 1px solid var(--border);
                     text-align: left;
                 }
 
+                .custom-table th:first-child,
+                .custom-table td:first-child {
+                    padding-left: 0;
+                }
+
+                .custom-table th:last-child,
+                .custom-table td:last-child {
+                    padding-right: 0;
+                }
+
                 .custom-table td {
-                    padding: 12px;
+                    padding: 12px 8px;
                     border-bottom: 1px solid #f1f5f9;
                     color: var(--stone);
                     vertical-align: middle;
@@ -218,6 +274,22 @@
 
                 .custom-table tr:last-child td {
                     border-bottom: none;
+                }
+
+                /* This panel is only half the row on desktop, so the columns are
+                   narrow enough that a booking ref and a date both wrapped
+                   mid-token ("VE-20260907-" / "0012"). Neither is ever worth
+                   breaking; the guest and property names absorb the wrapping. */
+                .custom-table .booking-ref {
+                    font-size: 13px;
+                    color: #94a3b8;
+                    white-space: nowrap;
+                }
+
+                .custom-table .checkin-cell {
+                    font-size: 14px;
+                    color: #64748b;
+                    white-space: nowrap;
                 }
 
                 .custom-table tr:hover td {
@@ -272,6 +344,25 @@
                 .pay-refunded {
                     background: var(--tag-cyan-bg);
                     color: var(--tag-cyan-fg);
+                }
+
+                /* Property Status uses properties.status (available/occupied/
+                   maintenance), not the booking-status vocabulary above — those
+                   three never had a colour rule anywhere, so the badges in that
+                   panel rendered as bare bold text at every screen width. */
+                .status-available {
+                    background: var(--tag-green-bg);
+                    color: var(--tag-green-fg);
+                }
+
+                .status-occupied {
+                    background: var(--tag-blue-bg);
+                    color: var(--tag-blue-fg);
+                }
+
+                .status-maintenance {
+                    background: var(--tag-amber-bg);
+                    color: var(--tag-amber-fg);
                 }
 
                 /* ── QUICK ACTIONS ────────────────────────────────── */
@@ -350,30 +441,111 @@
                     .kpi-grid {
                         grid-template-columns: repeat(2, 1fr);
                     }
+
                 }
 
                 @media (max-width: 768px) {
                     .kpi-grid {
                         grid-template-columns: 1fr 1fr;
+                        gap: 14px;
+                        margin-bottom: 20px;
                     }
 
                     .charts-row,
                     .bottom-row {
                         grid-template-columns: minmax(0, 1fr);
+                        gap: 16px;
                     }
 
-                    .card-panel {
-                        overflow-x: auto;
+                    .card-panel-header {
+                        flex-wrap: wrap;
+                        gap: 8px;
+                        padding: 16px 18px;
                     }
 
+                    .card-panel-body {
+                        padding: 16px 18px;
+                    }
+
+                    .card-panel-body.table-body {
+                        padding: 0 18px;
+                    }
+
+                    .chart-box {
+                        height: 230px;
+                    }
+
+                    /* Below the scroller's own width the columns would crush into
+                       one word per line; let it scroll instead. */
                     .custom-table {
                         min-width: 520px;
                     }
                 }
 
-                @media (max-width: 480px) {
+                /* Phones keep TWO KPI columns, not one. Stacking all six full-width
+                   is what made this page 3,284px tall on a 390px screen — the owner
+                   had to scroll past six near-identical cards before reaching a
+                   single chart. Two compact columns halve that; the numbers stay
+                   legible because .kpi-value drops from 36px to 24px with them. */
+                @media (max-width: 560px) {
                     .kpi-grid {
-                        grid-template-columns: 1fr;
+                        gap: 12px;
+                    }
+
+                    .kpi-card {
+                        padding: 16px;
+                    }
+
+                    .kpi-label {
+                        font-size: 12px;
+                        letter-spacing: 0.5px;
+                        margin-bottom: 6px;
+                    }
+
+                    .kpi-value {
+                        font-size: 24px;
+                        margin-bottom: 6px;
+                    }
+
+                    .kpi-sub {
+                        font-size: 12px;
+                    }
+
+                    .kpi-icon {
+                        font-size: 26px;
+                        bottom: 10px;
+                        right: 12px;
+                    }
+
+                    .guest-name-card .kpi-value {
+                        font-size: 17px;
+                    }
+
+                    .card-panel-header,
+                    .card-panel-body,
+                    .card-panel-body.table-body {
+                        padding-left: 14px;
+                        padding-right: 14px;
+                    }
+
+                    .card-panel-header h3 {
+                        font-size: 16px;
+                    }
+
+                    .chart-box {
+                        height: 200px;
+                    }
+
+                    .chart-box.donut {
+                        height: 190px;
+                    }
+
+                    .quick-action-btn {
+                        padding: 12px 14px;
+                    }
+
+                    .property-item {
+                        gap: 10px;
                     }
                 }
 
@@ -502,7 +674,9 @@
                         </span>
                     </div>
                     <div class="card-panel-body">
-                        <canvas id="revenueChart" height="100"></canvas>
+                        <div class="chart-box">
+                            <canvas id="revenueChart"></canvas>
+                        </div>
                     </div>
                 </div>
 
@@ -515,7 +689,9 @@
                         </div>
                     </div>
                     <div class="card-panel-body">
-                        <canvas id="sourceChart" height="180"></canvas>
+                        <div class="chart-box donut">
+                            <canvas id="sourceChart"></canvas>
+                        </div>
 
                         <div style="display:flex; flex-wrap:wrap; gap:8px; margin-top:16px; justify-content:center;">
 
@@ -556,7 +732,7 @@
                             View all <i class="bi bi-arrow-right"></i>
                         </a>
                     </div>
-                    <div class="card-panel-body" style="padding: 0 24px;">
+                    <div class="card-panel-body table-body">
                         @php
                             $recentBookings = \App\Models\Booking::with(['user', 'property'])
                                 ->latest()
@@ -584,13 +760,11 @@
                                         <tr>
                                             <td>
                                                 <div class="fw-medium">{{ $booking->user->full_name ?? 'N/A' }}</div>
-                                                <div style="font-size: 13px; color:#94a3b8;">{{ $booking->booking_ref }}
-                                                </div>
+                                                <div class="booking-ref">{{ $booking->booking_ref }}</div>
                                             </td>
                                             <td style="font-size:13px;">{{ $booking->property->property_name ?? 'N/A' }}
                                             </td>
-                                            <td style="font-size: 14px; color:#64748b;">
-                                                {{ $booking->check_in_date->format('M d, Y') }}</td>
+                                            <td class="checkin-cell">{{ $booking->check_in_date->format('M d, Y') }}</td>
                                             <td>
                                                 <span class="status-badge status-{{ $booking->status }}">
                                                     {{ ucfirst(str_replace('_', ' ', $booking->status)) }}
@@ -758,6 +932,11 @@
                         },
                         options: {
                             responsive: true,
+                            // The canvas is sized by .chart-box, not by an aspect ratio.
+                            // Left on (the default), Chart.js derives height from width, so
+                            // this chart flattened to 99px on a phone while the doughnut
+                            // below — aspect ratio 1 — grew to a 663px circle at 768px wide.
+                            maintainAspectRatio: false,
                             plugins: {
                                 legend: {
                                     display: false
@@ -815,6 +994,7 @@
                         },
                         options: {
                             responsive: true,
+                            maintainAspectRatio: false,
                             cutout: '70%',
                             plugins: {
                                 legend: {

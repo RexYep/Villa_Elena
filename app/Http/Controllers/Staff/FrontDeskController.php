@@ -463,19 +463,17 @@ class FrontDeskController extends Controller
         }
 
         // Availability check — dating wala nito, kaya posibleng
-        // ma-double-book ang buong Villa. Wrapped sa transaction +
-        // lockForUpdate() para maiwasan din ang race condition kung
-        // dalawang staff sabay-sabay mag-book.
-        $booking = \Illuminate\Support\Facades\DB::transaction(function () use ($request, $checkin, $checkout, $property, $baseAmount, $discountAmount, $totalAmount, $promo, $amountPaid) {
-
-            \App\Models\Booking::where('property_id', $request->property_id)
-                ->whereNotIn('status', ['cancelled', 'no_show'])
-                ->lockForUpdate()
-                ->get();
-
-            if (Booking::hasConflict($request->property_id, $checkin, $checkout)) {
-                return null; // signal conflict pabalik sa labas ng closure
-            }
+        // ma-double-book ang buong Villa.
+        //
+        // Dating may sariling DB::transaction + lockForUpdate() dito ang
+        // walk-in — pero mga `bookings` row ang nilo-lock nito, at
+        // umaasa sa gap-lock na gawi ng InnoDB para pigilan ang isang
+        // row na WALA PA. Mas masahol: ito lang ang path na kumukuha ng
+        // lock, at walang saysay ang lock na iisa lang ang humahawak —
+        // kayang lampasan ito ng online booking o ng admin create.
+        // Iisa na ngayon ang pinagdadaanan ng lahat, at ang nilo-lock ay
+        // ang tunay na `properties` row. Tingnan ang Booking::reserveSlot().
+        $booking = Booking::reserveSlot($request->property_id, $checkin, $checkout, function () use ($request, $checkin, $checkout, $property, $baseAmount, $discountAmount, $totalAmount, $promo, $amountPaid) {
 
             // Create new guest if needed
             if ($request->guest_type === 'new') {

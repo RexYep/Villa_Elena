@@ -17,6 +17,7 @@ use Illuminate\Support\Str;
  * @property \Illuminate\Support\Carbon|null $actual_check_in
  * @property \Illuminate\Support\Carbon $check_out_date
  * @property string $check_out_time
+ * @property string|null $slot_hold
  * @property \Illuminate\Support\Carbon|null $actual_check_out
  * @property int $num_nights
  * @property int $num_guests
@@ -92,6 +93,7 @@ use Illuminate\Support\Str;
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Booking whereUserId($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Booking withTrashed(bool $withTrashed = true)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Booking withoutTrashed()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Booking whereSlotHold($value)
  * @mixin \Eloquent
  */
 class Booking extends Model
@@ -152,6 +154,134 @@ class Booking extends Model
                 $booking->booking_ref = 'VE-' . strtoupper(Str::random(8));
             }
         });
+
+        // `slot_hold` ang column na binabantayan ng UNIQUE index na
+        // pumipigil sa double-booking sa antas ng database (tingnan ang
+        // 2026_09_08_100000_add_slot_hold_to_bookings_table). Hindi ito
+        // fillable at hindi ito dapat isulat ng kahit sinong controller
+        // — dito lang ito kinukuwenta, para hindi kailanman maghiwalay
+        // ang halaga nito sa aktuwal na petsa/oras/status ng booking.
+        static::saving(function ($booking) {
+            if (! static::slotHoldColumnExists()) {
+                return;
+            }
+
+            $hold = $booking->computeSlotHold();
+
+            // Ang isang EXISTING row na wala nang `slot_hold` ay hindi
+            // basta-basta puwedeng bumawi ng slot nito.
+            //
+            // Dalawang paraan para mapunta sa estadong ito: kinansela
+            // ito (tama lang na bumalik ang hawak kung bakante pa), o
+            // isa ito sa dalawang naunang double-booking na sinadyang
+            // hindi isinama ng migration sa index (VE-YHLBMLUU). Kung
+            // walang tsekeng ito, ang PINAKASIMPLENG pag-edit sa
+            // ganoong row — pagtatala ng refund, pagpapalit ng status,
+            // pag-aayos ng bilang ng bisita — ay 500 na duplicate-key
+            // error, at ang mga row na iyon mismo ang kailangang
+            // ayusin ng admin.
+            //
+            // Ang query ay tumatakbo LANG sa makitid na kasong ito.
+            // Ang bagong INSERT ay laging kumukuha ng totoong halaga
+            // ($booking->exists === false dito), kaya buo pa rin ang
+            // proteksiyon ng index laban sa bagong double-booking.
+            if ($hold !== null && $booking->exists && $booking->getOriginal('slot_hold') === null) {
+                $taken = static::withTrashed()
+                    ->where('slot_hold', $hold)
+                    ->whereKeyNot($booking->getKey())
+                    ->exists();
+
+                if ($taken) {
+                    $hold = null;
+                }
+            }
+
+            $booking->slot_hold = $hold;
+        });
+
+        // Ang SoftDeletes::runSoftDelete() ay direktang UPDATE sa query
+        // builder — hindi ito dumadaan sa save(), kaya hindi tumatakbo
+        // ang saving() sa itaas. Kung hindi ito lilinisin dito,
+        // haharangan ng isang soft-deleted na booking ang slot nito
+        // habang-buhay.
+        static::deleted(function ($booking) {
+            if ($booking->isForceDeleting() || ! static::slotHoldColumnExists()) {
+                return;
+            }
+
+            static::withTrashed()->whereKey($booking->getKey())->update(['slot_hold' => null]);
+            $booking->slot_hold = null;
+            $booking->syncOriginalAttribute('slot_hold');
+        });
+    }
+
+    /**
+     * Umiiral na ba ang `slot_hold` column?
+     *
+     * Hindi atomic ang isang deploy: sa Render, tumatakbo lang ang
+     * migrations kapag naka-set ang `RUN_MIGRATIONS=true` para sa deploy
+     * na iyon (tingnan ang §15). Kung tumapak ang code na ito bago pa
+     * ang migration, ang hook sa itaas ay magsusulat ng column na wala
+     * pa — at BAWAT paggawa ng booking ay 500. Kaya kailangang kayanin
+     * ng code ang parehong hugis ng schema habang naglalabasan ang
+     * deploy.
+     *
+     * Isang beses lang ito tinatanong kada proseso. Ibig sabihin, ang
+     * isang matagal-nang-buhay na worker na nagsimula bago ang
+     * migration ay mananatiling nakakita ng "wala" hanggang mag-restart
+     * — tanggap iyon: pagkatapos ng deploy, nagre-restart naman ang
+     * mga proseso, at hindi nawawala ang tunay na proteksiyon
+     * (nananatili ang lock ng reserveSlot()) — ang backstop lang ang
+     * pansamantalang wala.
+     */
+    protected static ?bool $slotHoldColumnExists = null;
+
+    protected static function slotHoldColumnExists(): bool
+    {
+        if (static::$slotHoldColumnExists === null) {
+            try {
+                static::$slotHoldColumnExists = \Illuminate\Support\Facades\Schema::hasColumn(
+                    (new static)->getTable(),
+                    'slot_hold'
+                );
+            } catch (\Throwable $e) {
+                static::$slotHoldColumnExists = false;
+            }
+        }
+
+        return static::$slotHoldColumnExists;
+    }
+
+    /**
+     * Ang halaga ng `slot_hold` para sa booking na ito: isang string na
+     * kumakatawan sa "hawak ko ang slot na ito" —
+     * `"{property_id}:{check_in_date}:{check_in_time}"`.
+     *
+     * NULL ito kapag hindi na hawak ng booking ang slot (cancelled,
+     * no_show, o soft-deleted). Mahalaga ang NULL: pinapayagan ng MySQL
+     * ang maraming NULL sa isang UNIQUE index, kaya libre nang
+     * ma-rebook ang slot ng isang kanseladong booking — habang
+     * imposible pa ring magkaroon ng dalawang BUHAY na booking sa
+     * iisang slot.
+     *
+     * Sinasadyang tugma ito sa exclusion list ng hasConflict()
+     * (`cancelled`/`no_show` lang) — kapag may binago sa isa, tingnan
+     * ang isa, kung hindi ay tatanggihan ng index ang isang booking na
+     * sinasabi naman ng hasConflict() na puwede.
+     */
+    public function computeSlotHold(): ?string
+    {
+        if (in_array($this->status, ['cancelled', 'no_show'], true) || $this->trashed()) {
+            return null;
+        }
+
+        if (empty($this->property_id) || empty($this->check_in_date) || empty($this->check_in_time)) {
+            return null;
+        }
+
+        return $this->property_id
+            . ':' . $this->check_in_date->format('Y-m-d')
+            . ':' . \Carbon\Carbon::parse($this->check_in_time)->format('H:i:s');
     }
 
     /**
@@ -408,6 +538,184 @@ class Booking extends Model
         }
 
         return false;
+    }
+
+    // ── Atomic Slot Reservation ─────────────────────────────────────
+
+    /**
+     * Ang IISANG paraan ng paggawa o paglipat ng booking.
+     *
+     * Ang hasConflict() ay SELECT lang. Kapag tinawag ito nang mag-isa,
+     * may puwang sa pagitan ng "wala palang kasalungat" at ng INSERT na
+     * walang humahawak ng kahit ano — kaya dalawang request na sabay
+     * dumating ay PAREHONG nakakakita ng bakante, at parehong pumapasok.
+     * Hindi ito teorya: VE-4C7INQOG at VE-YHLBMLUU, parehong 2026-09-15
+     * Day slot, parehong `created_at` na 16:33:05, parehong nabayaran.
+     *
+     * Kaya lahat ng gumagawa/lumilipat ng booking (public portal, admin
+     * create, staff walk-in, customer reschedule, extend stay) ay dapat
+     * dumaan dito — kagaya ng slotDateTimes() sa oras at ng quoteFor()
+     * sa presyo. Ang lock ay hindi nakakabit sa `bookings` (walang
+     * mailo-lock kung wala pang row), kundi sa mismong `properties` row:
+     * isang tunay na row na tiyak na umiiral, kaya deterministiko ang
+     * pagse-serialize — walang inaasahang gap-lock na gawi ng InnoDB.
+     *
+     * Ang callback ay tumatakbo LAMANG kapag napatunayang bakante pa
+     * ang slot, at nasa loob pa rin ng lock. Panatilihing DB lang ang
+     * laman nito — ang mail, broadcast at notification ay pagkatapos ng
+     * commit, hindi sa loob (isang nag-timeout na Pusher call ay hindi
+     * dapat mag-rollback ng nabayarang booking).
+     *
+     * @param  \Closure  $callback  Gumagawa/nag-uupdate ng booking. Dapat may ibinabalik.
+     * @return mixed  Ang ibinalik ng callback, o NULL kung hindi na bakante ang slot.
+     */
+    public static function reserveSlot(
+        int $propertyId,
+        \Carbon\Carbon $checkIn,
+        \Carbon\Carbon $checkOut,
+        \Closure $callback,
+        ?int $excludeBookingId = null
+    ) {
+        try {
+            return \Illuminate\Support\Facades\DB::transaction(function () use ($propertyId, $checkIn, $checkOut, $callback, $excludeBookingId) {
+                // Ang serialization point. Lahat ng sabay-sabay na
+                // booking sa iisang property ay pipila rito.
+                Property::whereKey($propertyId)->lockForUpdate()->first();
+
+                static::releaseExpiredHolds($propertyId, $checkIn, $checkOut, $excludeBookingId);
+
+                if (static::hasConflict($propertyId, $checkIn, $checkOut, $excludeBookingId)) {
+                    return null;
+                }
+
+                return $callback();
+            });
+        } catch (\Illuminate\Database\QueryException $e) {
+            // Huling sala ng UNIQUE index sa `slot_hold`. Hindi ito
+            // dapat maabot habang buo ang lock sa itaas — pero kung
+            // maabot man (hal. bagong code path na hindi dumadaan dito),
+            // isang "hindi na bakante" ang tamang sagot sa guest, hindi
+            // isang 500.
+            if (static::isSlotHoldViolation($e)) {
+                \Illuminate\Support\Facades\Log::warning(
+                    'slot_hold unique index rejected a booking for property '.$propertyId.' at '
+                    .$checkIn->format('Y-m-d H:i').' — a concurrent write got past reserveSlot().'
+                );
+
+                return null;
+            }
+
+            throw $e;
+        }
+    }
+
+    /**
+     * Pormal nang kinakansela ang mga "abandoned" na unpaid hold na
+     * dumadaan sa hinihinging slot, habang hawak ang lock ng
+     * reserveSlot().
+     *
+     * Kailangan ito dahil MAGKAIBA ang pananaw ng dalawang mekanismo sa
+     * isang lumagpas-nang-oras na `pending` booking: pinapalampas na ito
+     * ng hasConflict() (kaya "bakante" ang sabi ng availability grid),
+     * pero row pa rin ito na may `slot_hold` kaya haharangin ito ng
+     * UNIQUE index. Kung hindi lilinisin dito, magkakaroon ng slot na
+     * bukas sa mata ng guest pero tinatanggihan ng INSERT.
+     *
+     * Dating ang AutoCheckInOutBookings::cancelStalePendingBookings()
+     * lang ang gumagawa nito — pero cron-driven iyon, at sa Render ay
+     * external pinger ang nagpapatakbo ng scheduler. Hindi puwedeng
+     * nakasalalay ang tama ng booking sa kung tumatakbo ba ang cron.
+     */
+    private static function releaseExpiredHolds(
+        int $propertyId,
+        \Carbon\Carbon $checkIn,
+        \Carbon\Carbon $checkOut,
+        ?int $excludeBookingId
+    ): void {
+        $query = static::where('property_id', $propertyId)
+            ->where('status', 'pending')
+            ->where('created_at', '<', now()->subMinutes(static::pendingHoldMinutes()))
+            // Kaparehong dobleng proteksiyon ng sweeper: kailanman ay
+            // hindi kinakansela ang isang booking na may hawak nang pera.
+            ->where(function ($q) {
+                $q->whereNull('amount_paid')->orWhere('amount_paid', '<=', 0);
+            })
+            ->where('check_out_date', '>=', $checkIn->copy()->subDay())
+            ->where('check_in_date', '<=', $checkOut->copy()->addDay());
+
+        if ($excludeBookingId) {
+            $query->where('id', '!=', $excludeBookingId);
+        }
+
+        foreach ($query->get() as $hold) {
+            // Yung mga tunay na dumadaan lang sa hinihinging window —
+            // hindi lahat ng expired hold ng property na ito.
+            if (! ($checkIn->lt($hold->checkOutDateTime()) && $checkOut->gt($hold->checkInDateTime()))) {
+                continue;
+            }
+
+            $hold->releaseAsExpiredHold();
+        }
+    }
+
+    /**
+     * Kinakansela ang booking na ito bilang isang abandoned na unpaid
+     * hold, at ipinapaalam sa guest at admin.
+     *
+     * Pinagsasaluhan ng reserveSlot() at ng
+     * AutoCheckInOutBookings::cancelStalePendingBookings() — dalawang
+     * kopya ng wording at ng cancellation fields ay siguradong
+     * maglalayo sa isa't isa.
+     *
+     * Ipinapadala ang mga notification PAGKATAPOS ng commit: kapag
+     * tinawag ito mula sa loob ng reserveSlot(), mali (at
+     * mapanganib) na magpaalam ng "na-cancel na" para sa isang
+     * transaction na puwede pang mag-rollback. Sa labas ng
+     * transaction, agad na tumatakbo ang afterCommit().
+     */
+    public function releaseAsExpiredHold(): void
+    {
+        $holdMinutes = static::pendingHoldMinutes();
+        $holdLabel = $holdMinutes % 60 === 0
+            ? ($holdMinutes / 60) . '-hour'
+            : $holdMinutes . '-minute';
+
+        $this->update([
+            'status'              => 'cancelled',
+            'cancelled_at'        => now(),
+            'cancellation_reason' => "Auto-cancelled by the system — payment was not completed within the {$holdLabel} grace period.",
+            'cancelled_by'        => 'system',
+            'balance_due'         => 0,
+        ]);
+
+        StaffLog::record('auto_cancelled_stale_booking', 'bookings', $this->id,
+            "System auto-cancelled unpaid pending booking {$this->booking_ref} ({$holdMinutes}+ minutes since created, no payment received).");
+
+        $booking = $this;
+
+        \Illuminate\Support\Facades\DB::afterCommit(function () use ($booking, $holdLabel) {
+            $booking->loadMissing(['user', 'property']);
+
+            \App\Helpers\NotificationHelper::notifyGuest(
+                $booking->user_id,
+                'Booking Auto-Cancelled — Grace Period Expired',
+                "Your booking {$booking->booking_ref} for {$booking->property->property_name} was automatically cancelled because the required 50% downpayment wasn't completed within the {$holdLabel} grace period. Feel free to book again if the dates are still available.",
+                route('customer.bookings.show', $booking, false)
+            );
+
+            \App\Helpers\NotificationHelper::bookingAutoCancelled($booking, $holdLabel);
+        });
+    }
+
+    /**
+     * `true` kung ang QueryException na ito ay galing sa UNIQUE index
+     * ng `slot_hold` — ibig sabihin, isang double-booking ang sinagasa
+     * ng database.
+     */
+    private static function isSlotHoldViolation(\Illuminate\Database\QueryException $e): bool
+    {
+        return (string) $e->getCode() === '23000'
+            && str_contains($e->getMessage(), 'bookings_slot_hold_unique');
     }
 
     // ── Anti-Abuse / Anti-Spam Helpers ──────────────────────────────
@@ -845,6 +1153,38 @@ class Booking extends Model
     public function confirmOnFirstPayment(): bool
     {
         if ($this->status !== 'pending' || $this->amount_paid <= 0) {
+            return false;
+        }
+
+        // Pangalawang ruta patungo sa double-booking, walang
+        // kinalaman sa race condition: ang isang `pending` na hold na
+        // lumagpas na sa grace period ay tumitigil nang mag-block ng
+        // slot, kaya puwede nang mabook ng ibang guest — pero ang
+        // PayMongo checkout link ng unang guest ay BUKAS PA RIN. Kapag
+        // bumalik siya at nagbayad, dating basta na lang siyang
+        // ginagawang 'confirmed' dito, kahit may ibang may hawak na ng
+        // slot na iyon.
+        //
+        // Hindi puwedeng basta ibasura ang bayad (may hawak na tayong
+        // pera), at hindi rin puwedeng kanselahin ang booking dito
+        // (desisyon iyon ng admin, may refund na kasama). Kaya
+        // naiiwan itong 'pending' — na siya ring ligtas na estado:
+        // hindi na ito kinakansela ng stale sweeper dahil
+        // `amount_paid > 0`, kaya nananatili itong nakikita at may
+        // pera, hanggang may magdesisyon.
+        if (static::hasConflict($this->property_id, $this->checkInDateTime(), $this->checkOutDateTime(), $this->id)) {
+            \Illuminate\Support\Facades\Log::warning(
+                "Payment received for {$this->booking_ref} but its slot is already held by another booking — left pending for admin review."
+            );
+
+            \App\Helpers\NotificationHelper::notifyAdmin(
+                "Double-booked payment — {$this->booking_ref}",
+                "A payment was received for {$this->booking_ref} ("
+                . $this->checkInDateTime()->format('M d, Y g:i A')
+                . "), but that slot is already held by another booking. The payment was recorded and the booking left pending — decide which guest keeps the slot and refund the other.",
+                route('admin.bookings.show', $this, false)
+            );
+
             return false;
         }
 

@@ -24,6 +24,18 @@
             align-items: start;
         }
 
+        /* Without this the page is unusable on a small phone. A grid `1fr` track
+           is minmax(auto, 1fr), so its floor is the column's min-content width —
+           and this column holds a 5-column table and three side-by-side input
+           pairs. At 360px the track blew out to 381px and dragged 141 elements
+           past the right edge of the screen, every card included. Nothing hinted
+           at it, because admin.css sets `body { overflow-x: hidden }`, so it was
+           all just clipped. With this the track is 317px and the overflow is
+           gone. */
+        .detail-grid>div {
+            min-width: 0;
+        }
+
         /* Cards */
         .card-panel {
             background: var(--cream);
@@ -91,11 +103,47 @@
             font-family: 'Cormorant Garamond', serif;
         }
 
+        .bh-cell {
+            text-align: center;
+        }
+
+        .bh-arrow {
+            color: rgba(255, 255, 255, 0.4);
+            font-size: 24px;
+        }
+
+        .bh-duration-label {
+            color: rgba(255, 255, 255, 0.6);
+            font-size: 14px;
+        }
+
+        .bh-duration-value {
+            color: #fff;
+            font-family: 'Cormorant Garamond', serif;
+            font-size: 28px;
+            font-weight: 700;
+            margin: 4px 0;
+        }
+
+        .bh-status {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            align-items: flex-end;
+        }
+
         /* Info Grid */
         .info-grid {
             display: grid;
             grid-template-columns: 1fr 1fr;
             gap: 16px;
+        }
+
+        /* Same reason as .detail-grid > div above: a `1fr` track's floor is its
+           min-content width, so one long unbroken value (an address, an email,
+           an ID number) widens the track and pushes the card off-screen. */
+        .info-item {
+            min-width: 0;
         }
 
         .info-item .label {
@@ -111,6 +159,7 @@
             font-size: 14px;
             font-weight: 500;
             color: var(--text-main);
+            overflow-wrap: anywhere;
         }
 
         /* Status Badges — semantic, unchanged */
@@ -257,6 +306,23 @@
         }
 
         /* Payment History Table */
+
+        /* Both tables live in a card that is only ~270px wide on a phone. The
+           five-column extras table squeezed its Item column to 87px there, so an
+           item name plus its description wrapped into an 80px-tall cell. Letting
+           the table keep a workable width and scroll beats crushing every column
+           — the same trade already made for the bookings index. */
+        .table-scroll {
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+        }
+
+        @media (max-width: 560px) {
+            .table-scroll .pay-table {
+                min-width: 420px;
+            }
+        }
+
         .pay-table {
             width: 100%;
             border-collapse: collapse;
@@ -309,6 +375,18 @@
             border-color: var(--terracotta);
         }
 
+        /* Was three copies of an inline `grid-template-columns:1fr 1fr`, which
+           could never respond to width. Two effects at 360px: the Extend Stay
+           pair came out 144px + 121px rather than even halves, because a native
+           date input's intrinsic minimum (144px) outranks its 1fr share; and the
+           extras pair gave a text field 128px, too narrow to read what you are
+           typing into "Item / Amenity Name". */
+        .field-pair {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+        }
+
         .btn-record {
             background: var(--terracotta);
             color: #fff;
@@ -329,6 +407,33 @@
         }
 
         /* Guest card */
+        .guest-head {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            margin-bottom: 16px;
+        }
+
+        /* A flex item's default min-width is auto, so the text block could not
+           shrink below the guest's email address — browsers don't break emails
+           on their own. Measured at 360px: this block held 269px against a card
+           that only had 269px of content box once its own padding was taken, and
+           pushed its right edge to 370px, ten past the viewport. */
+        .guest-head-text {
+            min-width: 0;
+        }
+
+        .guest-head-name {
+            font-weight: 600;
+            font-size: 16px;
+            overflow-wrap: anywhere;
+        }
+
+        .guest-head-email {
+            font-size: 14px;
+            overflow-wrap: anywhere;
+        }
+
         .guest-avatar {
             width: 48px;
             height: 48px;
@@ -347,6 +452,51 @@
             .detail-grid {
                 grid-template-columns: 1fr;
             }
+
+            /* The header was six flex items with `flex-wrap: wrap` and
+               `space-between`, which pairs them up differently at every width and
+               reads as scrambled at all of them: at 480px the check-in date sat
+               beside the reference, the word "Duration" floated above the status
+               badges with its number underneath, and the "→" — a separator that
+               only means anything when check-in and check-out are on one line —
+               pointed at the edge of the card. A grid puts each piece in a known
+               cell instead of letting the wrap algorithm decide. */
+            .booking-header {
+                display: grid;
+                grid-template-columns: 1fr 1fr;
+                gap: 18px 20px;
+                padding: 20px;
+            }
+
+            .bh-id {
+                grid-column: 1 / -1;
+            }
+
+            .bh-arrow {
+                display: none;
+            }
+
+            .bh-cell {
+                text-align: left;
+            }
+
+            .bh-status {
+                align-items: flex-start;
+            }
+
+            /* Stacked, the three-line tower ("Duration" / "1" / "night") is a lot
+               of vertical space for two words; on one baseline it reads as the
+               sentence it always was. */
+            .bh-duration {
+                display: flex;
+                align-items: baseline;
+                gap: 8px;
+            }
+
+            .bh-duration-value {
+                font-size: 22px;
+                margin: 0;
+            }
         }
 
         @media (max-width: 480px) {
@@ -354,9 +504,25 @@
                 grid-template-columns: 1fr;
             }
 
+            /* Two columns of ~140px is not enough for "Sunday, September 13" plus
+               a time, so below this the header becomes a single column. */
             .booking-header {
-                justify-content: center;
-                text-align: center;
+                grid-template-columns: 1fr;
+                gap: 14px;
+            }
+
+            .booking-ref {
+                font-size: 24px;
+            }
+
+            .bh-status {
+                flex-direction: row;
+                flex-wrap: wrap;
+            }
+
+            .field-pair {
+                grid-template-columns: minmax(0, 1fr);
+                gap: 10px;
             }
         }
     </style>
@@ -381,11 +547,11 @@
 
     {{-- Booking Header --}}
     <div class="booking-header">
-        <div>
+        <div class="bh-id">
             <div class="booking-ref">{{ $booking->booking_ref }}</div>
             <div class="booking-source">Source: {{ strtoupper(str_replace('_', ' ', $booking->source)) }}</div>
         </div>
-        <div class="text-center">
+        <div class="bh-cell">
             <div class="booking-dates">
                 <strong>{{ $booking->check_in_date->format('M d, Y') }}</strong>
                 Check-in @if ($booking->check_in_time)
@@ -393,8 +559,8 @@
                 @endif
             </div>
         </div>
-        <div style="color:rgba(255,255,255,0.4);font-size:24px;">→</div>
-        <div class="text-center">
+        <div class="bh-arrow">→</div>
+        <div class="bh-cell">
             <div class="booking-dates">
                 <strong>{{ $booking->check_out_date->format('M d, Y') }}</strong>
                 Check-out @if ($booking->check_out_time)
@@ -402,13 +568,12 @@
                 @endif
             </div>
         </div>
-        <div class="text-center">
-            <div style="color:rgba(255,255,255,0.6);font-size: 14px;margin-bottom:4px;">Duration</div>
-            <div style="color:#fff;font-family:'Cormorant Garamond',serif;font-size:28px;font-weight:700;">
-                {{ $booking->num_nights }}</div>
-            <div style="color:rgba(255,255,255,0.6);font-size: 14px;">night{{ $booking->num_nights != 1 ? 's' : '' }}</div>
+        <div class="bh-cell bh-duration">
+            <div class="bh-duration-label">Duration</div>
+            <div class="bh-duration-value">{{ $booking->num_nights }}</div>
+            <div class="bh-duration-label">night{{ $booking->num_nights != 1 ? 's' : '' }}</div>
         </div>
-        <div style="display:flex;flex-direction:column;gap:8px;align-items:flex-end;">
+        <div class="bh-status">
             <span
                 class="status-badge s-{{ $booking->status }}">{{ ucfirst(str_replace('_', ' ', $booking->status)) }}</span>
             <span class="status-badge {{ $booking->payment_status_class }}">{{ $booking->payment_status_label }}</span>
@@ -503,7 +668,7 @@
                         </p>
                         <form method="POST" action="{{ route('admin.bookings.extend', $booking) }}">
                             @csrf @method('PATCH')
-                            <div class="mb-12" style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+                            <div class="mb-12 field-pair">
                                 <div>
                                     <label class="form-label-sm">New Check-out Date *</label>
                                     <input type="date" name="new_check_out_date" class="form-control-sm-custom"
@@ -595,13 +760,13 @@
                     <h3>Guest Information</h3>
                 </div>
                 <div class="card-body-custom">
-                    <div style="display:flex;align-items:center;gap:14px;margin-bottom:16px;">
+                    <div class="guest-head">
                         <div class="guest-avatar">
                             {{ strtoupper(substr($booking->user->full_name ?? 'G', 0, 1)) }}
                         </div>
-                        <div>
-                            <div style="font-weight:600;font-size:16px;">{{ $booking->user->full_name ?? 'N/A' }}</div>
-                            <div class="text-muted-theme" style="font-size: 14px;">{{ $booking->user->email ?? '' }}</div>
+                        <div class="guest-head-text">
+                            <div class="guest-head-name">{{ $booking->user->full_name ?? 'N/A' }}</div>
+                            <div class="text-muted-theme guest-head-email">{{ $booking->user->email ?? '' }}</div>
                         </div>
                     </div>
                     <div class="info-grid">
@@ -641,6 +806,7 @@
                         <p class="text-muted-theme" style="font-size:13px;text-align:center;padding:20px 0;">No payments
                             recorded yet.</p>
                     @else
+                        <div class="table-scroll">
                         <table class="pay-table">
                             <thead>
                                 <tr>
@@ -666,6 +832,7 @@
                                 @endforeach
                             </tbody>
                         </table>
+                        </div>
                     @endif
                 </div>
             </div>
@@ -680,7 +847,8 @@
                         <p class="text-muted-theme" style="font-size:13px;text-align:center;padding:10px 0;">No extra
                             charges recorded.</p>
                     @else
-                        <table class="pay-table mb-3">
+                        <div class="table-scroll mb-3">
+                        <table class="pay-table">
                             <thead>
                                 <tr>
                                     <th>Item</th>
@@ -721,11 +889,12 @@
                                 @endforeach
                             </tbody>
                         </table>
+                        </div>
                     @endif
 
                     <form method="POST" action="{{ route('admin.bookings.extras.store', $booking) }}">
                         @csrf
-                        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:10px;">
+                        <div class="field-pair" style="margin-bottom:10px;">
                             <div>
                                 <label class="form-label-sm">Item / Amenity Name *</label>
                                 <input type="text" name="item_name" class="form-control-sm-custom"
@@ -737,7 +906,7 @@
                                     placeholder="Detalye (opsyonal)">
                             </div>
                         </div>
-                        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:10px;">
+                        <div class="field-pair" style="margin-bottom:10px;">
                             <div>
                                 <label class="form-label-sm">Quantity *</label>
                                 <input type="number" name="quantity" class="form-control-sm-custom" value="1"

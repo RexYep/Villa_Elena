@@ -6,10 +6,13 @@
 
 @push('styles')
     <style>
-        /* Stats */
+        /* Stats — minmax(140px…) rather than 180px so a phone gets two columns
+           instead of one. At 180px these five chips stacked single-file and stood
+           431px tall on a 390px screen: half a phone screen of filter chrome
+           before the first booking row. */
         .stats-row {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
             gap: 12px;
             margin-bottom: 24px;
         }
@@ -69,6 +72,10 @@
             gap: 10px;
             flex-wrap: wrap;
             align-items: center;
+        }
+
+        .filter-search {
+            width: 200px;
         }
 
         .filter-input {
@@ -188,6 +195,40 @@
             color: var(--tag-cyan-fg);
         }
 
+        /* Table cells.
+
+           `table { width: 100% }` in admin.css means that once the card is
+           narrower than the table's content — every screen under ~1100px, since
+           this table has eight columns — the browser falls back to min-content
+           widths and wraps every cell it can. A booking ref came out as three
+           stacked lines ("VE-" / "20260907-" / "0012"), the guest name as four,
+           the phone number as two, and rows grew past 100px tall. None of these
+           three values is ever worth breaking; the table scrolls instead (see the
+           min-width in the 900px block below). */
+        .ref-link {
+            font-weight: 600;
+            color: var(--stone);
+            text-decoration: none;
+            font-size: 13px;
+            white-space: nowrap;
+        }
+
+        .ref-source {
+            font-size: 12px;
+            color: #94a3b8;
+            margin-top: 1px;
+        }
+
+        .guest-name {
+            white-space: nowrap;
+        }
+
+        .guest-phone {
+            font-size: 13px;
+            color: #94a3b8;
+            white-space: nowrap;
+        }
+
 
         .pagination .page-link[aria-label],
         .pagination .page-item:first-child .page-link,
@@ -202,6 +243,108 @@
             display: flex !important;
             align-items: center;
             justify-content: center;
+        }
+
+        /* Laravel renders up to ~11 page links; on a phone that is wider than the
+           card, and .pagination is a nowrap flex row by default. */
+        .pagination-wrap .pagination {
+            flex-wrap: wrap;
+            row-gap: 6px;
+        }
+
+        /* ── RESPONSIVE ─────────────────────────────────────────────── */
+
+        /* This table wants ~1160px for its eight columns — more than the content
+           area offers on anything short of a very wide monitor. admin.css makes
+           .table-card a scroller only below 900px, so between 900px and ~1500px
+           the base `overflow: hidden` simply cut the Actions column off with no
+           scrollbar to reveal it. The nowrap rules above make that width honest
+           rather than hiding it behind shredded cells, so the scroller has to
+           exist at every width, not just on mobile. */
+        /* Prefixed with .main-content purely for specificity: admin.css sets
+           `overflow: hidden` on a bare .table-card, and under `composer dev`
+           Vite injects admin.css at runtime — after this inline block — so an
+           equal-specificity override would silently lose in dev and work in
+           production. Every rule here that contends with admin.css is written
+           this way rather than relying on source order. */
+        .main-content .table-card {
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+        }
+
+        /* Both sit inside the scroller, so without this they slide out of view
+           with the table when it is dragged sideways. admin.css already does
+           this below 900px; the rule has to hold at every width now. */
+        .table-card>.table-header,
+        .table-card>.pagination-wrap {
+            position: sticky;
+            left: 0;
+        }
+
+        /* admin.css pairs its ≤900px scroller with `table { min-width: 640px }`.
+           640px is a sensible floor for the 4- and 5-column tables elsewhere in
+           the admin panel, but at eight columns it is below this table's own
+           content width and does nothing. */
+        @media (max-width: 900px) {
+            .main-content .table-card table {
+                min-width: 880px;
+            }
+        }
+
+        @media (max-width: 768px) {
+
+            /* .table-header goes column at 600px (admin.css); .btn-add is a flex
+               container, so without this it stretches to the full card width. */
+            .table-header .btn-add {
+                align-self: flex-start;
+            }
+        }
+
+        /* Phones only. Above this the flex row still packs three controls per
+           line and is genuinely shorter — forcing the grid at 768px made the bar
+           GROW from 119px to 206px, which is the opposite of the point. */
+        @media (max-width: 560px) {
+
+            /* The bar is a flex row of seven controls at seven different widths
+               (the search box carried an inline width:200px), so on a phone it
+               wrapped into ragged rows with holes in them. A grid pairs them
+               evenly: search across the top, then the selects, dates and buttons
+               two-up. */
+            .filters-bar {
+                display: grid;
+                grid-template-columns: 1fr 1fr;
+                align-items: stretch;
+                padding: 14px;
+                gap: 8px;
+            }
+
+            .filter-search {
+                width: auto;
+                grid-column: 1 / -1;
+            }
+
+            .filters-bar .btn-filter,
+            .filters-bar .btn-clear {
+                text-align: center;
+                padding: 10px 14px;
+            }
+
+            .stats-row {
+                gap: 8px;
+                margin-bottom: 16px;
+            }
+
+            .stat-chip {
+                padding: 10px 12px;
+            }
+
+            .stat-chip .val {
+                font-size: 20px;
+            }
+
+            .stat-chip .lbl {
+                font-size: 12px;
+            }
         }
     </style>
 @endpush
@@ -244,7 +387,7 @@
     {{-- Filters --}}
     <form method="GET" action="{{ route('admin.bookings.index') }}">
         <div class="filters-bar">
-            <input type="text" name="search" class="filter-input" style="width:200px;"
+            <input type="text" name="search" class="filter-input filter-search"
                 placeholder="Search ref / guest name..." value="{{ request('search') }}">
             <select name="status" class="filter-input">
                 <option value="">All Status</option>
@@ -300,17 +443,14 @@
                     @foreach ($bookings as $booking)
                         <tr>
                             <td>
-                                <a href="{{ route('admin.bookings.show', $booking) }}"
-                                    style="font-weight:600;color:var(--stone);text-decoration:none;font-size:13px;">
+                                <a href="{{ route('admin.bookings.show', $booking) }}" class="ref-link">
                                     {{ $booking->booking_ref }}
                                 </a>
-                                <div style="font-size: 12px;color:#94a3b8;margin-top:1px;">
-                                    {{ $booking->source }}
-                                </div>
+                                <div class="ref-source">{{ $booking->source }}</div>
                             </td>
                             <td>
-                                <div class="fw-medium">{{ $booking->user->full_name ?? 'N/A' }}</div>
-                                <div style="font-size: 13px;color:#94a3b8;">{{ $booking->user->phone ?? '' }}</div>
+                                <div class="fw-medium guest-name">{{ $booking->user->full_name ?? 'N/A' }}</div>
+                                <div class="guest-phone">{{ $booking->user->phone ?? '' }}</div>
                             </td>
                             <td style="white-space:nowrap;">{{ $booking->check_in_date->format('M d, Y') }}@if ($booking->check_in_time)
                                     <br><small

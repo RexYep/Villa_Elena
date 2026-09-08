@@ -59,10 +59,6 @@ class BookingController extends Controller
             return back()->withErrors(['dates' => 'The ' . Booking::SLOTS[$request->slot]['label'] . ' check-in slot has already passed for today. Please select a different date or slot.'])->withInput();
         }
 
-        if (Booking::hasConflict($booking->property_id, $checkin, $checkout, $booking->id)) {
-            return back()->withErrors(['dates' => 'Sorry, the Villa is not available on the selected date/slot.'])->withInput();
-        }
-
         $oldRef   = $booking->booking_ref;
         $oldDates = $booking->check_in_date->format('M d, Y') . ' — ' . $booking->check_out_date->format('M d, Y');
 
@@ -77,18 +73,38 @@ class BookingController extends Controller
         $newPromo     = $quote['promo'];
         $oldPromoId   = $booking->discount_id;
 
-        $booking->update([
-            'check_in_date'    => $checkin->format('Y-m-d'),
-            'check_in_time'    => $checkin->format('H:i:s'),
-            'check_out_date'   => $checkout->format('Y-m-d'),
-            'check_out_time'   => $checkout->format('H:i:s'),
-            'num_nights'       => $nights,
-            'base_amount'      => $quote['base'],
-            'discount_amount'  => $quote['discount'],
-            'discount_id'      => $newPromo?->id,
-            'total_amount'     => $newTotal,
-            'reschedule_count' => $booking->reschedule_count + 1,
-        ]);
+        // Availability check + ang paglipat mismo ng petsa ay iisang
+        // atomic na hakbang (tingnan ang Booking::reserveSlot()) —
+        // kung hindi, kayang sumingit ng ibang guest sa target na slot
+        // sa pagitan ng check at ng UPDATE. Ang $booking->id ang
+        // excludeBookingId: hindi dapat hinaharangan ng booking ang
+        // sarili nitong kasalukuyang slot.
+        $moved = Booking::reserveSlot(
+            $booking->property_id,
+            $checkin,
+            $checkout,
+            function () use ($booking, $checkin, $checkout, $nights, $quote, $newPromo, $newTotal) {
+                $booking->update([
+                    'check_in_date'    => $checkin->format('Y-m-d'),
+                    'check_in_time'    => $checkin->format('H:i:s'),
+                    'check_out_date'   => $checkout->format('Y-m-d'),
+                    'check_out_time'   => $checkout->format('H:i:s'),
+                    'num_nights'       => $nights,
+                    'base_amount'      => $quote['base'],
+                    'discount_amount'  => $quote['discount'],
+                    'discount_id'      => $newPromo?->id,
+                    'total_amount'     => $newTotal,
+                    'reschedule_count' => $booking->reschedule_count + 1,
+                ]);
+
+                return $booking;
+            },
+            $booking->id
+        );
+
+        if ($moved === null) {
+            return back()->withErrors(['dates' => 'Sorry, the Villa is not available on the selected date/slot.'])->withInput();
+        }
 
         // Panatilihing tapat ang bilang ng paggamit kapag lumipat ang
         // booking sa ibang promo — kung hindi, mauubos ang `usage_limit`

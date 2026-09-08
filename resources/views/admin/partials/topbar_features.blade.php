@@ -1,22 +1,34 @@
 <style>
     /* ── Notification Dropdown ── */
+    /* Anchored to the bell, but the bell is NOT at the right edge of the
+       topbar — the logout button follows it — so the panel grows leftwards
+       from a point ~120px in from the screen edge. Any width cap therefore
+       has to be measured against the viewport, not against the wrapper.
+       Below 640px the anchoring is dropped entirely (media query at the
+       end of this block). */
     .notif-dropdown {
         position: absolute;
         top: calc(100% + 12px);
         right: 0;
         width: 360px;
+        max-width: calc(100vw - 24px);
+        max-height: calc(100vh - var(--topbar-h) - 24px);
         background: #fff;
         border-radius: 16px;
         border: 1px solid #E2E8F0;
         box-shadow: 0 16px 48px rgba(13, 27, 42, .15);
         z-index: 9999;
         display: none;
+        flex-direction: column;
         overflow: hidden;
         animation: fadeSlideDown .2s ease;
     }
 
+    /* flex, not block: the header and footer stay pinned while .notif-list
+       takes the leftover height and scrolls, so "View all notifications"
+       stays reachable however short the screen is. */
     .notif-dropdown.open {
-        display: block;
+        display: flex;
     }
 
     @keyframes fadeSlideDown {
@@ -32,6 +44,7 @@
     }
 
     .notif-header {
+        flex-shrink: 0;
         padding: 14px 18px;
         border-bottom: 1px solid #E2E8F0;
         display: flex;
@@ -40,7 +53,7 @@
     }
 
     .notif-header-title {
-        font-family: 'Playfair Display', serif;
+        font-family: 'Cormorant Garamond', serif;
         font-size: 15px;
         font-weight: 600;
         color: #0D1B2A;
@@ -62,8 +75,12 @@
     }
 
     .notif-list {
+        flex: 1 1 auto;
+        min-height: 0;
         max-height: 340px;
         overflow-y: auto;
+        overscroll-behavior: contain;
+        -webkit-overflow-scrolling: touch;
     }
 
     .notif-list::-webkit-scrollbar {
@@ -117,15 +134,24 @@
         font-size: 13px;
         font-weight: 600;
         color: #1e293b;
+        overflow-wrap: anywhere;
     }
 
+    /* Two clamped lines instead of one nowrap line. These messages lead with
+       a booking ref, so a single ellipsised line on a phone showed the ref
+       and none of what actually happened to it. Also drops below the title's
+       13px — the message was rendering larger than its own heading. */
     .notif-item-msg {
-        font-size: 14px;
+        font-size: 13px;
+        line-height: 1.45;
         color: #6B7A8D;
         margin-top: 2px;
-        white-space: nowrap;
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        line-clamp: 2;
+        -webkit-box-orient: vertical;
         overflow: hidden;
-        text-overflow: ellipsis;
+        overflow-wrap: anywhere;
     }
 
     .notif-item-time {
@@ -144,6 +170,7 @@
     }
 
     .notif-footer {
+        flex-shrink: 0;
         padding: 11px 18px;
         border-top: 1px solid #E2E8F0;
         text-align: center;
@@ -169,10 +196,43 @@
         opacity: .4;
     }
 
-    @media (max-width: 480px) {
+    /* Phones: stop anchoring to the bell. `right: -12px` on an absolutely
+       positioned panel is measured from the bell, which sits ~120px in from
+       the screen edge, so a calc(100vw - 24px) panel started off the left of
+       the viewport — the whole icon column and the first characters of every
+       line were clipped away, and the page picked up a horizontal scrollbar.
+       Fixed positioning pins it to the viewport instead, where these 12px
+       gutters actually mean 12px. */
+    @media (max-width: 640px) {
         .notif-dropdown {
-            width: calc(100vw - 24px);
-            right: -12px;
+            position: fixed;
+            top: calc(var(--topbar-h) + 8px);
+            left: 12px;
+            right: 12px;
+            width: auto;
+            max-width: none;
+            max-height: calc(100vh - var(--topbar-h) - 20px);
+            border-radius: 14px;
+        }
+
+        /* the panel's own max-height is the limit now, not a fixed 340px */
+        .notif-list {
+            max-height: none;
+        }
+
+        .notif-item {
+            gap: 10px;
+            padding: 12px 14px;
+        }
+
+        .notif-header,
+        .notif-footer {
+            padding-left: 14px;
+            padding-right: 14px;
+        }
+
+        .notif-empty {
+            padding: 32px 20px;
         }
     }
 
@@ -418,6 +478,19 @@
         if (dropdown && !wrapper?.contains(e.target) && !btn?.contains(e.target)) {
             dropdown.classList.remove('open');
         }
+    });
+
+    // The topbar is z-index 900 and the mobile sidebar backdrop is 999, so an
+    // open panel would be buried behind the drawer rather than closed by it —
+    // the drawer's own toggle lives in admin.js and knows nothing about this.
+    document.addEventListener('DOMContentLoaded', function() {
+        document.getElementById('sidebarToggle')?.addEventListener('click', function() {
+            document.getElementById('notifDropdown')?.classList.remove('open');
+        });
+    });
+
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape') document.getElementById('notifDropdown')?.classList.remove('open');
     });
 
     // ── SEARCH ─────────────────────────────────────────────────────

@@ -285,6 +285,18 @@ tr:hover td { background: var(--sand); }
 .btn-icon.danger:hover { background: #ef4444; border-color: #ef4444; color: #fff; }
 .btn-icon.warning:hover { background: #f59e0b; border-color: #f59e0b; color: #fff; }
 
+/* Touch devices only. These are 30x30 with a 5px gap, which is fine for a mouse
+   but well under the 44px finger minimum — and in every admin table the Delete
+   button sits immediately beside Edit (and on promotions, beside Announce), so a
+   near-miss is destructive rather than merely annoying. Keyed on pointer type
+   rather than width: a tablet at 768px and a desktop window dragged to 768px
+   need different hit areas, and only the first is a finger. Mouse users keep the
+   compact sizing at every width. */
+@media (hover: none) and (pointer: coarse) {
+    .btn-icon { width: 44px; height: 44px; font-size: 15px; }
+    .action-btns { gap: 8px; }
+}
+
 /* ── EMPTY STATE ─────────────────────────────────────────── */
 .empty-state { text-align: center; padding: 60px 20px; color: var(--muted); }
 .empty-state i { font-size: 44px; display: block; margin-bottom: 10px; opacity: .4; }
@@ -412,7 +424,17 @@ tr:hover td { background: var(--sand); }
     .topbar { left: 0; padding: 0 16px; }
     .main-content { margin-left: 0; padding: 20px; }
     .sidebar-toggle { display: flex; }
-    .topbar-left h2 { font-size: 18px; }
+    /* .topbar is a fixed 68px, so a page-title that wraps grows straight out of
+       the bar. The dashboard's greeting ("Good Morning, <first name> 👋") already
+       took two lines at 390px and would overflow outright with a longer name —
+       one truncated line always fits. */
+    .topbar-left h2 {
+        font-size: 18px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    .topbar-left > div { min-width: 0; }
     .topbar-left p { display: none; }
 }
 

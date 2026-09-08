@@ -75,6 +75,24 @@
             align-items: center;
             gap: 4px;
         }
+
+        /* Seven columns want ~789px. admin.css makes .table-card a scroller only
+           below 900px, so at 1024px the base `overflow: hidden` left the table
+           789px wide inside a 683px card with no way to scroll — the entire
+           Actions column (edit, activate, announce, delete) was unreachable.
+           Prefixed with .main-content for specificity: admin.css sets
+           `overflow: hidden` on a bare .table-card and `composer dev` injects it
+           after this block. */
+        .main-content .table-card {
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+        }
+
+        .table-card>.table-header,
+        .table-card>.pagination-wrap {
+            position: sticky;
+            left: 0;
+        }
     </style>
 @endpush
 

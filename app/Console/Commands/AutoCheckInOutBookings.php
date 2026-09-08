@@ -359,36 +359,16 @@ class AutoCheckInOutBookings extends Command
             ->with(['user', 'property'])
             ->get();
 
-        $holdLabel = $holdMinutes % 60 === 0
-            ? ($holdMinutes / 60) . '-hour'
-            : $holdMinutes . '-minute';
-
         foreach ($stale as $booking) {
-            $booking->update([
-                'status'              => 'cancelled',
-                'cancelled_at'        => now(),
-                'cancellation_reason' => "Auto-cancelled by the system — payment was not completed within the {$holdLabel} grace period.",
-                'cancelled_by'        => 'system',
-                'balance_due'         => 0,
-            ]);
-
-            NotificationHelper::notifyGuest(
-                $booking->user_id,
-                'Booking Auto-Cancelled — Grace Period Expired',
-                "Your booking {$booking->booking_ref} for {$booking->property->property_name} was automatically cancelled because the required 50% downpayment wasn't completed within the {$holdLabel} grace period. Feel free to book again if the dates are still available.",
-                route('customer.bookings.show', $booking, false)
-            );
-
-            // Dating wala nito — puro notifyGuest() lang, kaya ang admin
-            // ay walang malay na may na-cancel na booking hangga't hindi
-            // niya binuksan mismo ang bookings list. Sinasadyang ibang
-            // preset ito sa bookingCancelled() (na nagsasabing "guest
-            // cancelled their booking") — mali iyon dito, ang system ang
-            // nag-cancel, hindi ang guest.
-            NotificationHelper::bookingAutoCancelled($booking, $holdLabel);
-
-            StaffLog::record('auto_cancelled_stale_booking', 'bookings', $booking->id,
-                "System auto-cancelled unpaid pending booking {$booking->booking_ref} ({$holdMinutes}+ minutes since created, no payment received).");
+            // Ang mismong pagkansela, ang staff log at ang dalawang
+            // notification (guest + admin) ay nasa
+            // Booking::releaseAsExpiredHold() na — pinagsasaluhan ito ng
+            // sweeper na ito at ng Booking::reserveSlot(), na kailangan
+            // ding magpalaya ng expired hold habang hawak ang lock nito
+            // (kung hindi, haharangan ng slot_hold unique index ang
+            // isang slot na sinasabi naman ng availability grid na
+            // bakante). Dalawang kopya nito ay siguradong maglalayo.
+            $booking->releaseAsExpiredHold();
 
             $this->info("🗑️ Auto-cancelled stale pending: {$booking->booking_ref}");
         }

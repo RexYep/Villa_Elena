@@ -6,9 +6,11 @@
 
 @push('styles')
     <style>
+        /* minmax(0, …) on the flexible track: a bare 1fr is minmax(auto, 1fr),
+           which lets anything wide inside push the column past its share. */
         .form-grid {
             display: grid;
-            grid-template-columns: 1fr 360px;
+            grid-template-columns: minmax(0, 1fr) 360px;
             gap: 24px;
             align-items: start;
         }
@@ -42,9 +44,15 @@
             gap: 16px;
         }
 
+        /* auto-fill, not three fixed columns. Above the stacking breakpoint the
+           form column is 1fr of (1fr + 360px), so it stays narrow while the
+           window is wide; three fixed tracks came out around 100px each, and the
+           widest chip ("Air Conditioning") has a measured min-content width of
+           125px, so every track was forced past its share and the grid overflowed
+           its own card. 130px clears that floor with a small margin. */
         .amenities-grid {
             display: grid;
-            grid-template-columns: repeat(3, 1fr);
+            grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
             gap: 8px;
         }
 
@@ -138,7 +146,7 @@
 
         .image-previews {
             display: grid;
-            grid-template-columns: repeat(2, 1fr);
+            grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
             gap: 8px;
             margin-top: 12px;
         }
@@ -189,7 +197,7 @@
 
         .existing-images {
             display: grid;
-            grid-template-columns: repeat(2, 1fr);
+            grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
             gap: 8px;
             margin-bottom: 12px;
         }
@@ -282,27 +290,34 @@
             color: var(--text-main);
         }
 
-        @media (max-width: 900px) {
+        /* Collapses at 1150px, not 900px. The 360px photos/settings column is a
+           fixed track, so between 993px — where the admin's own 260px sidebar
+           reappears — and roughly 1150px the form gets only what is left, and the
+           secondary column ends up wider than the form it is meant to support.
+           Stacking through that band gives the form the full width instead. */
+        @media (max-width: 1150px) {
             .form-grid {
-                grid-template-columns: 1fr;
+                grid-template-columns: minmax(0, 1fr);
             }
         }
 
-        @media (max-width: 560px) {
-            .three-col {
-                grid-template-columns: 1fr;
-            }
-
-            .amenities-grid {
+        /* admin.css collapses every .two-col below 900px — but that is exactly
+           where .form-grid hands the form its full width, so the inner pairs
+           collapsed at the moment their container grew. Prefixed with .form-grid
+           for specificity: admin.css's rule is a bare .two-col, and `composer
+           dev` injects admin.css after this block. */
+        @media (min-width: 561px) {
+            .form-grid .two-col {
                 grid-template-columns: 1fr 1fr;
             }
+        }
 
-            .image-previews {
-                grid-template-columns: 1fr;
-            }
-
-            .existing-images {
-                grid-template-columns: 1fr;
+        /* The three grids above size themselves by content now, so they no longer
+           need a phone override — auto-fill already drops them to the column
+           count the width allows. */
+        @media (max-width: 560px) {
+            .three-col {
+                grid-template-columns: minmax(0, 1fr);
             }
         }
     </style>

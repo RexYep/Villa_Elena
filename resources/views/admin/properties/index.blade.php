@@ -6,10 +6,15 @@
 
 @push('styles')
     <style>
-        /* Stats row */
+        /* Stats row — auto-fit, not four fixed tracks. `repeat(4, 1fr)` is
+           `repeat(4, minmax(auto, 1fr))`, so each track's floor is its own
+           min-content: icon (42px) + gap + the longest label word + padding is
+           about 171px, but at a 1000px viewport there are only ~157px to go
+           round, so the row overflowed its container by a few pixels — invisible,
+           because admin.css clips it with `body { overflow-x: hidden }`. */
         .stats-row {
             display: grid;
-            grid-template-columns: repeat(4, 1fr);
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
             gap: 16px;
             margin-bottom: 28px;
         }
@@ -82,8 +87,15 @@
             color: #fff;
         }
 
+        /* flex-wrap, because this row cannot shrink past roughly 400px: a text
+           input has an intrinsic minimum around 170px and each select cannot go
+           narrower than its longest option ("Maintenance", "All Types"). Without
+           it the row stays one line and runs off a phone screen — and admin.css's
+           `body { overflow-x: hidden }` means that shows up as the filters being
+           cut off, not as a scrollbar. */
         .search-box {
             display: flex;
+            flex-wrap: wrap;
             gap: 8px;
             align-items: center;
         }
@@ -93,10 +105,21 @@
             border-radius: 8px;
             padding: 9px 14px;
             font-size: 13px;
-            width: 240px;
+            flex: 1 1 200px;
+            min-width: 0;
+            max-width: 240px;
             font-family: 'DM Sans', sans-serif;
             background: #fff;
             color: var(--text-main);
+        }
+
+        /* flex: 0 1 auto — shrink when the row is tight, but never GROW. With
+           `1 1 auto` a select expands to fill whatever is left on its line, and
+           because the row wraps at desktop widths the lone "All Types" dropdown
+           was stretching to 415px for its two options. */
+        .search-box .filter-select {
+            flex: 0 1 auto;
+            min-width: 0;
         }
 
         .search-box input:focus {
@@ -114,10 +137,20 @@
             color: var(--text-main);
         }
 
-        /* Property Cards Grid */
+        /* Property Cards Grid — minmax(0, 1fr) rather than 1fr. A bare `1fr` is
+           minmax(auto, 1fr), so a single wide item inside a card (a long property
+           name, the meta row above, an amenity chip) can widen its track and take
+           the grid past the screen. minmax(0, …) lets the track shrink and the
+           content wrap instead. */
+        /* Three fixed columns held even where they don't fit. Between 993px —
+           where the admin's own 260px sidebar reappears — and about 1150px the
+           content area is only ~676px, giving 207px cards; the meta row inside
+           them went to three lines and the price and amenity chips had nowhere to
+           go. Sizing by content lets the column count follow the space: two in
+           that band, three once there is room. */
         .properties-grid {
             display: grid;
-            grid-template-columns: repeat(3, 1fr);
+            grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
             gap: 20px;
         }
 
@@ -173,9 +206,15 @@
             margin-bottom: 8px;
         }
 
+        /* Three nowrap items on one line ("20 guests", "340 sqm", "1248
+           bookings") need roughly 260px, plus the card's 40px of padding. In the
+           two-column band the cards are narrower than that, and since a grid
+           `1fr` track's floor is its min-content width, the track widens rather
+           than the text wrapping — pushing the whole grid past its container. */
         .property-meta {
             display: flex;
-            gap: 14px;
+            flex-wrap: wrap;
+            gap: 6px 14px;
             font-size: 14px;
             color: var(--muted);
             margin-bottom: 12px;
@@ -248,23 +287,59 @@
             animation: fadeUp .35s ease both;
         }
 
-        @media (max-width: 900px) {
-            .stats-row {
-                grid-template-columns: 1fr 1fr;
-            }
-
-            .properties-grid {
-                grid-template-columns: 1fr 1fr;
-            }
-        }
+        /* No 900px override any more — both grids above size themselves by
+           content now, so the column count follows the width on its own. */
 
         @media (max-width: 560px) {
+            /* Two columns, not one. These cards are an icon plus two short lines,
+               so full width wastes most of the row and turns four of them into a
+               long scroll before the properties themselves start. */
             .stats-row {
-                grid-template-columns: 1fr;
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+                gap: 10px;
+                margin-bottom: 20px;
             }
 
+            .stat-card {
+                padding: 14px;
+                gap: 10px;
+            }
+
+            .stat-icon {
+                width: 36px;
+                height: 36px;
+                font-size: 16px;
+            }
+
+            .stat-val {
+                font-size: 22px;
+            }
+
+            .stat-lbl {
+                font-size: 12px;
+            }
+
+            /* One property card per row on a phone; auto-fill would still fit two
+               260px tracks at the wider end of this range and they would be too
+               cramped for the image, meta row, price and amenity chips. */
             .properties-grid {
-                grid-template-columns: 1fr;
+                grid-template-columns: minmax(0, 1fr);
+            }
+
+            /* The toolbar is space-between, so on a phone the Add button and the
+               filters sit on separate lines with the button stranded; stacking
+               them deliberately keeps the filters full width. */
+            .toolbar {
+                flex-direction: column;
+                align-items: stretch;
+            }
+
+            .toolbar .btn-add {
+                justify-content: center;
+            }
+
+            .search-box input {
+                max-width: none;
             }
         }
     </style>

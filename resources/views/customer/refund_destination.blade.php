@@ -193,12 +193,13 @@
         }
 
         @media (max-width:480px) {
+
             /* `flex-wrap: wrap` dati: tatlong hilera ang kinalalabasan —
-               mag-isa ang icon, tapos ang reference, tapos ang HALAGA sa
-               pinakadulo. Ang halaga ang buong dahilan ng pahinang ito,
-               kaya hindi ito dapat nasa ilalim ng lahat. Dalawang hilera na
-               lang: icon + reference sa itaas, at ang pera bilang sariling
-               nakalinyang hilera, may label sa tabi. */
+                   mag-isa ang icon, tapos ang reference, tapos ang HALAGA sa
+                   pinakadulo. Ang halaga ang buong dahilan ng pahinang ito,
+                   kaya hindi ito dapat nasa ilalim ng lahat. Dalawang hilera na
+                   lang: icon + reference sa itaas, at ang pera bilang sariling
+                   nakalinyang hilera, may label sa tabi. */
             .booking-summary {
                 display: grid;
                 grid-template-columns: auto 1fr;
@@ -270,7 +271,7 @@
 
     <div class="notice-box">
         <i class="bi bi-info-circle me-1"></i>
-        You can use any account you like — it does not have to be the one you paid with.
+        You can use any account you have for transfer — it does not have to be the one you paid with.
     </div>
 
     @if (empty($institutions))
@@ -298,8 +299,7 @@
                             class="form-control @error('institution_bic') is-invalid @enderror" required>
                             <option value="">Select where to send it…</option>
                             @foreach ($institutions as $institution)
-                                <option value="{{ $institution['bic'] }}"
-                                    @selected(old('institution_bic', $destination->institution_bic ?? '') === $institution['bic'])>
+                                <option value="{{ $institution['bic'] }}" @selected(old('institution_bic', $destination->institution_bic ?? '') === $institution['bic'])>
                                     {{ $institution['name'] }}
                                 </option>
                             @endforeach
@@ -307,7 +307,7 @@
                         @error('institution_bic')
                             <div class="field-error">{{ $message }}</div>
                         @enderror
-                        <div class="form-hint">GCash is listed as <strong>G-Xchange, Inc.</strong></div>
+
                     </div>
 
                     <div class="mb-16">
@@ -322,7 +322,7 @@
                         <div class="form-hint">
                             Digits only — no spaces or dashes.
                             For GCash and Maya this is your 11-digit mobile number.
-                            @if ($suggestedNumber && ! ($destination->account_number ?? null))
+                            @if ($suggestedNumber && !($destination->account_number ?? null))
                                 We've filled in the number on your profile — please confirm it's the right one.
                             @endif
                         </div>
@@ -332,7 +332,7 @@
                         <label class="form-label" for="account_name">Account Name</label>
                         <input type="text" name="account_name" id="account_name"
                             class="form-control @error('account_name') is-invalid @enderror"
-                            value="{{ old('account_name', $destination->account_name ?? $booking->user->full_name ?? '') }}"
+                            value="{{ old('account_name', $destination->account_name ?? ($booking->user->full_name ?? '')) }}"
                             placeholder="Juan Dela Cruz" required>
                         @error('account_name')
                             <div class="field-error">{{ $message }}</div>
@@ -358,3 +358,4 @@
         @endif
     @endif
 @endsection
+

@@ -211,10 +211,15 @@
             margin-bottom: 4px;
         }
 
+        .info-item {
+            min-width: 0;
+        }
+
         .info-item .val {
             font-size: 14px;
             color: var(--text-main);
             font-weight: 500;
+            overflow-wrap: anywhere;
         }
 
         /* AMENITIES */
@@ -298,19 +303,79 @@
             background: #b91c1c;
         }
 
-        .two-col {
+        /* Renamed from .two-col. admin.css already owns .two-col as a shared
+           form-field-pair utility (1fr 1fr), and this page was redefining that
+           same class as a 2fr 1fr page layout — a different thing entirely. The
+           two rules have equal specificity, so which one won depended purely on
+           load order: page CSS wins in production, where @vite emits a stylesheet
+           link before @stack('styles'), but admin.css wins under `composer dev`,
+           where Vite injects it at runtime after this block. The layout would
+           have silently differed between dev and production. */
+        .detail-cols {
             display: grid;
             grid-template-columns: 2fr 1fr;
             gap: 20px;
         }
 
+        /* Both tracks default to minmax(auto, …), so their floor is min-content —
+           and the left one holds a five-column table whose min-content is 615px.
+           That dragged the left track to 617px at a 1000px viewport and left the
+           right column 156px, less than the width of the buttons inside it. The
+           ratio measured 3.95:1 where the CSS asks for 2:1. */
+        .detail-cols>div {
+            min-width: 0;
+        }
+
+        /* The bookings table is wider than this panel at most widths, and .panel
+           clips with overflow:hidden — so Check-out and Status were simply cut
+           off with nothing to show they existed (measured: a 615px table in a
+           317px panel at 360px). */
+        .table-scroll {
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+        }
+
         @media(max-width:900px) {
-            .two-col {
+            .detail-cols {
                 grid-template-columns: minmax(0, 1fr);
             }
 
             .mini-stats {
-                grid-template-columns: repeat(2, 1fr);
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+        }
+
+        @media(max-width:560px) {
+
+            /* 127px per column at 360px is not enough for a property name or a
+               peso amount with its label above it. */
+            .info-grid {
+                grid-template-columns: minmax(0, 1fr);
+            }
+
+            /* Three labelled buttons take 297px of a 345px topbar, which left
+               .topbar-left just 24px and the page title rendering at literally
+               zero width. Icons only here; the labels return above 560px.
+               font-size:0 on the button hides the bare text nodes without needing
+               a span around each label. */
+            .topbar-right .btn-outline,
+            .topbar-right .btn-navy,
+            .topbar-right .logout-btn {
+                font-size: 0;
+                gap: 0;
+                padding: 9px 12px;
+            }
+
+            .topbar-right .btn-outline i,
+            .topbar-right .btn-navy i,
+            .topbar-right .logout-btn i {
+                font-size: 15px;
+            }
+
+            .danger-zone {
+                flex-wrap: wrap;
+                gap: 14px;
+                padding: 18px;
             }
         }
     </style>
@@ -375,7 +440,7 @@
         </div>
     </div>
 
-    <div class="two-col">
+    <div class="detail-cols">
         {{-- LEFT COLUMN --}}
         <div>
 
@@ -500,6 +565,7 @@
                         No bookings yet for this property.
                     </div>
                 @else
+                    <div class="table-scroll">
                     <table>
                         <thead>
                             <tr>
@@ -533,6 +599,7 @@
                             @endforeach
                         </tbody>
                     </table>
+                    </div>
                 @endif
             </div>
 

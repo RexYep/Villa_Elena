@@ -714,7 +714,10 @@
                                 showToast(`${p.booking_ref} moved — ${data.nights} nights`);
                             } else {
                                 info.revert();
-                                showToast('Could not move booking', true);
+                                // Ang server ang nagsasabi kung BAKIT — halos
+                                // palaging dahil may ibang booking nang humahawak
+                                // sa petsa/slot na iyon.
+                                showToast(data.message || 'Could not move booking', true);
                             }
                         })
                         .catch(() => {

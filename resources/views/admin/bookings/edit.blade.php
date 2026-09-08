@@ -40,6 +40,18 @@
             gap: 14px;
         }
 
+        /* min-width: 0 matters here. A grid `1fr` track is minmax(auto, 1fr), so
+           its floor is the content's min-content width — one unbroken token is
+           enough to push the track past its share and the card past the screen.
+           Measured at 360px with a 46-character name and no spaces or hyphens to
+           break on: the value's right edge landed at 374px against a 360px
+           viewport, and the card grew to 393px. Nothing showed a scrollbar,
+           because admin.css sets `body { overflow-x: hidden }` — the overflow is
+           simply clipped away. */
+        .info-item {
+            min-width: 0;
+        }
+
         .info-item .label {
             font-size: 13px;
             font-weight: 600;
@@ -53,6 +65,19 @@
             font-size: 14px;
             font-weight: 500;
             color: var(--text-main);
+            overflow-wrap: anywhere;
+        }
+
+        /* This note was 11.5px — the smallest text anywhere in the admin panel
+           (labels and hints are 13px, validation messages 14px) — and it is the
+           text that tells you where to go to change status or dates, wrapped
+           around the only link in the card. On a phone it was the least legible
+           thing on the page while carrying the most navigational weight. */
+        .edit-note {
+            font-size: 13px;
+            line-height: 1.5;
+            margin-top: 14px;
+            margin-bottom: 0;
         }
 
         @media (max-width: 900px) {
@@ -137,7 +162,7 @@
                                 <div class="value">₱{{ number_format($booking->total_amount, 2) }}</div>
                             </div>
                         </div>
-                        <p class="text-muted-theme" style="font-size:11.5px;margin-top:14px;margin-bottom:0;">
+                        <p class="text-muted-theme edit-note">
                             <i class="bi bi-info-circle me-1"></i>
                             Guest, property, dates, and status are not editable here. Use the status action buttons on the
                             <a href="{{ route('admin.bookings.show', $booking) }}">booking detail page</a> to change

@@ -437,12 +437,6 @@ class PortalController extends Controller
             return back()->withErrors(['dates' => 'The '.Booking::SLOTS[$request->slot]['label'].' check-in slot has already passed for today. Please select a different date or slot.'])->withInput();
         }
 
-        // Final conflict check — walang hiwalay na buffer, ang gap sa
-        // pagitan ng dalawang fixed slot na mismo ang buffer.
-        if (Booking::hasConflict($property->id, $checkin, $checkout)) {
-            return back()->withErrors(['dates' => 'This selected date/slot is no longer available. Please choose another.'])->withInput();
-        }
-
         // Flat/package price + seasonal promo. Muling kinukuwenta dito
         // (hindi tinatanggap mula sa form) — kung galing sa request ang
         // discount, kayang baguhin ng guest ang presyo mismo.
@@ -458,7 +452,13 @@ class PortalController extends Controller
         // AWTOMATIKO pagkatapos ng successful PayMongo payment
         // (tingnan: PaymentController::success()). WALANG admin approval
         // step — direktang papunta sa Pay page pagkatapos nito.
-        $booking = Booking::create([
+        //
+        // Ang huling availability check at ang INSERT ay iisang atomic
+        // na hakbang sa loob ng Booking::reserveSlot(). Dati, magkahiwalay
+        // sila — kaya dalawang guest na sabay mag-submit ay parehong
+        // nakakakita ng bakante bago pa may naipasok na row, at parehong
+        // nakakakuha ng slot (nangyari ito: VE-4C7INQOG at VE-YHLBMLUU).
+        $booking = Booking::reserveSlot($property->id, $checkin, $checkout, fn () => Booking::create([
             'user_id' => Auth::id(),
             'property_id' => $property->id,
             'check_in_date' => $checkin->format('Y-m-d'),
@@ -478,7 +478,11 @@ class PortalController extends Controller
             'payment_status' => 'unpaid',
             'source' => 'online',
             'special_requests' => $request->special_requests,
-        ]);
+        ]));
+
+        if ($booking === null) {
+            return back()->withErrors(['dates' => 'This selected date/slot is no longer available. Please choose another.'])->withInput();
+        }
 
         // Atomic sa antas ng SQL (`used_count = used_count + 1`), kaya
         // walang mawawalang bilang kahit sabay-sabay ang mga booking.

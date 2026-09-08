@@ -6,10 +6,12 @@
 
 @push('styles')
     <style>
-        /* Form Layout */
+        /* Form Layout — minmax(0, …) on the flexible track, since a bare 1fr is
+           minmax(auto, 1fr) and lets anything wide inside (the amenities grid
+           below, a long validation message) push the column past its share. */
         .form-grid {
             display: grid;
-            grid-template-columns: 1fr 360px;
+            grid-template-columns: minmax(0, 1fr) 360px;
             gap: 24px;
             align-items: start;
         }
@@ -43,10 +45,23 @@
             gap: 16px;
         }
 
-        /* Amenities checkboxes */
+        /* Amenities checkboxes.
+
+           auto-fill rather than a fixed 3 columns. Above 900px the form column
+           is 1fr of (1fr + 360px), so it gets narrow while the window is still
+           wide — at a 1000px viewport it is about 316px, and three fixed columns
+           are ~100px each. "Air Conditioning" cannot render narrower than its
+           longest word plus the check icon and padding (~137px), so each track
+           was forced past its share and the grid overflowed its own card. Sizing
+           by content instead means the column count follows the space available:
+           two when it is tight, five when the form is full width.
+
+           130px is the measured floor: the widest chip, "Air Conditioning", has a
+           min-content width of 125px including its check icon and padding, so any
+           track at or above that can never be forced wider than its share. */
         .amenities-grid {
             display: grid;
-            grid-template-columns: repeat(3, 1fr);
+            grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
             gap: 8px;
         }
 
@@ -139,10 +154,12 @@
             color: var(--muted);
         }
 
-        /* Image previews */
+        /* Image previews — two fixed columns only makes sense while this card is
+           in the 360px sidebar. Once .form-grid stacks below 900px the card runs
+           the full width and those two thumbnails become enormous. */
         .image-previews {
             display: grid;
-            grid-template-columns: repeat(2, 1fr);
+            grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
             gap: 8px;
             margin-top: 12px;
         }
@@ -251,23 +268,35 @@
             color: var(--text-main);
         }
 
-        @media (max-width: 900px) {
+        /* Collapses at 1150px, not 900px. The 360px photo/settings column is a
+           fixed track, so between 993px — where the admin's own 260px sidebar
+           reappears — and roughly 1150px the form gets whatever is left, and that
+           is not much: measured 277px of form against 360px of sidebar at a
+           1000px viewport, and 377px against 360px at 1100px. The secondary
+           column was wider than the form it was meant to support, which squeezed
+           the paired fields to 105px each. Stacking through that band gives the
+           form the full ~676px instead. */
+        @media (max-width: 1150px) {
             .form-grid {
-                grid-template-columns: 1fr;
+                grid-template-columns: minmax(0, 1fr);
+            }
+        }
+
+        /* admin.css collapses every .two-col below 900px — but 900px is exactly
+           where .form-grid above drops its 360px sidebar and gives the form the
+           full width, so the inner pairs collapsed at the moment their container
+           grew. Same problem, and the same 561px threshold, as the booking form.
+           Prefixed with .form-grid for specificity: admin.css's rule is a bare
+           .two-col and `composer dev` injects it after this block. */
+        @media (min-width: 561px) {
+            .form-grid .two-col {
+                grid-template-columns: 1fr 1fr;
             }
         }
 
         @media (max-width: 560px) {
             .three-col {
-                grid-template-columns: 1fr;
-            }
-
-            .amenities-grid {
-                grid-template-columns: 1fr 1fr;
-            }
-
-            .image-previews {
-                grid-template-columns: 1fr;
+                grid-template-columns: minmax(0, 1fr);
             }
         }
     </style>

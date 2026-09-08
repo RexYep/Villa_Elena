@@ -106,13 +106,6 @@ class BookingController extends Controller
             return back()->withErrors(['check_in_date' => 'The ' . Booking::SLOTS[$request->slot]['label'] . ' check-in slot has already passed for today. Please select a different date or slot.'])->withInput();
         }
 
-        // Check availability — ang gap sa pagitan ng dalawang fixed slot
-        // ang siya nang cleaning buffer, kaya walang hiwalay na buffer
-        // check dito.
-        if (Booking::hasConflict($request->property_id, $checkIn, $checkOut)) {
-            return back()->withErrors(['check_in_date' => 'This villa is already booked for the selected date/slot.'])->withInput();
-        }
-
         $nights = max(1, $checkIn->diffInDays($checkOut));
 
         // Flat/package price — base lang sa segment ng CHECK-IN (hindi
@@ -125,7 +118,11 @@ class BookingController extends Controller
         $totalAmount    = $quote['total'];
         $promo          = $quote['promo'];
 
-        $booking = Booking::create([
+        // Availability check + INSERT bilang iisang atomic na hakbang —
+        // tingnan ang Booking::reserveSlot(). Dating magkahiwalay ang
+        // dalawa, kaya kayang sumingit ng isang online booking sa
+        // pagitan nila at makuha ang parehong slot.
+        $booking = Booking::reserveSlot($request->property_id, $checkIn, $checkOut, fn () => Booking::create([
             'user_id'          => $request->user_id,
             'property_id'      => $request->property_id,
             'check_in_date'    => $checkIn->format('Y-m-d'),
@@ -145,7 +142,11 @@ class BookingController extends Controller
             'payment_status'   => 'unpaid',
             'source'           => $request->source,
             'special_requests' => $request->special_requests,
-        ]);
+        ]));
+
+        if ($booking === null) {
+            return back()->withErrors(['check_in_date' => 'This villa is already booked for the selected date/slot.'])->withInput();
+        }
 
         $promo?->increment('used_count');
 
@@ -272,6 +273,22 @@ class BookingController extends Controller
         // ang naka-schedule na check-out oras nito.
         if ($newStatus === 'checked_out' && $booking->checkOutDateTime()->isFuture()) {
             return back()->with('error', 'It is not yet time for check-out for this booking — it is scheduled for ' . $booking->checkOutDateTime()->format('M d, Y g:i A') . '.');
+        }
+
+        // Ang pagbabalik ng isang cancelled/no_show na booking sa isang
+        // buhay na status ay muling KUMUKUHA ng slot nito — at malamang
+        // may ibang guest nang humahawak doon, dahil pinalaya na iyon
+        // nang ma-cancel ito. Walang tseke nito dati: tahimik na
+        // nagiging double-booking. (Sasagasaan din ito ngayon ng
+        // slot_hold unique index, pero bilang 500 — mas mabuti nang
+        // malinaw na mensahe kaysa error page.)
+        if (in_array($oldStatus, ['cancelled', 'no_show'], true)
+            && ! in_array($newStatus, ['cancelled', 'no_show'], true)
+            && Booking::hasConflict($booking->property_id, $booking->checkInDateTime(), $booking->checkOutDateTime(), $booking->id)
+        ) {
+            return back()->with('error',
+                "Hindi na maibabalik sa '{$newStatus}' ang booking na ito — may ibang booking nang humahawak sa "
+                . $booking->checkInDateTime()->format('M d, Y g:i A') . ' na slot.');
         }
 
         $updates = ['status' => $newStatus];
@@ -432,21 +449,33 @@ class BookingController extends Controller
             return back()->withErrors(['extend' => 'Ang bagong check-out ay dapat pagkatapos ng kasalukuyang check-out na naka-schedule.']);
         }
 
-        // Tignan kung may susunod na booking na ma-co-conflict sa
-        // pinaplanong bagong check-out — dahil dito lang dapat pipigilan
-        // ang extension.
-        if (Booking::hasConflict($booking->property_id, $currentCheckout, $newCheckout, $booking->id)) {
-            return back()->withErrors(['extend' => 'Hindi pwedeng i-extend — may susunod na guest na naka-schedule mag-check-in bago pa man mapaglinis ang Villa. Sabihan na lang ang guest na kailangan nilang mag check-out sa oras na naka-schedule.']);
-        }
-
         $oldCheckoutDate = $booking->check_out_date->format('M d, Y');
         $oldCheckoutTime = $booking->check_out_time;
 
-        $booking->update([
-            'check_out_date' => $newCheckout->format('Y-m-d'),
-            'check_out_time' => $newCheckout->format('H:i:s'),
-            'num_nights'     => max(1, $booking->checkInDateTime()->diffInDays($newCheckout)),
-        ]);
+        // Tignan kung may susunod na booking na ma-co-conflict sa
+        // pinaplanong bagong check-out — dahil dito lang dapat pipigilan
+        // ang extension. Kasama na ito sa lock ng reserveSlot(), kaya
+        // hindi na kayang sumingit ng isang bagong booking sa susunod na
+        // slot sa pagitan ng check at ng UPDATE.
+        $extended = Booking::reserveSlot(
+            $booking->property_id,
+            $currentCheckout,
+            $newCheckout,
+            function () use ($booking, $newCheckout) {
+                $booking->update([
+                    'check_out_date' => $newCheckout->format('Y-m-d'),
+                    'check_out_time' => $newCheckout->format('H:i:s'),
+                    'num_nights'     => max(1, $booking->checkInDateTime()->diffInDays($newCheckout)),
+                ]);
+
+                return $booking;
+            },
+            $booking->id
+        );
+
+        if ($extended === null) {
+            return back()->withErrors(['extend' => 'Hindi pwedeng i-extend — may susunod na guest na naka-schedule mag-check-in bago pa man mapaglinis ang Villa. Sabihan na lang ang guest na kailangan nilang mag check-out sa oras na naka-schedule.']);
+        }
 
         // Housekeeping task (checkout_clean) ay dapat maging updated na rin
         // ang due_date nito para tama ang schedule.

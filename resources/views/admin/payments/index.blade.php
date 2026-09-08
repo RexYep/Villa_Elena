@@ -278,6 +278,27 @@
             align-items: end;
         }
 
+        /* This table has NINE columns and wants ~1000px even with short sample
+           data; real notes and guest names push it wider. admin.css only turns
+           .table-card into a scroller below 900px, so from 900px up to roughly
+           1350px the base `overflow: hidden` just cut the View / Refund column
+           off with no scrollbar to reveal it (measured: a 999px table inside a
+           659px card at a 1000px viewport). Prefixed with .main-content for
+           specificity — admin.css sets `overflow: hidden` on a bare .table-card,
+           and `composer dev` injects admin.css after this block. */
+        .main-content .table-card {
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+        }
+
+        /* Both sit inside that scroller, so without this they slide out of view
+           with the table when it is dragged sideways. */
+        .table-card>.table-card-header,
+        .table-card>.pagination-wrap {
+            position: sticky;
+            left: 0;
+        }
+
         @media (max-width: 1100px) {
             .stats-row {
                 grid-template-columns: repeat(3, 1fr);
@@ -299,12 +320,40 @@
         }
 
         @media (max-width: 480px) {
+
+            /* Two columns, not one. Five full-width cards is most of a phone
+               screen of chrome before the first payment row. */
             .stats-row {
-                grid-template-columns: 1fr;
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+                gap: 10px;
+            }
+
+            .stat-card {
+                padding: 14px;
+            }
+
+            .stat-icon {
+                width: 32px;
+                height: 32px;
+                font-size: 15px;
+                margin-bottom: 8px;
+            }
+
+            .stat-val {
+                font-size: 20px;
             }
 
             .payments-filter-grid {
-                grid-template-columns: 1fr;
+                grid-template-columns: minmax(0, 1fr);
+            }
+
+            /* The banner is a nowrap flex row whose button carries
+               `white-space: nowrap`, so the button kept its 110px and the
+               paragraph was squeezed into a 163px ribbon — 338px tall on a 360px
+               screen. Wrapping puts the button on its own line and gives the text
+               the full width. */
+            .alert-warning {
+                flex-wrap: wrap;
             }
         }
     </style>

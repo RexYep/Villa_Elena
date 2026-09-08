@@ -127,11 +127,38 @@ class CalendarController extends Controller
         $newOut = \Carbon\Carbon::parse($request->check_out_date);
         $nights = $newIn->diffInDays($newOut);
 
-        $booking->update([
-            'check_in_date'  => $newIn,
-            'check_out_date' => $newOut,
-            'num_nights'     => $nights,
-        ]);
+        // Petsa lang ang binabago ng drag — nananatili ang oras ng slot,
+        // kaya iyon ang isinasama sa window na tinitingnan.
+        $newCheckIn  = \Carbon\Carbon::parse($newIn->format('Y-m-d') . ' ' . $booking->check_in_time);
+        $newCheckOut = \Carbon\Carbon::parse($newOut->format('Y-m-d') . ' ' . $booking->check_out_time);
+
+        // Dati, WALANG availability check dito — ang pinaka-maluwag na
+        // butas sa buong sistema: kayang i-drag ng admin ang isang
+        // booking nang diretso sa ibabaw ng iba at walang pipigil.
+        // Dumadaan na ito ngayon sa parehong lock at parehong tseke ng
+        // lahat ng ibang path (Booking::reserveSlot()).
+        $moved = Booking::reserveSlot(
+            $booking->property_id,
+            $newCheckIn,
+            $newCheckOut,
+            function () use ($booking, $newIn, $newOut, $nights) {
+                $booking->update([
+                    'check_in_date'  => $newIn,
+                    'check_out_date' => $newOut,
+                    'num_nights'     => $nights,
+                ]);
+
+                return $booking;
+            },
+            $booking->id
+        );
+
+        if ($moved === null) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Another booking already holds that date and slot. The booking was not moved.',
+            ], 409);
+        }
 
         \App\Models\StaffLog::record(
             'moved_booking', 'bookings', $booking->id,

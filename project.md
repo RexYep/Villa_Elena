@@ -1,12 +1,139 @@
 # Villa Elena Private Rental Resort
 ## Resort Management System — Project Documentation
 
-**Version:** 6.9
+**Version:** 7.0
 **Stack:** PHP 8.2 / Laravel 12 / MySQL 8 / Bootstrap 5
 **Local URL:** `http://127.0.0.1:8000` (`php artisan serve`) or `http://localhost:8000` (Docker — see v5.3)
 **Live URL:** `https://villa-elena.onrender.com` (Render, free tier — testing only, not yet handed to real guests)
 **Database (local):** `villa_elena_db` (MySQL, XAMPP or standalone MySQL — same database either way)
 **Database (live):** Aiven MySQL free tier, database `defaultdb`
+
+---
+
+## What Changed in v7.0 (Read This First)
+
+### Two guests booked the same slot, and the availability check was never the problem
+
+Found by testing the deployed system with two accounts booking the same date and slot. Both succeeded. The rows are still in production:
+
+| id | ref | user | slot | status | paid | `created_at` |
+|---|---|---|---|---|---|---|
+| 9 | `VE-YHLBMLUU` | 7 | 2026-09-15 08:00 → 17:00 (Day) | confirmed | ₱2,000 | 2026-09-08 16:33:05 |
+| 8 | `VE-4C7INQOG` | 9 | 2026-09-15 08:00 → 17:00 (Day) | confirmed | ₱2,000 | 2026-09-08 16:33:05 |
+
+Both payments landed at `16:33:41`. Identical timestamps to the second — the fingerprint of a race, not of a broken rule.
+
+**`Booking::hasConflict()` was correct and stayed correct.** It is a plain datetime overlap, so Day (08:00–17:00) and Night (19:00–06:00+1) on one date genuinely don't collide and are both bookable — the intended behaviour. The defect was that it is a **SELECT**, and every caller did:
+
+```php
+if (Booking::hasConflict(...)) { return back()->withErrors([...]); }   // ← both requests read here
+// ...
+$booking = Booking::create([...]);                                     // ← both requests write here
+```
+
+Nothing held anything across that gap, and there was no constraint underneath to catch the result. Two submits that arrive together both see a free slot before either row exists.
+
+### Reproduced, then proved fixed, with real concurrent processes
+
+Six OS processes, each waiting on a shared wall-clock instant, all going for one slot. Running the **old** shape (check, then create) against the new schema:
+
+```
+worker 3: GOT SLOT -> VE-WFVOLXN5 (id 141)
+worker 1: EXCEPTION — Duplicate entry '14:2027-01-15:08:00:00' for key 'bookings.bookings_slot_hold_unique'
+worker 2: EXCEPTION — Duplicate entry '14:2027-01-15:08:00:00' …
+worker 4: EXCEPTION — …    worker 5: EXCEPTION — …
+```
+
+The old code really does attempt five inserts for one slot — the production bug, reproduced on demand. Through `reserveSlot()`:
+
+```
+worker 4: GOT SLOT -> VE-LXAJ2PAH (id 146)
+worker 1: rejected — slot taken      worker 2: rejected — slot taken
+worker 3: rejected — slot taken      worker 5: rejected — slot taken
+worker 6: rejected — slot taken
+```
+
+One winner, five clean rejections, no exceptions. Day and night racing on the *same* date still yield one of each, which is the rule the system is supposed to enforce.
+
+### `Booking::reserveSlot()` — the only way to create or move a booking
+
+```php
+$booking = Booking::reserveSlot($propertyId, $checkin, $checkout, fn () => Booking::create([...]));
+
+if ($booking === null) {
+    return back()->withErrors(['dates' => 'This selected date/slot is no longer available.'])->withInput();
+}
+```
+
+It wraps the check and the write in one transaction under `lockForUpdate()` **on the `properties` row**. That choice matters: the walk-in path already had a transaction, but it locked `bookings` rows and leaned on InnoDB gap locks to block a row that *does not exist yet*. Locking a real, guaranteed-present row makes the serialization deterministic. The callback runs only when the slot is provably free and still inside the lock, so it must stay DB-only — mail, Pusher and notifications belong after the commit.
+
+**A lock only works if every writer takes it**, which is why the walk-in's private version was removed rather than left alongside. All seven paths now share this one:
+
+| Path | Before |
+|---|---|
+| `Portal\PortalController::submitBooking()` | check + create, no lock ← **the reproduced bug** |
+| `Admin\BookingController::store()` | check + create, no lock |
+| `Admin\BookingController::extendStay()` | check + update, no lock |
+| `Admin\CalendarController::moveBooking()` | **no availability check whatsoever** |
+| `Staff\FrontDeskController::store()` | own transaction + `bookings` row lock |
+| `Customer\BookingController::update()` (reschedule) | check + update, no lock |
+
+`moveBooking()` — the admin calendar's drag-and-drop — was the widest hole in the system and was found only while auditing for this fix: an admin could drag one booking directly on top of another and nothing objected. It now returns `409` with a reason, and the calendar's `eventDrop` handler surfaces that message instead of a generic one.
+
+### `bookings.slot_hold` — the database-level backstop
+
+Application locks stop races in code that remembers to take them. The unique index stops them in code that forgets:
+
+```
+slot_hold = "14:2026-09-15:08:00:00"   while the booking holds its slot
+slot_hold = NULL                       cancelled / no_show / soft-deleted
+```
+
+A composite unique index on `(property_id, check_in_date, check_in_time)` would have been wrong: a cancelled booking is still a row, so it would block re-booking the slot it just released. MySQL permits repeated NULLs in a unique index, so the nullable column expresses exactly the invariant wanted — *at most one **live** booking per slot* — while leaving cancelled and deleted rows unconstrained.
+
+`Booking::computeSlotHold()` owns the value; it is not fillable and no controller writes it. A `saving` hook recomputes it, and a `deleted` hook nulls it — `SoftDeletes::runSoftDelete()` updates through the query builder and never fires `saving`, so without that second hook a soft-deleted booking would hold its slot forever. Verified: cancelling frees the slot, soft-deleting frees the slot, and both are immediately re-bookable.
+
+**Its exclusion list must stay identical to `hasConflict()`'s** (`cancelled`/`no_show` only). If they drift, the index rejects a booking that the availability grid is advertising as open.
+
+### Expired holds are now released inside the lock, not only by cron
+
+The two mechanisms disagreed about an abandoned unpaid hold. `hasConflict()` *ignores* a `pending` booking older than `booking_hold_minutes` — so the grid calls the slot free — but that row still carried a `slot_hold`, so the index would have refused the INSERT. A slot open to the eye and closed to the database.
+
+`reserveSlot()` therefore formally cancels overlapping expired holds while holding the lock, through the new `Booking::releaseAsExpiredHold()`. `AutoCheckInOutBookings::cancelStalePendingBookings()` now calls the same method rather than keeping its own copy of the wording, the cancellation fields and the two notifications. Its guest and admin notifications go out via `DB::afterCommit()` — announcing a cancellation for a transaction that may still roll back would be a lie, and outside a transaction the callback fires immediately, so the sweeper behaves exactly as before (verified end to end).
+
+The side effect is that **booking correctness no longer depends on the external cron pinger running.** Previously, if the pinger stalled, stale holds sat `pending` indefinitely.
+
+### The second double-booking route: a late payment on a slot someone else now owns
+
+Unrelated to concurrency, and it needed no simultaneity at all:
+
+1. Guest A books → `pending`, PayMongo checkout session created.
+2. A never pays. The hold expires; the slot stops blocking.
+3. Guest B books the slot and pays → `confirmed`.
+4. A returns to their **still-open** PayMongo QR and pays. `recordPaymongoPayment()` → `confirmOnFirstPayment()` promoted A to `confirmed` without ever re-checking availability.
+
+`confirmOnFirstPayment()` now re-checks before promoting. The payment is still recorded — money in hand is never thrown away — but the booking is left `pending` and admins are notified to decide which guest keeps the slot. `pending` is also the correct resting state here: the stale sweeper skips anything with `amount_paid > 0`, so it stays visible and funded rather than being auto-cancelled out from under a paying guest.
+
+`Admin\BookingController::updateStatus()` got the matching guard: reviving a `cancelled`/`no_show` booking re-acquires its slot, and after v7.0 that would otherwise surface as a raw duplicate-key 500 instead of a sentence.
+
+### Migrating, and the two rows that are still double-booked
+
+`2026_09_08_100000_add_slot_hold_to_bookings_table` backfills in PHP rather than SQL (one implementation shared with `computeSlotHold()`, and it runs on SQLite for the test suite), then adds the unique index.
+
+**The index cannot be created while a duplicate exists**, and production has one — `VE-4C7INQOG` / `VE-YHLBMLUU` above. The migration does **not** cancel or refund anything: real guests have ₱2,000 each in play and choosing between them is the admin's call, not a migration's. It keeps the earlier row's `slot_hold`, nulls the later one so the index can be built, and prints both refs:
+
+```
+⚠️  Pre-existing double-bookings found while adding the slot_hold unique index.
+    These rows were left untouched but excluded from the index — resolve them manually:
+    VE-YHLBMLUU (id 9) collides with VE-4C7INQOG (id 8)
+```
+
+Both bookings stay fully intact and visible in the admin panel. **This still needs resolving by hand:** decide which guest keeps 2026-09-15 Day and refund the other through the existing Send Money flow.
+
+Two consequences of that "left untouched but excluded" state, both handled:
+
+- **The excluded row must stay editable.** Its `slot_hold` is NULL, so the `saving` hook would recompute the real value on the next save and hit the duplicate key — meaning the simplest admin edit on exactly the row that needs fixing (recording the refund, changing status) would 500. The hook therefore refuses to let an **existing** row re-claim a `slot_hold` that another row already holds; it stays excluded instead. A **new** row always gets its true value (`$booking->exists` is false during a create), so the index's protection against fresh double-bookings is untouched. Verified: editing and cancelling the excluded row both work, and a new booking on that slot is still refused.
+- **Deploy the migration with the code, not after it.** Render only runs migrations when `RUN_MIGRATIONS=true` is set for that deploy (§15). If this code ships against the old schema, the `saving` hook writes a column that doesn't exist and *every* booking insert 500s. `Booking::slotHoldColumnExists()` (one cached `Schema::hasColumn` per process) makes the code tolerate both schema shapes during a rollout — but **set `RUN_MIGRATIONS=true` on the deploy that carries v7.0 anyway**, or the database-level backstop simply won't exist.
 
 ---
 
@@ -1695,6 +1822,27 @@ Managed via Laravel migrations with sequential timestamps to resolve foreign key
 | 16 | **`trusted_devices`** ← **NEW v5.0** | Devices a customer has verified via 2FA email OTP; lets a device skip OTP on future logins and lets the customer view/revoke them |
 | 17 | **`login_activities`** ← **NEW v5.0** | Read-only per-login history (device, IP, timestamp, whether it required OTP) shown on the customer Profile page |
 
+### v7.0 Schema Changes
+
+`2026_09_08_100000_add_slot_hold_to_bookings_table.php` — the database-level guarantee that one slot holds at most one live booking.
+
+```sql
+ALTER TABLE bookings
+  ADD COLUMN slot_hold VARCHAR(64) NULL AFTER check_out_time;
+
+-- backfilled in PHP, not SQL (see below), then:
+ALTER TABLE bookings
+  ADD UNIQUE KEY bookings_slot_hold_unique (slot_hold);
+```
+
+**Why a nullable column instead of `UNIQUE (property_id, check_in_date, check_in_time)`:** a cancelled booking is still a row, so a composite index over the real columns would keep blocking the slot it had just released. `slot_hold` is `"{property_id}:{check_in_date}:{check_in_time}"` while a booking holds its slot and **NULL** when it doesn't (`cancelled`, `no_show`, soft-deleted) — and MySQL allows repeated NULLs in a unique index. The constraint therefore expresses exactly the intended invariant: *at most one **live** booking per slot*, with cancelled and deleted rows unconstrained.
+
+The column is maintained solely by `Booking::computeSlotHold()` via a `saving` hook and a `deleted` hook. Both hooks are required — `SoftDeletes::runSoftDelete()` updates through the query builder and never fires `saving`, so without the `deleted` hook a soft-deleted booking would hold its slot permanently.
+
+**The backfill runs in PHP, not as a `CONCAT()` UPDATE**, for two reasons: it shares one implementation with `computeSlotHold()` (a SQL copy would drift), and SQLite — which the test suite uses — has no `CONCAT()`.
+
+**The migration will not create the index if a live duplicate already exists, so it handles that instead of failing.** Production has one (`VE-4C7INQOG` / `VE-YHLBMLUU`, both on 2026-09-15 Day, ₱2,000 each). The migration deliberately **cancels and refunds nothing** — real guests' money is involved and choosing between them is an admin decision, not a migration's. It keeps the earlier row's `slot_hold`, nulls the later one so the index can be built, leaves both bookings fully intact and visible, and prints the colliding refs plus a `Log::warning`. Those rows still need resolving by hand.
+
 ### v5.7 Schema Changes
 
 `2026_08_16_090000_switch_payment_method_to_qrph.php` — four steps, and **the order is load-bearing**:
@@ -2627,6 +2775,9 @@ Villa Elena is rented as a **flat-rate package** — one of two fixed slots, Day
 **Rules:**
 - Every booking channel (public portal, customer reschedule, staff walk-in, admin-created) submits a check-in **date** + a **`slot`** (`day` or `night`) — no raw time input anywhere in the booking-creation flow. `Booking::slotDateTimes()` is the single source of truth that turns those two values into the actual check-in/check-out datetimes; every controller calls it instead of parsing `check_in_time`/`check_out_time` from the request.
 - Bookings are checked against the single master Villa's existing bookings using **full date+time**, not date-only (`Booking::hasConflict()`).
+- **`hasConflict()` is never called on its own by a path that then writes (v7.0).** It is a SELECT; calling it and then creating leaves a window where two concurrent requests both see the slot free and both take it — which is exactly what happened in production (`VE-4C7INQOG` / `VE-YHLBMLUU`, same Day slot, identical `created_at`, both paid). **`Booking::reserveSlot($propertyId, $checkIn, $checkOut, $callback, $excludeBookingId)` is the single source of truth for creating or moving a booking**, the way `slotDateTimes()` is for time and `quoteFor()` is for price. It does the check and the write in one transaction under `lockForUpdate()` on the **`properties`** row — a row that always exists, so serialization is deterministic rather than relying on InnoDB gap-lock behaviour over a range that may match nothing. It returns the callback's value, or `null` when the slot is gone. Read-only uses of `hasConflict()` (availability grids, the chatbot, form pre-checks) are fine and unchanged.
+- **`bookings.slot_hold` + its UNIQUE index is the schema-level backstop (v7.0)** for any path that forgets. Value is `"{property_id}:{check_in_date}:{check_in_time}"` while the booking holds its slot, **NULL** when it doesn't (`cancelled`, `no_show`, soft-deleted) — MySQL allows repeated NULLs in a unique index, so a cancelled booking's slot frees up while two live bookings on one slot stay impossible to store. Maintained solely by `Booking::computeSlotHold()` through `saving`/`deleted` hooks; not fillable, never written by a controller. **Its exclusion list must stay identical to `hasConflict()`'s** — if they drift, the index will reject a booking the availability calendar is showing as open.
+- **Expired unpaid holds are released inside `reserveSlot()`'s lock** (`Booking::releaseAsExpiredHold()`, shared with the stale sweeper). Necessary because `hasConflict()` ignores a `pending` booking past `booking_hold_minutes` while that row still carries a `slot_hold` — without the release, the index would refuse an INSERT for a slot the grid calls free. It also means slot correctness no longer depends on the external cron pinger running.
 - **No separate cleaning buffer is enforced.** The gap built into the two fixed slots themselves (5:00 PM checkout → 7:00 PM next check-in, or 6:00 AM checkout → 8:00 AM next check-in — both exactly 2 hours) *is* the cleaning buffer. `hasConflict()` no longer takes a `$bufferHours` parameter — it does a plain datetime overlap check.
 - **No 12–24 hour cap exists anymore** — moot, since duration is fixed per slot and there's no time input to misuse. **Admin/staff bookings use the same two fixed slots as customers** (no free-choice discretion for fresh bookings anymore).
 - **Exception — "Extend Stay":** the one place free-choice time still exists is `Admin\BookingController::extendStay()`, which pushes out the check-out of an *already checked-in* guest's existing stay (not a new booking, so it's deliberately exempt from the fixed-slot policy). Its `hasConflict()` call was updated only to drop the removed `$bufferHours` argument — behavior otherwise unchanged.
@@ -3062,6 +3213,11 @@ DELETE /my/profile/devices/{device}           customer.profile.devices.destroy  
 
 | Issue | Cause | Fix Applied |
 |---|---|---|
+| **(v7.0)** Two accounts booked and paid for the exact same date + slot (`VE-4C7INQOG` / `VE-YHLBMLUU`, 2026-09-15 Day, identical `created_at`) | `Booking::hasConflict()` was correct but is a **SELECT** — every caller checked, then created, with no lock and no constraint across the gap, so two simultaneous submits both saw a free slot before either row existed | `Booking::reserveSlot()` does the check and the write in one transaction under `lockForUpdate()` on the `properties` row; all six booking-creating/moving paths go through it. Reproduced and verified fixed with six concurrent OS processes |
+| **(v7.0)** Admin calendar drag-and-drop could drop one booking directly on top of another | `Admin\CalendarController::moveBooking()` had **no availability check at all** — found while auditing for the race above | Routed through `reserveSlot()`; returns `409` with a reason, and the `eventDrop` handler now shows that message instead of a generic one |
+| **(v7.0)** A guest whose hold expired could pay through their still-open PayMongo link and be confirmed onto a slot another guest had since taken | `recordPaymongoPayment()` → `confirmOnFirstPayment()` promoted `pending` → `confirmed` without re-checking availability. Needed no concurrency at all | `confirmOnFirstPayment()` re-checks first; the payment is still recorded (never discard money), the booking stays `pending` — which the stale sweeper skips, since `amount_paid > 0` — and admins are notified to decide |
+| **(v7.0)** Reviving a `cancelled`/`no_show` booking silently re-acquired a slot someone else now held | `Admin\BookingController::updateStatus()` allowed any status transition with no availability check | Guard added for the revive transition; without it the new unique index would surface as a raw duplicate-key 500 instead of a message |
+| **(v7.0)** The walk-in path's own transaction was the only lock in the system | It locked `bookings` rows and relied on InnoDB gap locks to block a row that doesn't exist yet — and a lock only works if *every* writer takes it, so the portal and admin paths walked straight past it | Its private version was removed in favour of the shared `reserveSlot()`, which locks the always-present `properties` row |
 | **(v6.9)** PayMongo disabled the production webhook; nothing in the app log | Registered at the bare origin `https://villa-elena.onrender.com` instead of `…/webhooks/paymongo` — `POST /` is 405 from the router, before any controller | URL corrected via `paymongo:webhooks --webhook=… --url=…`; the command now flags any URL whose path isn't `/webhooks/paymongo` |
 | **(v6.9)** Webhook answered `401` on every delivery when the secret didn't match the registered mode | One `PAYMONGO_WEBHOOK_SECRET` was tried against both the `te=` and `li=` slots, but those carry *different* secrets | `verifyWebhook()` maps each slot to its own secret (`_TEST` / `_LIVE`, generic as fallback), so test and live webhooks can share one URL |
 | **(v6.9)** Any exception in webhook processing returned `500`, which PayMongo counts toward disabling | `webhook()` did the work inline, so a DB error, an unmapped enum or a malformed body escaped as a 500 | `handleWebhookEvent()` returns arrays and never calls `response()`; the shell catches `\Throwable` and always answers 200, notifying admins instead |

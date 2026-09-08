@@ -70,9 +70,45 @@
             color: rgba(255, 255, 255, 0.6);
         }
 
-        @media (max-width: 900px) {
+        /* 1150px, not 900px. The 320px price-preview column is a fixed track, so
+           from 993px — where the admin's own 260px sidebar reappears — up to
+           about 1150px the form is left with almost nothing: measured 317px of
+           form against 320px of sidebar at a 1000px viewport, with the slot
+           labels wrapping to two and three lines. The 561px rule below fixes the
+           STACKED layout only; it cannot help here, because at these widths the
+           form column is narrower than it would be on a 561px phone. Stacking
+           through the band gives the form the full width instead.
+
+           1200px is measured, and 1150px was not enough: at a 1160px viewport the
+           two-column layout returns with a 477px form, the pairs land at 205px,
+           and the slot labels wrap to two lines again. At 1200px the pairs are
+           225px and the labels hold one line — matching the 226px-per-column
+           floor measured for the 561px rule below. */
+        @media (max-width: 1200px) {
             .form-grid {
-                grid-template-columns: 1fr;
+                grid-template-columns: minmax(0, 1fr);
+            }
+        }
+
+        /* admin.css collapses every .two-col to one column below 900px — but on
+           this page 900px is precisely where .form-grid drops its 320px sidebar
+           and hands the form the FULL width. So the inner grid collapsed at the
+           exact moment its container got wider: at 768px the form column is
+           713px and the two-col inside it was a single 663px column, which made
+           the tablet render a TALLER page (1762px) than the phone (1732px).
+           561px is measured, not picked: the longest slot label ("Night (7:00 PM
+           – 6:00 AM)") needs 199px plus the radio's 24px indent, so a column has
+           to clear ~223px. At a 540px viewport the columns come out 224px and
+           that label wraps to two lines; at 561px they are 234px and both labels
+           hold one line. Below it, single column is genuinely right.
+
+           .form-grid prefix is for specificity, not scoping: admin.css's rule is
+           a bare .two-col, and `composer dev` injects admin.css after this block,
+           so an equal-specificity override would work in production and silently
+           lose in dev. */
+        @media (min-width: 561px) {
+            .form-grid .two-col {
+                grid-template-columns: 1fr 1fr;
             }
         }
     </style>

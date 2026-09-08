@@ -189,6 +189,76 @@
             .amount-val {
                 font-size: 34px;
             }
+
+            /* Touch targets. Measured at 320px: "Send Refund" and "Mark Paid Out"
+               were 38px tall and the back links 36–38px, all under the 44px
+               minimum — and these two buttons move real money, so a mistap is
+               not a cosmetic problem. */
+            .btn-navy,
+            .back-btn,
+            .logout-btn {
+                min-height: 44px;
+            }
+
+            .card-head {
+                flex-wrap: wrap;
+            }
+        }
+
+        /* Width is a poor proxy for "finger". A tablet at 768px and a desktop
+           window dragged to 768px need different hit areas, and the 700px rule
+           above only catches the narrow case — at 768px and 1024px the buttons
+           measured 38px. This asks the actual question instead: coarse pointer,
+           no hover. Touch devices get the 44px minimum at every width; mouse
+           users keep the tighter desktop sizing. */
+        @media (hover: none) and (pointer: coarse) {
+
+            .btn-navy,
+            .back-btn,
+            .logout-btn {
+                min-height: 44px;
+            }
+        }
+
+        /* The confirm-before-sending checkbox rendered at 13x13px — the smallest
+           interactive element on a page whose primary action is irreversible.
+           Enlarged, and the whole label is the hit area (it already wraps the
+           input), with padding to carry the row past 44px. */
+        .confirm-send {
+            display: flex;
+            gap: 10px;
+            align-items: flex-start;
+            font-size: 14px;
+            margin-bottom: 14px;
+            cursor: pointer;
+            padding: 10px 0;
+            min-height: 44px;
+        }
+
+        .confirm-send input[type="checkbox"] {
+            width: 20px;
+            height: 20px;
+            flex-shrink: 0;
+            margin-top: 1px;
+            cursor: pointer;
+        }
+
+        /* Label and value share one row by default, but on a phone a long value
+           starves the label: at 320px "Email" was compressed to 32px against a
+           256px address, and every long row wrapped into a ragged right-aligned
+           block. Stacking them keeps both readable and left-aligned — the skill's
+           "restructure rather than hide" rule. */
+        @media (max-width: 480px) {
+            .info-row {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 2px;
+            }
+
+            .info-row .val {
+                text-align: left;
+                overflow-wrap: anywhere;
+            }
         }
     </style>
 @endpush
@@ -414,7 +484,7 @@
                                         </div>
                                     @endif
 
-                                    <label style="display:flex;gap:8px;align-items:flex-start;font-size: 14px;margin-bottom:14px;cursor:pointer;">
+                                    <label class="confirm-send">
                                         <input type="checkbox" required style="margin-top:2px;">
                                         <span>I have checked the account number and name above against what the guest gave us.</span>
                                     </label>
