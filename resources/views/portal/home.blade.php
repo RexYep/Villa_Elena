@@ -1,6 +1,6 @@
 @extends('layouts.portal')
 
-@section('title', $resortName . ' — Private Island Luxury')
+@section('title', $resortName . ' — Private Pool Resort in Pansol, Calamba')
 @section('bare')@endsection
 
 @push('styles')
@@ -21,8 +21,8 @@
         }
 
         /* ════════════════════════════════════════
-               NAVIGATION
-            ════════════════════════════════════════ */
+                               NAVIGATION
+                            ════════════════════════════════════════ */
         .nav {
             position: fixed;
             top: 0;
@@ -223,8 +223,8 @@
         }
 
         /* ════════════════════════════════════════
-               HERO SECTION
-            ════════════════════════════════════════ */
+                               HERO SECTION
+                            ════════════════════════════════════════ */
         .hero {
             height: 100vh;
             min-height: 680px;
@@ -297,9 +297,9 @@
         }
 
         /* ── Seasonal promo ─────────────────────────────────────────
-               Ito ang PANGUNAHING paraan ng pag-anunsyo ng promo. Karamihan
-               ng bagong booker ay hindi pa naka-login, kaya hindi sila
-               maaabot ng in-app notification — dito lang nila ito makikita. */
+                               Ito ang PANGUNAHING paraan ng pag-anunsyo ng promo. Karamihan
+                               ng bagong booker ay hindi pa naka-login, kaya hindi sila
+                               maaabot ng in-app notification — dito lang nila ito makikita. */
         .hero-promo {
             display: inline-flex;
             align-items: center;
@@ -456,8 +456,8 @@
         }
 
         /* ════════════════════════════════════════
-               SHARED SECTION STYLES
-            ════════════════════════════════════════ */
+                               SHARED SECTION STYLES
+                            ════════════════════════════════════════ */
         .section {
             max-width: 1280px;
             margin: 0 auto;
@@ -505,8 +505,8 @@
         }
 
         /* ════════════════════════════════════════
-               PROPERTIES SECTION
-            ════════════════════════════════════════ */
+                               PROPERTIES SECTION
+                            ════════════════════════════════════════ */
         #properties {
             background: var(--cream);
         }
@@ -913,8 +913,8 @@
         }
 
         /* ════════════════════════════════════════
-               AMENITIES SECTION
-            ════════════════════════════════════════ */
+                               AMENITIES SECTION
+                            ════════════════════════════════════════ */
         #amenities {
             background: var(--stone);
             padding: 0;
@@ -992,8 +992,8 @@
         }
 
         /* ════════════════════════════════════════
-               ROOM TOUR SECTION
-            ════════════════════════════════════════ */
+                               ROOM TOUR SECTION
+                            ════════════════════════════════════════ */
         #room-tour {
             background: var(--cream);
             padding: 0;
@@ -1134,8 +1134,8 @@
         }
 
         /* ════════════════════════════════════════
-               GALLERY SECTION
-            ════════════════════════════════════════ */
+                               GALLERY SECTION
+                            ════════════════════════════════════════ */
         #gallery {
             background: var(--sand);
             padding: 0;
@@ -1383,8 +1383,8 @@
         }
 
         /* ════════════════════════════════════════
-               ABOUT SECTION
-            ════════════════════════════════════════ */
+                               ABOUT SECTION
+                            ════════════════════════════════════════ */
         #about {
             background: var(--cream);
             padding: 0;
@@ -1490,8 +1490,8 @@
         }
 
         /* ════════════════════════════════════════
-               TESTIMONIALS SECTION
-            ════════════════════════════════════════ */
+                               TESTIMONIALS SECTION
+                            ════════════════════════════════════════ */
         #testimonials {
             background: var(--sand);
             padding: 0;
@@ -1609,8 +1609,8 @@
         }
 
         /* ════════════════════════════════════════
-               LOCATION SECTION
-            ════════════════════════════════════════ */
+                               LOCATION SECTION
+                            ════════════════════════════════════════ */
         #location {
             background: var(--cream);
             padding: 0;
@@ -1695,8 +1695,8 @@
         }
 
         /* ════════════════════════════════════════
-               CONTACT SECTION
-            ════════════════════════════════════════ */
+                               CONTACT SECTION
+                            ════════════════════════════════════════ */
         #contact {
             background: var(--stone);
             padding: 0;
@@ -1841,8 +1841,8 @@
         }
 
         /* ════════════════════════════════════════
-               FOOTER
-            ════════════════════════════════════════ */
+                               FOOTER
+                            ════════════════════════════════════════ */
         .footer {
             background: #1a1009;
             padding: 70px 40px 40px;
@@ -1939,8 +1939,8 @@
         }
 
         /* ════════════════════════════════════════
-               ANIMATIONS & SCROLL REVEAL
-            ════════════════════════════════════════ */
+                               ANIMATIONS & SCROLL REVEAL
+                            ════════════════════════════════════════ */
         .reveal {
             opacity: 0;
             transform: translateY(30px);
@@ -1969,8 +1969,8 @@
         }
 
         /* ════════════════════════════════════════
-               RESPONSIVE
-            ════════════════════════════════════════ */
+                               RESPONSIVE
+                            ════════════════════════════════════════ */
         @media (max-width: 1024px) {
             .about-grid {
                 grid-template-columns: 1fr;
@@ -2133,9 +2133,9 @@
 
         <div class="hero-content">
 
-            <h1 class="hero-title">An Exclusive<br><em>Island Sanctuary</em></h1>
+            <h1 class="hero-title">Villa Elena<br><em>Private Pool Resort</em></h1>
             <p class="hero-sub">
-                {{ $resortDesc ?? 'Experience unparalleled privacy and natural beauty in our handcrafted villas.' }}</p>
+                {{ $resortDesc ?? 'The whole villa to yourselves — pool, rooms and all — in Pansol, Calamba.' }}</p>
 
         </div>
 
@@ -2197,10 +2197,10 @@
         <div class="section">
             <div class="section-header">
                 <div>
-                    <div class="section-eyebrow reveal">Exclusive Private Rental</div>
-                    <div class="section-title reveal reveal-delay-1">Villa Elena</div>
-                    <p class="section-desc reveal reveal-delay-2">Welcome to our resort, a place good for vacation and any
-                        occasion.</p>
+                    <div class="section-eyebrow reveal">One Villa. One Group</div>
+                    <div class="section-title reveal reveal-delay-1">Your Own Private Escape</div>
+                    <p class="section-desc reveal reveal-delay-2">A private pool resort in Pansol, Calamba. Perfect for
+                        family days, barkada getaways and small celebrations.</p>
                 </div>
             </div>
 
@@ -2227,9 +2227,9 @@
                     <i class="bi bi-house-slash"></i>
                     <p class="mb-12" style="font-size:20px;font-weight:500;color:var(--stone);">Villa Elena is not
                         available on the selected date.</p>
-                    <p>Try a different date, or check the calendar on the Villa's page..</p>
-                    <a href="{{ route('home') }}" style="color:var(--gold);margin-top:20px;display:inline-block;">Alisin
-                        ang filter →</a>
+                    <p>Try a different date, or check the calendar on the Villa's page.</p>
+                    <a href="{{ route('home') }}" style="color:var(--gold);margin-top:20px;display:inline-block;">Clear
+                        the filter →</a>
                 </div>
             @else
                 @php
@@ -2285,10 +2285,14 @@
                         <div class="villa-showcase-footer">
                             <div class="villa-showcase-price">
                                 ₱{{ number_format($villa->base_price, 0) }} <span>/ package</span>
-                                <div style="font-size:12px;font-family:'Jost',sans-serif;font-weight:400;margin-top:6px;line-height:1.7;color:var(--muted);">
-                                    <div>&#x2022; <strong style="color:var(--stone);font-weight:600;">Regular:</strong> Mon–Thu &amp; Sun after 6PM</div>
+                                <div
+                                    style="font-size:12px;font-family:'Jost',sans-serif;font-weight:400;margin-top:6px;line-height:1.7;color:var(--muted);">
+                                    <div>&#x2022; <strong style="color:var(--stone);font-weight:600;">Regular:</strong>
+                                        Mon–Thu &amp; Sun after 6PM</div>
                                     @if ($villa->weekend_price && $villa->weekend_price != $villa->base_price)
-                                        <div>&#x2022; <strong style="color:var(--stone);font-weight:600;">Peak:</strong> ₱{{ number_format($villa->weekend_price, 0) }} &middot; Fri, Sat &amp; Sun before 6PM</div>
+                                        <div>&#x2022; <strong style="color:var(--stone);font-weight:600;">Peak:</strong>
+                                            ₱{{ number_format($villa->weekend_price, 0) }} &middot; Fri, Sat &amp; Sun
+                                            before 6PM</div>
                                     @else
                                         <div>&#x2022; Same rate applies all week</div>
                                     @endif
@@ -2362,53 +2366,60 @@
         <div class="section">
             <div class="section-header">
                 <div>
-                    <div class="section-eyebrow reveal">Resort Features</div>
-                    <div class="section-title reveal reveal-delay-1">World-Class<br>Amenities</div>
-                    <p class="section-desc reveal reveal-delay-2" style="color:rgba(255,255,255,0.5);">Every detail
-                        curated for your ultimate comfort and escape from the everyday.</p>
+                    <div class="section-eyebrow reveal">Villa Features</div>
+                    <div class="section-title reveal reveal-delay-1">Everything is<br>Yours</div>
+                    <p class="section-desc reveal reveal-delay-2" style="color:rgba(255,255,255,0.5);">From the private
+                        pool to the kitchen and entertainment spaces, everything comes with your whole-villa booking.</p>
                 </div>
             </div>
 
+            {{-- Ito ang WALONG pangunahing amenity — sadyang hardcoded, hindi
+                 galing sa DB. Ang buong listahan ng amenities ay nasa property
+                 page na; headline lang ang seksyong ito, kaya kung magdagdag ang
+                 admin ng bagong amenity ay hindi na kailangang magdagdag din ng
+                 card dito. Pinagsama ang dating hiwalay na Kiddie at Adult pool
+                 sa iisang "Swimming Pool" card — pareho namang kasama sa
+                 booking, at sinasabi na ng blurb na dalawa sila. --}}
             <div class="amenities-grid">
                 <div class="amenity-card reveal reveal-delay-1">
-                    <div class="amenity-icon"><i class="bi bi-droplet-fill"></i></div>
-                    <div class="amenity-name">Infinity Pool</div>
-                    <div class="amenity-desc">Perched oceanside with breathtaking sunset views</div>
+                    <div class="amenity-icon"><i class="bi bi-water"></i></div>
+                    <div class="amenity-name">Swimming Pool</div>
+                    <div class="amenity-desc">Adult and kiddie pools, exclusively yours for the whole booking</div>
                 </div>
                 <div class="amenity-card reveal reveal-delay-2">
                     <div class="amenity-icon"><i class="bi bi-wifi"></i></div>
-                    <div class="amenity-name">High-Speed WiFi</div>
-                    <div class="amenity-desc">Fiber-optic connectivity throughout the resort</div>
+                    <div class="amenity-name">WiFi</div>
+                    <div class="amenity-desc">Free internet access throughout your stay</div>
                 </div>
                 <div class="amenity-card reveal reveal-delay-3">
                     <div class="amenity-icon"><i class="bi bi-snow2"></i></div>
-                    <div class="amenity-name">Air Conditioning</div>
-                    <div class="amenity-desc">Climate-controlled villas for your comfort</div>
+                    <div class="amenity-name">All Air Conditioned Rooms</div>
+                    <div class="amenity-desc">Every room in the villa is air-conditioned</div>
                 </div>
                 <div class="amenity-card reveal reveal-delay-1">
-                    <div class="amenity-icon"><i class="bi bi-car-front-fill"></i></div>
-                    <div class="amenity-name">Free Parking</div>
-                    <div class="amenity-desc">Secure, covered parking for all guests</div>
+                    <div class="amenity-icon"><i class="bi bi-mic-fill"></i></div>
+                    <div class="amenity-name">Videoke</div>
+                    <div class="amenity-desc">Sing the night away on the in-house videoke</div>
                 </div>
                 <div class="amenity-card reveal reveal-delay-2">
-                    <div class="amenity-icon"><i class="bi bi-building"></i></div>
-                    <div class="amenity-name">Function Hall</div>
-                    <div class="amenity-desc">Elegant event space for up to 200 guests</div>
+                    <div class="amenity-icon"><i class="bi bi-fire"></i></div>
+                    <div class="amenity-name">Griller Station</div>
+                    <div class="amenity-desc">An outdoor grill ready for your barbecue</div>
                 </div>
                 <div class="amenity-card reveal reveal-delay-3">
-                    <div class="amenity-icon"><i class="bi bi-cup-hot-fill"></i></div>
-                    <div class="amenity-name">Fine Dining</div>
-                    <div class="amenity-desc">Farm-to-table cuisine and curated cocktails</div>
+                    <div class="amenity-icon"><i class="bi bi-thermometer-snow"></i></div>
+                    <div class="amenity-name">Refrigerator</div>
+                    <div class="amenity-desc">Keep your food and drinks cold for the whole stay</div>
                 </div>
                 <div class="amenity-card reveal reveal-delay-1">
-                    <div class="amenity-icon"><i class="bi bi-heart-pulse-fill"></i></div>
-                    <div class="amenity-name">Spa & Wellness</div>
-                    <div class="amenity-desc">Rejuvenating treatments and yoga sessions</div>
+                    <div class="amenity-icon"><i class="bi bi-egg-fried"></i></div>
+                    <div class="amenity-name">Double Burner Gas Stove</div>
+                    <div class="amenity-desc">A two-burner stove for cooking your own meals</div>
                 </div>
                 <div class="amenity-card reveal reveal-delay-2">
-                    <div class="amenity-icon"><i class="bi bi-water"></i></div>
-                    <div class="amenity-name">Water Activities</div>
-                    <div class="amenity-desc">Kayaking, snorkeling, and island hopping</div>
+                    <div class="amenity-icon"><i class="bi bi-car-front-fill"></i></div>
+                    <div class="amenity-name">Parking Area</div>
+                    <div class="amenity-desc">On-site parking space for your vehicles</div>
                 </div>
             </div>
         </div>
@@ -2440,7 +2451,7 @@
                     ],
                     ['src' => 'images/terrace1.png', 'alt' => 'Terrace', 'caption' => 'Terrace'],
                     ['src' => 'images/karaoke1.png', 'alt' => 'Karaoke room', 'caption' => 'Karaoke'],
-                    ['src' => 'images/images10.jpg', 'alt' => 'Dining area', 'caption' => 'Dinning Area'],
+                    ['src' => 'images/images10.jpg', 'alt' => 'Dining area', 'caption' => 'Dining Area'],
                 ];
             @endphp
 
@@ -2484,8 +2495,9 @@
         <div class="section">
             <div class="about-grid">
                 <div class="about-img-stack reveal">
-                    <img src="{{ asset('images/pool-view.jpg') }}" class="about-img-main" alt="Resort landscape">
-                    <img src="{{ asset('images/night-view.jpg') }}" class="about-img-accent" alt="Beach">
+                    <img src="{{ asset('images/pool-view.jpg') }}" class="about-img-main"
+                        alt="The pool area at Villa Elena">
+                    <img src="{{ asset('images/night-view.jpg') }}" class="about-img-accent" alt="Villa Elena at night">
                     <div class="about-badge">
                         <strong>6+</strong>
                         Years of<br>Excellence
@@ -2494,32 +2506,39 @@
 
                 <div class="about-text">
                     <div class="section-eyebrow reveal">Our Story</div>
-                    <div class="section-title reveal reveal-delay-1">A Sanctuary<br>Built for You</div>
+                    <div class="section-title reveal reveal-delay-1">The Whole Villa,<br>Just for You</div>
                     <p class="section-desc reveal reveal-delay-2" style="max-width:none;"></p>
                     <p class="reveal reveal-delay-2 text-muted-theme"
                         style="font-size:16px;line-height:1.8;font-weight:300;margin-bottom:18px;">
-                        Villa Elena was born from a dream — to create an escape where luxury and nature exist in perfect
-                        harmony. Nestled along the pristine resort of Calamba, our resort is a testament to the beauty of
-                        the Philippines and the warmth of its people.
+                        Villa Elena Private Pool Resort is a place in Pansol, Calamba made for families and groups of
+                        friends who want to enjoy their time together in a space they can call their own. When you book
+                        Villa Elena, the resort is yours for your stay.
                     </p>
                     <p class="reveal reveal-delay-3 text-muted-theme"
                         style="font-size:16px;line-height:1.8;font-weight:300;">
-                        Every villa, pathway, and garden has been thoughtfully designed to offer complete immersion in the
-                        island's natural splendor — while ensuring every modern comfort is at your fingertips. From the
-                        moment you arrive, you are our honored guest.
+                        You have your own pool, rooms, kitchen, griller and shared spaces — giving your group the freedom to
+                        swim, eat, relax and spend time together without sharing the place with other guests. Whether it is
+                        a family getaway, a barkada weekend or a simple celebration, Villa Elena gives you the space to make
+                        the most of your time together.
                     </p>
 
+                    {{-- Isang villa lang ang narerentahan, kaya ang bilang ng KWARTO
+                         ang makabuluhang stat dito — hindi "6 Private Villas", na
+                         nagmumungkahi ng anim na hiwalay na booking. Ang rating at
+                         ang guest count ay galing na sa DB: dating hardcoded na
+                         "4.7★" at "1k+" na walang pinanggagalingan. --}}
                     <div class="about-stats reveal reveal-delay-4">
                         <div class="stat-item">
-                            <div class="stat-num">6</div>
-                            <div class="stat-label">Private Villas</div>
+                            <div class="stat-num">{{ $rooms->count() }}</div>
+                            <div class="stat-label">Private Rooms</div>
                         </div>
                         <div class="stat-item">
-                            <div class="stat-num">4.7★</div>
+                            <div class="stat-num">{{ $guestRating > 0 ? number_format($guestRating, 1) . '★' : 'New' }}
+                            </div>
                             <div class="stat-label">Guest Rating</div>
                         </div>
                         <div class="stat-item">
-                            <div class="stat-num">1k+</div>
+                            <div class="stat-num">{{ number_format($guestsServed) }}</div>
                             <div class="stat-label">Happy Guests</div>
                         </div>
                     </div>
@@ -2607,27 +2626,37 @@
                     </div>
 
                     <div class="location-item reveal reveal-delay-2">
-                        <div class="location-icon"><i class="bi bi-airplane-fill"></i></div>
+                        <div class="location-icon"><i class="bi bi-signpost-2-fill"></i></div>
                         <div>
-                            <div class="location-item-label">Nearest Terminal</div>
-                            <div class="location-item-value">Calamba Central Terminal (ENI)<br>30 minutes by private
-                                transfer</div>
+                            <div class="location-item-label">Getting Here</div>
+                            <div class="location-item-value">Exit SLEX at Calamba, then head toward Los Baños<br>along the
+                                Pansol stretch of the national highway.</div>
                         </div>
                     </div>
 
+                    {{-- Galing mismo sa Booking::SLOTS ang mga oras. Dating
+                         hardcoded na "2:00 PM / 12:00 PM" — hotel-style na oras
+                         na wala sa sistema, kaya maling impormasyon ang nababasa
+                         ng guest. Kapag nagbago ang slot, kasabay itong magbabago. --}}
                     <div class="location-item reveal reveal-delay-3">
                         <div class="location-icon"><i class="bi bi-clock-fill"></i></div>
                         <div>
-                            <div class="location-item-label">Check-in / Check-out</div>
-                            <div class="location-item-value">Check-in: 2:00 PM<br>Check-out: 12:00 PM</div>
+                            <div class="location-item-label">Booking Slots</div>
+                            <div class="location-item-value">
+                                @foreach (\App\Models\Booking::SLOTS as $slotInfo)
+                                    {{ $slotInfo['label'] }}@if (!$loop->last)
+                                        <br>
+                                    @endif
+                                @endforeach
+                            </div>
                         </div>
                     </div>
 
                     <div class="location-item reveal reveal-delay-4">
                         <div class="location-icon"><i class="bi bi-headset"></i></div>
                         <div>
-                            <div class="location-item-label">Concierge</div>
-                            <div class="location-item-value">24/7 Personal Concierge<br>Available for all arrival
+                            <div class="location-item-label">Assistance</div>
+                            <div class="location-item-value">Open every day<br>Call or message us for arrival
                                 arrangements</div>
                         </div>
                     </div>
@@ -2756,7 +2785,8 @@
                 <div>
                     <div class="footer-brand">Villa <em>Elena</em></div>
                     <p class="footer-tagline">
-                        A private resort sanctuary where luxury meets the untouched beauty of nature. {{ $resortAddress }}.
+                        A private pool resort in Pansol, Calamba — the whole villa exclusively yours, one group at a
+                        time.<br> {{ $resortAddress }}.
                     </p>
                 </div>
 
@@ -2765,7 +2795,7 @@
                     <div class="footer-col-title">Explore</div>
                     <ul class="footer-links">
                         <li><a href="#hero">Home</a></li>
-                        <li><a href="#properties">Our Villas</a></li>
+                        <li><a href="#properties">The Villa</a></li>
                         <li><a href="#room-tour">Rooms</a></li>
                         <li><a href="#amenities">Amenities</a></li>
                         <li><a href="#gallery">Gallery</a></li>
@@ -2793,7 +2823,7 @@
                     <ul class="footer-links">
                         <li><a href="tel:{{ preg_replace('/[^0-9+]/', '', $resortPhone) }}">{{ $resortPhone }}</a></li>
                         <li><a href="mailto:{{ $resortEmail }}">{{ $resortEmail }}</a></li>
-                        <li style="color:rgba(255,255,255,0.4);font-size:14px;line-height:1.6;">{{ $resortAddress }}</li>
+
                     </ul>
                 </div>
             </div>

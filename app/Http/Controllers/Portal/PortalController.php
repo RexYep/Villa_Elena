@@ -91,10 +91,20 @@ class PortalController extends Controller
 
         $allowOnlineBooking = Setting::get('allow_online_booking', '1') === '1';
 
+        // Landing-page stats. Totoong bilang mula sa DB — dating hardcoded
+        // ("4.7*", "1k+ guests") at hindi ma-depensahan. Ang bilang ng taon
+        // lang ang natirang manu-mano, wala kasi tayong record ng opening.
+        $guestRating = round((float) Review::where('status', 'approved')->avg('rating'), 1);
+
+        // Headcount ng bawat natapos na stay, hindi bilang ng account:
+        // karamihan ng walk-in/phone booking ay walang sariling user row,
+        // at isang account lang ang nagba-book para sa buong grupo.
+        $guestsServed = (int) Booking::where('status', 'checked_out')->sum('num_guests');
+
         return view('portal.home', compact(
             'properties', 'rooms', 'resortName', 'resortDesc', 'reviews',
             'resortEmail', 'resortPhone', 'resortAddress', 'facebookUrl', 'tiktokUrl',
-            'promos', 'allowOnlineBooking'
+            'promos', 'allowOnlineBooking', 'guestRating', 'guestsServed'
         ));
     }
 

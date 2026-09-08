@@ -187,3 +187,42 @@ Vite multi-entry build — one JS/CSS pair per portal section (`admin`, `portal`
 ## Deployment
 
 Production runs on Render (Docker, free tier, no persistent disk, blocks outbound SMTP entirely) against an Aiven MySQL database, with Cloudinary for images, Pusher for realtime, and Brevo's HTTPS API (not SMTP) for mail via a custom `Mail::extend('brevo', ...)` in `AppServiceProvider`. `docker/start.sh` branches on `APP_ENV` (`local` skips config/route/view caching for live-reload; anything else caches them) and only runs migrations when `RUN_MIGRATIONS=true` is set for that deploy. A scheduled task (`bookings:auto-checkinout`, registered `everyMinute()` in `routes/console.php`) runs via an external cron pinger hitting the token-gated `GET /cron/run-schedule/{CRON_SECRET}` route, since Render Cron Jobs aren't free — that route just calls `Artisan::call('schedule:run')`. Locally, `composer dev` runs `php artisan schedule:work` alongside the other dev processes so this (including the stale-pending-booking auto-cancel) actually fires while developing; without it, nothing invokes the scheduler and pending bookings never get swept. Full details, required env vars, and the Aiven CA-cert/TLS setup are in `project.md` §15 — read it before changing deployment-related code (Dockerfile, `docker/start.sh`, `render.yaml`, `config/database.php`'s `aiven` connection).
+
+
+## Skill Usage Reminders
+
+The following installed skills don't always auto-trigger based on request 
+phrasing alone. Explicitly invoke the matching skill by name when the task 
+fits, rather than relying on auto-detection:
+
+- **frontend-design** — when reviewing, critiquing, or polishing UI/UX 
+  (Blade views, CSS, layout, typography, visual hierarchy)
+- **responsive-design** — when the task specifically involves mobile 
+  layouts, breakpoints, or responsive behavior fixes
+- **web-design-guidelines** — when designing a new form, page, or UX 
+  pattern from scratch (not just polishing existing UI)
+- **laravel (laravel/agent-skills)** — when reviewing or refactoring 
+  PHP/Laravel backend code for clarity and maintainability
+
+- **superpowers-laravel** — currently DISABLED by default (too many 
+  sub-skills, all unused, adds unnecessary token overhead every turn). 
+  Only re-enable and use for these specific situations:
+  - Writing automated tests (Pest/PHPUnit) — e.g. `laravel-tdd`, 
+    `controller-tests`, `tdd-with-pest`
+  - Security hardening before deployment — e.g. `request-forgery-protection`, 
+    `policies-and-authorization`, `rate-limiting-and-throttle`
+  - Extending the Groq AI forecasting feature — e.g. `ai-sdk-essentials`, 
+    `vector-semantic-search`
+  - Debugging a non-trivial bug (not a simple typo/syntax fix) — 
+    `debugging-prompts`
+  - Performance optimization pass before final defense — e.g. 
+    `performance-caching`, `performance-eager-loading`, 
+    `performance-select-columns`
+  
+  Do not suggest enabling superpowers-laravel outside these situations — 
+  the plugin is broad and most of its sub-skills (Nova, i18n, Horizon 
+  metrics) are out of scope for this project.
+
+When a request matches one of the categories above, name the relevant 
+skill explicitly before starting the task, rather than assuming it will 
+auto-invoke.
