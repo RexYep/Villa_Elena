@@ -4,8 +4,6 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Storage;
 
 /**
  * @property int $id
@@ -62,20 +60,9 @@ class Package extends Model
 
     public function getImageUrlAttribute(): string
     {
-        if (! $this->image_path) {
-            return asset('images/default-package.jpg');
-        }
-
-        try {
-            return Storage::disk('public')->url($this->image_path);
-        } catch (\Throwable $e) {
-            Log::error('Failed to resolve package image URL', [
-                'package_id' => $this->id,
-                'image_path' => $this->image_path,
-                'error' => $e->getMessage(),
-            ]);
-
-            return asset('images/default-package.jpg');
-        }
+        // Tingnan ang MediaUrlHelper — dating isang live na Cloudinary
+        // Admin API call ito kada larawan kada render.
+        return \App\Helpers\MediaUrlHelper::resolve($this->image_path)
+            ?? asset('images/default-package.jpg');
     }
 }

@@ -7,8 +7,6 @@ use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
-use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Storage;
 
 /**
  * @property int $id
@@ -172,20 +170,13 @@ class User extends Authenticatable implements MustVerifyEmail
 
     public function getProfileImageUrlAttribute(): ?string
     {
-        if (! $this->profile_image) {
-            return null;
-        }
-
-        try {
-            return Storage::disk('public')->url($this->profile_image);
-        } catch (\Throwable $e) {
-            Log::error('Failed to resolve profile image URL', [
-                'user_id' => $this->id,
-                'profile_image' => $this->profile_image,
-                'error' => $e->getMessage(),
-            ]);
-
-            return null;
-        }
+        // Dating `Storage::disk('public')->url()` na nakabalot sa
+        // try/catch. Ang problema ay hindi ang catch kundi ang tawag:
+        // sa Cloudinary, ang url() ay isang LIVE na Admin API call kada
+        // larawan kada render, at 500/oras lang ang libreng quota — kaya
+        // "Rate Limit Exceeded" at nawawala ang lahat ng larawan sa
+        // buong site hanggang sa susunod na oras. Tingnan ang
+        // MediaUrlHelper.
+        return \App\Helpers\MediaUrlHelper::resolve($this->profile_image);
     }
 }

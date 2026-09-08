@@ -4,8 +4,6 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Storage;
 
 /**
  * @property int $id
@@ -58,16 +56,10 @@ class PropertyImage extends Model
 
     public function getUrlAttribute(): ?string
     {
-        try {
-            return Storage::disk('public')->url($this->image_path);
-        } catch (\Throwable $e) {
-            Log::error('Failed to resolve property image URL', [
-                'property_image_id' => $this->id,
-                'image_path' => $this->image_path,
-                'error' => $e->getMessage(),
-            ]);
-
-            return null;
-        }
+        // Ito ang pinakamabigat sa tatlong accessor: isang gallery ng
+        // villa ay anim hanggang walong larawan, at dating isang
+        // Cloudinary Admin API call ang bawat isa — kada page load.
+        // Tingnan ang MediaUrlHelper kung bakit lokal na ang pagbuo.
+        return \App\Helpers\MediaUrlHelper::resolve($this->image_path);
     }
 }

@@ -1,12 +1,105 @@
 # Villa Elena Private Rental Resort
 ## Resort Management System — Project Documentation
 
-**Version:** 7.1
+**Version:** 7.2
 **Stack:** PHP 8.2 / Laravel 12 / MySQL 8 / Bootstrap 5
 **Local URL:** `http://127.0.0.1:8000` (`php artisan serve`) or `http://localhost:8000` (Docker — see v5.3)
 **Live URL:** `https://villa-elena.onrender.com` (Render, free tier — testing only, not yet handed to real guests)
 **Database (local):** `villa_elena_db` (MySQL, XAMPP or standalone MySQL — same database either way)
 **Database (live):** Aiven MySQL free tier, database `defaultdb`
+
+---
+
+## What Changed in v7.2 (Read This First)
+
+### Every image on the site was one Cloudinary API call away from disappearing
+
+From the Render log:
+
+```
+production.ERROR: Failed to resolve profile image URL
+{"user_id":9,"profile_image":"avatars/VFjouTJRPpTkmkuyo0t6wzMd8GmXyVzsoB0U6FQV.jpg",
+ "error":"Rate Limit Exceeded. Limit of 500 api operations reached.
+          Try again on 2026-09-08 10:00:00 UTC"}
+```
+
+That message is not about the avatar. It is the **whole image system** hitting Cloudinary's free-tier Admin API ceiling — after which *every* image on the site (avatars, the villa gallery, package photos) returns `null` until the top of the next hour. Note the retry time: a clean hour boundary, because the quota is per hour.
+
+### Why an image URL was costing an API call
+
+`config/filesystems.php` points the `public` disk at the `cloudinary` driver in production, and every accessor asked Laravel for a URL the normal way:
+
+```php
+return Storage::disk('public')->url($this->profile_image);
+```
+
+On every other disk that is pure string-building. On this one it is not — `CloudinaryStorageAdapter::getUrl()` is:
+
+```php
+public function getUrl(string $path): string
+{
+    [$id, $type] = $this->prepareResource($path);
+
+    return $this->cloudinary->adminApi()->asset($id, ['resource_type' => $type])->offsetGet('secure_url');
+}
+```
+
+**One live Admin API call per image, per render.** The villa property page shows 6–8 images, the landing page 6, and each avatar in a list is one more. The free tier allows **500 Admin API operations per hour**, so a few dozen page views exhaust it — and it recovers on its own each hour, which is exactly why this looks intermittent rather than broken.
+
+The v5.3 try/catch around these accessors was doing its job (a failed URL degrades to `null` instead of a 500). It just made the real problem quiet: the cost was in the *call*, not in the error handling.
+
+### The fix: build the URL instead of asking for it
+
+A Cloudinary delivery URL is derived, not looked up:
+
+```
+https://res.cloudinary.com/{cloud_name}/image/upload/v1/{public_id}
+```
+
+The Admin API exists to return an asset's *metadata*. We never wanted metadata — only the URL — so the call was pure waste. `App\Helpers\MediaUrlHelper::resolve()` now builds it locally through the Cloudinary SDK's own URL builder: **zero API calls, zero quota**. All three accessors (`User::profile_image_url`, `PropertyImage::url`, `Package::image_url`) delegate to it, and it still falls back to the local-disk URL when `CLOUDINARY_URL` is unset, so dev behaviour is unchanged.
+
+Two details that would have silently broken every image if gotten wrong:
+
+- **`MediaUrlHelper::prepareResource()` mirrors `CloudinaryStorageAdapter::prepareResource()` exactly**, because that method is what produced the `public_id` at upload time. It strips the extension (`avatars/abc.jpg` → public ID `avatars/abc`), which we re-append for image/video delivery — matching the `secure_url` shape the Admin API used to return — but *not* for `raw`, which was stored without one.
+- The resource type comes from `FinfoMimeTypeDetector::detectMimeTypeFromPath()`, which is **extension-based and never touches the filesystem**. That matters: in production the file exists only on Cloudinary, so anything that needed the local file would fall through to `raw` and produce a 404 for every image. Verified against paths that exist nowhere: `avatars/does-not-exist-anywhere.jpg → image/jpeg`.
+
+Also worth knowing: **do not resolve `app(Cloudinary::class)`**. The package's singleton reads `filesystems.disks.cloudinary`, but this project's disk is named `public`, so that binding yields a client with a null cloud name. `MediaUrlHelper` builds its own from `config('filesystems.disks.public.url')`.
+
+Uploads and deletes are untouched — they use the Upload API (`uploadApi()->upload()` / `destroy()`), a separate and far larger quota than the 500/hr Admin API limit. Nothing else in the app made per-request Admin API calls; the three `url()` accessors were the entire source.
+
+### Verified
+
+Rendered the real pages through the real HTTP stack with the disk switched to `cloudinary`:
+
+```
+public disk driver: cloudinary
+
+landing         HTTP 200
+  cloudinary urls: 6
+  raw /storage/ urls (should be 0): 0
+    https://res.cloudinary.com/…/image/upload/v1/properties/rRR7FXY5haNgLUqleMY5Jm1ErjmFW96HsNsYSqOf.png
+
+property page   HTTP 200
+  cloudinary urls: 1
+  raw /storage/ urls (should be 0): 0
+```
+
+That landing page alone used to cost **6 Admin API operations**; it now costs none. The run was made against a deliberately nonexistent cloud name and still produced correct URLs in ~164 ms for six of them — if any call were still going out, they would have failed or hung instead.
+
+With `CLOUDINARY_URL` unset, the accessors return `http://127.0.0.1:8000/storage/avatars/…` exactly as before.
+
+### The one thing that could not be verified from here
+
+Local `.env` correctly has no `CLOUDINARY_URL` (see v5.3), so **there was no way to fetch a generated URL against the real production cloud**. The cloud name comes straight from the existing `CLOUDINARY_URL`, and the public ID derivation is mirrored from the adapter, but the end-to-end resolve is unproven until deployed. After deploying, confirm with any property image — or locally, with the production credential:
+
+```bash
+CLOUDINARY_URL="<the production value>" php artisan tinker --execute="
+  echo App\Models\PropertyImage::first()->url;
+"
+# then curl -I that URL — expect 200, not 404
+```
+
+If it 404s, the public ID derivation is the thing to look at, not the cloud name.
 
 ---
 
@@ -3330,6 +3423,7 @@ DELETE /my/profile/devices/{device}           customer.profile.devices.destroy  
 
 | Issue | Cause | Fix Applied |
 |---|---|---|
+| **(v7.2)** All images across the site vanished for stretches of an hour at a time | Every `$image->url` / `profile_image_url` called `Storage::disk('public')->url()`, and the Cloudinary adapter's `getUrl()` is a **live Admin API call per image, per render** (`adminApi()->asset()`). The free tier allows 500/hour, and one page load costs 6–8, so ordinary browsing exhausted it — then `Rate Limit Exceeded` until the next hour, which the v5.3 try/catch quietly turned into `null` | `App\Helpers\MediaUrlHelper::resolve()` builds the delivery URL locally (`res.cloudinary.com/{cloud}/image/upload/v1/{public_id}`) with **zero API calls**; all three accessors delegate to it. Its `prepareResource()` mirrors the adapter's exactly, since that produced the `public_id` at upload time |
 | **(v7.1)** Nothing stopped a guest being charged twice on a slow connection | Every `POST /pay/{booking}/checkout` unconditionally created a new PayMongo session and overwrote `paymongo_session_id`, and the Pay button was a plain submit with no disable-on-click — a second click meant a second live QR for one booking | `createCheckout()` holds a `Cache::lock` per booking and reuses a still-open session (or redirects to `payment.success` if it turns out already paid) instead of creating a second; button disables on submit and re-enables from bfcache; route throttled at 8/min |
 | **(v7.1)** A stale checkout page could charge a fully-paid booking | `showPaymentPage()` guarded `balance_due <= 0` but `createCheckout()` never re-checked — and the deposit is a percentage of `total_amount`, not of the balance, so it stayed non-zero after full payment | `createCheckout()` re-reads the booking inside the lock, refuses when nothing is due, and caps the deposit at `min($depositAmount, $balance_due)` |
 | **(v7.1)** The `reference_number` idempotency had no backstop | A SELECT then an INSERT, with the webhook arriving exactly while the success callback runs — the same shape as the v7.0 booking race, in the one place it is most likely to fire | `payments (booking_id, reference_number)` UNIQUE; the insert catches `UniqueConstraintViolationException` and treats it as already-recorded. Verified with five concurrent processes: one row, four clean skips |
