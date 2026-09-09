@@ -107,9 +107,17 @@
         }
 
         /* Review Cards */
+        /* min() on the track floor, because a bare minmax(360px, 1fr) keeps a
+           360px track even when the container is narrower — at a 320px viewport
+           the content box is 292px, so every card ran 54px past the right edge
+           and body{overflow-x:hidden} clipped the status badge and star rating
+           off the card with no scrollbar to reveal them. 320px rather than 360px
+           as the desired floor: the card's min-content is 234px, and 320 is what
+           lets 768px and the starved 993–1150px band hold two columns instead of
+           stretching one card to the full content width. */
         .reviews-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+            grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr));
             gap: 16px;
         }
 
@@ -150,6 +158,15 @@
             display: flex;
             align-items: center;
             gap: 10px;
+            min-width: 0;
+        }
+
+        /* Guest names come from user input, so one long unbroken token (a
+           run-together name, an email used as a name) would otherwise set the
+           flex item's min-content and push the badge/stars column out of the
+           card. */
+        .review-guest>div {
+            min-width: 0;
         }
 
         .guest-avatar {
@@ -170,6 +187,7 @@
             font-weight: 600;
             font-size: 13px;
             color: var(--text-main);
+            overflow-wrap: anywhere;
         }
 
         .review-meta {
@@ -381,7 +399,13 @@
             background: #dc2626;
         }
 
-        @media (max-width: 900px) {
+        /* 1120px, not 900px: "Pending Approval" needs 105px to stay on one line,
+           so a stat card has to clear 141px and five of them need 761px of
+           content. The sidebar comes back at 993px and costs 260px, which left
+           the row jumping from three roomy tracks at 900px to five 123px ones at
+           993px — narrower cards on a wider screen, every label wrapping to two
+           lines. Hold at three until the sidebar has been paid for. */
+        @media (max-width: 1120px) {
             .stats-row {
                 grid-template-columns: repeat(3, 1fr);
             }
@@ -390,6 +414,42 @@
         @media (max-width: 560px) {
             .stats-row {
                 grid-template-columns: 1fr 1fr;
+            }
+        }
+
+        /* Approve/Reject/Delete sit side by side and all three are one-way, so a
+           near-miss on a finger is a moderation mistake, not an annoyance.
+           admin.css's shared coarse-pointer block only covers .btn-icon /
+           .action-btns; this page's buttons use different classes and were left
+           at 29-32px tall. Keyed on pointer type, not width, so mouse users keep
+           the compact sizing at every width. */
+        @media (hover: none) and (pointer: coarse) {
+            .review-actions {
+                gap: 10px;
+            }
+
+            .btn-approve,
+            .btn-reject,
+            .btn-reply,
+            .btn-submit-reply,
+            .btn-filter {
+                min-height: 44px;
+            }
+
+            .btn-delete {
+                min-width: 44px;
+                min-height: 44px;
+            }
+
+            .btn-clear {
+                min-height: 44px;
+                display: inline-flex;
+                align-items: center;
+            }
+
+            .form-select-sm,
+            .form-control-sm {
+                min-height: 44px;
             }
         }
     </style>

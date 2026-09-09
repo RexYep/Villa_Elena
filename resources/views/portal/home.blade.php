@@ -21,8 +21,8 @@
         }
 
         /* ════════════════════════════════════════
-                               NAVIGATION
-                            ════════════════════════════════════════ */
+                                       NAVIGATION
+                                    ════════════════════════════════════════ */
         .nav {
             position: fixed;
             top: 0;
@@ -223,8 +223,8 @@
         }
 
         /* ════════════════════════════════════════
-                               HERO SECTION
-                            ════════════════════════════════════════ */
+                                       HERO SECTION
+                                    ════════════════════════════════════════ */
         .hero {
             height: 100vh;
             min-height: 680px;
@@ -296,10 +296,6 @@
             font-weight: 500;
         }
 
-        /* ── Seasonal promo ─────────────────────────────────────────
-                               Ito ang PANGUNAHING paraan ng pag-anunsyo ng promo. Karamihan
-                               ng bagong booker ay hindi pa naka-login, kaya hindi sila
-                               maaabot ng in-app notification — dito lang nila ito makikita. */
         .hero-promo {
             display: inline-flex;
             align-items: center;
@@ -456,8 +452,8 @@
         }
 
         /* ════════════════════════════════════════
-                               SHARED SECTION STYLES
-                            ════════════════════════════════════════ */
+                                       SHARED SECTION STYLES
+                                    ════════════════════════════════════════ */
         .section {
             max-width: 1280px;
             margin: 0 auto;
@@ -505,8 +501,8 @@
         }
 
         /* ════════════════════════════════════════
-                               PROPERTIES SECTION
-                            ════════════════════════════════════════ */
+                                       PROPERTIES SECTION
+                                    ════════════════════════════════════════ */
         #properties {
             background: var(--cream);
         }
@@ -913,8 +909,8 @@
         }
 
         /* ════════════════════════════════════════
-                               AMENITIES SECTION
-                            ════════════════════════════════════════ */
+                                       AMENITIES SECTION
+                                    ════════════════════════════════════════ */
         #amenities {
             background: var(--stone);
             padding: 0;
@@ -992,8 +988,8 @@
         }
 
         /* ════════════════════════════════════════
-                               ROOM TOUR SECTION
-                            ════════════════════════════════════════ */
+                                       ROOM TOUR SECTION
+                                    ════════════════════════════════════════ */
         #room-tour {
             background: var(--cream);
             padding: 0;
@@ -1134,8 +1130,8 @@
         }
 
         /* ════════════════════════════════════════
-                               GALLERY SECTION
-                            ════════════════════════════════════════ */
+                                       GALLERY SECTION
+                                    ════════════════════════════════════════ */
         #gallery {
             background: var(--sand);
             padding: 0;
@@ -1383,8 +1379,8 @@
         }
 
         /* ════════════════════════════════════════
-                               ABOUT SECTION
-                            ════════════════════════════════════════ */
+                                       ABOUT SECTION
+                                    ════════════════════════════════════════ */
         #about {
             background: var(--cream);
             padding: 0;
@@ -1490,8 +1486,8 @@
         }
 
         /* ════════════════════════════════════════
-                               TESTIMONIALS SECTION
-                            ════════════════════════════════════════ */
+                                       TESTIMONIALS SECTION
+                                    ════════════════════════════════════════ */
         #testimonials {
             background: var(--sand);
             padding: 0;
@@ -1609,8 +1605,8 @@
         }
 
         /* ════════════════════════════════════════
-                               LOCATION SECTION
-                            ════════════════════════════════════════ */
+                                       LOCATION SECTION
+                                    ════════════════════════════════════════ */
         #location {
             background: var(--cream);
             padding: 0;
@@ -1695,8 +1691,8 @@
         }
 
         /* ════════════════════════════════════════
-                               CONTACT SECTION
-                            ════════════════════════════════════════ */
+                                       CONTACT SECTION
+                                    ════════════════════════════════════════ */
         #contact {
             background: var(--stone);
             padding: 0;
@@ -1841,8 +1837,8 @@
         }
 
         /* ════════════════════════════════════════
-                               FOOTER
-                            ════════════════════════════════════════ */
+                                       FOOTER
+                                    ════════════════════════════════════════ */
         .footer {
             background: #1a1009;
             padding: 70px 40px 40px;
@@ -1939,8 +1935,8 @@
         }
 
         /* ════════════════════════════════════════
-                               ANIMATIONS & SCROLL REVEAL
-                            ════════════════════════════════════════ */
+                                       ANIMATIONS & SCROLL REVEAL
+                                    ════════════════════════════════════════ */
         .reveal {
             opacity: 0;
             transform: translateY(30px);
@@ -1969,8 +1965,8 @@
         }
 
         /* ════════════════════════════════════════
-                               RESPONSIVE
-                            ════════════════════════════════════════ */
+                                       RESPONSIVE
+                                    ════════════════════════════════════════ */
         @media (max-width: 1024px) {
             .about-grid {
                 grid-template-columns: 1fr;
@@ -2064,6 +2060,36 @@
                 grid-template-columns: 1fr;
             }
         }
+
+        @media (hover: none) and (pointer: coarse) {
+            .hamburger {
+                min-width: 44px;
+                min-height: 44px;
+                align-items: center;
+                justify-content: center;
+            }
+
+            .gallery-nav,
+            .gallery-nav.prev,
+            .gallery-nav.next {
+                width: 44px;
+                height: 44px;
+            }
+
+            .gallery-dot {
+                position: relative;
+            }
+
+            .gallery-dot::after {
+                content: '';
+                position: absolute;
+                top: 50%;
+                left: 50%;
+                width: 44px;
+                height: 44px;
+                transform: translate(-50%, -50%);
+            }
+        }
     </style>
 @endpush
 
@@ -2149,9 +2175,6 @@
 
     {{-- ══════════════════════════════════
      SEASONAL PROMOS
-     Awtomatiko ang bawas — walang code na itatype ang guest. Nakikita
-     ito bago pa ang villa showcase, para nasa isip na niya ang promo
-     habang tinitingnan ang presyo sa ibaba.
 ══════════════════════════════════ --}}
     @if ($promos->isNotEmpty())
         <section class="promo-band" id="promos">
@@ -2169,9 +2192,6 @@
                             @endif
                             <div class="promo-meta">
                                 @if ($promo->isUpcoming())
-                                    {{-- Paparating pa lang — ang petsa ng STAY ang
-                                         sinasabi, hindi kung kailan puwedeng mag-book.
-                                         Puwede nang mag-book ngayon para sa window na ito. --}}
                                     For stays {{ $promo->start_date->format('M d') }}@if ($promo->expiry_date)
                                         – {{ $promo->expiry_date->format('M d, Y') }}
                                     @endif
@@ -2246,7 +2266,7 @@
                     <div class="villa-showcase-img-wrap">
                         @if ($villa->primaryImage)
                             <img src="{{ $villa->primaryImage->url }}" class="villa-showcase-img"
-                                alt="{{ $villa->property_name }}">
+                                alt="{{ $villa->property_name }}" loading="lazy" decoding="async">
                         @else
                             <div
                                 style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:80px;color:#ddd;">
@@ -2340,7 +2360,9 @@
                         <div class="room-card reveal">
                             <div class="room-card-img-wrap">
                                 @if ($roomImage)
-                                    <img src="{{ $roomImage->url }}" alt="{{ $room->property_name }}" loading="lazy">
+                                    <img src="{{ $roomImage->url }}"
+                                        alt="{{ $room->property_name ?: 'Room at Villa Elena' }}" loading="lazy"
+                                        decoding="async">
                                 @else
                                     <div class="room-card-img-placeholder"><i class="bi bi-door-closed"></i></div>
                                 @endif
@@ -2373,13 +2395,6 @@
                 </div>
             </div>
 
-            {{-- Ito ang WALONG pangunahing amenity — sadyang hardcoded, hindi
-                 galing sa DB. Ang buong listahan ng amenities ay nasa property
-                 page na; headline lang ang seksyong ito, kaya kung magdagdag ang
-                 admin ng bagong amenity ay hindi na kailangang magdagdag din ng
-                 card dito. Pinagsama ang dating hiwalay na Kiddie at Adult pool
-                 sa iisang "Swimming Pool" card — pareho namang kasama sa
-                 booking, at sinasabi na ng blurb na dalawa sila. --}}
             <div class="amenities-grid">
                 <div class="amenity-card reveal reveal-delay-1">
                     <div class="amenity-icon"><i class="bi bi-water"></i></div>
@@ -2455,10 +2470,11 @@
                 ];
             @endphp
 
-            <div class="gallery-slideshow" id="gallerySlideshow" data-interval="4000">
+            <div class="gallery-slideshow" id="gallerySlideshow" data-interval="2500">
                 @foreach ($galleryShots as $i => $shot)
                     <div class="gallery-slide{{ $i === 0 ? ' active' : '' }}" onclick="openLightbox(this)">
-                        <img src="{{ asset($shot['src']) }}" alt="{{ $shot['alt'] }}">
+                        <img src="{{ asset($shot['src']) }}" alt="{{ $shot['alt'] }}" loading="lazy"
+                            decoding="async">
                         <div class="gallery-overlay">
                             <div class="gallery-caption">{{ $shot['caption'] }}</div>
                         </div>
@@ -2496,8 +2512,9 @@
             <div class="about-grid">
                 <div class="about-img-stack reveal">
                     <img src="{{ asset('images/pool-view.jpg') }}" class="about-img-main"
-                        alt="The pool area at Villa Elena">
-                    <img src="{{ asset('images/night-view.jpg') }}" class="about-img-accent" alt="Villa Elena at night">
+                        alt="The pool area at Villa Elena" loading="lazy" decoding="async">
+                    <img src="{{ asset('images/night-view.jpg') }}" class="about-img-accent" alt="Villa Elena at night"
+                        loading="lazy" decoding="async">
                     <div class="about-badge">
                         <strong>6+</strong>
                         Years of<br>Excellence
@@ -2522,11 +2539,6 @@
                         the most of your time together.
                     </p>
 
-                    {{-- Isang villa lang ang narerentahan, kaya ang bilang ng KWARTO
-                         ang makabuluhang stat dito — hindi "6 Private Villas", na
-                         nagmumungkahi ng anim na hiwalay na booking. Ang rating at
-                         ang guest count ay galing na sa DB: dating hardcoded na
-                         "4.7★" at "1k+" na walang pinanggagalingan. --}}
                     <div class="about-stats reveal reveal-delay-4">
                         <div class="stat-item">
                             <div class="stat-num">{{ $rooms->count() }}</div>
@@ -2573,7 +2585,9 @@
                         <div class="testimonial-author">
                             <div class="author-avatar">
                                 @if ($review->user?->profile_image_url)
-                                    <img src="{{ $review->user->profile_image_url }}" alt="">
+                                    <img src="{{ $review->user->profile_image_url }}"
+                                        alt="Photo of {{ $review->user->full_name ?? 'the guest' }}" loading="lazy"
+                                        decoding="async" width="46" height="46">
                                 @else
                                     {{ strtoupper(substr($review->user->full_name ?? 'G', 0, 1)) }}
                                 @endif
@@ -2634,10 +2648,6 @@
                         </div>
                     </div>
 
-                    {{-- Galing mismo sa Booking::SLOTS ang mga oras. Dating
-                         hardcoded na "2:00 PM / 12:00 PM" — hotel-style na oras
-                         na wala sa sistema, kaya maling impormasyon ang nababasa
-                         ng guest. Kapag nagbago ang slot, kasabay itong magbabago. --}}
                     <div class="location-item reveal reveal-delay-3">
                         <div class="location-icon"><i class="bi bi-clock-fill"></i></div>
                         <div>

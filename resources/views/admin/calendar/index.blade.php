@@ -243,6 +243,25 @@
             margin-bottom: 12px;
         }
 
+        /* Was an inline grid-template-columns:1fr 1fr on the element itself, which
+           no media query could have overridden. 1fr is minmax(auto, 1fr), so each
+           track's floor is the content's min-content — and a native date input
+           refuses to render below 144px. Two of them plus the gap need 300px, but
+           the modal body is only 236px at a 320px viewport, so the End Date field
+           sat 22px past the right edge, clipped away by body{overflow-x:hidden}
+           with no scrollbar to recover it. */
+        .date-pair {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+        }
+
+        @media (max-width: 420px) {
+            .date-pair {
+                grid-template-columns: 1fr;
+            }
+        }
+
         .form-label-sm {
             display: block;
             font-size: 13px;
@@ -402,12 +421,96 @@
                 padding: 12px;
             }
 
-            .filter-bar select {
-                min-width: 140px;
+            /* Full-width rather than a min-width floor: the groups already stack
+               here, so a 140px control just leaves dead space beside itself. */
+            .filter-bar {
+                gap: 12px;
+                padding: 14px;
             }
 
+            /* A basis, not 100%: the two groups still sit side by side wherever
+               they fit (they do from ~420px up) and only stack when they don't.
+               Forcing 100% made the bar taller at 480-600px than it was before. */
+            .filter-bar>div {
+                flex: 1 1 180px;
+            }
+
+            .filter-bar select {
+                min-width: 0;
+                width: 100%;
+            }
+
+            /* "Drag bookings to reschedule" is advice for a mouse, and below this
+               width the calendar is in list view, where there is nothing to drag. */
             .filter-bar>.text-muted-theme {
-                margin-left: 0 !important;
+                display: none;
+            }
+
+            .legend {
+                gap: 10px 14px;
+                padding: 10px 12px;
+            }
+
+            /* 26px Cormorant pushes the wrapped toolbar to three tall rows. */
+            .fc .fc-toolbar-title {
+                font-size: 20px;
+            }
+        }
+
+        /* The "Block Dates" button label wraps to two lines at 360px and below,
+           making the button 57px tall inside a topbar that admin.css fixes at
+           68px. Same icon-only treatment as the properties detail page. */
+        @media (max-width: 560px) {
+            .topbar-right .btn-navy {
+                font-size: 0;
+                padding: 9px 12px;
+                gap: 0;
+            }
+
+            .topbar-right .btn-navy i {
+                font-size: 15px;
+            }
+        }
+
+        /* A toast anchored only by right:24px grows leftward until it hits the
+           viewport edge, so on a 320px screen it ends up flush at L0 with no
+           gutter on that side. Anchor both edges and let the text wrap. */
+        @media (max-width: 520px) {
+            .toast-msg {
+                left: 16px;
+                right: 16px;
+                bottom: 16px;
+            }
+        }
+
+        /* Remove Block deletes a blocked period and the FullCalendar toolbar
+           drives navigation, so both need finger-sized targets. Keyed on pointer
+           type, not width: a tablet at 768px and a desktop window dragged to
+           768px need different hit areas, and only the first is a finger. */
+        @media (hover: none) and (pointer: coarse) {
+
+            .fc .fc-button,
+            .btn-navy,
+            .logout-btn,
+            .btn-view,
+            .btn-danger-sm,
+            .btn-submit {
+                min-height: 44px;
+            }
+
+            .modal-close {
+                width: 44px;
+                height: 44px;
+            }
+
+            /* Icon-only below 560px, so it needs the width set too. */
+            .topbar-right .btn-navy {
+                min-width: 44px;
+            }
+
+            .filter-bar select,
+            .form-control-sm2 {
+                min-height: 44px;
             }
         }
     </style>
@@ -535,7 +638,7 @@
                         @endforeach
                     </select>
                 </div>
-                <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;" class="mb-12">
+                <div class="date-pair mb-12">
                     <div>
                         <label class="form-label-sm">Start Date</label>
                         <input type="date" id="blockStart" class="form-control-sm2" required>
@@ -618,6 +721,13 @@
         let calendar;
         let activeBlockId = null;
 
+        // A month grid needs seven columns. At a 320px viewport that is a 37px day
+        // cell, and an event title — "<property> — <guest>" — renders 31px of the
+        // 266px it wants, i.e. about three characters. listWeek gives each booking
+        // a full row instead. Matches the 600px breakpoint the stylesheet above
+        // already uses for this page.
+        const phoneMQ = window.matchMedia('(max-width: 600px)');
+
         // ── Init FullCalendar ──────────────────────────────────────────
         document.addEventListener('DOMContentLoaded', function() {
             const el = document.getElementById('calendar');
@@ -625,7 +735,7 @@
                 plugins: [FullCalendar.dayGridPlugin, FullCalendar.timeGridPlugin, FullCalendar.listPlugin,
                     FullCalendar.interactionPlugin
                 ],
-                initialView: 'dayGridMonth',
+                initialView: phoneMQ.matches ? 'listWeek' : 'dayGridMonth',
                 headerToolbar: {
                     left: 'prev,next today',
                     center: 'title',
@@ -747,6 +857,13 @@
                 }
             });
             calendar.render();
+
+            // Only on an actual crossing of the breakpoint, not on every resize:
+            // an admin who picks month view on a phone keeps it until they cross
+            // back, instead of being yanked to list on the next scroll-resize.
+            phoneMQ.addEventListener('change', function(e) {
+                calendar.changeView(e.matches ? 'listWeek' : 'dayGridMonth');
+            });
 
             // Live sync: if another admin creates, moves, or changes the
             // status of a booking while this calendar is open, refetch so it

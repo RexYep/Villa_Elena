@@ -61,11 +61,64 @@
             color: var(--text-main);
         }
 
+        /* 13px, not 11.5px — this was the smallest text in the admin panel
+           (labels and hints elsewhere are 13px), and it is the text explaining
+           what each switch actually does, including the one that sends a
+           notification to every customer account. */
         .check-row .check-hint {
-            font-size: 11.5px;
+            font-size: 13px;
             color: var(--muted);
             line-height: 1.5;
             margin-top: 2px;
+        }
+
+        /* admin.css collapses every .two-col below 900px. This form is capped at
+           760px and has no sidebar competing for width, so at 768px the wrapper
+           is 713px wide and the pairs still stacked into one 663px column —
+           the collapse buys nothing there.
+
+           561px matches the booking and property forms, and is comfortably above
+           what this one needs: the binding constraint is the native date input,
+           whose intrinsic minimum is 157px, so a column has to clear ~165px.
+           At 561px the columns are 234px. Below it single column is genuinely
+           better here anyway — at 320px a forced pair gives 120px cells, and
+           this form's per-field hints run three or four lines in a column that
+           narrow. */
+        @media (min-width: 561px) {
+            .form-wrapper .two-col {
+                grid-template-columns: 1fr 1fr;
+            }
+        }
+
+        /* Label and prices share a row, but on a phone the price block wins:
+           at 320px "Regular rate (Mon–Thu, Sun after 6PM)" was squeezed to 62px
+           against a 139px price and wrapped into a 125px-tall column. */
+        @media (max-width: 480px) {
+            .preview-row {
+                flex-direction: column;
+                gap: 2px;
+            }
+        }
+
+        /* The checkbox is 17px. Two of these decide whether the promo is live
+           and whether it is advertised publicly, and the third sends a one-time
+           notification to every customer — worth a finger-sized target. Keyed on
+           pointer type so the desktop form keeps its compact controls. */
+        @media (hover: none) and (pointer: coarse) {
+            .check-row {
+                padding: 14px 0;
+            }
+
+            .check-row input[type="checkbox"] {
+                width: 22px;
+                height: 22px;
+                margin-top: 0;
+            }
+
+            .check-row .check-label {
+                display: inline-block;
+                min-height: 24px;
+            }
         }
     </style>
 @endpush
