@@ -62,9 +62,39 @@
             max-width: 760px;
         }
 
+        /* Third page in this section using .btn-refresh in the topbar without
+           defining it anywhere — it rendered as a bare inline anchor. */
+        .btn-refresh {
+            background: var(--gold);
+            color: var(--stone);
+            border: none;
+            padding: 9px 20px;
+            border-radius: 8px;
+            font-weight: 600;
+            font-size: 13px;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            white-space: nowrap;
+            transition: opacity .2s;
+        }
+
+        .btn-refresh:hover {
+            opacity: .85;
+            color: var(--stone);
+        }
+
+        /* minmax(0, …) because a bare 1fr floors each track at its own
+           min-content, so the three tiles sized independently — 128 / 123.8 /
+           123.9px, frozen at those widths from 320px to 390px rather than
+           shrinking — and the headline tile ran to R422 against a 320px
+           viewport. Calibration and Delivered, the two figures this page exists
+           to show, were entirely off-screen and clipped by
+           body{overflow-x:hidden}. */
         .score-strip {
             display: grid;
-            grid-template-columns: repeat(3, 1fr);
+            grid-template-columns: repeat(3, minmax(0, 1fr));
             gap: 16px;
             margin-bottom: 8px;
         }
@@ -125,6 +155,55 @@
         .status-pill.applied { background: #dcfce7; color: #15803d; }
         .status-pill.dismissed { background: #e2e8f0; color: #475569; }
         .status-pill.expired { background: #fef3c7; color: #92400e; }
+
+        /* Recommendation titles are full sentences, and at a narrow viewport the
+           first column collapsed to 173px and broke them over five lines — 107px
+           per row. The table is inside a horizontal scroller, so giving the
+           column a floor costs nothing but a little scrolling and roughly halves
+           the row height. */
+        .table-scroll td:first-child,
+        .table-scroll th:first-child {
+            min-width: 260px;
+        }
+
+        /* The widest label, "Forecast (no action)", needs 150px on one line, so a
+           tile needs 190px — but the binding limit lower down is the 26px figure
+           itself at 68px: below a 420px viewport a third of the row leaves less
+           than that and the value starts breaking in half. */
+        @media (max-width: 420px) {
+            .score-strip {
+                grid-template-columns: minmax(0, 1fr);
+            }
+        }
+
+        /* "Back to Recommendations" is a long label for a bar admin.css fixes at
+           68px, which also has to hold the page title. */
+        @media (max-width: 700px) {
+            .topbar-right .btn-refresh {
+                font-size: 0;
+                padding: 9px 12px;
+                gap: 0;
+            }
+
+            .topbar-right .btn-refresh i {
+                font-size: 15px;
+            }
+        }
+
+        /* Keyed on pointer type, not width: only a finger needs the bigger
+           target. This page is read-only, so the topbar is all there is. */
+        @media (hover: none) and (pointer: coarse) {
+
+            .btn-refresh,
+            .logout-btn {
+                min-height: 44px;
+            }
+
+            .topbar-right .btn-refresh {
+                min-width: 44px;
+                justify-content: center;
+            }
+        }
     </style>
 @endpush
 

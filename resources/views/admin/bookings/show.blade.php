@@ -842,6 +842,15 @@
                                         <td>{{ $payment->method_label }}</td>
                                         <td><span
                                                 style="font-size: 13px;background:#f1f5f9;padding:2px 8px;border-radius:10px;">{{ $payment->type_label }}</span>
+                                            {{-- Dito hinahanap ng admin ang refund ng booking, kaya
+                                                 dito rin dapat ang daan papunta sa pagsasara nito. --}}
+                                            @if ($payment->isAwaitingPayout())
+                                                <a href="{{ route('admin.payments.show', $payment) }}"
+                                                    style="font-size: 12px;font-weight:700;color:#92400e;background:#fef3c7;padding:2px 8px;border-radius:10px;text-decoration:none;white-space:nowrap;"
+                                                    title="Refund approved — money not sent yet. Open it to send it, or to mark it paid out.">
+                                                    NOT SENT →
+                                                </a>
+                                            @endif
                                         </td>
                                         <td
                                             style="text-align:right;font-weight:600;{{ $payment->payment_type === 'refund' ? 'color:#ef4444;' : 'color:#15803d;' }}">
@@ -989,8 +998,11 @@
                 </div>
             </div>
 
-            {{-- Record Payment --}}
-            @if (!in_array($booking->payment_status, ['paid', 'refunded']))
+            {{-- Record Payment — papasok na pera lang. Nakatago rin ito sa
+                 cancelled/no-show: wala nang sisingilin doon, at ito mismo
+                 ang form na ginamit para "i-mark as refunded" ang isang
+                 refund, na gumawa lang ng pangalawang refund row. --}}
+            @if (!in_array($booking->payment_status, ['paid', 'refunded']) && !in_array($booking->status, ['cancelled', 'no_show']))
                 <div class="card-panel" id="card-record-payment">
                     <div class="card-header-custom">
                         <h3>Record Payment</h3>
@@ -1015,8 +1027,11 @@
                                 <select name="payment_type" class="form-control-sm-custom" required>
                                     <option value="partial">Partial Payment</option>
                                     <option value="full_payment">Full Payment</option>
-                                    <option value="refund">Refund</option>
                                 </select>
+                                <div class="text-muted-theme" style="font-size:12px;margin-top:4px;">
+                                    Money coming <strong>in</strong> only. Refunds are issued and closed on the
+                                    <a href="{{ route('admin.payments.index', ['search' => $booking->booking_ref]) }}">Payments page</a>.
+                                </div>
                             </div>
                             <div style="margin-bottom:14px;">
                                 <label class="form-label-sm">Notes (optional)</label>

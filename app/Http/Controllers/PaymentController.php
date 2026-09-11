@@ -69,7 +69,12 @@ class PaymentController extends Controller
         // Hindi ito puwedeng DB transaction: may HTTP call sa PayMongo
         // sa loob, at ang pagpapatakbo niyon sa loob ng transaction ang
         // eksaktong pagkakamaling nakalista sa §PayMongo ng CLAUDE.md.
-        $lock = Cache::lock("paymongo-checkout:{$booking->id}", 20);
+        //
+        // Pinned to the `database` store, never the default. Under
+        // CACHE_STORE=failover a Redis blip would put two requests' locks
+        // in two different stores and both would "win" — and a Redis lock
+        // throws at get(), past the point where failover can catch it.
+        $lock = Cache::store('database')->lock("paymongo-checkout:{$booking->id}", 20);
 
         if (! $lock->get()) {
             return back()->with('info', 'Your payment is already being set up — please wait a moment before trying again.');

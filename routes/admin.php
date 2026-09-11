@@ -26,7 +26,7 @@ Route::prefix('admin')
     Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
     // Booking lookup for payment modal (AJAX)
 Route::get('bookings/lookup', function (\Illuminate\Http\Request $request) {
-    $booking = \App\Models\Booking::where('booking_ref', strtoupper($request->ref))
+    $booking = \App\Models\Booking::where('booking_ref', strtoupper(trim((string) $request->ref)))
         ->with(['user:id,full_name', 'property:id,property_name'])
         ->first();
  
@@ -37,6 +37,9 @@ Route::get('bookings/lookup', function (\Illuminate\Http\Request $request) {
         'guest'    => $booking->user->full_name,
         'property' => $booking->property->property_name,
         'balance'  => $booking->balance_due,
+        // Para masabi agad ng modal na cancelled ang booking — bago pa
+        // tumanggi ang server.
+        'status'   => $booking->status,
     ]);
     })->name('bookings.lookup');
 

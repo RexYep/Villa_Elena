@@ -3,8 +3,11 @@
 namespace App\Providers;
 
 use App\Models\Notification;
+use Illuminate\Cache\Events\CacheFailedOver;
 use Illuminate\Pagination\Paginator;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\View;
 use Illuminate\Support\ServiceProvider;
@@ -59,6 +62,15 @@ class AppServiceProvider extends ServiceProvider
         // default pagination view (which uses Tailwind utility classes)
         // rendered unstyled. Switch to the Bootstrap 5 view instead.
         Paginator::useBootstrapFive();
+
+        // CACHE_STORE=failover drops to MySQL when Redis can't answer: the
+        // site keeps working, just slower. Without this, a Redis outage
+        // would leave no trace at all in Render's logs.
+        Event::listen(CacheFailedOver::class, function (CacheFailedOver $event) {
+            Log::warning("Cache store [{$event->storeName}] failed; fell back to the next store.", [
+                'error' => $event->exception->getMessage(),
+            ]);
+        });
 
         // NOTE: we intentionally do NOT force https here. Forcing it
         // broke direct local access via http://127.0.0.1:8000 (the

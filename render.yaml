@@ -3,6 +3,7 @@ services:
     name: villa-elena
     runtime: docker
     plan: free
+    region: singapore
     dockerfilePath: ./Dockerfile
     envVars:
       - key: APP_NAME
@@ -56,8 +57,22 @@ services:
       # plain-http request ever reaches the app.
       - key: SESSION_SECURE_COOKIE
         value: true
+      # Redis first, MySQL whenever Redis can't answer (project.md v7.4).
+      # Like this web service, the Key Value instance was created by hand
+      # in the dashboard, not from this file: Free plan, Singapore (same
+      # region as this service), internal-only. REDIS_URL is its INTERNAL
+      # URL (redis://red-...:6379), which resolves only inside Render's
+      # private network.
       - key: CACHE_STORE
-        value: database
+        value: failover
+      - key: REDIS_CLIENT
+        value: predis
+      - key: REDIS_URL
+        sync: false
+      - key: REDIS_CACHE_DB
+        value: "0"
+      - key: REDIS_TIMEOUT
+        value: "0.5"
       - key: QUEUE_CONNECTION
         value: sync
 

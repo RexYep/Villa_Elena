@@ -10,6 +10,54 @@
             .form-wrapper {
                 max-width: 720px;
             }
+
+            /* admin.css collapses every .two-col below a 900px *viewport*, but
+               this form is capped at 720px and has no sidebar to compete with —
+               at 768px and 900px it was already at its full 720px width and still
+               stacked every pair into one 670px column, while at 901px the same
+               720px form showed them side by side at 327px. Same container, two
+               layouts, 254px of extra page. Keyed on 561px like the booking,
+               property and promotions forms. Two classes, so it outranks
+               admin.css's single-class rule in either stylesheet order. */
+            @media (min-width: 561px) {
+                .form-wrapper .two-col {
+                    grid-template-columns: repeat(2, minmax(0, 1fr));
+                }
+            }
+
+            /* When editing, the breadcrumb ends in "Edit: <full name>", and a
+               breadcrumb item is a flex item whose floor is its own min-content.
+               A name with no break points (entered as one token, or an email typed
+               into the name field) held that floor and ran off the row — a
+               47-character name reached R437 against a 320px viewport, clipped by
+               body{overflow-x:hidden}. Ordinary names with spaces wrap fine. */
+            .breadcrumb-row .current {
+                min-width: 0;
+                overflow-wrap: anywhere;
+            }
+
+            /* The show/hide password button was 41x43px and Cancel was a 42x20px
+               text link beside Create Account. Keyed on pointer type, not width:
+               only a finger needs the larger target. */
+            @media (hover: none) and (pointer: coarse) {
+
+                .form-wrapper .form-control,
+                .form-wrapper .form-select {
+                    min-height: 44px;
+                }
+
+                .form-wrapper .input-group .btn {
+                    min-width: 44px;
+                    min-height: 44px;
+                }
+
+                .form-wrapper .btn-cancel-link {
+                    display: inline-flex;
+                    align-items: center;
+                    min-height: 44px;
+                    padding: 0 8px;
+                }
+            }
         </style>
     @endpush
 

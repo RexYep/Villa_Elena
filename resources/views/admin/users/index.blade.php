@@ -177,6 +177,45 @@
             color: #fff;
         }
 
+        /* Seven columns need 1078px — the User column alone is 329px, because an
+           email address has no break opportunities. admin.css only turns
+           .table-card into a scroller below 900px; above that it is back to
+           overflow:hidden, so from 901px to 1280px the right-hand columns were
+           simply cut off. At 993px that was 409px of table, and at 1280px — an
+           ordinary laptop — it was still the whole Actions column: no View, Edit,
+           Deactivate or Delete from this list, and no scrollbar to reach them.
+           Descendant selector so it outranks admin.css's own .table-card rule in
+           either stylesheet order (@vite emits its link before @stack('styles')
+           in production; `composer dev` injects admin.css afterwards). */
+        .main-content .table-card {
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+        }
+
+        .main-content .table-card .table-header,
+        .main-content .table-card .pagination-wrap {
+            position: sticky;
+            left: 0;
+        }
+
+        /* The row icons are already lifted by admin.css's shared coarse-pointer
+           block; these are the page's own controls, 38px tall. Keyed on pointer
+           type, not width: only a finger needs the larger target. */
+        @media (hover: none) and (pointer: coarse) {
+
+            .filter-input,
+            .btn-filter,
+            .btn-add {
+                min-height: 44px;
+            }
+
+            .btn-clear {
+                min-height: 44px;
+                display: inline-flex;
+                align-items: center;
+            }
+        }
+
         @media (max-width: 900px) {
             .stats-row {
                 grid-template-columns: repeat(3, 1fr);

@@ -12,9 +12,16 @@
 
 @push('styles')
     <style>
+        /* minmax(0, 1fr), not 1fr: a bare 1fr is minmax(auto, 1fr), so once the
+           row is too narrow to give every track its equal share, each track falls
+           back to its own content's min-content and they size *unequally*. That
+           is what produced four KPI cards of four different widths — 118 / 203 /
+           171 / 118px at a 993px viewport — with the Revenue card's peso figure
+           setting its own floor. minmax(0, …) removes the floor so the four stay
+           equal and the text wraps instead. */
         .kpi-grid {
             display: grid;
-            grid-template-columns: repeat(4, 1fr);
+            grid-template-columns: repeat(4, minmax(0, 1fr));
             gap: 20px;
             margin-bottom: 28px;
         }
@@ -125,11 +132,36 @@
             color: var(--stone);
         }
 
-        @media (max-width: 900px) {
+        /* One insight per line, straight from the model. Was an inline style
+           block repeated on every line, which no media query could reach. */
+        .insight-line {
+            background: #fff;
+            border: 1px solid var(--border);
+            border-left: 4px solid var(--gold);
+            border-radius: 10px;
+            padding: 14px 18px;
+            font-size: 14.5px;
+            color: var(--text-main);
+            line-height: 1.5;
+            /* Model output — a long reference or URL would otherwise set the
+               min-content width and push the card past the viewport. */
+            overflow-wrap: anywhere;
+        }
+
+        /* The widest KPI is Revenue: its sub-line ("Last month: ₱1,096,000.00")
+           needs 175px, so a card needs 225px and four of them need 960px of
+           content — which with the 260px sidebar means a 1300px viewport. Below
+           that, two columns keep every label and figure on one line; four would
+           only wrap them. The old breakpoint was 900px, which meant the sidebar
+           returning at 993px dropped the row from two clean 420px cards to four
+           starved ones and made the cards 231px tall on a *wider* screen. */
+        @media (max-width: 1300px) {
             .kpi-grid {
                 grid-template-columns: 1fr 1fr;
             }
+        }
 
+        @media (max-width: 900px) {
             .ai-card-body {
                 padding: 20px;
             }
@@ -146,6 +178,36 @@
 
             .ai-badge {
                 margin-left: 0;
+            }
+        }
+
+        /* "Refresh Insights" wraps to two lines at 360px and below, making the
+           button 57px tall inside a topbar admin.css fixes at 68px. Same
+           icon-only treatment as the calendar and properties detail pages. */
+        @media (max-width: 560px) {
+            .topbar-right .btn-refresh {
+                font-size: 0;
+                padding: 9px 12px;
+                gap: 0;
+            }
+
+            .topbar-right .btn-refresh i {
+                font-size: 15px;
+            }
+        }
+
+        /* Keyed on pointer type, not width: a tablet at 768px and a desktop
+           window dragged to 768px need different hit areas. */
+        @media (hover: none) and (pointer: coarse) {
+
+            .btn-refresh,
+            .logout-btn {
+                min-height: 44px;
+            }
+
+            .topbar-right .btn-refresh {
+                min-width: 44px;
+                justify-content: center;
             }
         }
     </style>
@@ -191,22 +253,7 @@
             <div style="display: flex; flex-direction: column; gap: 12px;">
                 @foreach ($lines as $line)
                     @if (trim($line))
-                        <div
-                            style="
-                        display: flex;
-                        align-items: flex-start;
-                        gap: 14px;
-                        background: #fff;
-                        border: 1px solid var(--border);
-                        border-left: 4px solid var(--gold);
-                        border-radius: 10px;
-                        padding: 14px 18px;
-                        font-size: 14.5px;
-                        color: var(--text-main);
-                        line-height: 1.5;
-                    ">
-                            {{ trim($line) }}
-                        </div>
+                        <div class="insight-line">{{ trim($line) }}</div>
                     @endif
                 @endforeach
             </div>

@@ -26,6 +26,37 @@
 
         .intro-note strong { color: var(--text-main); }
 
+        /* Same .btn-refresh gap as prescriptive/index — the class is used in the
+           topbar above but defined nowhere, so the control rendered as a bare
+           inline anchor (measured 219x24, an unstyled line box). */
+        .btn-refresh {
+            background: var(--gold);
+            color: var(--stone);
+            border: none;
+            padding: 9px 20px;
+            border-radius: 8px;
+            font-weight: 600;
+            font-size: 13px;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            white-space: nowrap;
+            transition: opacity .2s;
+        }
+
+        .btn-refresh:hover {
+            opacity: .85;
+            color: var(--stone);
+        }
+
+        /* minmax(0, …) because a bare 1fr floors each track at its own
+           min-content. A native date input will not render below 157px, so the
+           two date tracks held that floor and the other two were crushed to fit
+           what was left: the Slot dropdown came out 31px wide and the Simulate
+           button sat at L501 against a 320px viewport — 280px off-screen and
+           clipped by body{overflow-x:hidden}. The form's own submit button was
+           unreachable on a phone. */
         .sim-form {
             background: var(--cream);
             border: 1px solid var(--border);
@@ -33,7 +64,7 @@
             padding: 20px 24px;
             margin-bottom: 22px;
             display: grid;
-            grid-template-columns: repeat(4, 1fr) auto;
+            grid-template-columns: repeat(4, minmax(0, 1fr)) auto;
             gap: 16px;
             align-items: end;
         }
@@ -63,7 +94,7 @@
 
         .result-strip {
             display: grid;
-            grid-template-columns: repeat(4, 1fr);
+            grid-template-columns: repeat(4, minmax(0, 1fr));
             gap: 16px;
             margin-bottom: 22px;
         }
@@ -131,6 +162,87 @@
             padding: 1px 7px;
             border-radius: 20px;
             margin-left: 6px;
+        }
+
+        /* The date column broke "Fri, Sep 18" and its holiday tag across three
+           lines, making every row 68px tall — inside a container that already
+           scrolls horizontally, so the wrapping bought nothing. */
+        .table-scroll td:first-child,
+        .table-scroll th:first-child {
+            white-space: nowrap;
+        }
+
+        /* Four fields plus the button need 792px of content: a date input holds
+           a 157px floor and the button is 99px. With the sidebar back that means
+           a 1180px viewport, and below it the row was sizing tracks unequally
+           rather than breaking — 157/157/71/71 at 993px, with "Price change (%)"
+           wrapping to three lines over a 71px input. */
+        @media (max-width: 1180px) {
+            .sim-form {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+
+            .sim-form .btn-run {
+                grid-column: 1 / -1;
+                width: 100%;
+            }
+        }
+
+        /* Two 157px date tracks plus the gap need 330px of content, which runs
+           out just below a 360px viewport. */
+        @media (max-width: 380px) {
+            .sim-form {
+                grid-template-columns: minmax(0, 1fr);
+            }
+        }
+
+        @media (max-width: 900px) {
+            .result-strip {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+        }
+
+        @media (max-width: 480px) {
+            .result-strip {
+                grid-template-columns: minmax(0, 1fr);
+            }
+        }
+
+        /* One topbar control here, but "Back to Recommendations" is a long label
+           beside a fixed 68px bar that also has to hold the page title. */
+        @media (max-width: 700px) {
+            .topbar-right .btn-refresh {
+                font-size: 0;
+                padding: 9px 12px;
+                gap: 0;
+            }
+
+            .topbar-right .btn-refresh i {
+                font-size: 15px;
+            }
+        }
+
+        /* Keyed on pointer type, not width: only a finger needs the bigger
+           target. .btn-run sets an explicit 38px height, so min-height alone
+           would not lift it. */
+        @media (hover: none) and (pointer: coarse) {
+            .btn-run {
+                height: 44px;
+            }
+
+            .btn-refresh,
+            .logout-btn {
+                min-height: 44px;
+            }
+
+            .topbar-right .btn-refresh {
+                min-width: 44px;
+                justify-content: center;
+            }
+
+            .sim-form .form-control {
+                min-height: 44px;
+            }
         }
     </style>
 @endpush

@@ -81,6 +81,10 @@
             font-size: 15px;
             line-height: 1.8;
             color: var(--stone);
+            /* Model output — an unbroken token (a URL, a reference code) would
+               otherwise set the min-content width inside an overflow:hidden
+               panel and be clipped. */
+            overflow-wrap: anywhere;
         }
 
         .forecast-text>*:first-child {
@@ -180,7 +184,23 @@
             color: #fff;
         }
 
-        @media (max-width: 900px) {
+        /* Charts were sized by aspect ratio (canvas height="120" on a 300px
+           default width = 2.5:1), so their height tracked their width. When the
+           grid went two-up the charts got *shorter* on a wider screen — 810x324
+           at 900px, 273x109 at 993px, where the plot area itself was 51px tall
+           and the month labels were rotated 28deg. On a 320px phone the plot
+           area was 39px. A fixed-height box with maintainAspectRatio:false keeps
+           the plot readable at every width. */
+        .chart-box {
+            position: relative;
+            height: 240px;
+        }
+
+        /* Two-up only once each chart is wide enough that the six month labels
+           sit flat: the bookings axis still rotated at 1150px (351px canvas) and
+           stopped at 1200px (376px). The old 900px breakpoint put two starved
+           charts side by side through the whole 993-1199px band. */
+        @media (max-width: 1199px) {
             .chart-grid {
                 grid-template-columns: 1fr;
             }
@@ -199,6 +219,36 @@
                 margin-left: 0;
             }
         }
+
+        /* "Refresh Forecast" wraps to two lines at 390px and below, making the
+           button 57px tall inside a topbar admin.css fixes at 68px. Same
+           icon-only treatment as insights, calendar and properties. */
+        @media (max-width: 560px) {
+            .topbar-right .btn-refresh {
+                font-size: 0;
+                padding: 9px 12px;
+                gap: 0;
+            }
+
+            .topbar-right .btn-refresh i {
+                font-size: 15px;
+            }
+        }
+
+        /* Keyed on pointer type, not width: only a finger needs the bigger
+           target. */
+        @media (hover: none) and (pointer: coarse) {
+
+            .btn-refresh,
+            .logout-btn {
+                min-height: 44px;
+            }
+
+            .topbar-right .btn-refresh {
+                min-width: 44px;
+                justify-content: center;
+            }
+        }
     </style>
 @endpush
 
@@ -209,12 +259,12 @@
         <div class="chart-panel">
             <h3>Historical Bookings</h3>
             <p>Number of bookings per month (last 6 months)</p>
-            <canvas id="bookingsChart" height="120"></canvas>
+            <div class="chart-box"><canvas id="bookingsChart"></canvas></div>
         </div>
         <div class="chart-panel">
             <h3>Historical Revenue</h3>
             <p>Revenue in PHP per month (last 6 months)</p>
-            <canvas id="revenueChart" height="120"></canvas>
+            <div class="chart-box"><canvas id="revenueChart"></canvas></div>
         </div>
     </div>
 
@@ -261,6 +311,7 @@
                 },
                 options: {
                     responsive: true,
+                    maintainAspectRatio: false,
                     plugins: {
                         legend: {
                             display: false
@@ -311,6 +362,7 @@
                 },
                 options: {
                     responsive: true,
+                    maintainAspectRatio: false,
                     plugins: {
                         legend: {
                             display: false

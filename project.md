@@ -1,12 +1,98 @@
 # Villa Elena Private Rental Resort
 ## Resort Management System — Project Documentation
 
-**Version:** 7.2
+**Version:** 7.4
 **Stack:** PHP 8.2 / Laravel 12 / MySQL 8 / Bootstrap 5
 **Local URL:** `http://127.0.0.1:8000` (`php artisan serve`) or `http://localhost:8000` (Docker — see v5.3)
 **Live URL:** `https://villa-elena.onrender.com` (Render, free tier — testing only, not yet handed to real guests)
 **Database (local):** `villa_elena_db` (MySQL, XAMPP or standalone MySQL — same database either way)
 **Database (live):** Aiven MySQL free tier, database `defaultdb`
+
+---
+
+## What Changed in v7.4 (Read This First)
+
+### Redis now caches in production too: Redis first, MySQL when Redis can't answer
+
+Until v7.4, "Redis for caching and improving response time" was only true on dev machines. `render.yaml` set `CACHE_STORE=database`, and the Aiven `cache` table held production's 36 live entries (`villa-elena-resort-cache-setting_*`, `admin_dashboard_stats`, rate-limiter counters). On that driver a cache hit is itself a MySQL query over the network to Aiven. So `Setting::get()` (up to 18 calls from `PortalController`, plus `CheckMaintenanceMode` on every public page) cost exactly what the uncached query would have. Only the dashboard stats cache saved real work.
+
+Production now caches in a **Render Key Value** instance: Free plan, **Singapore** (the web service's region), internal-only. Like the web service, it was created by hand in the dashboard, so `render.yaml` documents it rather than declaring it. The app reaches it over Render's private network through `REDIS_URL`.
+
+What changed, and why each piece is needed:
+
+- **`CACHE_STORE=failover`; `config/cache.php`'s `failover` store is now `['redis', 'database']`.** Plain `CACHE_STORE=redis` would give the site a new way to go down. Before, the cache could only fail together with the DB. With Redis alone, a Redis outage throws out of `Setting::get()` in `CheckMaintenanceMode` and every public page returns 500. That exact failure already happened in dev (v6.4, the advisors). With failover the site stays up on MySQL, just back at pre-v7.4 speed.
+- **`REDIS_TIMEOUT` (0.5s) feeds predis's `timeout` and `read_write_timeout`** in both redis connections. predis's own connect timeout is 5s *per command*. The `max_retries`/`backoff_*` keys in `config/database.php` are phpredis-only, and predis ignores them.
+- **`Setting::get()` caches every setting as one entry (`Setting::CACHE_KEY = 'settings_all'`), read through `Cache::memo()`.** A request now makes at most one real cache read, however many settings the page asks for. Without this, a Redis timeout was paid once per `Setting::get()` call. Invalidation moved to the model's `saved`/`deleted` events, because `AdminSeeder` writes through `updateOrCreate()` and bypasses `set()`. The old per-key `setting_<key>` entries are no longer read and expire on their own.
+- **The PayMongo checkout lock is pinned to `Cache::store('database')`.** A lock must live in exactly one store. Under failover, a Redis blip could put two concurrent requests' locks in two different stores, and both would proceed. That is precisely the double checkout this lock exists to prevent (v7.1). A Redis lock also throws at `get()`, after failover has already handed it back.
+- **`CacheFailedOver` is logged** as a `WARNING` (`AppServiceProvider`, text `fell back to the next store`). Failover is otherwise silent: the site would quietly lose its cache and nothing would say so.
+- **`REDIS_CLIENT=predis` is required.** The image has no `redis` PHP extension, so the default `phpredis` fails with "Class Redis not found". `REDIS_CACHE_DB=0` keeps the config portable to providers that expose only database 0.
+
+Sessions stay on `database`: the free Key Value plan doesn't persist data, so a restart would log everyone out. The queue stays `sync`.
+
+### Render setup (by hand, in the dashboard)
+
+1. **New → Key Value**: Free plan, region **Singapore**, maxmemory policy `allkeys-lru` (it's a cache, so it should evict old entries rather than refuse writes). Leave external access off (empty IP allowlist).
+2. Copy the instance's **Internal** URL (`redis://red-…:6379`). The External URL is the wrong one.
+3. Web service → Environment: `CACHE_STORE=failover`, `REDIS_CLIENT=predis`, `REDIS_URL=<internal URL>`, `REDIS_CACHE_DB=0`, `REDIS_TIMEOUT=0.5`. Save and redeploy. `docker/start.sh` runs `config:cache`, so env changes only apply on a new deploy or restart.
+
+### What a Redis outage costs now
+
+A probe script ran each scenario on the host and inside the Docker image (Linux, like Render). In every scenario all 39 settings matched the table, a missing key returned its default, a write was visible to the next read in the same request, the checkout lock was exclusive, and the rate limiter counted. Docker figures:
+
+| Scenario | 18 × `Setting::get()` | Result |
+|---|---|---|
+| Redis up | 1.4 ms (memoized) | entry in Redis, none in MySQL, no failover events |
+| Redis refusing connections | 7 ms | instant fallback to MySQL |
+| Redis unreachable (packets dropped) | ~0.5 s | one `REDIS_TIMEOUT` per request, then MySQL |
+
+Real landing page on local `php -S` (a slow Windows dev server, so the absolute numbers say nothing about Render): about 0.5–0.7 s with Redis up and 1.15–1.35 s with Redis unreachable. The page still renders, about one timeout slower. On Windows a refused connection also takes ~0.5 s because the OS retries the connection; on Linux it is instant. **The speed-up on Render itself has not been measured yet.** Time the landing page before and after the switch.
+
+### Known edge
+
+If Redis is down at the moment a setting is saved, the cache clear lands on MySQL, and Redis still holds the old value when it comes back, for up to the 1-hour TTL. There is no shell on Render to flush it; re-saving the setting in Admin → Settings clears it.
+
+### Verifying production after the deploy
+
+```bash
+php artisan tinker --execute="echo DB::connection('aiven')->table('cache')->where('key', 'like', '%settings_all%')->count();"
+```
+
+`0` means production reads settings from Redis. `1` means it fell back to MySQL at least once, so search Render's log for `fell back to the next store`. What legitimately remains in the Aiven `cache` table: the old `setting_*` entries (gone within an hour). Checkout locks come and go in `cache_locks`.
+
+---
+
+## What Changed in v7.3 (Read This First)
+
+### "Mark Paid Out" was missing for exactly the refunds that needed it
+
+A QR Ph refund with no refund destination on file (the guest never filled in the in-app form) showed only **Add Details** in the payments list. The detail page offered only the destination form, and Mark Paid Out appeared only *after* a destination was saved. An admin who had already sent the money by GCash therefore saw no way to close the refund. That was the reported symptom (refund #228, VE-CEDECOOO). Refunds that *could* be auto-sent showed only **Send Refund**, with the manual path collapsed on the detail page.
+
+- The detail page now has **"Already sent it by hand? Mark it paid out"** for no-destination refunds. It takes the account the money went to *and* the transfer reference in one form. `markRefundPaidOut()` validates both together through the shared `validatedRefundDestination()` (the same rules as Save Destination), then saves the destination and closes the refund in one locked transaction. "No destination, no payout" (Phase 3 below) still holds; the destination is simply captured in the same step.
+- The list shows a secondary, muted **Mark Paid Out** next to **Send Refund** and **Add Details**. It links to `payments/{id}#manual-payout`, which opens that form. It is deliberately not a modal, because the admin should see the account first. Send Refund stays the primary action.
+- Cash refunds get a Mark Paid Out card on the detail page. Before, it existed only in the list.
+- `markRefundPaidOut()` now refuses while a PayMongo transfer is still clearing, and re-reads the row under `lockForUpdate()` so a double-submit can't notify the guest twice.
+
+### Using "Record Payment" to mark a refund as refunded wrote real money into the books
+
+Local staff log for VE-CEDECOOO (cancelled, ₱12, already paid online, ₱12 refund pending):
+
+| Row | What the admin did | What was actually written |
+|---|---|---|
+| 242 | Payments page → Record Payment, ₱12 cash | a **new ₱12 payment** on a cancelled booking |
+| 243 | Booking page → Record Payment, type **Refund** | a **second ₱12 refund** marked `success`; #228 stayed `pending` / NOT SENT |
+| 244 | Payments page → Record Payment, ₱15, wrong reference typed | **₱15 recorded on VE-CEDECOOO anyway** |
+
+Three separate defects:
+
+1. **The Record Payment modal never checked the reference it displayed.** The server read only the hidden `booking_id`, which the lookup JS filled on a match and never cleared. Any reference typed after a successful lookup (wrong, partial, or another booking's) was recorded against the *previously* matched booking. `store()` now resolves the booking from `booking_ref` (trimmed, uppercased) and rejects the request when the hidden id disagrees with it. The JS clears the id and the info panel on every keystroke, shows "No booking found", and ignores out-of-order responses. The same code rendered the guest's name through `innerHTML`; it uses `textContent` now. After a validation error the modal reopens with what was typed.
+2. **The booking page's Record Payment accepted `payment_type = refund`** and wrote a `success` refund. That bypassed `refund()`'s refundable-balance check, didn't close the pending refund, and double-counted in `recalculateFinancials()`. The option is removed; that form is money-in only. The Payment History table now links each pending refund ("NOT SENT →") to the place it is closed.
+3. **`Payment::manualEntryProblem()` refuses `cancelled` / `no_show` bookings outright**, before the balance check. The balance check's message ("already fully paid — check whether the guest paid online") is the wrong advice there, and `balance_due` is a stored column that can be stale. The booking page also hides the Record Payment card on those bookings.
+
+**Why the existing guards didn't stop 242 and 244:** the app on `localhost:8000` was the Docker container, built from a 2026-09-07 image with Compose Watch not syncing. It was running an `Admin\PaymentController` from before the v7.1 duplicate-payment guard (`grep -c manualEntryProblem` inside the container returned `0`). **When Docker behaves differently from `php artisan serve`, confirm the container's code is current before debugging the code.**
+
+**What "Record Payment" is for:** money the guest paid *outside* PayMongo checkout, such as cash at the front desk or a QR Ph transfer that never went through a checkout session. It never records money going *out*. Refunds are approved with **Refund** and closed with **Send Refund** or **Mark Paid Out**.
+
+Verified with a rolled-back script that calls the real controllers and renders the real views. Every rejection path wrote 0 rows. The valid Mark Paid Out on #228 saved the GCash destination, set `status = success` and `transaction_ref`, and logged `refund_destination_set` + `refund_paid_out`; a second submit was refused.
 
 ---
 
@@ -195,7 +281,7 @@ Two of these forms live in modals and **neither page rendered `$errors`** — so
 
 ### Notes
 
-- `Cache::lock()` needs a lock-capable store. Production is the `database` driver and the `cache_locks` table exists; verified there directly (second acquire returns `false`, releases correctly). Local dev is Redis, which must be running (`docker compose up -d redis`) — already true for `Setting::get()`, so this adds no new dependency.
+- `Cache::lock()` needs a lock-capable store. **Since v7.4 the checkout lock is pinned to `Cache::store('database')`** in every environment. The default store is now `failover` (Redis, then MySQL), and a lock must never be split across two stores; see v7.4. The `cache_locks` table exists in both databases; verified there directly (second acquire returns `false`, releases correctly).
 - The migration **refuses to run** if a duplicate `(booking_id, reference_number)` already exists, listing the offending payment ids, rather than editing anything. Unlike the v7.0 `slot_hold` migration, which excluded a colliding booking from its index and carried on, these are financial records — silently rewriting a payment's reference to make an index fit would damage the audit trail. Both databases were checked first and are clean (local 82 payments, production 12; zero duplicates, zero overpaid bookings), so it applies without incident.
 
 ---
@@ -827,7 +913,7 @@ Sample of real output, which uses only figures from the card: *"Prioritize sched
 
 Live local DB throughout. All three action types driven through `apply()` inside rolled-back transactions: promo → `Discount` → `quoteFor()` **drops**; peak rate → `PricingRule` → `quoteFor()` **rises** (₱14 → ₱16.80, after the boundary fix); maintenance → `AvailabilityBlock`. Recommendations, simulator, dashboard, and settings pages all rendered for real. Double-apply refused.
 
-> One test artifact worth knowing: `Setting::set()` inside a rolled-back transaction leaves the **new value in Redis** while the DB reverts, so settings read stale afterwards. Not a product problem — nothing rolls back in production — but it will confuse the next person testing this way. `Cache::forget('setting_<key>')` clears it.
+> One test artifact worth knowing: `Setting::set()` inside a rolled-back transaction leaves the **new value in Redis** while the DB reverts, so settings read stale afterwards. Not a product problem — nothing rolls back in production — but it will confuse the next person testing this way. `Cache::forget(Setting::CACHE_KEY)` clears it (all settings share one entry, `settings_all`, since v7.4; before that it was `Cache::forget('setting_<key>')`).
 
 ---
 
@@ -1214,8 +1300,8 @@ Both doors share one set of rules — `RefundDestination::rules()`, `messages()`
 
 Two guards sit in front of it:
 
-- **No destination, no payout.** You cannot have sent money to an account nobody recorded. The escape hatch is Phase 2's *Add Details* — so this is sequencing, not obstruction.
-- The list **doesn't render a Mark Paid Out button** for refunds still missing a destination. Showing a button that is guaranteed to error teaches staff to ignore errors.
+- **No destination, no payout.** You cannot have sent money to an account nobody recorded. The escape hatch was Phase 2's *Add Details*, which in practice made this a two-step flow with no visible button in between. Since v7.3 the "Already sent it by hand?" form on the detail page takes the destination and the reference together, so the rule holds in one step.
+- The list **doesn't render a Mark Paid Out *modal*** for refunds still missing a destination. Showing a button that is guaranteed to error teaches staff to ignore errors. Since v7.3 it shows a secondary *Mark Paid Out* link to `payments/{id}#manual-payout` instead, where that combined form lives.
 
 The confirmation modal shows the destination account inline, so the admin is looking at where the money goes while pasting the reference from the receipt. `transaction_ref` is displayed next to `reference_number` on the payment page — deliberately adjacent, because they are opposites: `reference_number` is the **inbound** PayMongo payment (`pay_…`), `transaction_ref` is the **outbound** transfer the resort sent.
 
@@ -1928,7 +2014,7 @@ Public-facing customers interact with a **fourth surface**, the Public Portal (h
 | Fonts | Playfair Display + DM Sans / Jost | Google Fonts |
 | AI Provider | Groq API | `openai/gpt-oss-20b` (env-overridable via `GROQ_MODEL`) |
 | Payment Gateway | PayMongo | Sandbox / Live |
-| Caching | **Redis** (`predis/predis` client) | **NEW v5.2** — local dev only, see below; production still caches via the `database` driver (no free Redis provider wired up on Render yet) |
+| Caching | **Redis** (`predis/predis` client) | local dev since v5.2; **production since v7.4**: Render Key Value (Singapore, internal-only) behind the `failover` store, with MySQL as the fallback. See [v7.4](#what-changed-in-v74-read-this-first) |
 | Reports Export | **barryvdh/laravel-dompdf** + **maatwebsite/excel** | **NEW v5.2** — PDF/Excel export on the Admin Reports page, see [Reports & Analytics](#66-reports--analytics) |
 
 ### Local Development Configuration
@@ -1939,21 +2025,21 @@ Public-facing customers interact with a **fourth surface**, the Public Portal (h
 | Web URL | `http://127.0.0.1:8000` (`php artisan serve`) or `http://localhost:8000` (Docker) |
 | Database | `villa_elena_db` (credentials in local `.env`, not reproduced here) |
 | Session Driver | `file` |
-| Cache Driver | `redis` (**v5.2** — was `file`; see Redis Caching below) |
+| Cache Driver | `redis` (**v5.2**, was `file`). `failover` recommended since v7.4, so local matches production and keeps working with the Redis container stopped |
 | Queue Driver | `sync` |
 | Docker (optional, **NEW v5.3**) | `docker compose up --watch` — runs the same `Dockerfile`/image Render deploys, for testing changes against the real production runtime before pushing. See [What Changed in v5.3](#what-changed-in-v53-read-this-first) |
 
-### Redis Caching (NEW v5.2, local dev only)
+### Redis Caching (v5.2 local, v7.4 production)
 
-Added specifically to make the caching layer real rather than just described — `App\Models\Setting::get()` already called `Cache::remember(..., 3600, ...)` before this (see [Settings](#67-settings)), it just meant nothing (`file` driver) until now. As of v5.2, `CACHE_STORE=redis` / `REDIS_CLIENT=predis` in the local `.env`, backed by a standalone Redis container (not the full app) — no PHP `redis` extension needs to be installed into XAMPP's `php.ini`:
+Added in v5.2 to make the caching layer real rather than just described. `App\Models\Setting::get()` already went through `Cache::remember(..., 3600, ...)` (see [Settings](#67-settings)), but on the `file` driver that meant little. Locally, Redis runs as a standalone container (not the full app), through `REDIS_CLIENT=predis`, so no PHP `redis` extension is needed in XAMPP's `php.ini`:
 
 ```bash
 docker compose up -d redis      # starts just the redis service from docker-compose.yml
 ```
 
-Also newly cached: `Admin\DashboardController::index()`'s KPI stats (`Cache::remember('admin_dashboard_stats', 60, ...)`) — previously ran 8 fresh COUNT/SUM queries on every admin dashboard load; a 60s TTL was chosen over event-driven invalidation to avoid touching every booking/payment mutation call site for a monitoring-only figure.
+Also cached since v5.2: `Admin\DashboardController::index()`'s KPI stats (`Cache::remember('admin_dashboard_stats', 60, ...)`), which previously ran 8 fresh COUNT/SUM queries on every admin dashboard load. A 60s TTL was chosen over event-driven invalidation to avoid touching every booking/payment mutation call site for a monitoring-only figure.
 
-**Production is unaffected on purpose** — `.env.example`'s `CACHE_STORE` stays `database` for Render (no free Redis add-on there yet, same reasoning as the rest of the [Deployment](#15-deployment) stack being picked for $0 cost). If a free Redis provider (e.g. Upstash) is added later, only `.env`/`render.yaml` need to change — no application code depends on which cache driver is active.
+**Production joined in v7.4** through a free Render Key Value instance in Singapore, behind the `failover` store (`CACHE_STORE=failover`: Redis first, MySQL whenever Redis can't answer). Getting there took more than an env change: a timeout, one memoized settings entry, a pinned checkout lock, and failover logging. The reasons for each, the Render setup steps, and the outage measurements are in [v7.4](#what-changed-in-v74-read-this-first).
 
 ---
 
@@ -3692,6 +3778,7 @@ Re-verified directly against the live code/database (not just re-stated from mem
 | Email | Brevo (HTTPS API, not SMTP) | Yes — 300 emails/day |
 | Payments | PayMongo | Test-mode keys |
 | AI chatbot | Groq | Free tier |
+| Cache | Render Key Value (Singapore, internal-only, created by hand) | Free instance type. No persistence: a restart empties it and the app falls back to MySQL until it refills (v7.4) |
 
 ### 15.2 Required environment variables
 
@@ -3701,7 +3788,8 @@ See `.env.example` for the full, commented list — every variable there has a n
 - `APP_URL` — the Render service URL
 - `DB_CONNECTION=mysql`, `DB_HOST`/`DB_PORT`/`DB_DATABASE`/`DB_USERNAME`/`DB_PASSWORD` — from Aiven's console
 - `MYSQL_ATTR_SSL_CA=/etc/ssl/certs/aiven-ca.pem` + `AIVEN_CA_CERT` (the full `.pem` contents) — Aiven requires TLS; `docker/start.sh` writes the cert file from this env var at container start
-- `SESSION_DRIVER=database`, `CACHE_STORE=database`, `QUEUE_CONNECTION=sync` — no persistent disk for file-based drivers; sync queue avoids needing a separate worker service (fine at this traffic level)
+- `SESSION_DRIVER=database`, `QUEUE_CONNECTION=sync` — no persistent disk for file-based drivers; sync queue avoids needing a separate worker service (fine at this traffic level)
+- `CACHE_STORE=failover`, `REDIS_CLIENT=predis` (required, since the image has no `redis` extension), `REDIS_URL` (the Key Value instance's **internal** URL), `REDIS_CACHE_DB=0`, `REDIS_TIMEOUT=0.5` — see [v7.4](#what-changed-in-v74-read-this-first). Never plain `CACHE_STORE=redis`: a Redis outage would then 500 every public page
 - `LOG_CHANNEL=stderr` — a log file inside the container is invisible in Render's dashboard; stderr streams there directly
 - `CLOUDINARY_URL=cloudinary://<key>:<secret>@<cloud_name>` — from the Cloudinary dashboard's home page
 - `BROADCAST_CONNECTION=pusher` + `PUSHER_APP_ID`/`PUSHER_APP_KEY`/`PUSHER_APP_SECRET`/`PUSHER_APP_CLUSTER=ap1`

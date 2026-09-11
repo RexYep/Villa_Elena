@@ -252,6 +252,19 @@
             font-size: 14px;
         }
 
+        /* Secondary on purpose: Send Refund stays the primary action (see the
+           row comment). This is the way out for money already sent by hand. */
+        .payout-alt-link {
+            color: var(--muted);
+            text-decoration: underline;
+            font-size: 13px;
+            margin-left: 8px;
+        }
+
+        .payout-alt-link:hover {
+            color: var(--terracotta);
+        }
+
         /* ── MODAL ── */
         .modal-box {
             width: 480px;
@@ -602,11 +615,20 @@
                                              makita ang account bago pumindot. --}}
                                         <a href="{{ route('admin.payments.show', $payment) }}"
                                             class="refund-link">Send Refund</a>
+                                        {{-- Pangalawa lang, at papunta sa detail page (hindi
+                                             modal) para makita muna ang account. Dati ay wala
+                                             ito rito, kaya ang refund na naipadala na nang
+                                             manu-mano ay walang makitang paraan para isara. --}}
+                                        <a href="{{ route('admin.payments.show', $payment) }}#manual-payout"
+                                            class="payout-alt-link">Mark Paid Out</a>
                                     @elseif ($payment->needsRefundDestination())
-                                        {{-- Walang "Mark Paid Out" dito nang sinasadya. Tatanggihan
-                                             ito ng controller hangga't walang destinasyon — at ang
-                                             pagpapakita ng button na garantisadong mag-e-error ay
-                                             pagtuturo sa staff na balewalain ang mga error.
+                                        {{-- Walang Mark Paid Out MODAL dito nang sinasadya: wala
+                                             pang destinasyon ang refund na ito, kaya tatanggihan
+                                             iyon ng controller — at ang button na garantisadong
+                                             mag-e-error ay pagtuturo sa staff na balewalain ang
+                                             mga error. Ang "Mark Paid Out" sa ibaba ay papunta
+                                             sa detail page, kung saan kasama na sa form ang
+                                             account na pinagpadalhan.
 
                                              Ang detalye ay ipinapasok sa detail page, kasama ang
                                              buong konteksto ng booking — financial account data
@@ -614,6 +636,8 @@
                                              modal sa gitna ng listahan. --}}
                                         <a href="{{ route('admin.payments.show', $payment) }}"
                                             class="refund-link">Add Details</a>
+                                        <a href="{{ route('admin.payments.show', $payment) }}#manual-payout"
+                                            class="payout-alt-link">Mark Paid Out</a>
                                     @else
                                         <a href="#" class="refund-link"
                                             onclick="event.preventDefault(); openPayoutModal(
@@ -652,10 +676,25 @@
             </div>
             <form method="POST" action="{{ route('admin.payments.store') }}" class="modal-body">
                 @csrf
+                {{-- Para malaman pagkatapos ng validation error na ang form na
+                     ito ang nag-post, at mabuksan ulit ang modal nang buo pa
+                     ang tinype. Kung hindi, nawawala ang lahat sa likod ng
+                     isang alert na nagtatago pagkalipas ng 5 segundo. --}}
+                <input type="hidden" name="_form" value="record">
+                @if ($errors->any() && old('_form') === 'record')
+                    <div
+                        style="background:#fee2e2; color:#b91c1c; border-radius:8px; padding:10px 12px; margin-bottom:12px; font-size:14px;">
+                        <i class="bi bi-exclamation-circle me-2"></i>{{ $errors->first() }}
+                    </div>
+                @endif
                 <div class="mb-12">
                     <label class="form-label">Booking Reference</label>
-                    <input type="text" name="booking_ref" class="form-control" placeholder="e.g. VE-XXXXXXXX"
-                        autocomplete="off" oninput="lookupBooking(this.value)">
+                    <input type="text" name="booking_ref" id="bookingRefInput" class="form-control"
+                        placeholder="e.g. VE-XXXXXXXX" autocomplete="off" required maxlength="32"
+                        oninput="lookupBooking(this.value)">
+                    {{-- Kopya lang ito ng nahanap ng lookup, para matiyak ng
+                         server na ang booking na ipinakita ay ang booking na
+                         tinype. Ang reference ang pinagbabatayan. --}}
                     <input type="hidden" name="booking_id" id="bookingIdInput">
                     <div id="bookingInfo" class="text-muted-theme"
                         style="margin-top:8px; font-size: 14px; display:none; background:#f8fafc; border-radius:8px; padding:10px 12px;">
@@ -857,30 +896,85 @@
         let lookupTimer;
         const bookingLookupUrlTemplate = '{{ route('admin.bookings.lookup', ['ref' => '__REF__']) }}';
 
+        // Dalawang mali ang dating bersyon nito:
+        //  1. Hindi kailanman binubura ang `booking_id`, kaya ang maling
+        //     reference na tinype pagkatapos ng isang tamang lookup ay
+        //     naitatala sa NAUNANG booking. Binubura na ito sa bawat
+        //     keystroke — at sa reference na rin nagbabatayan ang server.
+        //  2. `innerHTML` na may pangalan ng guest, na ang guest mismo ang
+        //     nagta-type. textContent na ang gamit.
         function lookupBooking(ref) {
             clearTimeout(lookupTimer);
-            if (ref.length < 6) {
-                document.getElementById('bookingInfo').style.display = 'none';
-                return;
-            }
+            const idInput = document.getElementById('bookingIdInput');
+            const info = document.getElementById('bookingInfo');
+
+            idInput.value = '';
+            info.style.display = 'none';
+            info.replaceChildren();
+
+            ref = ref.trim().toUpperCase();
+            if (ref.length < 6) return;
+
             lookupTimer = setTimeout(() => {
                 fetch(bookingLookupUrlTemplate.replace('__REF__', encodeURIComponent(ref)), {
                         headers: {
                             'X-Requested-With': 'XMLHttpRequest'
                         }
                     })
-                    .then(r => r.json())
+                    .then(r => r.ok ? r.json() : null)
                     .then(data => {
-                        if (data.id) {
-                            document.getElementById('bookingIdInput').value = data.id;
-                            const info = document.getElementById('bookingInfo');
-                            info.style.display = 'block';
-                            info.innerHTML =
-                                `<strong>${data.guest}</strong> · ${data.property} · Balance: <strong style="color:#dc2626;">₱${parseFloat(data.balance).toLocaleString('en-PH',{minimumFractionDigits:2})}</strong>`;
+                        // Huwag hayaang manalo ang mas mabagal na sagot para
+                        // sa lumang keystroke.
+                        if (document.getElementById('bookingRefInput').value.trim().toUpperCase() !== ref) return;
+
+                        info.style.display = 'block';
+
+                        if (!data || !data.id) {
+                            info.style.color = '#b91c1c';
+                            info.textContent = 'No booking found with reference ' + ref + '.';
+                            return;
+                        }
+
+                        idInput.value = data.id;
+                        info.style.color = '';
+
+                        const guest = document.createElement('strong');
+                        guest.textContent = data.guest;
+                        const balance = document.createElement('strong');
+                        balance.style.color = '#dc2626';
+                        balance.textContent = '₱' + parseFloat(data.balance).toLocaleString('en-PH', {
+                            minimumFractionDigits: 2
+                        });
+                        info.append(guest, ' · ' + data.property + ' · Balance: ', balance);
+
+                        if (data.status === 'cancelled' || data.status === 'no_show') {
+                            const warn = document.createElement('div');
+                            warn.style.cssText = 'color:#b91c1c;font-weight:600;margin-top:4px;';
+                            warn.textContent = 'This booking is ' + (data.status === 'no_show' ? 'a no-show' :
+                                    'cancelled') +
+                                ' — there is nothing to collect. To close a refund, use Mark Paid Out on the refund instead.';
+                            info.append(warn);
                         }
                     }).catch(() => {});
             }, 400);
         }
+
+        // Pagkatapos ng validation error, buksan ulit ang modal nang buo pa
+        // ang tinype — kung hindi, kailangang i-type ulit ang lahat, pati
+        // ang pag-tick ng "separate payment" na hinihingi mismo ng error.
+        @if (old('_form') === 'record')
+            @php($recordOld = collect(old())->only(['booking_ref', 'amount', 'payment_date', 'payment_method', 'payment_type', 'notes', 'confirm_duplicate']))
+            (function() {
+                const old = @json($recordOld);
+                const form = document.querySelector('#recordModal form');
+                ['booking_ref', 'amount', 'payment_date', 'payment_method', 'payment_type', 'notes'].forEach(name => {
+                    if (old[name] != null) form.elements[name].value = old[name];
+                });
+                form.elements['confirm_duplicate'].checked = old.confirm_duplicate === '1';
+                openRecordModal();
+                lookupBooking(form.elements['booking_ref'].value);
+            })();
+        @endif
 
         setTimeout(() => {
             document.querySelectorAll('.alert').forEach(a => a.style.display = 'none');

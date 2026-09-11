@@ -348,6 +348,23 @@ class Payment extends Model
         bool $confirmedDuplicate = false,
         ?string $date = null
     ): ?array {
+        // Tapos na ang booking — wala nang sisingilin. Nauuna ito sa
+        // balance check dahil mali ang payo ng mensahe roon ("already
+        // fully paid — check whether the guest paid online") para sa isang
+        // cancelled na booking, at dahil naka-store na column lang ang
+        // `balance_due` na puwedeng luma. Ang status ang totoo.
+        //
+        // Ito rin ang daan na ginamit para "i-mark as refunded" ang isang
+        // refund — na nagtala lang ng bagong bayad sa booking na wala nang
+        // utang.
+        if (in_array($booking->status, ['cancelled', 'no_show'], true)) {
+            return ['amount' =>
+                $booking->booking_ref.' is '.($booking->status === 'no_show' ? 'marked as a no-show' : 'cancelled')
+                .' — there is nothing left to collect on it, so nothing was recorded. '
+                .'To close a refund you already sent, open that refund on the Payments page and use "Mark Paid Out".',
+            ];
+        }
+
         if (static::exceedsBalance($booking, $amount)) {
             return ['amount' =>
                 'This payment of ₱'.number_format($amount, 2).' is more than the remaining balance of ₱'

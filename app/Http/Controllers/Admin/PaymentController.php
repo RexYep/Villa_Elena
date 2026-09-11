@@ -15,6 +15,8 @@ use App\Helpers\NotificationHelper;
 use App\Helpers\BookingMailHelper;
 use App\Events\PaymentReceived;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 
 class PaymentController extends Controller
 {
@@ -155,43 +157,9 @@ class PaymentController extends Controller
             return back()->with('error', 'A cash refund is handed over at the front desk — it has no bank destination.');
         }
 
-        $institutions = app(PayMongoService::class)->receivingInstitutions();
-        $validBics    = array_column($institutions, 'bic');
+        [$validated, $institution] = $this->validatedRefundDestination($request);
 
-        if (empty($validBics)) {
-            return back()->with('error', 'Could not load the list of banks and e-wallets from PayMongo. Please try again shortly.');
-        }
-
-        $validated = $request->validate(
-            RefundDestination::rules($validBics),
-            RefundDestination::messages()
-        );
-
-        $institution = collect($institutions)->firstWhere('bic', $validated['institution_bic']);
-
-        if ($error = RefundDestination::mobileNumberError($institution['bic'], $institution['name'], $validated['account_number'])) {
-            return back()->withErrors(['account_number' => $error])->withInput();
-        }
-
-        RefundDestination::updateOrCreate(
-            ['payment_id' => $payment->id],
-            [
-                'institution_name' => $institution['name'],
-                'institution_bic'  => $validated['institution_bic'],
-                'account_number'   => $validated['account_number'],
-                'account_name'     => trim($validated['account_name']),
-                'provided_by'      => Auth::id(),
-                'provided_at'      => now(),
-            ]
-        );
-
-        // Walang account number o pangalan sa log — financial account
-        // data ito. Ang layunin ng talaan ay ipakitang may naganap at
-        // kung sino ang may gawa, hindi ulitin ang laman.
-        StaffLog::record('refund_destination_set', 'payments', $payment->id,
-            'Refund destination entered by staff on behalf of the guest for booking '
-            . ($payment->booking->booking_ref ?? '#' . $payment->booking_id)
-            . " ({$institution['name']})");
+        $this->saveRefundDestination($payment, $validated, $institution);
 
         return back()->with('success', '✅ Refund destination saved. This refund is now ready to send.');
     }
@@ -200,16 +168,42 @@ class PaymentController extends Controller
     public function store(Request $request)
     {
         $request->validate([
-            'booking_id'     => 'required|exists:bookings,id',
+            'booking_ref'    => 'required|string|max:32',
+            'booking_id'     => 'nullable|integer',
             'amount'         => 'required|numeric|min:1',
             'payment_method' => 'required|in:qrph,cash',
             'payment_type'   => 'required|in:full_payment,partial,balance',
             'payment_date'   => 'required|date',
             'notes'          => 'nullable|string|max:300',
             'confirm_duplicate' => 'nullable|boolean',
+        ], [
+            'booking_ref.required' => 'Enter the booking reference of the payment you are recording.',
         ]);
 
-        $booking = Booking::findOrFail($request->booking_id);
+        // Ang reference na tinype ng admin ang pinagbabatayan — hindi ang
+        // nakatagong `booking_id`. Dati, ang hidden field lang ang binabasa:
+        // pinupunan ito ng lookup at hindi kailanman binubura, kaya ang
+        // maling reference na tinype PAGKATAPOS ng isang tamang lookup ay
+        // tahimik na naitatala sa NAUNANG booking. Hindi rin kailanman
+        // sinuri ng server ang reference mismo.
+        $ref     = strtoupper(trim($request->booking_ref));
+        $booking = Booking::where('booking_ref', $ref)->first();
+
+        if (! $booking) {
+            return back()->withErrors([
+                'booking_ref' => "No booking found with reference \"{$ref}\" — nothing was recorded. Check the reference and try again.",
+            ])->withInput();
+        }
+
+        // Ang `booking_id` ay ang booking na IPINAKITA ng lookup (pangalan,
+        // balanse). Kapag hindi ito tugma sa reference, iba ang nakita ng
+        // admin sa itatala — mas mabuting tumigil.
+        if ($request->filled('booking_id') && (int) $request->booking_id !== $booking->id) {
+            return back()->withErrors([
+                'booking_ref' => "The booking shown in the form does not match reference {$ref} — nothing was recorded. "
+                    . "Re-type the reference and wait for the guest's name to appear before saving.",
+            ])->withInput();
+        }
 
         // Walang guard dito dati — `min:1` lang. Kaya ang pagtatala ng
         // bayad na naibayad na pala online ay tahimik na nagdadagdag ng
@@ -375,17 +369,34 @@ class PaymentController extends Controller
             return back()->with('error', 'This payment is not a refund awaiting payout.');
         }
 
+        $payment->load(['refundDestination', 'refundTransfers']);
+
+        // Naipadala na ito ng sistema at hinihintay na lang ang bangko.
+        // Ang pagmamarka rito bilang "ipinadala nang manu-mano" ay
+        // magtatala ng dalawang pagpapadala para sa iisang refund — at
+        // kapag dumating ang transfer, dalawang beses ding nabayaran ang
+        // guest.
+        if ($payment->hasTransferInFlight()) {
+            return back()->with('error',
+                'A PayMongo transfer for this refund is still clearing — wait for it to settle before recording anything by hand.');
+        }
+
         // HINDI mo maipapadala ang isang bagay kung hindi mo alam kung
         // saan. Kung walang naitalang destinasyon, kahit anong pinindot
         // dito ay hindi maaaring kumakatawan sa isang tunay na transfer.
         //
-        // May tunay na escape hatch ito: kung nakuha ng admin ang
-        // detalye sa text o tawag, mailalagay niya ito sa "Add Details"
-        // bago bumalik dito. Kaya hindi ito hadlang — pagkakasunod.
-        if ($payment->needsRefundDestination()) {
+        // Dati, dalawang hakbang ito ("Add Details" muna, saka pa lang
+        // lilitaw ang Mark Paid Out) — at sa pagitan, walang button na
+        // makita ang admin na nakapagpadala na sa GCash. Ngayon, ang
+        // "already sent it by hand" na form sa detail page ay humihingi
+        // na rin ng account na pinagpadalhan, kaya isang hakbang na lang
+        // — at naitatala pa rin kung saan napunta ang pera.
+        $needsDestination = $payment->needsRefundDestination();
+
+        if ($needsDestination && ! $request->filled('institution_bic')) {
             return back()->with('error',
-                'Add the refund destination first — there is no record of where this money should go. '
-                . 'Use "Add Details" on this refund if the guest gave it to you by text or phone.');
+                'Enter the account you sent this refund to — there is no record yet of where this money went. '
+                . 'Open the refund and use "Already sent it by hand?".');
         }
 
         // ANG MISMONG SAFEGUARD.
@@ -402,20 +413,54 @@ class PaymentController extends Controller
         // nang personal — kaya opsyonal doon ang OR/resibo.
         $isCash = $payment->payment_method === 'cash';
 
-        $request->validate([
+        $referenceRules = [
             'transfer_reference' => ($isCash ? 'nullable' : 'required') . '|string|min:4|max:100',
-        ], [
+        ];
+        $referenceMessages = [
             'transfer_reference.required' => 'Enter the reference number of the transfer you sent, so there is a record of it.',
             'transfer_reference.min'      => 'That reference looks too short — copy it exactly from your GCash/Maya/bank receipt.',
-        ]);
+        ];
 
-        $payment->update([
-            'status'       => 'success',
-            'processed_by' => Auth::id(),
-            // Dating NULL ito sa lahat ng 59 na row — bakante ang column
-            // magmula nang gawin ito. Dito na ito nagkakalaman.
-            'transaction_ref' => $request->transfer_reference,
-        ]);
+        // Kapag kasama ang destinasyon, sabay itong sinusuri kasama ang
+        // reference — walang naisusulat hangga't hindi pareho malinis.
+        $institution = null;
+
+        if ($needsDestination) {
+            [$validated, $institution] = $this->validatedRefundDestination($request, $referenceRules, $referenceMessages);
+        } else {
+            $validated = $request->validate($referenceRules, $referenceMessages);
+        }
+
+        $reference = $validated['transfer_reference'] ?? null;
+
+        // Naka-lock at muling binabasa ang refund: ang double-click (o
+        // dalawang admin na sabay) ay dating nagpapadala ng dalawang
+        // "refund sent" na abiso sa guest para sa iisang refund.
+        $closed = DB::transaction(function () use ($payment, $validated, $institution, $needsDestination, $reference) {
+            $locked = Payment::whereKey($payment->id)->lockForUpdate()->first();
+
+            if (! $locked || ! $locked->isAwaitingPayout()) {
+                return false;
+            }
+
+            if ($needsDestination) {
+                $this->saveRefundDestination($locked, $validated, $institution);
+            }
+
+            $locked->update([
+                'status'       => 'success',
+                'processed_by' => Auth::id(),
+                // Dating NULL ito sa lahat ng 59 na row — bakante ang column
+                // magmula nang gawin ito. Dito na ito nagkakalaman.
+                'transaction_ref' => $reference,
+            ]);
+
+            return true;
+        });
+
+        if (! $closed) {
+            return back()->with('error', 'This refund has already been marked as paid out.');
+        }
 
         // Dito nagtatapos ang refund lifecycle, kaya dito rin dapat
         // malaman ng guest na naipadala na ang pera niya — dati, tahimik
@@ -431,9 +476,69 @@ class PaymentController extends Controller
         StaffLog::record('refund_paid_out', 'payments', $payment->id,
             "Refund ₱" . number_format($payment->amount, 2) . " marked as paid out for booking "
             . ($payment->booking->booking_ref ?? '#' . $payment->booking_id)
-            . ($request->transfer_reference ? " (ref: {$request->transfer_reference})" : ' (cash, no reference)'));
+            . ($reference ? " (ref: {$reference})" : ' (cash, no reference)'));
 
         return back()->with('success', '✅ Refund of ₱' . number_format($payment->amount, 2) . ' marked as paid out.');
+    }
+
+    // ── Refund destination: iisang validation, iisang pag-save ─────
+    /**
+     * Binabasa at sinusuri ang destinasyon mula sa request.
+     *
+     * Dalawang form ang dumadaan dito — "Save Destination" at ang
+     * "already sent it by hand" na Mark Paid Out — kaya iisa ang kopya,
+     * para hindi maging mas maluwag ang isa kaysa sa isa. Ang
+     * `$extraRules` ay para sa field na sariling-kanya ng isang form
+     * (hal. `transfer_reference`), para sabay na lumabas ang mga error.
+     *
+     * @return array{0: array, 1: array} [$validated, $institution]
+     */
+    private function validatedRefundDestination(Request $request, array $extraRules = [], array $extraMessages = []): array
+    {
+        $institutions = app(PayMongoService::class)->receivingInstitutions();
+        $validBics    = array_column($institutions, 'bic');
+
+        if (empty($validBics)) {
+            throw ValidationException::withMessages([
+                'institution_bic' => 'Could not load the list of banks and e-wallets from PayMongo. Please try again shortly.',
+            ]);
+        }
+
+        $validated = $request->validate(
+            RefundDestination::rules($validBics) + $extraRules,
+            RefundDestination::messages() + $extraMessages
+        );
+
+        $institution = collect($institutions)->firstWhere('bic', $validated['institution_bic']);
+
+        if ($error = RefundDestination::mobileNumberError($institution['bic'], $institution['name'], $validated['account_number'])) {
+            throw ValidationException::withMessages(['account_number' => $error]);
+        }
+
+        return [$validated, $institution];
+    }
+
+    private function saveRefundDestination(Payment $payment, array $validated, array $institution): void
+    {
+        RefundDestination::updateOrCreate(
+            ['payment_id' => $payment->id],
+            [
+                'institution_name' => $institution['name'],
+                'institution_bic'  => $validated['institution_bic'],
+                'account_number'   => $validated['account_number'],
+                'account_name'     => trim($validated['account_name']),
+                'provided_by'      => Auth::id(),
+                'provided_at'      => now(),
+            ]
+        );
+
+        // Walang account number o pangalan sa log — financial account
+        // data ito. Ang layunin ng talaan ay ipakitang may naganap at
+        // kung sino ang may gawa, hindi ulitin ang laman.
+        StaffLog::record('refund_destination_set', 'payments', $payment->id,
+            'Refund destination entered by staff on behalf of the guest for booking '
+            . ($payment->booking->booking_ref ?? '#' . $payment->booking_id)
+            . " ({$institution['name']})");
     }
 
     // ── Ipadala ang refund sa pamamagitan ng PayMongo ──────────────

@@ -91,11 +91,15 @@ return [
             'driver' => 'octane',
         ],
 
+        // Production's store (CACHE_STORE=failover): Redis first, MySQL
+        // whenever Redis can't answer. With Redis alone, a Redis outage
+        // would 500 every public page — CheckMaintenanceMode reads a
+        // Setting on each one. See project.md v7.4.
         'failover' => [
             'driver' => 'failover',
             'stores' => [
+                'redis',
                 'database',
-                'array',
             ],
         ],
 

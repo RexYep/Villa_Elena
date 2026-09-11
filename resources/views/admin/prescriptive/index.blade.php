@@ -66,9 +66,40 @@
             line-height: 1.6;
         }
 
+        /* .btn-refresh was used in the topbar above but never defined — not here
+           and not in admin.css, which only forecast/index and insights/index
+           carry their own copies of. All three controls rendered as bare inline
+           anchors (measured 91x24 at 768px, an unstyled line box) and the topbar
+           overflowed at 320px because they wrap by text rather than as buttons. */
+        .btn-refresh {
+            background: var(--gold);
+            color: var(--stone);
+            border: none;
+            padding: 9px 20px;
+            border-radius: 8px;
+            font-weight: 600;
+            font-size: 13px;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            white-space: nowrap;
+            transition: opacity .2s;
+        }
+
+        .btn-refresh:hover {
+            opacity: .85;
+            color: var(--stone);
+        }
+
+        /* minmax(0, …) because a bare 1fr floors each track at its own
+           min-content, so the three tiles sized independently — 168.6 / 129.1 /
+           138.0px, unchanged from 320px all the way to 480px — and their total
+           never fit. "Last Recalculated" sat at L344 with the viewport ending at
+           320, entirely off-screen and clipped by body{overflow-x:hidden}. */
         .summary-strip {
             display: grid;
-            grid-template-columns: repeat(3, 1fr);
+            grid-template-columns: repeat(3, minmax(0, 1fr));
             gap: 16px;
             margin-bottom: 22px;
         }
@@ -116,6 +147,13 @@
             align-items: flex-start;
             gap: 16px;
             padding: 20px 24px 0;
+        }
+
+        /* The title column is a flex item, so without this its min-content (the
+           longest word in the recommendation title) sets the floor and the peso
+           figure beside it gets squeezed instead of the title wrapping. */
+        .rec-head>div:first-child {
+            min-width: 0;
         }
 
         .rec-title {
@@ -205,11 +243,20 @@
             color: var(--stone);
         }
 
+        /* Without wrapping, Apply/Dismiss and the 192px reassurance note fought
+           over 290px at a 320px viewport: Apply was crushed to 77px and its own
+           label broke across two lines. */
         .rec-actions {
             display: flex;
             align-items: center;
+            flex-wrap: wrap;
             gap: 10px;
             padding: 16px 24px 20px;
+        }
+
+        .btn-apply,
+        .btn-dismiss {
+            white-space: nowrap;
         }
 
         .btn-apply {
@@ -265,6 +312,97 @@
         .history-note {
             font-size: 12px;
             color: var(--muted);
+        }
+
+        /* Decision History is six columns and needs 710px. admin.css only turns
+           .table-card into a scroller below 900px, so from 993px up — where the
+           sidebar returns and the content column drops to 669px — the card was
+           back to overflow:hidden and the entire "When" column, header and all
+           four dates, was clipped away with no scrollbar. Descendant selector to
+           beat admin.css's own .table-card rule regardless of which order the
+           two sheets land in (@vite emits its link before @stack('styles') in
+           production, but `composer dev` injects admin.css afterwards). */
+        .main-content .table-card {
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+        }
+
+        .main-content .table-card table {
+            min-width: 760px;
+        }
+
+        .main-content .table-card .table-header {
+            position: sticky;
+            left: 0;
+        }
+
+        @media (max-width: 560px) {
+
+            /* Three tiles across leaves 122px of inner width here — enough for
+               the 26px figure but not for a label or the sub-line. */
+            .summary-strip {
+                grid-template-columns: minmax(0, 1fr);
+            }
+
+            /* Put the peso figure under the title rather than beside it. */
+            .rec-head {
+                flex-wrap: wrap;
+                gap: 10px;
+            }
+
+            .rec-impact {
+                margin-left: 0;
+                text-align: left;
+            }
+
+            .rec-note {
+                margin-left: 0;
+                flex-basis: 100%;
+            }
+        }
+
+        /* Three topbar controls plus Logout need 500px of the bar. Below this
+           they are icons only, which is also what admin.css's fixed 68px topbar
+           can actually hold — at 320px the row was 72px tall and ran 31px past
+           the right edge, taking Logout with it. */
+        @media (max-width: 900px) {
+            .topbar-right .btn-refresh {
+                font-size: 0;
+                padding: 9px 12px;
+                gap: 0;
+            }
+
+            .topbar-right .btn-refresh i {
+                font-size: 15px;
+            }
+        }
+
+        /* Apply creates a promo, a pricing rule, or a block — all things guests
+           see immediately — and Dismiss is one-way. Keyed on pointer type, not
+           width: only a finger needs the larger target. */
+        @media (hover: none) and (pointer: coarse) {
+
+            .btn-apply,
+            .btn-dismiss,
+            .btn-refresh,
+            .logout-btn {
+                min-height: 44px;
+            }
+
+            .topbar-right .btn-refresh {
+                min-width: 44px;
+                justify-content: center;
+            }
+
+            /* Bootstrap's .btn-close is content-box with its own padding, so a
+               bare width/height lands at 60px rather than 44. */
+            .modal .btn-close {
+                box-sizing: border-box;
+                width: 44px;
+                height: 44px;
+                padding: 12px;
+                background-size: 14px;
+            }
         }
     </style>
 @endpush

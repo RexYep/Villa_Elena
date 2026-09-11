@@ -5,7 +5,7 @@
 @section('page-subtitle', $user->full_name)
 
 @section('topbar-right')
-    <a href="{{ route('admin.users.index') }}" class="text-muted-theme"
+    <a href="{{ route('admin.users.index') }}" class="text-muted-theme back-link"
         style="display:flex;align-items:center;gap:6px;text-decoration:none;font-size:13px;border:1px solid var(--border);padding:7px 14px;border-radius:9px;background:#fff;">
         <i class="bi bi-arrow-left"></i> Back
     </a>
@@ -16,11 +16,31 @@
 
 @push('styles')
     <style>
+        /* minmax(0, …) and min-width:0 because a bare 1fr floors its track at
+           the content's min-content, and the booking table — which had no
+           scroller — has a 798px min-content. On a phone the single column
+           therefore stretched to 800px and took the profile card with it: at a
+           320px viewport both cards ran from L14 to R814, and body
+           {overflow-x:hidden} hid the right half of everything with no
+           scrollbar. From 901px to 1280px the right track was likewise pinned
+           at 800px, so the booking card ran to R1416 on a 993px screen. */
         .profile-grid {
             display: grid;
-            grid-template-columns: 300px 1fr;
+            grid-template-columns: 300px minmax(0, 1fr);
             gap: 24px;
             align-items: start;
+        }
+
+        .profile-grid>div {
+            min-width: 0;
+        }
+
+        /* The table scrolls inside its own card instead of setting the width of
+           the whole page. The card is overflow:hidden, so without this the
+           columns past its edge would simply be cut off. */
+        .history-scroll {
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
         }
 
         .card-panel {
@@ -83,6 +103,10 @@
             color: rgba(255, 255, 255, 0.65);
             font-size: 14px;
             margin-top: 3px;
+            /* An email has no break opportunities, and from 901px the card is a
+               fixed 300px wide (250px inside the hero) — a 39-character address
+               needs 262px and its end was cut off by the card's overflow:hidden. */
+            overflow-wrap: anywhere;
         }
 
         /* Role badges — semantic, unchanged */
@@ -271,15 +295,41 @@
             color: var(--tag-green-fg);
         }
 
-        @media (max-width: 900px) {
+        /* One column up to 1199px, not 900px. Beside the fixed 300px profile
+           column the booking history got only what was left, and the sidebar's
+           return at 993px made it worse on a wider screen: the table showed 100%
+           at 900px but 43% at 993px (Check-in, Nights, Total, Status and Payment
+           all behind a scroll) and 63% at 1150px. Stacked, the same widths show
+           84-100%. From 1200px two columns show 69% and climb to 100% at 1536px. */
+        @media (max-width: 1199px) {
             .profile-grid {
-                grid-template-columns: 1fr;
+                grid-template-columns: minmax(0, 1fr);
             }
         }
 
         @media (max-width: 420px) {
             .stats-grid {
                 grid-template-columns: 1fr;
+            }
+        }
+
+        /* Deactivate Account is one-way and sat at 40px; Back was 78x36 and
+           "View all" a 67x21 text link. Keyed on pointer type, not width: only a
+           finger needs the larger target. */
+        @media (hover: none) and (pointer: coarse) {
+            .btn-action,
+            .logout-btn {
+                min-height: 44px;
+            }
+
+            .topbar-right .back-link {
+                min-height: 44px;
+            }
+
+            .card-header-custom a {
+                display: inline-flex;
+                align-items: center;
+                min-height: 44px;
             }
         }
     </style>
@@ -415,7 +465,7 @@
                         View all <i class="bi bi-arrow-right"></i>
                     </a>
                 </div>
-                <div class="card-body-custom" style="padding:0;">
+                <div class="card-body-custom history-scroll" style="padding:0;">
                     @if ($bookings->isEmpty())
                         <div class="empty-state">
                             <i class="bi bi-calendar-x"

@@ -53,13 +53,50 @@ td{padding:13px 20px;}
 .period-label{font-size: 14px;color:var(--muted);margin-bottom:20px;}
 .period-label strong{color:var(--text-main);}
 
-@media (max-width: 900px) {
-    .kpi-grid{grid-template-columns:1fr 1fr;}
+/* Line/bar charts were sized by aspect ratio (canvas height attr + Chart.js's
+   default maintainAspectRatio), so height followed width: the 12-month revenue
+   chart (300:80) had a 22px-tall plot area on a 320px phone, and the two
+   half-width charts went from a 398px plot at 900px to 78px at 993px when the
+   row turned two-up. A fixed box with maintainAspectRatio:false fixes both. */
+.chart-box{position:relative;height:240px;}
+
+/* Donut + legend rows: let the legend drop under the 160px donut rather than be
+   squeezed to 66-84px beside it on a phone. No effect on non-flex chart bodies. */
+.chart-body{flex-wrap:wrap;}
+
+/* One chart per row until 1199px, as on the forecast page: two-up in the
+   993-1199px band halved each chart to 282-420px, rotating the month labels
+   50deg and dropping half of them. */
+@media (max-width: 1199px) {
     .charts-row{grid-template-columns:minmax(0, 1fr);}
+}
+/* Two-up until 1100px, not 900px. The widest label, "Confirmed Bookings", needs
+   131px on one line, so a card needs 177px (22px padding a side + border) and
+   four need 756px of content — a 1080px viewport once the sidebar is back. The
+   old breakpoint put four 155px cards in the 993px band, wrapping two labels and
+   making the cards 194px tall: taller than the two-up cards at 900px. */
+@media (max-width: 1100px) {
+    .kpi-grid{grid-template-columns:1fr 1fr;}
 }
 @media (max-width: 480px) {
     .kpi-grid{grid-template-columns:1fr;}
     .custom-range{margin-left:0;width:100%;}
+}
+/* The custom range (two date inputs, a dash, Apply) needs 403px in one row and
+   did not wrap, so below ~430px Apply ran to R417 and was clipped by
+   body{overflow-x:hidden} — no way to submit a custom period on a phone.
+   From/To side by side, Apply full width beneath. */
+@media (max-width: 430px) {
+    .custom-range{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;}
+    .custom-range>span{display:none;}
+    .custom-range .date-input{width:100%;min-width:0;}
+    .custom-range .period-btn{grid-column:1/-1;}
+}
+/* Period buttons and date inputs were 36-37px. Keyed on pointer type, not
+   width: only a finger needs the larger target. */
+@media (hover: none) and (pointer: coarse) {
+    .period-btn,.date-input{min-height:44px;}
+    a.period-btn{display:inline-flex;align-items:center;gap:6px;}
 }
 </style>
 @endpush
@@ -147,7 +184,7 @@ td{padding:13px 20px;}
             <p class="text-muted-theme" style="font-size: 14px;margin-top:2px;">Monthly collected payments (excl. refunds)</p>
         </div>
         <div style="padding:20px 24px;">
-            <canvas id="revenueChart" height="80"></canvas>
+            <div class="chart-box"><canvas id="revenueChart"></canvas></div>
         </div>
     </div>
 
@@ -159,7 +196,7 @@ td{padding:13px 20px;}
                 <p>Confirmed bookings per month</p>
             </div>
             <div class="chart-body">
-                <canvas id="bookingsChart" height="160"></canvas>
+                <div class="chart-box"><canvas id="bookingsChart"></canvas></div>
             </div>
         </div>
         <div class="chart-card">
@@ -182,7 +219,7 @@ td{padding:13px 20px;}
                 <p>Payments collected per day — selected period</p>
             </div>
             <div class="chart-body">
-                <canvas id="dailyChart" height="160"></canvas>
+                <div class="chart-box"><canvas id="dailyChart"></canvas></div>
             </div>
         </div>
         <div class="chart-card">
@@ -275,6 +312,7 @@ new Chart(document.getElementById('revenueChart'), {
     },
     options: {
         responsive: true,
+        maintainAspectRatio: false,
         plugins: { legend: { display: false } },
         scales: {
             y: { ticks: { callback: v => '₱' + (v >= 1000 ? (v/1000).toFixed(0)+'k' : v) }, grid: { color: '#f1f5f9' } },
@@ -302,6 +340,7 @@ new Chart(document.getElementById('bookingsChart'), {
     },
     options: {
         responsive: true,
+        maintainAspectRatio: false,
         plugins: { legend: { display: false } },
         scales: {
             y: { ticks: { stepSize: 1 }, grid: { color: '#f1f5f9' } },
@@ -340,6 +379,7 @@ new Chart(document.getElementById('dailyChart'), {
     },
     options: {
         responsive: true,
+        maintainAspectRatio: false,
         plugins: { legend: { display: false } },
         scales: {
             y: { ticks: { callback: v => '₱' + (v >= 1000 ? (v/1000).toFixed(0)+'k' : v) }, grid: { color: '#f1f5f9' } },

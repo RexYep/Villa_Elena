@@ -524,7 +524,7 @@
                                  kapag ipinadala ito ng admin sa sarili niyang app. --}}
                             {{-- Nakabukas agad ito kapag ito na ang TANGING daan —
                                  walang saysay na itago ang tanging magagawa. --}}
-                            <details style="margin-top:16px;"
+                            <details id="manual-payout" style="margin-top:16px;"
                                 {{ $payment->canSendTransfer() ? '' : 'open' }}>
                                 <summary style="cursor:pointer;font-size: 14px;font-weight:600;color:var(--stone);">
                                     I sent it myself — record it by hand
@@ -626,6 +626,77 @@
                                 </button>
                             </form>
                         </details>
+
+                        @if ($payment->needsRefundDestination())
+                            {{-- ANG MANU-MANONG DAAN para sa refund na wala pang
+                                 destinasyon. "No destination, no payout" pa rin —
+                                 pero isang hakbang na lang: kasama na sa form ang
+                                 account na pinagpadalhan. Dati ay kailangang mag-
+                                 "Save Destination" muna bago lumitaw ang Mark Paid
+                                 Out, kaya ang refund na naipadala na sa GCash ay
+                                 mukhang walang paraan para isara. --}}
+                            <details id="manual-payout" style="margin-top:14px;"
+                                {{ old('_form') === 'payout' ? 'open' : '' }}>
+                                <summary style="cursor:pointer;font-size:13px;font-weight:600;color:var(--stone);">
+                                    Already sent it by hand? Mark it paid out
+                                </summary>
+
+                                <form method="POST" action="{{ route('admin.payments.paidOut', $payment) }}"
+                                    style="margin-top:12px;">
+                                    @csrf
+                                    @method('PATCH')
+                                    <input type="hidden" name="_form" value="payout">
+
+                                    <div style="font-size: 14px;color:var(--muted);margin-bottom:12px;">
+                                        Only use this if you already sent
+                                        <strong>₱{{ number_format($payment->amount, 2) }}</strong>
+                                        from your own GCash / Maya / bank app. Enter the account you sent it to —
+                                        it is kept with the refund as the record of where the money went.
+                                    </div>
+
+                                    <div style="margin-bottom:12px;">
+                                        <label class="field-lbl">Sent to (Bank / E-Wallet)</label>
+                                        <select name="institution_bic" class="form-control" required>
+                                            <option value="">Select…</option>
+                                            @foreach ($institutions as $institution)
+                                                <option value="{{ $institution['bic'] }}"
+                                                    @selected(old('institution_bic') === $institution['bic'])>
+                                                    {{ $institution['name'] }}
+                                                </option>
+                                            @endforeach
+                                        </select>
+                                        <div style="font-size: 13px;color:var(--muted);margin-top:4px;">
+                                            GCash is listed as <strong>G-Xchange, Inc.</strong>
+                                        </div>
+                                    </div>
+
+                                    <div style="margin-bottom:12px;">
+                                        <label class="field-lbl">Account / Mobile Number</label>
+                                        <input type="text" name="account_number" class="form-control" inputmode="numeric"
+                                            placeholder="09171234567" required value="{{ old('account_number') }}">
+                                    </div>
+
+                                    <div style="margin-bottom:12px;">
+                                        <label class="field-lbl">Account Name</label>
+                                        <input type="text" name="account_name" class="form-control"
+                                            placeholder="Juan Dela Cruz" required
+                                            value="{{ old('account_name', $payment->booking->user->full_name ?? '') }}">
+                                    </div>
+
+                                    <label class="field-lbl">Transfer Reference Number</label>
+                                    <input type="text" name="transfer_reference" class="form-control"
+                                        minlength="4" maxlength="100" placeholder="e.g. 1029384756123" required
+                                        value="{{ old('transfer_reference') }}">
+                                    <div style="font-size: 13px;color:var(--muted);margin:4px 0 14px;">
+                                        From your receipt. This is the only proof the money left.
+                                    </div>
+
+                                    <button type="submit" class="btn-submit" style="padding:10px 22px;font-size:13px;">
+                                        <i class="bi bi-check2-circle me-1"></i> Confirm Sent
+                                    </button>
+                                </form>
+                            </details>
+                        @endif
                     @endif
                 @endif
 
@@ -635,6 +706,36 @@
                         so there is no record of where the money was sent.
                     </div>
                 @endif
+            </div>
+        </div>
+    @endif
+
+    {{-- Cash refund: inaabot sa front desk, kaya wala itong Refund
+         Destination card — at dahil doon, wala ring paraan dito para
+         isara ito dati; nasa listahan lang ang Mark Paid Out. --}}
+    @if ($payment->isAwaitingPayout() && $payment->payment_method === 'cash')
+        <div class="card" style="margin-bottom:20px;">
+            <div class="card-head">
+                <h3>Cash Refund</h3>
+            </div>
+            <div class="card-body">
+                <form method="POST" action="{{ route('admin.payments.paidOut', $payment) }}">
+                    @csrf
+                    @method('PATCH')
+
+                    <div style="font-size: 14px;color:var(--muted);margin-bottom:12px;">
+                        Hand <strong>₱{{ number_format($payment->amount, 2) }}</strong> to the guest, then record
+                        it here.
+                    </div>
+
+                    <label class="field-lbl">Receipt / OR Number <span style="font-weight:400;">(optional)</span></label>
+                    <input type="text" name="transfer_reference" class="form-control" minlength="4" maxlength="100"
+                        value="{{ old('transfer_reference') }}">
+
+                    <button type="submit" class="btn-submit" style="padding:10px 22px;font-size:13px;margin-top:14px;">
+                        <i class="bi bi-check2-circle me-1"></i> Mark Paid Out
+                    </button>
+                </form>
             </div>
         </div>
     @endif
@@ -758,4 +859,21 @@
         <i class="bi bi-arrow-left"></i> Back to Payments
     </a>
 @endsection
+
+@push('scripts')
+    <script>
+        // Ang "Mark Paid Out" sa listahan ay tumuturo rito (#manual-payout).
+        // Nakasara ang form na iyon kapag may Send Refund, kaya binubuksan
+        // ito rito — kung hindi, parang walang nangyari sa pagpindot.
+        (function() {
+            if (location.hash !== '#manual-payout') return;
+            const el = document.getElementById('manual-payout');
+            if (!el) return;
+            el.open = true;
+            el.scrollIntoView({
+                block: 'center'
+            });
+        })();
+    </script>
+@endpush
 

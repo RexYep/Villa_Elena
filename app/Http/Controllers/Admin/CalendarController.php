@@ -50,9 +50,21 @@ class CalendarController extends Controller
 
         foreach ($bookings as $booking) {
             $color = $statusColors[$booking->status] ?? ['bg' => '#6b7280', 'border' => '#4b5563'];
+
+            // A calendar cell is narrow — 129px on a 1280px screen, 37px on a
+            // phone — and FullCalendar truncates from the right. Leading with the
+            // property name spent that entire budget on a string that is identical
+            // on every booking (there is only ever one bookable villa), so the
+            // guest name never survived. The slot goes first instead: a day and a
+            // night booking on the same date are two separate rows in the cell,
+            // and it is the only thing that tells them apart. Property still has
+            // its own row in the detail modal.
+            $slot  = $booking->slotKey();
+            $label = $slot ? ucfirst($slot) . ' · ' : '';
+
             $events[] = [
                 'id'              => 'booking-' . $booking->id,
-                'title'           => ($booking->property->property_name ?? 'N/A') . ' — ' . ($booking->user->full_name ?? 'Guest'),
+                'title'           => $label . ($booking->user->full_name ?? 'Guest'),
                 'start'           => $booking->check_in_date->format('Y-m-d'),
                 'end'             => $booking->check_out_date->addDay()->format('Y-m-d'), // FullCalendar end is exclusive
                 'backgroundColor' => $color['bg'],

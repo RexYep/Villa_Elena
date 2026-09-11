@@ -570,27 +570,33 @@ class BookingController extends Controller
     // ── Record Payment ─────────────────────────────────────────────
     public function recordPayment(Request $request, Booking $booking)
     {
+        // Wala nang `refund` dito. Dati, ang "Refund" sa form na ito ay
+        // gumagawa ng BAGONG refund row na agad `success` — hindi nito
+        // isinasara ang naka-pending na refund (nananatiling "NOT SENT"
+        // iyon), hindi ito dumadaan sa refundable-balance check ng
+        // PaymentController::refund(), at nabibilang nang dalawang beses
+        // ang iisang refund sa booking. Nasa Payments page ang refund:
+        // "Refund" para aprubahan, "Mark Paid Out" para isara.
         $request->validate([
             'amount'         => 'required|numeric|min:1',
             'payment_method' => 'required|in:qrph,cash',
-            'payment_type'   => 'required|in:full_payment,partial,refund',
+            'payment_type'   => 'required|in:full_payment,partial',
             'notes'          => 'nullable|string',
             'confirm_duplicate' => 'nullable|boolean',
+        ], [
+            'payment_type.in' => 'Refunds are not recorded here. Issue one with "Refund" on the Payments page, '
+                . 'and close one you already sent with "Mark Paid Out".',
         ]);
 
-        // Ang refund ay palabas na pera — hindi ito sinusukat laban sa
-        // balanse, at normal lang na maulit.
-        if ($request->payment_type !== 'refund') {
-            $problem = Payment::manualEntryProblem(
-                $booking->fresh(),
-                (float) $request->amount,
-                $request->payment_method,
-                (bool) $request->boolean('confirm_duplicate'),
-            );
+        $problem = Payment::manualEntryProblem(
+            $booking->fresh(),
+            (float) $request->amount,
+            $request->payment_method,
+            (bool) $request->boolean('confirm_duplicate'),
+        );
 
-            if ($problem) {
-                return back()->withErrors($problem)->withInput();
-            }
+        if ($problem) {
+            return back()->withErrors($problem)->withInput();
         }
 
         Payment::create([
@@ -612,13 +618,10 @@ class BookingController extends Controller
         // na may hawak nang pera ng guest.
         $wasPending = $booking->confirmOnFirstPayment();
 
-        // Dati, walang email ang manwal na path na ito. Pero ang form
-        // dito ay tumatanggap din ng payment_type = 'refund' — at ang
-        // isang refund ay HINDI "natanggap na bayad", kaya hindi dapat
-        // makapag-trigger ng resibo na nagsasabing salamat sa bayad.
-        if ($request->payment_type !== 'refund') {
-            BookingMailHelper::paymentRecorded($booking, (float) $request->amount, $wasPending);
-        }
+        // Dati, walang email ang manwal na path na ito. Papasok na pera na
+        // lang ang tinatanggap ng form (tingnan ang validation sa itaas),
+        // kaya laging may resibo.
+        BookingMailHelper::paymentRecorded($booking, (float) $request->amount, $wasPending);
 
         StaffLog::record('recorded_payment', 'payments', $booking->id,
             "Recorded ₱{$request->amount} payment for {$booking->booking_ref}");

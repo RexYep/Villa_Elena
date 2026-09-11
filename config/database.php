@@ -184,6 +184,11 @@ return [
             'password' => env('REDIS_PASSWORD'),
             'port' => env('REDIS_PORT', '6379'),
             'database' => env('REDIS_DB', '0'),
+            // predis waits 5s on a dead server by default, per command, and
+            // the `failover` cache store can only fall back once it gives up.
+            // (max_retries/backoff below are phpredis-only; predis ignores them.)
+            'timeout' => env('REDIS_TIMEOUT', 0.5),
+            'read_write_timeout' => env('REDIS_TIMEOUT', 0.5),
             'max_retries' => env('REDIS_MAX_RETRIES', 3),
             'backoff_algorithm' => env('REDIS_BACKOFF_ALGORITHM', 'decorrelated_jitter'),
             'backoff_base' => env('REDIS_BACKOFF_BASE', 100),
@@ -197,6 +202,8 @@ return [
             'password' => env('REDIS_PASSWORD'),
             'port' => env('REDIS_PORT', '6379'),
             'database' => env('REDIS_CACHE_DB', '1'),
+            'timeout' => env('REDIS_TIMEOUT', 0.5),
+            'read_write_timeout' => env('REDIS_TIMEOUT', 0.5),
             'max_retries' => env('REDIS_MAX_RETRIES', 3),
             'backoff_algorithm' => env('REDIS_BACKOFF_ALGORITHM', 'decorrelated_jitter'),
             'backoff_base' => env('REDIS_BACKOFF_BASE', 100),

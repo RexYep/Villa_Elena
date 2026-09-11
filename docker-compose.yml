@@ -27,9 +27,9 @@
 #     the Windows<->Linux bridge.
 # Run with: docker compose up --watch
 services:
-  # Local-only cache backend (see .env: CACHE_STORE=redis). Not part of the
-  # production stack — Render caching still uses the `database` driver, no
-  # free Redis provider has been wired up there. Run standalone with:
+  # Local stand-in for production's Render Key Value instance (see
+  # project.md v7.4). With CACHE_STORE=failover the app still works when
+  # this is stopped — the cache falls back to MySQL. Run standalone with:
   #   docker compose up -d redis
   # (does not require running the `app` service in Docker too — works fine
   # alongside `composer dev` / `php artisan serve` on the host.)

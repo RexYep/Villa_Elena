@@ -54,15 +54,19 @@ php artisan migrate:fresh --seed --force --database=aiven   # full prod reset + 
 
 Migrations use sequential sub-second timestamps to control FK creation order — don't rely on filename dates alone when reordering.
 
-### Redis (local caching only)
+### Redis (cache — local and production, v7.4)
 
-Local dev caches through Redis (`predis/predis` client, no PHP `redis` extension needed) via a container — not part of the production stack (Render/Aiven still cache via the `database` driver, no free Redis provider wired up there yet):
+Production caches through Redis since v7.4: a hand-created **Render Key Value** instance (Free, Singapore, internal-only) reached through `REDIS_URL`. Locally it's the Compose container:
 
 ```bash
 docker compose up -d redis      # starts just the redis service, independent of the app service
 ```
 
-`App\Models\Setting::get()` and `Admin\DashboardController::index()`'s KPI stats both go through `Cache::remember()` — this is now a real cache hit/miss locally instead of the `file` driver it used to be silently backed by.
+- **Production runs `CACHE_STORE=failover`, never plain `redis`.** The `failover` store in `config/cache.php` is `['redis', 'database']`: Redis first, MySQL whenever Redis can't answer. With plain `redis`, a Redis outage throws out of `Setting::get()` in `CheckMaintenanceMode` and every public page 500s. Before v7.4 the cache could only fail together with the DB.
+- `REDIS_CLIENT=predis` is required everywhere: neither the Docker image nor XAMPP has the `redis` extension. `max_retries`/`backoff_*` in `config/database.php` are phpredis-only. The setting that matters under predis is `REDIS_TIMEOUT` (0.5s, feeding `timeout` and `read_write_timeout`); predis's own default is 5s per command.
+- **`Setting::get()` reads every setting as one entry (`Setting::CACHE_KEY`) through `Cache::memo()`**, so a request makes at most one real cache read. Don't return to per-key entries or drop the memo: while Redis is down, every real cache read pays `REDIS_TIMEOUT`. Invalidation lives in the model's `saved`/`deleted` events, so the seeder's `updateOrCreate()` clears it too.
+- **Locks that guard correctness use `Cache::store('database')`, never the default store.** Under failover a Redis blip puts two requests' locks in two different stores, and both win. A Redis lock also throws at `get()`, past the point failover can catch it. The PayMongo checkout lock is pinned this way.
+- `CacheFailedOver` is logged as a `WARNING` (`AppServiceProvider`). To spot an outage, search Render's log for `fell back to the next store`.
 
 `REDIS_HOST` in `.env` is `127.0.0.1` (correct for `php artisan serve` reaching Redis's published port) — the Dockerized `app` service below overrides this to `redis` (the Compose service name) since `127.0.0.1` inside that container means the container itself, not the sibling Redis one.
 
