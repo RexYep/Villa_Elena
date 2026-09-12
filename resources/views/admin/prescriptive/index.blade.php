@@ -320,7 +320,7 @@
            back to overflow:hidden and the entire "When" column, header and all
            four dates, was clipped away with no scrollbar. Descendant selector to
            beat admin.css's own .table-card rule regardless of which order the
-           two sheets land in (@vite emits its link before @stack('styles') in
+           two sheets land in (@@vite emits its link before @@stack('styles') in
            production, but `composer dev` injects admin.css afterwards). */
         .main-content .table-card {
             overflow-x: auto;

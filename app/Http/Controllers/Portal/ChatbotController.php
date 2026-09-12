@@ -48,7 +48,7 @@ If no slot is mentioned, leave slot as null (defaults to \"day\").";
         $intentJson = $ai->ask($intentPrompt);
 
         // Clean JSON response
-        $intentJson = preg_replace('/```json|```/', '', $intentJson);
+        $intentJson = preg_replace('/```json|```/', '', $intentJson ?? '');
         $intentJson = trim($intentJson);
         $intent     = json_decode($intentJson, true);
 
@@ -246,7 +246,22 @@ CONVERSATION HISTORY:
 
         $reply = $ai->ask($systemPrompt);
 
+        // Hindi kailanman ipinapakita sa bisita ang tunay na error — nasa log
+        // na iyon. Ang `ok => false` ang nagsasabi sa harapan na huwag itabi
+        // ang mensaheng ito sa conversation history: isa itong mensahe ng
+        // sistema, hindi sagot ni Elena, at kung maidadagdag ito sa history ay
+        // ipapakain pa sa susunod na prompt.
+        if ($reply === null) {
+            return response()->json([
+                'ok'             => false,
+                'reply'          => "Sorry, I'm having trouble replying right now. Please try again in a moment — or message us directly and we'll be happy to help. 🙏",
+                'property_cards' => [],
+                'intent'         => $intent['intent'] ?? 'general_question',
+            ]);
+        }
+
         return response()->json([
+            'ok'             => true,
             'reply'          => trim($reply),
             'property_cards' => $propertyCards,
             'intent'         => $intent['intent'] ?? 'general_question',

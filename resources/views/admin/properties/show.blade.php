@@ -307,8 +307,8 @@
            form-field-pair utility (1fr 1fr), and this page was redefining that
            same class as a 2fr 1fr page layout — a different thing entirely. The
            two rules have equal specificity, so which one won depended purely on
-           load order: page CSS wins in production, where @vite emits a stylesheet
-           link before @stack('styles'), but admin.css wins under `composer dev`,
+           load order: page CSS wins in production, where @@vite emits a stylesheet
+           link before @@stack('styles'), but admin.css wins under `composer dev`,
            where Vite injects it at runtime after this block. The layout would
            have silently differed between dev and production. */
         .detail-cols {

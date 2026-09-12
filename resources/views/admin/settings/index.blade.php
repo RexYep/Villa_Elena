@@ -218,12 +218,18 @@
             box-shadow: 0 4px 20px rgba(44, 36, 22, 0.1);
         }
 
+        /* flex-shrink:0 because the submit bar is a flex row and the "Last saved"
+           timestamp beside it takes what it needs: where the content column is
+           narrowest (425px at a 993px viewport) the button was squeezed to 159px
+           and "Save Settings" broke across two lines, making it 64px tall. */
         .btn-save {
             background: var(--terracotta);
             color: #fff;
             border: none;
             border-radius: 9px;
             padding: 11px 28px;
+            flex-shrink: 0;
+            white-space: nowrap;
             font-size: 14px;
             font-weight: 600;
             cursor: pointer;
@@ -257,17 +263,87 @@
             gap: 8px;
         }
 
+        /* Used three times in the amenities tab, and by addAmenityRow() for every
+           row added at runtime, but defined nowhere — it rendered as a bare
+           20x43px button around a trash icon. */
+        .btn-remove-amenity {
+            flex-shrink: 0;
+            width: 38px;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            background: #fff;
+            color: var(--muted);
+            cursor: pointer;
+            transition: all .2s;
+        }
+
+        .btn-remove-amenity:hover {
+            background: #fee2e2;
+            border-color: #fecaca;
+            color: #dc2626;
+        }
+
+        /* Same declarations this button carried as an inline style attribute; it
+           needs a class so the coarse-pointer rule below can reach it. */
+        .btn-add-amenity {
+            background: var(--sand);
+            color: var(--text-main);
+            border: none;
+            border-radius: 8px;
+            padding: 9px 18px;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            margin-top: 6px;
+        }
+
+        /* Two-up until 1150px, not 900px. The 220px tab rail plus gap comes off
+           the content column, so it is 860px wide at a 900px viewport but only
+           425px at 993px — and three columns there came out 114px each for
+           Currency, Deposit % and Tax %. The widest label, "Deposit Percentage
+           (%)", needs 148px, so three columns need 476px inside the card (a
+           1094px viewport); two need 312px, which fits from 901px up. */
+        @media (max-width: 1150px) {
+            .three-col {
+                grid-template-columns: 1fr 1fr;
+            }
+        }
+
         @media (max-width: 900px) {
             .settings-layout {
-                grid-template-columns: 1fr;
+                grid-template-columns: minmax(0, 1fr);
             }
 
             .tab-nav {
                 position: static;
             }
+        }
 
-            .three-col {
-                grid-template-columns: 1fr 1fr;
+        /* Maintenance Mode hides the entire guest-facing portal, and its switch
+           is 44x24px. The pseudo-element gives every toggle a 44x44 hit area
+           without changing how the switch looks. Keyed on pointer type, not
+           width: only a finger needs the larger target. */
+        @media (hover: none) and (pointer: coarse) {
+            .toggle-switch::after {
+                content: '';
+                position: absolute;
+                top: 50%;
+                left: 50%;
+                width: 44px;
+                height: 44px;
+                transform: translate(-50%, -50%);
+            }
+
+            .btn-save,
+            .btn-add-amenity,
+            .settings-card-body .form-control,
+            .settings-card-body .form-select {
+                min-height: 44px;
+            }
+
+            .btn-remove-amenity {
+                min-width: 44px;
+                min-height: 44px;
             }
         }
 
@@ -684,8 +760,7 @@
                                     </div>
                                 @endforelse
                             </div>
-                            <button type="button" onclick="addAmenityRow()"
-                                style="background:var(--sand);color:var(--text-main);border:none;border-radius:8px;padding:9px 18px;font-size:13px;font-weight:600;cursor:pointer;margin-top:6px;">
+                            <button type="button" onclick="addAmenityRow()" class="btn-add-amenity">
                                 <i class="bi bi-plus-circle me-1"></i> Add Amenity
                             </button>
                         </div>

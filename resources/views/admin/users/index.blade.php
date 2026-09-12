@@ -185,7 +185,7 @@
            ordinary laptop — it was still the whole Actions column: no View, Edit,
            Deactivate or Delete from this list, and no scrollbar to reach them.
            Descendant selector so it outranks admin.css's own .table-card rule in
-           either stylesheet order (@vite emits its link before @stack('styles')
+           either stylesheet order (@@vite emits its link before @@stack('styles')
            in production; `composer dev` injects admin.css afterwards). */
         .main-content .table-card {
             overflow-x: auto;

@@ -2,7 +2,9 @@
 
 namespace App\Http\Controllers\Admin;
 
+use App\Http\Controllers\Concerns\ThrottlesAiRefresh;
 use App\Http\Controllers\Controller;
+use App\Services\AiReportStore;
 use App\Services\GeminiService;
 use App\Models\Booking;
 use App\Models\Payment;
@@ -11,7 +13,62 @@ use Carbon\Carbon;
 
 class InsightsController extends Controller
 {
-    public function index(GeminiService $gemini)
+    use ThrottlesAiRefresh;
+
+    /**
+     * Reads the stored insights; calls Groq only when there are none yet.
+     *
+     * The stats below are plain DB counts and are recomputed on every visit —
+     * they're cheap and they should be live. Only the AI's reading of them is
+     * stored, and `AiReportStore` explains why.
+     */
+    public function index(AiReportStore $store, GeminiService $gemini)
+    {
+        $stats = $this->gatherStats();
+
+        $report = $store->remember(
+            AiReportStore::INSIGHTS,
+            fn () => $gemini->ask($this->prompt($stats))
+        );
+
+        return view('admin.insights.index', $stats + [
+            // NULL kapag hindi pa tumugon ang AI kahit kailan. Ang view na
+            // ang nagpapasya kung ano ang makikita ng admin — hindi
+            // ipinapakita ang tunay na error, nasa log iyon
+            // (`storage/logs/laravel.log`, "Groq API call failed").
+            'insights' => $report['text'] ?? null,
+            'generatedAt' => $report['generated_at'] ?? null,
+        ]);
+    }
+
+    /**
+     * The Refresh button. The ONLY path that spends a Groq request on purpose.
+     */
+    public function refresh(AiReportStore $store, GeminiService $gemini)
+    {
+        if ($wait = $this->aiRefreshCooldown(AiReportStore::INSIGHTS)) {
+            return back()->with('error', $this->aiRefreshCooldownMessage('insights report', $wait));
+        }
+
+        $stats = $this->gatherStats();
+
+        // NULL means "not regenerated" — `refresh()` leaves the previous report
+        // in place. Say so plainly rather than flashing a success message over
+        // text that didn't change.
+        $refreshed = $store->refresh(
+            AiReportStore::INSIGHTS,
+            fn () => $gemini->ask($this->prompt($stats))
+        );
+
+        return $refreshed === null
+            ? back()->with('error', 'Insights could not be refreshed right now — the analysis service did not respond. The figures above are unaffected.')
+            : back()->with('success', 'Insights refreshed.');
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function gatherStats(): array
     {
         $now = Carbon::now();
 
@@ -59,8 +116,32 @@ class InsightsController extends Controller
         // itaas, 0 o 1 lang dahil isang Villa lang) — mas tapat na
         // representasyon ng totoong kalagayan.
 
-        // --- Build Prompt ---
-   $prompt = "
+        return compact(
+            'now',
+            'totalBookings',
+            'pendingBookings',
+            'confirmedBookings',
+            'checkedIn',
+            'cancelledBookings',
+            'revenueThisMonth',
+            'revenueLastMonth',
+            'totalGuests',
+            'newGuestsThisMonth'
+        );
+    }
+
+    /**
+     * @param  array<string, mixed>  $stats
+     */
+    private function prompt(array $stats): string
+    {
+        // `extract()` so the prompt below stays byte-for-byte what it was when
+        // this lived in index(). Rewriting ten interpolations as $stats['...']
+        // is a chance to change the prompt while meaning to move it, and the
+        // wording here is tuned (the single-villa framing especially).
+        extract($stats);
+
+        return "
 You are a data analyst for Villa Elena Private Rental Resort in the Philippines.
 IMPORTANT: Villa Elena is a SINGLE, EXCLUSIVE-USE villa — there is only ONE bookable
 property, rented out in its entirety to one guest group at a time (not a hotel with
@@ -90,17 +171,5 @@ New Guests This Month: {$newGuestsThisMonth}
 
 Respond with exactly 5 lines. One insight per line. No numbering. No extra text.
 ";
-        $insights = $gemini->ask($prompt);
-
-        return view('admin.insights.index', compact(
-            'insights',
-            'totalBookings',
-            'pendingBookings',
-            'revenueThisMonth',
-            'revenueLastMonth',
-            'checkedIn',
-            'totalGuests',
-            'newGuestsThisMonth'
-        ));
     }
 }

@@ -5,9 +5,16 @@
 @section('page-subtitle', 'Powered by Google Gemini — ' . now()->format('F d, Y'))
 
 @section('topbar-right')
-    <a href="{{ route('admin.insights.index') }}" class="btn-refresh">
-        <i class="bi bi-arrow-clockwise"></i> Refresh Insights
-    </a>
+    {{-- POST, hindi <a href>. Ang GET ay bumabasa lang ng naitabing report;
+         ito lang ang tumatawag sa Groq. Noong <a href> pa ito papunta sa
+         mismong GET, walang pinagkaiba ang buton at ang pag-click sa sidebar
+         — kaya bawat bisita ay isang request. --}}
+    <form method="POST" action="{{ route('admin.insights.refresh') }}" class="d-inline">
+        @csrf
+        <button type="submit" class="btn-refresh">
+            <i class="bi bi-arrow-clockwise"></i> Refresh Insights
+        </button>
+    </form>
 @endsection
 
 @push('styles')
@@ -100,6 +107,34 @@
             font-size: 15px;
             line-height: 1.9;
             color: var(--text-main);
+        }
+
+        /* Shared "the AI didn't answer" state — quiet, not alarming. The admin
+           can't act on a 429 or a timeout, so the panel says what is missing
+           and what still holds, and nothing more. */
+        .ai-unavailable {
+            display: flex;
+            align-items: flex-start;
+            gap: 14px;
+            color: var(--muted);
+            font-size: 15px;
+            line-height: 1.7;
+        }
+
+        .ai-unavailable i {
+            font-size: 22px;
+            line-height: 1.4;
+            color: var(--muted);
+            flex-shrink: 0;
+        }
+
+        .ai-unavailable strong {
+            color: var(--text-main);
+            font-weight: 600;
+        }
+
+        .ai-unavailable p {
+            margin: 4px 0 0;
         }
 
         .ai-card-footer {
@@ -239,6 +274,13 @@
         </div>
     </div>
 
+    @if (session('success'))
+        <div class="alert alert-success">{{ session('success') }}</div>
+    @endif
+    @if (session('error'))
+        <div class="alert alert-danger">{{ session('error') }}</div>
+    @endif
+
     {{-- AI Insights Box --}}
     <div class="ai-card">
         <div class="ai-card-header">
@@ -247,20 +289,45 @@
             <span class="ai-badge">AUTO</span>
         </div>
         <div class="ai-card-body">
-            @php
-                $lines = array_filter(explode("\n", trim($insights)));
-            @endphp
-            <div style="display: flex; flex-direction: column; gap: 12px;">
-                @foreach ($lines as $line)
-                    @if (trim($line))
-                        <div class="insight-line">{{ trim($line) }}</div>
-                    @endif
-                @endforeach
-            </div>
+            @if ($insights === null)
+                {{-- Hindi tumugon ang AI. Sadyang walang teknikal na detalye
+                     dito — nasa storage/logs/laravel.log iyon. Isang malinaw
+                     na susunod na hakbang lang ang kailangan ng admin. --}}
+                <div class="ai-unavailable">
+                    <i class="bi bi-cloud-slash"></i>
+                    <div>
+                        <strong>No insights have been written yet.</strong>
+                        <p>The analysis service didn't respond the last time it was asked. Your booking
+                           and revenue figures above are unaffected — press
+                           <em>Refresh Insights</em> to try again.</p>
+                    </div>
+                </div>
+            @else
+                @php
+                    $lines = array_filter(explode("\n", trim($insights)));
+                @endphp
+                <div style="display: flex; flex-direction: column; gap: 12px;">
+                    @foreach ($lines as $line)
+                        @if (trim($line))
+                            <div class="insight-line">{{ trim($line) }}</div>
+                        @endif
+                    @endforeach
+                </div>
+            @endif
         </div>
         <div class="ai-card-footer">
             <i class="bi bi-info-circle"></i>
-            Automatically interpreted from your current resort data — not a prediction.
+            <span>
+                Automatically interpreted from your current resort data — not a prediction.
+                @if ($generatedAt)
+                    {{-- Mahalagang makita ang edad: ang report ay hindi na
+                         muling ginagawa kada bisita, kaya kung walang
+                         petsa rito ay aakalaing bago ito palagi. --}}
+                    Written <strong>{{ $generatedAt->diffForHumans() }}</strong>
+                    ({{ $generatedAt->format('M d, Y g:i A') }}) — press
+                    <em>Refresh Insights</em> to rewrite it from the figures above.
+                @endif
+            </span>
         </div>
     </div>
 

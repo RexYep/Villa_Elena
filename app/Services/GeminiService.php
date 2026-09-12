@@ -21,7 +21,16 @@ class GeminiService
         $this->model = config('services.groq.model');
     }
 
-    public function ask(string $prompt, int $maxTokens = 1024): string
+    /**
+     * Returns the model's reply, or NULL when the call failed or came back empty.
+     *
+     * NULL, never the provider's error text. Every caller renders what it gets,
+     * so returning "API Error: 429 — {...}" as the reply puts Groq's raw body —
+     * model id, org id, rate-limit internals — into a guest's chat bubble and
+     * into the admin panel, and reads as if the villa itself said it. The detail
+     * belongs in the log; the caller decides what the user sees.
+     */
+    public function ask(string $prompt, int $maxTokens = 1024): ?string
     {
         $payload = [
             'model' => $this->model,
@@ -64,12 +73,20 @@ class GeminiService
                 'body' => $response->body(),
             ]);
 
-            return 'API Error: '.$response->status().' — '.$response->body();
+            return null;
         }
 
-        $content = $response->json('choices.0.message.content', '');
+        $content = $this->stripReasoning((string) $response->json('choices.0.message.content', ''));
 
-        return $this->stripReasoning($content) ?: 'No insights returned.';
+        if ($content === '') {
+            Log::warning('Groq API returned an empty reply', [
+                'model' => $this->model,
+            ]);
+
+            return null;
+        }
+
+        return $content;
     }
 
     private function send(array $payload): Response

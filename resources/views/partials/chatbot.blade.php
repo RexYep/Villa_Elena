@@ -732,10 +732,16 @@
 
             removeTyping();
             addMessage('bot', reply, cards);
-            history.push({
-                role: 'assistant',
-                content: reply
-            });
+
+            // `ok === false` means the server is showing an apology, not an
+            // answer from Elena. Keep it out of the history we send back, or
+            // the next prompt is primed with the villa apologising to itself.
+            if (data.ok !== false) {
+                history.push({
+                    role: 'assistant',
+                    content: reply
+                });
+            }
 
             // Show notif dot if chat is closed
             if (!chatWin.classList.contains('open')) {

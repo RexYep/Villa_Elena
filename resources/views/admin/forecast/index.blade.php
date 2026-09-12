@@ -5,9 +5,13 @@
 @section('page-subtitle', 'Revenue & Occupancy Predictions — ' . now()->format('F d, Y'))
 
 @section('topbar-right')
-    <a href="{{ route('admin.forecast.index') }}" class="btn-refresh">
-        <i class="bi bi-arrow-clockwise"></i> Refresh Forecast
-    </a>
+    {{-- POST, hindi <a href> — tingnan ang paliwanag sa insights/index. --}}
+    <form method="POST" action="{{ route('admin.forecast.refresh') }}" class="d-inline">
+        @csrf
+        <button type="submit" class="btn-refresh">
+            <i class="bi bi-arrow-clockwise"></i> Refresh Forecast
+        </button>
+    </form>
 @endsection
 
 @push('styles')
@@ -75,6 +79,34 @@
         .panel-body {
             padding: 28px 32px;
             background: var(--sand);
+        }
+
+        /* Shared "the AI didn't answer" state — quiet, not alarming. The admin
+           can't act on a 429 or a timeout, so the panel says what is missing
+           and what still holds, and nothing more. */
+        .ai-unavailable {
+            display: flex;
+            align-items: flex-start;
+            gap: 14px;
+            color: var(--muted);
+            font-size: 15px;
+            line-height: 1.7;
+        }
+
+        .ai-unavailable i {
+            font-size: 22px;
+            line-height: 1.4;
+            color: var(--muted);
+            flex-shrink: 0;
+        }
+
+        .ai-unavailable strong {
+            color: var(--text-main);
+            font-weight: 600;
+        }
+
+        .ai-unavailable p {
+            margin: 4px 0 0;
         }
 
         .forecast-text {
@@ -254,6 +286,13 @@
 
 @section('content')
 
+    @if (session('success'))
+        <div class="alert alert-success">{{ session('success') }}</div>
+    @endif
+    @if (session('error'))
+        <div class="alert alert-danger">{{ session('error') }}</div>
+    @endif
+
     {{-- Charts --}}
     <div class="chart-grid">
         <div class="chart-panel">
@@ -276,11 +315,33 @@
             <span class="panel-badge">LIVE</span>
         </div>
         <div class="panel-body">
-            <div class="forecast-text">{!! $forecastHtml !!}</div>
+            @if ($forecastHtml === null)
+                {{-- Walang teknikal na detalye dito; nasa log iyon. Nananatiling
+                     nakikita ang historical chart sa itaas — iyon ang tunay na
+                     datos, at hindi ito nakadepende sa AI. --}}
+                <div class="ai-unavailable">
+                    <i class="bi bi-cloud-slash"></i>
+                    <div>
+                        <strong>No forecast has been written yet.</strong>
+                        <p>The forecasting service didn't respond the last time it was asked. The
+                           historical booking and revenue figures above come straight from your own
+                           records and are unaffected — press <em>Refresh Forecast</em> to try again.</p>
+                    </div>
+                </div>
+            @else
+                <div class="forecast-text">{!! $forecastHtml !!}</div>
+            @endif
         </div>
         <div class="text-muted-theme" style="padding: 14px 24px; border-top: 1px solid var(--border); font-size: 14px;">
             <i class="bi bi-info-circle me-1"></i>
             Forecast is generated based on your historical booking and revenue data. Use as a guide only.
+            @if ($generatedAt)
+                {{-- Mahalagang makita ang edad: ang report ay hindi na muling
+                     ginagawa kada bisita, kaya kung walang petsa rito ay
+                     aakalaing bago ito palagi. --}}
+                Written <strong>{{ $generatedAt->diffForHumans() }}</strong>
+                ({{ $generatedAt->format('M d, Y g:i A') }}) — press <em>Refresh Forecast</em> to rewrite it.
+            @endif
             This page is the <strong>outlook</strong> — for what to actually do about it, with the peso value of each
             option worked out, see <a href="{{ route('admin.prescriptive.index') }}">Recommendations</a>.
         </div>

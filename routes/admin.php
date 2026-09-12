@@ -109,11 +109,17 @@ Route::delete('reviews/{review}',             [ReviewController::class, 'destroy
     Route::put('profile', [ProfileController::class, 'update'])->name('profile.update');
     Route::put('profile/password', [ProfileController::class, 'updatePassword'])->name('profile.password');
 
-    //Insights
+    // Insights / Forecast — ang GET ay BUMABASA lang ng huling naitabing
+    // report (`AiReportStore`); ang POST refresh lang ang tumatawag sa Groq.
+    // Kaya POST: ang dating "Refresh" ay isang <a href> papunta sa mismong
+    // GET, kaya walang pinagkaiba ang pagpindot nito sa karaniwang
+    // pag-navigate — bawat bisita ay isang request sa Groq. Tingnan ang
+    // `prescriptive.regenerate` sa ibaba: matagal nang ganito ang hugis noon.
     Route::get('/insights', [InsightsController::class, 'index'])->name('insights.index');
+    Route::post('/insights/refresh', [InsightsController::class, 'refresh'])->name('insights.refresh');
 
-    // Forecast
     Route::get('/forecast', [ForecastController::class, 'index'])->name('forecast.index');
+    Route::post('/forecast/refresh', [ForecastController::class, 'refresh'])->name('forecast.refresh');
 
     // Prescriptive Analytics — ADMIN LANG, tulad ng Promotions. Ang mga
     // aksyon dito ang gumagawa ng totoong Discount/AvailabilityBlock, at

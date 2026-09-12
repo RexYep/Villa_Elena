@@ -53,13 +53,15 @@ class ReviewModerationService
         Review content: "{$content}"
         PROMPT;
 
-        $response = trim($this->ai->ask($prompt));
+        $response = $this->ai->ask($prompt);
 
-        if ($response === '' || str_starts_with($response, 'API Error:')) {
+        if ($response === null) {
             // AI unavailable — fail open to the pre-existing manual-review flow
             // rather than guessing either way.
             return ['approved' => false, 'reason' => null];
         }
+
+        $response = trim($response);
 
         $firstLine = trim(strtok($response, "\n"));
 

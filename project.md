@@ -1,12 +1,166 @@
 # Villa Elena Private Rental Resort
 ## Resort Management System — Project Documentation
 
-**Version:** 7.4
+**Version:** 7.5
 **Stack:** PHP 8.2 / Laravel 12 / MySQL 8 / Bootstrap 5
 **Local URL:** `http://127.0.0.1:8000` (`php artisan serve`) or `http://localhost:8000` (Docker — see v5.3)
 **Live URL:** `https://villa-elena.onrender.com` (Render, free tier — testing only, not yet handed to real guests)
 **Database (local):** `villa_elena_db` (MySQL, XAMPP or standalone MySQL — same database either way)
 **Database (live):** Aiven MySQL free tier, database `defaultdb`
+
+---
+
+## What Changed in v7.5 (Read This First)
+
+### Insights and Forecast no longer call Groq on every page visit
+
+Both pages called `GeminiService::ask()` inline in `index()`, so every navigation into them — sidebar
+click, browser back, a second admin opening the same tab — spent a Groq request. Measured with a faked
+endpoint: **3 visits, 3 calls**, on each page. `/admin/prescriptive` was already correct (0 calls; it reads
+what `prescriptive:generate` last wrote), and its own comment already named these two as the pages still
+getting it wrong.
+
+The "Refresh Insights" / "Refresh Forecast" buttons could not have helped: both were `<a href>` links
+pointing at the page's own GET route, which is byte-for-byte the same request as ordinary navigation.
+
+**`App\Services\AiReportStore`** now holds the generated text, and the GET only reads it:
+
+| | Before | After |
+|---|---|---|
+| Page visit | 1 Groq call | 0 — reads the stored report (2.11s → 0.03s, measured) |
+| Refresh button | `<a href>` to the same GET (a no-op) | `POST /admin/{insights,forecast}/refresh`, the only path that calls Groq |
+| Nothing stored yet | n/a | generates once, then never again until Refresh |
+| Refresh while Groq is down | n/a | previous report kept, error flash, page shows its age |
+| Refresh spammed | n/a | 1 per minute per admin (`ThrottlesAiRefresh`), 0 calls, friendly wait message |
+
+Decisions worth keeping:
+
+- **`Cache::store('database')`, not the default store.** Production is `CACHE_STORE=failover`
+  (`['redis', 'database']`) on the free Render Key Value plan, which doesn't persist. On the default store a
+  Redis restart or an `allkeys-lru` eviction silently drops the report and the next admin pays for a fresh
+  generation — quietly reintroducing what this removes.
+- **Not the `settings` table**, where `BriefingWriter` keeps its (short) briefing. `Setting::get()` loads every
+  setting as one blob on every public page via `CheckMaintenanceMode` — 762 bytes across 39 rows today. A
+  forecast report is ~2.8KB of Markdown, and every guest hitting the landing page would carry it.
+- **Stored forever, no TTL.** A TTL is a timer that spends money on nobody's behalf. The view shows the
+  report's age instead, so staleness is visible rather than guessed at.
+- **A failed generation is never stored**, so a bad minute doesn't become a permanently empty page that only a
+  Refresh click could clear. `AiReportStore::refresh()` returns NULL for "not regenerated" so the controller can
+  say so without comparing timestamps — those are second-resolution and would read equal, hence "failed".
+- The stat tiles and the historical chart are **still live DB queries on every visit**. Only the AI's prose is
+  stored. Cheap data should stay fresh.
+
+Relevant to the `rate_limit_exceeded … on output tokens per minute (OTPM)` errors in the Groq console: the
+forecast declares `max_tokens: 2048`, the largest single request in the app, which makes it the first thing
+refused when the per-minute output budget is tight. Note the OTPM ceiling is **not** a fixed property of a
+model — a fresh 2048 request succeeds on `gpt-oss-120b`, `gpt-oss-20b` and `qwen3.6-27b` — so don't "fix" it by
+lowering `max_tokens` without a measurement showing that helps. Page-visit-driven calls were what drained the
+budget; that is what this change removes.
+
+**Verified with real Groq calls, not only fakes** — one generation then three cached visits, timings above,
+`generated_at` unchanged across them.
+
+> Harness note, because it cost time: `Http::fake()` **merges** stubs rather than replacing them, and only
+> resets `recorded`. Calling `Http::fake()` a second time to switch a test from "AI up" to "AI down" does not
+> work — the first stub still answers, and the resulting "caching is broken" reading is an artifact. Use one
+> stub whose behaviour you flip.
+
+---
+
+### A CSS comment is not a Blade comment — three admin pages were 500ing
+
+`/admin/prescriptive` (Recommendations), `/admin/users` and `/admin/properties/{id}` all died with:
+
+```
+ArgumentCountError
+Too few arguments to function Illuminate\Foundation\Vite::__invoke(), 0 passed … and at least 1 expected
+```
+
+The cause is one line of **prose**, inside a `/* … */` CSS comment inside `@push('styles')`:
+
+```css
+/* … Descendant selector to beat admin.css's own .table-card rule regardless of which order the
+   two sheets land in (@vite emits its link before @stack('styles') in production, but
+   `composer dev` injects admin.css afterwards). */
+```
+
+Blade does not parse CSS. It scans the whole file for `@directive` and compiles every one it finds,
+wherever it sits — a CSS comment, a `<script>` block, an HTML attribute. So that line compiled to:
+
+```php
+two sheets land in (<?php echo app('Illuminate\Foundation\Vite')(); ?> emits its link before
+<?php echo $__env->yieldPushContent('styles'); ?> in
+```
+
+A bare `@vite` (no parentheses) compiles to an `__invoke()` call with **zero** arguments, and `Vite::__invoke()`
+requires at least one — hence the error, at compiled line 321, which is what the stack trace names.
+
+**Fix: escape the `@` as `@@`** (`@@vite`, `@@stack('styles')`), which Blade renders as literal `@vite` text.
+The comment still reads the way it was meant to.
+
+This is the same class of bug as the v5.9 `{{ payment_status }}`-in-a-CSS-comment one, and it has the same
+tell: `Blade::compileString()` says the view is fine, because the *compiled* output is valid PHP. Only an
+actual render catches it. All three pages were rendered through the HTTP kernel, unfixed and fixed — 500
+before, 200 after.
+
+To sweep for it, the directives that take arguments must never appear bare:
+
+```bash
+LC_ALL=C.UTF-8 grep -rnP '@(vite|stack|include|extends|yield|push|each|json|method|class|style|inject|lang|choice|props|can|section)(?![\w(@])' resources/views --include=*.blade.php
+```
+
+(`@empty`, `@forelse`, `@unless`, `@csrf` and friends legitimately appear bare — ignore those hits.)
+
+---
+
+### The AI's error text is no longer what the user reads
+
+`GeminiService::ask()` used to return the provider's failure as if it were the model's reply:
+
+```php
+return 'API Error: '.$response->status().' — '.$response->body();
+```
+
+Every caller renders whatever `ask()` hands back, so on any Groq failure the guest chat bubble showed
+`API Error: 429 — {"error":{"message":"Rate limit reached for model openai/gpt-oss-20b in organization org_01j…"}}`,
+and `/admin/insights` and `/admin/forecast` rendered the same body as their "report" (the forecast even ran it
+through the Markdown converter first). This is the one loose end left by the v5.8 fix, which added logging but
+deliberately kept the error-string return because the fail-open review moderation was matching on the
+`'API Error:'` prefix.
+
+Three separate problems with that, in order of how much they matter:
+
+1. **It leaks internals to the public.** The chatbot is unauthenticated. Groq's error body carries the model id,
+   the organisation id, rate-limit windows and quota figures — none of it the guest's business, all of it useful
+   to someone probing the site. This is ordinary information exposure through an error message (CWE-209).
+2. **It is unusable as a message.** Nobody outside this repo — guest or admin — can act on `400 model_not_found`.
+   The user needs to know what is missing, what still holds, and what to do next.
+3. **It read as if the villa said it.** In the chatbot the error arrived styled as Elena's reply, and the front end
+   pushed it into `history`, so the next prompt was primed with the villa apologising in machine language.
+
+**`ask()` now returns `?string` — the reply, or `NULL` when the call failed or came back empty.** The full status
+and body still go to the log (`Groq API call failed`, unchanged); only the return value changed. NULL, rather than
+a message, because the right wording differs per surface, and that is the caller's decision, not the service's:
+
+| Surface | On NULL |
+|---|---|
+| Chatbot (`Portal\ChatbotController`) | *"Sorry, I'm having trouble replying right now. Please try again in a moment — or message us directly…"* plus `ok => false` in the JSON, which tells the front end **not** to push the message into `history` |
+| `/admin/insights` | Panel shows "Insights are unavailable right now" — the booking/revenue tiles above it are unaffected and still shown |
+| `/admin/forecast` | Panel shows "The forecast is unavailable right now" — the historical chart is real data and stays |
+| `ReviewModerationService` | Unchanged behaviour: fails open to the manual approval queue (now a `=== null` check instead of a string-prefix match) |
+| `Prescriptive\BriefingWriter` | Unchanged behaviour: stores an empty briefing, page renders without one |
+
+The `'API Error:'` and `'No insights returned.'` sentinel strings are **gone**. Don't reintroduce them: a sentinel
+that only works if every caller remembers to string-match it is not a guard — two of the five callers never did,
+and those two were the user-facing ones. `?string` makes the failure case impossible to render by accident.
+
+An empty reply (a 200 with no content) now also returns NULL and logs `Groq API returned an empty reply`, so
+"the model said nothing" stops being indistinguishable from "the model said `No insights returned.`".
+
+**Verified against a real 401**, not a fake: with an invalid key in config, `ask()` returned NULL, the body landed
+in `laravel.log`, `classifyWithAi()` failed open, and a real `ChatbotController::reply()` call returned
+`ok=false` with the apology, while the same call on the live key returned `ok=true` and a normal availability
+answer. Both admin views were rendered in both states.
 
 ---
 
@@ -3129,6 +3283,10 @@ GROQ_MODEL=openai/gpt-oss-20b
 ],
 ```
 
+**Return contract (v7.5):** `ask()` returns `?string` — the model's reply, or `NULL` when the call failed or came
+back empty. It never returns the provider's error text as the reply; status and body go to the log only. Each
+caller decides what the user sees on NULL (see v7.5 above). Don't reintroduce a sentinel string.
+
 | Provider | Status | Reason |
 |---|---|---|
 | Gemini 2.0 Flash | ❌ | Free quota exhausted |
@@ -3530,6 +3688,9 @@ DELETE /my/profile/devices/{device}           customer.profile.devices.destroy  
 
 | Issue | Cause | Fix Applied |
 |---|---|---|
+| **(v7.5)** Every visit to `/admin/insights` and `/admin/forecast` spent a Groq request, exhausting the per-minute output-token budget | Both controllers called `GeminiService::ask()` inline in `index()`, with no cache — 3 visits measured as 3 calls on each page. The "Refresh" buttons were `<a href>` links to the page's own GET route, so they were indistinguishable from ordinary navigation and could not have helped | `AiReportStore` keeps the generated text in `Cache::store('database')`; GET reads it (2.11s → 0.03s), `POST …/refresh` is the only path that calls Groq, throttled to 1/min per admin. A failed generation is never stored and never blanks an existing report; the view shows the report's age |
+| **(v7.5)** `/admin/prescriptive`, `/admin/users` and `/admin/properties/{id}` all returned a 500 — `ArgumentCountError: Too few arguments to function Illuminate\Foundation\Vite::__invoke(), 0 passed` | A **CSS** comment inside `@push('styles')` mentioned `@vite` and `@stack('styles')` in its prose. Blade has no idea CSS comments exist — it compiles `@directive` anywhere in the file — so bare `@vite` compiled to `app('Illuminate\Foundation\Vite')()` and ran, inside what the author believed was a comment | Escaped as `@@vite` / `@@stack(...)`, which Blade renders as literal text. Verified by rendering all three pages through the HTTP kernel: 500 before, 200 after |
+| **(v7.5)** Groq's raw error body was shown to guests and admins as if it were the AI's answer | `GeminiService::ask()` returned `'API Error: '.$status.' — '.$body` as its reply, and every caller renders what it gets — so a rate-limited chatbot showed the guest the model id, org id and quota figures out of Groq's JSON, and insights/forecast rendered the same body as their report. The v5.8 fix kept the string return because review moderation matched on the `'API Error:'` prefix; the two user-facing callers never matched on anything | `ask()` returns `?string` — reply, or `NULL` on failure or empty content — with status and body logged as before. Each surface writes its own message: the chatbot apologises and sets `ok => false` (so the front end keeps it out of `history`), both admin panels show an "unavailable" state while keeping the real figures/chart around it. Sentinels `'API Error:'` and `'No insights returned.'` removed |
 | **(v7.2)** All images across the site vanished for stretches of an hour at a time | Every `$image->url` / `profile_image_url` called `Storage::disk('public')->url()`, and the Cloudinary adapter's `getUrl()` is a **live Admin API call per image, per render** (`adminApi()->asset()`). The free tier allows 500/hour, and one page load costs 6–8, so ordinary browsing exhausted it — then `Rate Limit Exceeded` until the next hour, which the v5.3 try/catch quietly turned into `null` | `App\Helpers\MediaUrlHelper::resolve()` builds the delivery URL locally (`res.cloudinary.com/{cloud}/image/upload/v1/{public_id}`) with **zero API calls**; all three accessors delegate to it. Its `prepareResource()` mirrors the adapter's exactly, since that produced the `public_id` at upload time |
 | **(v7.1)** Nothing stopped a guest being charged twice on a slow connection | Every `POST /pay/{booking}/checkout` unconditionally created a new PayMongo session and overwrote `paymongo_session_id`, and the Pay button was a plain submit with no disable-on-click — a second click meant a second live QR for one booking | `createCheckout()` holds a `Cache::lock` per booking and reuses a still-open session (or redirects to `payment.success` if it turns out already paid) instead of creating a second; button disables on submit and re-enables from bfcache; route throttled at 8/min |
 | **(v7.1)** A stale checkout page could charge a fully-paid booking | `showPaymentPage()` guarded `balance_due <= 0` but `createCheckout()` never re-checked — and the deposit is a percentage of `total_amount`, not of the balance, so it stayed non-zero after full payment | `createCheckout()` re-reads the booking inside the lock, refuses when nothing is due, and caps the deposit at `min($depositAmount, $balance_due)` |

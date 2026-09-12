@@ -62,12 +62,12 @@ class BriefingWriter
             return null;
         }
 
-        // Ibinabalik ng `GeminiService::ask()` ang mismong error bilang
-        // string sa halip na mag-throw — kailangan iyon ng fail-open na
-        // review moderation. Dito, ang isang error na ipinakitang briefing
-        // ay mukhang sinabi ng sistema, kaya hayagan itong sinasala.
-        if ($reply === '' || str_starts_with($reply, 'API Error:') || $reply === 'No insights returned.') {
-            Log::warning('Prescriptive briefing unavailable: '.$reply);
+        // Nagbabalik ng NULL ang `GeminiService::ask()` kapag hindi tumugon
+        // ang AI, sa halip na mag-throw — kailangan iyon ng fail-open na
+        // review moderation. Dito, walang briefing na ipinapakita kaysa sa
+        // isang mensaheng mukhang sinabi mismo ng sistema.
+        if ($reply === null || trim($reply) === '') {
+            Log::warning('Prescriptive briefing unavailable — the AI returned no reply.');
             $this->store('');
 
             return null;
