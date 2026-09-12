@@ -51,13 +51,34 @@ Real landing page on local `php -S` (a slow Windows dev server, so the absolute 
 
 If Redis is down at the moment a setting is saved, the cache clear lands on MySQL, and Redis still holds the old value when it comes back, for up to the 1-hour TTL. There is no shell on Render to flush it; re-saving the setting in Admin → Settings clears it.
 
-### Verifying production after the deploy
+### Verified in production (2026-09-11)
 
-```bash
-php artisan tinker --execute="echo DB::connection('aiven')->table('cache')->where('key', 'like', '%settings_all%')->count();"
+Checked from a dev machine through the `aiven` connection, since Render has no shell:
+
+1. **Deleted the one `settings_all` row from the Aiven `cache` table.** It had been written while the new code ran with `CACHE_STORE` still `database`. A valid copy there satisfies a fallback read without writing anything, so leaving it in place would have hidden a Redis failure. Merely finding "no new rows" proves nothing.
+2. Loaded `/`, `/login`, `/` on the live site (all 200).
+3. **Re-read the table: `settings_all` did not come back, and nothing new was written.** Under `failover`, the only way a settings read leaves MySQL untouched is Redis answering it. The old `setting_*` rows weren't refreshed either, so the pre-v7.4 code isn't running.
+
+Repeat this check (delete the row, load pages, look again) whenever Redis is in doubt. A row that reappears means the site is falling back, and Render's log will show `fell back to the next store` with the reason. The expired `setting_*` and `admin_dashboard_stats` rows still in the Aiven table are harmless: the `database` store ignores expired rows but never deletes them.
+
+Right after the deploy, four page loads took about 22 s each. Minutes later the same pages took 0.9–2 s, the same as a route that never touches the cache (an email-verify link with a bad signature: 0.9–1.0 s). That was a **free-tier cold start**, not the cache: Render's free web services spin down when idle (`WARN received SIGQUIT indicating exit request` from supervisord in the log) and the next visitor waits out the container boot. That window's log holds no `fell back to the next store` line.
+
+### Also found while verifying: production broadcasts were dead
+
+From Render's log, 2026-09-11 23:32, right after booking #12 was made online:
+
+```
+production.ERROR: Failed to broadcast BookingCreated (online booking): SQLSTATE[42S02]:
+Base table or view not found: 1146 Table 'defaultdb.jobs' doesn't exist
 ```
 
-`0` means production reads settings from Redis. `1` means it fell back to MySQL at least once, so search Render's log for `fell back to the next store`. What legitimately remains in the Aiven `cache` table: the old `setting_*` entries (gone within an hour). Checkout locks come and go in `cache_locks`.
+All seven events in `app/Events/` implement **`ShouldBroadcast`**, which is *queued*: Laravel inserts a `BroadcastEvent` job instead of calling Pusher inline. `config/queue.php` fell back to `env('QUEUE_CONNECTION', 'database')`; the hand-created Render service never set `QUEUE_CONNECTION` (`render.yaml` declares `sync`, but that file has never been applied to that service); and **no `jobs` table or migration has ever existed in this project** — confirmed absent from both databases. So every broadcast threw, was swallowed by its `try/catch` + `Log::error()`, and Pusher heard nothing. The admin bell, the live dashboard and availability updates were dead in production while working perfectly in local dev, where `.env` has `QUEUE_CONNECTION=sync`.
+
+The config default is now **`env('QUEUE_CONNECTION', 'sync')`**. No queue worker runs anywhere in this deployment (`docker/supervisord.conf` starts only nginx + php-fpm), so `database` is never a correct fallback here: it converts a working feature into a silent one. Also set `QUEUE_CONNECTION=sync` explicitly in the Render dashboard, which fixes it without waiting on a deploy.
+
+**Adding a `jobs` table instead would have been worse**: rows would pile up with nothing to process them, so broadcasts still would never arrive — and without an error next time.
+
+Unrelated to the cache change; found only because the cache work sent us to the Render log. `App\Mail\ContactFormSubmitted` imports `ShouldQueue` but does not implement it, so mail was never queued and never affected.
 
 ---
 

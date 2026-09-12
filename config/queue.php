@@ -13,7 +13,13 @@ return [
     |
     */
 
-    'default' => env('QUEUE_CONNECTION', 'database'),
+    // 'sync', not Laravel's 'database' default: no queue worker runs anywhere in
+    // this project (Render's free plan has no worker service, and
+    // docker/supervisord.conf starts only nginx + php-fpm), and no 'jobs' table
+    // or migration has ever existed. With 'database', every ShouldBroadcast event
+    // threw "Table 'jobs' doesn't exist" and Pusher heard nothing — silently,
+    // since those call sites catch and log. See project.md v7.4.
+    'default' => env('QUEUE_CONNECTION', 'sync'),
 
     /*
     |--------------------------------------------------------------------------
