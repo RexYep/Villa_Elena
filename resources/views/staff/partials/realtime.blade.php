@@ -58,6 +58,11 @@
     const pusher  = new Pusher(PUSHER_KEY, { cluster: PUSHER_CLUSTER });
     const channel = pusher.subscribe('staff-frontdesk');
 
+    // Para sa mga page na kailangang makinig sa sariling event sa iisang
+    // koneksiyon (hal. ang Availability grid) — hindi nagbubukas ng ikalawa.
+    window.rtStaffChannel = channel;
+    document.dispatchEvent(new CustomEvent('staff:realtime-ready', { detail: { channel } }));
+
     channel.bind('frontdesk.updated', function (data) {
         showFdToast(data);
 

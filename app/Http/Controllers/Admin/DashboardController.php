@@ -4,10 +4,10 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\Booking;
-use App\Models\Payment;
 use App\Models\Property;
 use App\Models\Recommendation;
 use App\Models\User;
+use App\Services\DashboardStats;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 
@@ -19,43 +19,28 @@ class DashboardController extends Controller
         // rarely need to be to-the-second fresh, so a short TTL cache cuts
         // repeat-load DB traffic without stats visibly going stale.
         $stats = Cache::remember('admin_dashboard_stats', 60, function () {
+            // Ang mga numerong kusang nag-a-update (5 KPI + 2 chart) ay
+            // HINDI rito — nasa DashboardStats::kpis(), sariwa. Dating
+            // nadoble dito, at ang cache na kopya ay ang dahilan kung bakit
+            // ang refresh ay kayang magpakita ng lumang numero matapos ang
+            // live na update. Iisang kopya ngayon.
             return [
-                'total_bookings' => Booking::count(),
                 'todays_checkins' => Booking::whereDate('check_in_date', today())
                     ->where('status', 'confirmed')->count(),
                 'todays_checkouts' => Booking::whereDate('check_out_date', today())
                     ->where('status', 'checked_in')->count(),
-                'pending_bookings' => Booking::where('status', 'pending')->count(),
-                'total_guests' => User::where('role', 'customer')->count(),
                 'total_properties' => Property::count(),
                 'current_guest' => Booking::where('status', 'checked_in')
                     ->with('user:id,full_name')
                     ->latest('check_in_date')
                     ->first(),
-                'revenue_today' => Payment::whereDate('payment_date', today())
-                    ->where('payment_type', '!=', 'refund')
-                    ->sum('amount'),
-                'revenue_this_month' => Payment::whereMonth('payment_date', now()->month)
-                    ->whereYear('payment_date', now()->year)
-                    ->where('payment_type', '!=', 'refund')
-                    ->sum('amount'),
-                'revenue_by_month' => collect(range(5, 0))->map(function ($i) {
-                    $month = now()->subMonths($i);
-                    $amount = Payment::whereYear('payment_date', $month->year)
-                        ->whereMonth('payment_date', $month->month)
-                        ->where('payment_type', '!=', 'refund')
-                        ->sum('amount');
-
-                    return ['label' => $month->format('M'), 'amount' => (float) $amount];
-                })->values()->toArray(),
-                'booking_sources' => collect(['online' => 0, 'walk_in' => 0, 'phone' => 0, 'partner' => 0])
-                    ->merge(
-                        Booking::selectRaw('source, COUNT(*) as count')
-                            ->groupBy('source')
-                            ->pluck('count', 'source')
-                    )->toArray(),
             ];
         });
+
+        // Ang mga live na numero ay sariwa, sa labas ng cache — tingnan ang
+        // DashboardStats::kpis() kung bakit.
+        $kpis = DashboardStats::kpis();
+        $stats = array_merge($stats, $kpis);
 
         // SADYANG NASA LABAS ng `Cache::remember` sa itaas. Ang mga KPI ay
         // maaaring maluma nang isang minuto nang walang masamang epekto,
@@ -69,6 +54,17 @@ class DashboardController extends Controller
             ->get();
 
         return view('admin.dashboard.index', compact('stats', 'topActions'));
+    }
+
+    // ── Live KPIs ──────────────────────────────────────────────────
+    // GET /admin/dashboard/stats
+    //
+    // Tinatanong ng dashboard kapag may `stats.changed` (o anumang event
+    // ng booking/bayad), at tuwing 60s bilang salo kapag patay ang Pusher.
+    // Ang AWTORIDAD — ang event ay hindi nagdadala ng numero.
+    public function stats()
+    {
+        return response()->json(DashboardStats::kpis());
     }
 
     // ── Global Search ──────────────────────────────────────────────

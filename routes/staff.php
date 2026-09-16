@@ -16,6 +16,10 @@ Route::prefix('staff')
 
     // Slot-by-slot availability grid (Day/Night per date)
     Route::get('/availability',                 [FrontDeskController::class, 'availability'])->name('availability');
+    // Ang grid lang, para sa kusang pag-update (v7.10)
+    Route::get('/availability/grid',            [FrontDeskController::class, 'availabilityGrid'])
+        ->middleware('throttle:60,1')
+        ->name('availability.grid');
 
     // Check in / out
     Route::patch('/checkin/{booking}',          [FrontDeskController::class, 'checkIn'])->name('checkin');

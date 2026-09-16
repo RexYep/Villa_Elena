@@ -218,6 +218,59 @@ class Booking extends Model
             $booking->slot_hold = null;
             $booking->syncOriginalAttribute('slot_hold');
         });
+
+        // Live na KPI ng admin dashboard (Pending / Total Bookings).
+        //
+        // Dito sa model, hindi sa mga controller: ang Pending Bookings ay
+        // dating nababawasan LANG kapag binago ng admin ang status sa
+        // booking page, dahil iyon ang tanging lugar na nagpapadala.
+        // Ang kumpirmasyon dahil sa bayad, check-in/out sa front desk,
+        // at awtomatikong pagkansela ay tahimik na nagbabago ng status —
+        // kaya nanatili ang "1" hanggang sa refresh. Sinasalo rito ang
+        // bawat daanan, kasama ang mga hindi pa naisusulat.
+        //
+        // Ang touch() ay iisang broadcast kada request anuman ang bilang
+        // ng save, kaya ligtas dito.
+        static::saved(function ($booking) {
+            // `source` para sa Booking Sources chart (v7.9) — ang pag-edit
+            // ng pinagmulan ay nagbabago sa donut nang walang anumang status.
+            if ($booking->wasRecentlyCreated || $booking->wasChanged(['status', 'source'])) {
+                \App\Services\DashboardStats::touch();
+            }
+
+            // Live na staff Availability grid. Ang status ay binabantayan
+            // dahil ang kinanselang booking ay nagpapalaya ng slot; ang mga
+            // petsa/oras dahil ang reschedule at ang calendar drag-move ay
+            // naglilipat ng slot nang walang anumang status.
+            if ($booking->wasRecentlyCreated || $booking->wasChanged([
+                'status', 'property_id',
+                'check_in_date', 'check_in_time', 'check_out_date', 'check_out_time',
+            ])) {
+                static::touchAvailability();
+            }
+        });
+
+        static::deleted(function () {
+            \App\Services\DashboardStats::touch();
+            static::touchAvailability();
+        });
+
+        static::restored(function () {
+            \App\Services\DashboardStats::touch();
+            static::touchAvailability();
+        });
+    }
+
+    /**
+     * Ipaalam sa staff Availability page na kunin muli ang grid.
+     * Iisa kada request — tingnan ang BroadcastOnce.
+     */
+    public static function touchAvailability(): void
+    {
+        \App\Services\BroadcastOnce::dispatch(
+            'staff-availability',
+            fn () => new \App\Events\StaffAvailabilityChanged
+        );
     }
 
     /**

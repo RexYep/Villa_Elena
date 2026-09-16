@@ -178,21 +178,7 @@ class FrontDeskController extends Controller
     // malaman kung aling kalahati ng araw ang kuha.
     public function availability(Request $request)
     {
-        $villa = Property::where('type', 'villa')->first();
-
-        abort_if(! $villa, 404, 'No villa record found.');
-
-        $days = 14;
-
-        // Naka-clamp sa ngayon pababa — walang saysay sa frontdesk ang
-        // makakita ng availability sa nakaraan.
-        $start = $request->filled('start')
-            ? \Carbon\Carbon::parse($request->start)->startOfDay()
-            : today();
-
-        if ($start->lt(today())) {
-            $start = today();
-        }
+        [$villa, $start, $days] = $this->availabilityRange($request);
 
         $grid = $this->buildSlotGrid($villa, $start, $days);
 
@@ -207,6 +193,47 @@ class FrontDeskController extends Controller
                 : $start->copy()->subDays($days)->format('Y-m-d'),
             'nextDate' => $start->copy()->addDays($days)->format('Y-m-d'),
         ]);
+    }
+
+    // GET /staff/availability/grid?start=
+    //
+    // Ang grid LANG, para sa kusang pag-update ng Availability page. Dating
+    // iginuguhit minsan: ang slot na na-book o kinansela matapos na-load ang
+    // page ay nanatiling "Available" hanggang i-reload. Tinatawag kapag may
+    // `availability.changed`, at tuwing 60s — sakop ng huli ang mga
+    // pagbabagong WALANG event: expired na unpaid hold at slot na lumipas.
+    //
+    // Iisang partial at iisang buildSlotGrid() sa page, kaya ang update ay
+    // hindi puwedeng sumalungat sa reload.
+    public function availabilityGrid(Request $request)
+    {
+        [$villa, $start, $days] = $this->availabilityRange($request);
+
+        return view('staff._availability_grid', [
+            'grid' => $this->buildSlotGrid($villa, $start, $days),
+        ]);
+    }
+
+    /**
+     * Ang villa, ang unang araw (naka-clamp sa ngayon pababa — walang saysay
+     * sa frontdesk ang makakita ng availability sa nakaraan), at ang bilang
+     * ng araw. Pinagsasaluhan ng page at ng grid endpoint para magkatugma.
+     */
+    private function availabilityRange(Request $request): array
+    {
+        $villa = Property::where('type', 'villa')->first();
+
+        abort_if(! $villa, 404, 'No villa record found.');
+
+        $start = $request->filled('start')
+            ? \Carbon\Carbon::parse($request->start)->startOfDay()
+            : today();
+
+        if ($start->lt(today())) {
+            $start = today();
+        }
+
+        return [$villa, $start, 14];
     }
 
     /**

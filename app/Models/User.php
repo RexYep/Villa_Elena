@@ -74,6 +74,26 @@ class User extends Authenticatable implements MustVerifyEmail
 {
     use HasFactory, MustVerifyEmailTrait, Notifiable;
 
+    /**
+     * Live na Total Guests sa admin dashboard (tingnan ang DashboardStats).
+     *
+     * Sinasadyang MAKITID ang kondisyon: ang User ay sine-save sa bawat
+     * login, 2FA, pag-update ng profile at iba pa. Ang bilang ng guest ay
+     * nagbabago LANG kapag may bagong account (pagrehistro, walk-in, admin)
+     * o binago ang role — kung hindi, bawat login ay magiging broadcast
+     * sa Pusher na walang anumang binago.
+     */
+    protected static function booted(): void
+    {
+        static::saved(function ($user) {
+            if ($user->wasRecentlyCreated || $user->wasChanged('role')) {
+                \App\Services\DashboardStats::touch();
+            }
+        });
+
+        static::deleted(fn () => \App\Services\DashboardStats::touch());
+    }
+
     protected $fillable = [
         'full_name',
         'email',

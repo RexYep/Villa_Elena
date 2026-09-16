@@ -35,6 +35,17 @@ class AvailabilityBlock extends Model
 {
     use HasFactory;
 
+    /**
+     * Ang block na idinagdag o inalis ng admin (calendar, property page,
+     * prescriptive action) ay nagbabago sa staff Availability grid — dito
+     * sa model para sakop ang bawat isa ng mga daanang iyon.
+     */
+    protected static function booted(): void
+    {
+        static::saved(fn () => Booking::touchAvailability());
+        static::deleted(fn () => Booking::touchAvailability());
+    }
+
     protected $fillable = [
         'property_id',
         'start_date',

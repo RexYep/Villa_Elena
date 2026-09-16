@@ -118,74 +118,8 @@
         <div class="legend-item"><span class="legend-dot dot-past"></span> Already passed</div>
     </div>
 
-    <div class="grid-card">
-        <div class="grid-head">
-            <div>Date</div>
-            <div>Day — 8:00 AM to 5:00 PM</div>
-            <div>Night — 7:00 PM to 6:00 AM</div>
-        </div>
-
-        @foreach($grid as $row)
-        <div class="grid-row {{ $row['is_today'] ? 'today' : '' }}">
-            <div class="date-cell">
-                <div class="date-day">{{ $row['date']->format('M j') }}</div>
-                <div class="date-dow">{{ $row['date']->format('l') }}</div>
-                @if($row['is_today'])
-                    <span class="today-tag">Today</span>
-                @endif
-            </div>
-
-            @foreach($row['slots'] as $slotKey => $slot)
-                <div class="slot-cell" data-slot="{{ ucfirst($slotKey) }}">
-                    @if($slot['state'] === 'free')
-                        <a class="slot-box free"
-                           href="{{ route('staff.walkin', ['date' => $row['date']->format('Y-m-d'), 'slot' => $slotKey]) }}"
-                           title="Book this slot for {{ $row['date']->format('M j, Y') }}">
-                            <span class="slot-icon"><i class="bi bi-plus-lg"></i></span>
-                            <span class="slot-text">
-                                <span class="slot-state">Available</span>
-                                <span class="slot-sub d-block">
-                                    @if ($slot['promo'])
-                                        {{-- Ang tinatawid ay ang list price; ang presyong sinisingil
-                                             ay ang nasa gilid nito. Ito ang sinasabi ni staff sa guest. --}}
-                                        <s style="opacity:.55;">₱{{ number_format($slot['base'], 2) }}</s>
-                                        <strong>₱{{ number_format($slot['price'], 2) }}</strong>
-                                        · {{ $slot['promo'] }}
-                                    @else
-                                        ₱{{ number_format($slot['price'], 2) }} · book now
-                                    @endif
-                                </span>
-                            </span>
-                        </a>
-                    @else
-                        <div class="slot-box {{ $slot['state'] }}">
-                            <span class="slot-icon">
-                                @if($slot['state'] === 'booked')
-                                    <i class="bi bi-person-fill"></i>
-                                @elseif($slot['state'] === 'blocked')
-                                    <i class="bi bi-lock-fill"></i>
-                                @else
-                                    <i class="bi bi-dash-lg"></i>
-                                @endif
-                            </span>
-                            <span class="slot-text">
-                                <span class="slot-state">
-                                    @if($slot['state'] === 'booked') Booked
-                                    @elseif($slot['state'] === 'blocked') Blocked
-                                    @else Passed @endif
-                                </span>
-                                @if($slot['guest'])
-                                    <span class="slot-sub d-block">{{ $slot['guest'] }} · {{ $slot['label'] }}</span>
-                                @elseif($slot['state'] === 'blocked')
-                                    <span class="slot-sub d-block">{{ $slot['label'] }}</span>
-                                @endif
-                            </span>
-                        </div>
-                    @endif
-                </div>
-            @endforeach
-        </div>
-        @endforeach
+    <div id="availabilityGrid">
+        @include('staff._availability_grid')
     </div>
 
     <div class="hint">
@@ -195,3 +129,72 @@
     </div>
 
 @endsection
+
+@push('scripts')
+<script>
+// ── Live availability grid ─────────────────────────────────────────
+//
+// Dating iginuguhit minsan: ang slot na na-book, nakumpirma, kinansela o
+// hinarangan matapos na-load ang page ay nanatiling "Available" hanggang
+// i-reload — kayang alukin ni staff ang slot na nakuha na.
+//
+// Walang panuntunan ng availability rito. Kapag may nagbago, kinukuha muli
+// ang grid mula sa server (iisang Blade partial at buildSlotGrid() sa page)
+// at ipinapalit. Kaya ang signal na nadoble, naantala o nawala ay walang
+// masamang epekto, at ang update ay hindi puwedeng sumalungat sa reload.
+(function () {
+    const wrap = document.getElementById('availabilityGrid');
+    if (!wrap) return;
+
+    const GRID_URL = @json(route('staff.availability.grid', ['start' => $start->format('Y-m-d')]));
+    let timer = null;
+    let inFlight = false;
+    let again = false;
+
+    function refresh() {
+        clearTimeout(timer);
+        // Debounce: iisang booking ay kadalasang nagsusulat nang maraming beses.
+        timer = setTimeout(function () {
+            if (inFlight) { again = true; return; }
+            inFlight = true;
+
+            fetch(GRID_URL, { headers: { 'Accept': 'text/html' }, credentials: 'same-origin' })
+                .then(function (res) {
+                    if (!res.ok) throw new Error('status ' + res.status);
+                    return res.text();
+                })
+                .then(function (html) {
+                    // Ipinapalit LANG kapag tunay na nagbago: ang 60s na salo
+                    // ay nagtatanong kahit walang pagbabago, at ang pagpalit
+                    // ng DOM sa ilalim ng daliri ni staff ay walang saysay.
+                    if (wrap.innerHTML.trim() !== html.trim()) {
+                        wrap.innerHTML = html;
+                    }
+                })
+                .catch(function () { /* susunod na signal o 60s na tick */ })
+                .finally(function () {
+                    inFlight = false;
+                    // Dumating ang signal habang nagtatanong: tanungin muli,
+                    // kung hindi ay nawawala ang pagbabagong iyon.
+                    if (again) { again = false; refresh(); }
+                });
+        }, 400);
+    }
+
+    function listen(channel) {
+        if (!channel || channel.__availabilityBound) return;
+        channel.__availabilityBound = true;
+        channel.bind('availability.changed', refresh);
+    }
+
+    // Ang staff realtime script ay nilo-load PAGKATAPOS ng script na ito.
+    if (window.rtStaffChannel) listen(window.rtStaffChannel);
+    document.addEventListener('staff:realtime-ready', function (e) { listen(e.detail.channel); });
+
+    // Salo kapag walang Pusher, at para sa mga pagbabagong walang event:
+    // expired na unpaid hold, at slot na lumipas.
+    setInterval(function () { if (!document.hidden) refresh(); }, 60000);
+    document.addEventListener('visibilitychange', function () { if (!document.hidden) refresh(); });
+})();
+</script>
+@endpush

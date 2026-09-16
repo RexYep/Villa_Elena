@@ -62,6 +62,12 @@
         color: #10b981;
     }
 
+    /* Perang papalabas — hindi dapat kamukha ng berdeng payment. */
+    .rt-icon.refund {
+        background: rgba(239, 68, 68, .18);
+        color: #ef4444;
+    }
+
     .rt-icon.property {
         background: rgba(201, 168, 76, .2);
         color: #c9a84c;
@@ -189,6 +195,81 @@
         const propertiesIndexUrl = '{{ route('admin.properties.index') }}';
         const notifOpenUrlTemplate = '{{ route('admin.notifications.open', ['notification' => '__ID__']) }}';
         const authUserId = {{ Auth::id() ?? 'null' }};
+
+        // ── Live KPIs (dashboard only) ───────────────────────────────
+        //
+        // Dating kinukuwenta rito ang mga numero: +1 kapag may bagong
+        // booking, −1 kapag binago ng admin ang status, +halaga kapag may
+        // bayad. Ganito nasira ang mga ito: ang booking na nakumpirma dahil
+        // sa bayad (o na-check-in, o awtomatikong kinansela) ay hindi
+        // kailanman nagpadala ng −1, kaya nanatili ang Pending sa 1; ang
+        // refund ay DINAGDAG sa Revenue Today; ang cash mula sa booking page
+        // o front desk ay hindi kailanman dumating; at ang Revenue This
+        // Month ay walang wiring kahit.
+        //
+        // Ngayon ay walang arithmetic dito. Anumang signal ay nangangahulugang
+        // "magtanong muli", at ang server ang sumasagot. Kaya ligtas kung
+        // dumoble ang signal (hal. booking.updated AT stats.changed para sa
+        // iisang pagbabago), maantala, o mawala. Nasa ITAAS ng PUSHER_KEY
+        // guard nang sadya: ang 60s na refetch ay ang salo kapag walang Pusher.
+        const kpiEls = document.querySelectorAll('[data-kpi]');
+        const STATS_URL = @json(route('admin.dashboard.stats'));
+        let statsTimer = null;
+        let statsInFlight = false;
+
+        function refreshStats() {
+            if (!kpiEls.length) return;
+
+            // Debounce: iisang pagbabago ay kadalasang nagpapadala ng
+            // dalawa o tatlong event magkasunod.
+            clearTimeout(statsTimer);
+            statsTimer = setTimeout(function() {
+                if (statsInFlight) return;
+                statsInFlight = true;
+
+                fetch(STATS_URL, {
+                        headers: { 'Accept': 'application/json' },
+                        credentials: 'same-origin',
+                    })
+                    .then(function(res) {
+                        if (!res.ok) throw new Error('status ' + res.status);
+                        return res.json();
+                    })
+                    .then(function(data) {
+                        kpiEls.forEach(function(el) {
+                            const next = data.formatted && data.formatted[el.dataset.kpi];
+                            if (next === undefined || el.textContent.trim() === next) return;
+
+                            el.textContent = next;
+                            // I-flash lang ang card na tunay na nagbago.
+                            const card = el.closest('.kpi-card');
+                            if (card && card.id) flashElement(card.id);
+                        });
+
+                        // Ang mga chart ay pag-aari ng dashboard view, hindi
+                        // ng script na ito (ibinabahagi sa bawat admin page).
+                        // Ipinapasa ang sariwang data; ang page ang nagpapasya
+                        // kung paano iguhit muli.
+                        document.dispatchEvent(new CustomEvent('admin:dashboard-stats', { detail: data }));
+                    })
+                    .catch(function() {
+                        // Susunod na signal o ang 60s na tick ay muling magtatanong.
+                    })
+                    .finally(function() {
+                        statsInFlight = false;
+                    });
+            }, 400);
+        }
+
+        if (kpiEls.length) {
+            setInterval(function() {
+                if (!document.hidden) refreshStats();
+            }, 60000);
+
+            document.addEventListener('visibilitychange', function() {
+                if (!document.hidden) refreshStats();
+            });
+        }
 
         if (!PUSHER_KEY) {
             console.warn('Pusher key not set');
@@ -321,29 +402,35 @@
                 amount: data.total_amount,
             });
 
-            // Update dashboard stats if elements exist
-            updateStat('rt-total-bookings', 1);
-            updateStat('rt-pending-count', data.status === 'pending' ? 1 : 0);
-            flashElement('rt-bookings-card');
+            refreshStats();
             bumpBell();
         });
 
+        // ── Dashboard numbers changed (any path — see DashboardStats::touch) ──
+        channel.bind('stats.changed', refreshStats);
+
         // ── Payment Received ─────────────────────────────────────────
         channel.bind('payment.received', function(data) {
+            // Ang refund ay naitatala rin bilang Payment row at nagpapadala ng
+            // parehong event, kaya dating sinasabi ng toast na "💳 Payment"
+            // na may berdeng icon — perang PAPALABAS na ipinapakitang
+            // perang papasok. Ang `is_refund` ay mula sa PaymentReceived.
+            const isRefund = !!data.is_refund;
+            const amountText = '₱' + parseFloat(data.amount).toLocaleString('en-PH', {
+                minimumFractionDigits: 2
+            });
+
             showToast({
-                type: 'payment',
-                icon: 'bi-cash-stack',
-                title: '💳 Payment — ₱' + parseFloat(data.amount).toLocaleString('en-PH', {
-                    minimumFractionDigits: 2
-                }),
+                type: isRefund ? 'refund' : 'payment',
+                icon: isRefund ? 'bi-arrow-counterclockwise' : 'bi-cash-stack',
+                title: (isRefund ? '↩️ Refund — ' : '💳 Payment — ') + amountText,
                 sub: data.guest + ' · ' + data.booking_ref + ' · ' + data.payment_method
                     .toUpperCase(),
                 time: data.created_at,
                 link: paymentsIndexUrl,
             });
 
-            updateRevenue('rt-today-revenue', data.amount);
-            flashElement('rt-revenue-card');
+            refreshStats();
             bumpBell();
         });
 
@@ -378,11 +465,7 @@
         // ── Booking Updated (status change or calendar move) ──────────
         channel.bind('booking.updated', function(data) {
             if (data.action === 'status_changed') {
-                if (data.old_status === 'pending' && data.new_status !== 'pending') {
-                    updateStat('rt-pending-count', -1);
-                } else if (data.new_status === 'pending' && data.old_status !== 'pending') {
-                    updateStat('rt-pending-count', 1);
-                }
+                refreshStats();
 
                 // "Current Guest" KPI shows a name, not a count — just flash
                 // it on a check-in/checkout transition; the name itself
@@ -432,24 +515,6 @@
         }
 
         // ── Stat Helpers ─────────────────────────────────────────────
-        function updateStat(id, increment) {
-            const el = document.getElementById(id);
-            if (!el) return;
-            const current = parseInt(el.textContent.replace(/[^0-9]/g, '')) || 0;
-            el.textContent = current + increment;
-        }
-
-        function updateRevenue(id, amount) {
-            const el = document.getElementById(id);
-            if (!el) return;
-            const current = parseFloat(el.dataset.value || 0);
-            const newVal = current + parseFloat(amount);
-            el.dataset.value = newVal;
-            el.textContent = '₱' + newVal.toLocaleString('en-PH', {
-                minimumFractionDigits: 2
-            });
-        }
-
         function flashElement(id) {
             const el = document.getElementById(id);
             if (!el) return;

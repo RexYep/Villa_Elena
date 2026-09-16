@@ -24,6 +24,9 @@ Route::prefix('admin')
     ->group(function () {
 
     Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
+    Route::get('/dashboard/stats', [DashboardController::class, 'stats'])
+        ->middleware('throttle:60,1')
+        ->name('dashboard.stats');
     // Booking lookup for payment modal (AJAX)
 Route::get('bookings/lookup', function (\Illuminate\Http\Request $request) {
     $booking = \App\Models\Booking::where('booking_ref', strtoupper(trim((string) $request->ref)))

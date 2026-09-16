@@ -55,6 +55,25 @@ class Payment extends Model
     use HasFactory;
 
     /**
+     * Live na Revenue Today / Revenue This Month sa admin dashboard.
+     *
+     * Dating tanging ang Admin\PaymentController ang nagpapadala ng
+     * PaymentReceived — ang cash na itinala mula sa booking page o sa
+     * front desk ay hindi kailanman umabot sa dashboard nang live. Dito,
+     * sakop ang bawat daanan. Ang touch() ay iisang broadcast kada request.
+     */
+    protected static function booted(): void
+    {
+        static::saved(function ($payment) {
+            if ($payment->wasRecentlyCreated || $payment->wasChanged(['amount', 'payment_date', 'payment_type'])) {
+                \App\Services\DashboardStats::touch();
+            }
+        });
+
+        static::deleted(fn () => \App\Services\DashboardStats::touch());
+    }
+
+    /**
      * Ilang araw bago pukawin ang isang refund na hindi pa naipapadala.
      *
      * Sinabihan na ang guest na *"we'll notify you again once it's on

@@ -1,12 +1,62 @@
 # Villa Elena Private Rental Resort
 ## Resort Management System — Project Documentation
 
-**Version:** 7.8
+**Version:** 7.10
 **Stack:** PHP 8.2 / Laravel 12 / MySQL 8 / Bootstrap 5
 **Local URL:** `http://127.0.0.1:8000` (`php artisan serve`) or `http://localhost:8000` (Docker — see v5.3)
 **Live URL:** `https://villa-elena.onrender.com` (Render, free tier — testing only, not yet handed to real guests)
 **Database (local):** `villa_elena_db` (MySQL, XAMPP or standalone MySQL — same database either way)
 **Database (live):** Aiven MySQL free tier, database `defaultdb`
+
+---
+
+## What Changed in v7.10 (Read This First)
+
+### Staff Availability grid stayed "Available" after a slot was booked
+
+Reported from use: after a booking was made and confirmed, `/staff/availability` still showed that date as Available until the page was reloaded. The grid was rendered once by `FrontDeskController::availability()`, and nothing on the page listened for changes. No event said "availability changed" for staff at all. `PropertyAvailabilityChanged` exists, but it goes to the public property page and is sent per-controller, which is the pattern that broke the dashboard in v7.9. The risk is a walk-in: staff offering a guest a slot that has already been taken.
+
+**Same design as v7.7/v7.9: the signal says "fetch again", and the server renders.**
+
+- The grid markup moved into `staff/_availability_grid.blade.php`. `GET /staff/availability/grid?start=` (`availabilityGrid()`, `throttle:60,1`) renders that same partial through the same `buildSlotGrid()`. The page swaps the HTML in **only when it differs**. No availability rule is copied into JavaScript, so the live grid can't disagree with a reload. Verified: the endpoint's HTML was identical to the page's grid. Page and endpoint share `availabilityRange()` (villa, start clamped to today, 14 days).
+- `StaffAvailabilityChanged` (`availability.changed` on `staff-frontdesk`, empty payload, `ShouldBroadcastNow`) is sent from **model hooks**: `Booking` on create, delete, restore, or a change to `status`, `property_id` or any check-in/out date/time (cancellations free a slot; reschedules and calendar drag-moves move one without a status change); `AvailabilityBlock` on save and delete (calendar, property page and prescriptive actions all create blocks). The channel is public, but the event carries nothing; the grid, which shows guest names, stays behind `role:staff,admin`.
+- **`App\Services\BroadcastOnce::dispatch($key, $makeEvent)`** now holds the once-per-request, after-response, never-throws logic that v7.9 wrote inside `DashboardStats::touch()`, which now calls it with the key `dashboard-stats`. Keys are separate, so one signal can't swallow another. Verified: three saves on one booking produced one `DashboardStatsChanged` and one `StaffAvailabilityChanged`.
+- The staff realtime partial is included **after** the page's scripts stack in `layouts/staff.blade.php`, so it now publishes `window.rtStaffChannel` and a `staff:realtime-ready` DOM event; the page binds through whichever arrives. A 60s refetch (and on tab focus) is the fallback when Pusher is down. It also covers the changes **no event exists for**: an unpaid hold passing `booking_hold_minutes` becomes free with no write, and a slot turning Passed is just the clock.
+
+Verified in a real browser on the Docker app with real Pusher, logged in as admin (allowed on staff routes), using changes that left nothing behind: a pending booking on Mar 4 Day flipped it Available→Booked about 2s later, and force-deleting it flipped it back; a maintenance block on Mar 5 flipped both slots to Blocked, and deleting it restored them. None of it needed a reload. The temporary booking (167) and block (4) no longer exist.
+
+Not covered by an event: `pricing_rules` and promo edits change the price shown on free slots, and reach the grid only through the 60s refetch.
+
+---
+
+## What Changed in v7.9 (Read This First)
+
+### Admin dashboard KPIs drifted: Pending stuck at 1, Revenue This Month never live
+
+Reported from use: a pending booking made **Pending Bookings** go to 1 live, but when the guest paid and the booking was confirmed it stayed at 1 until a refresh. **Revenue This Month** never moved.
+
+`admin/partials/realtime.blade.php` did arithmetic on the page: `+1` on `booking.created`, `−1` on `booking.updated` with `action = status_changed`, `+amount` on `payment.received`. Each signal had one sender, so every other path went silent:
+
+- `BookingUpdated('status_changed')` was fired **only** by `Admin\BookingController::updateStatus()`. `confirmOnFirstPayment()`, front-desk check-in/out, the stale-hold sweeper and guest cancellations all change `status` without it — so Pending was never decremented.
+- `payment.received` added **refunds** to Revenue Today (the refund path dispatches `PaymentReceived` too), and cash recorded from the booking page or front desk never broadcast at all.
+- **Revenue This Month** had no element id and no handler.
+- The live Revenue Today reformatted `₱6,000` to `₱6,000.00`.
+- A refresh read the 60s-cached `admin_dashboard_stats`, so it could show the *old* number right after the page had shown the new one.
+
+**Same design as v7.7: the signal says "ask again", never "+1".**
+
+- `App\Services\DashboardStats::kpis()` is the one source for Pending, Total Bookings, Revenue Today and Revenue This Month (refunds excluded), including the formatted strings. The dashboard render and `GET /admin/dashboard/stats` both use it, and it is **not cached** — four indexed COUNT/SUMs, merged over the cached stats so a refresh can't disagree with the live value.
+- `Booking` (`saved` on create or `status` change, `deleted`, `restored`) and `Payment` (`saved` on create or `amount`/`payment_date`/`payment_type` change, `deleted`) call `DashboardStats::touch()`. **Hooked on the models, not the controllers**, because a controller that forgot to broadcast is exactly what broke Pending.
+- `touch()` coalesces: it registers one `app()->terminating()` callback per request/command, which fires `DashboardStatsChanged` (`stats.changed`, empty payload, `ShouldBroadcastNow`) inside `try/catch`. One payment writes Payment + Booking several times; the sweeper can cancel many bookings in one run — both are still one Pusher call. `terminating` also means after the response is sent and after any transaction. Verified: four relevant saves → 0 dispatches during the request, 1 after.
+- The page script has no arithmetic left. `stats.changed`, `booking.created`, `booking.updated` and `payment.received` all call a debounced (400ms) `refreshStats()`, which writes `data.formatted[data-kpi]` and flashes only cards whose text changed. Duplicates are harmless. A 60s refetch (and on tab focus) is the fallback when Pusher is down, and sits **above** the script's `PUSHER_KEY` early return for that reason.
+
+Verified in a real browser as admin, on the Docker app with real Pusher: creating a pending booking moved Pending 0→1 and Total 72→73 about 1s later; recording a payment through `recordPaymongoPayment()` moved Pending 1→0, Revenue Today ₱10,800→₱12,800 and Revenue This Month ₱24,542→₱26,542, no reload; a real reload then showed the same four values.
+
+**Follow-ups in the same version:**
+
+- **Total Guests** had the same problem (cached, no live wiring) and is now the fifth live KPI (`total_guests`, same `role = customer` count as before). `User` calls `touch()` only on **create, `role` change, or delete** — deliberately narrow, because users are saved on every login, 2FA step and profile edit, and each of those would otherwise be a Pusher call that changes nothing. Verified: a login-style save dispatched 0; in the browser a temporary customer account moved Total Guests 8→9 and deleting it moved it back to 8, both with no reload.
+- **The two charts weren't live either, even though Revenue Overview carries a green "Live" badge.** Both were drawn once at page load from the 60s `admin_dashboard_stats` cache. `revenue_by_month` and `booking_sources` now come from `DashboardStats::kpis()` (same queries, unchanged), and the cached copies of every live value were **removed** from the controller's `Cache::remember`, so each number has one copy. The cache keeps only check-ins/outs, properties and current guest. The admin realtime script dispatches `admin:dashboard-stats` with each refetch, and the dashboard view redraws `revenueChart`/`sourceChart` **only when the data actually differs**, because the 60s fallback refetches regardless and an animation every minute is noise. The `Booking` hook now also watches `source`, since editing a booking's source changes the donut without any status change. Cost: 7 more queries (6 indexed SUMs + 1 GROUP BY) per refetch, and refetches only happen on the open dashboard. Verified in the browser with net-zero edits to test data: moving test payment 274 from Sep 16 to Aug 16 moved the bars Aug ₱54,086→₱56,086 and Sep ₱26,542→₱24,542 and the Revenue This Month card to ₱24,542, then all went back on restore. Switching test booking 166 from online to walk_in moved the donut Online 51→50 / Walk-in 10→11, then back. None of it needed a reload.
+- **The refund toast said "💳 Payment — ₱X" with the green income icon**, because refunds go through the same `PaymentReceived` event. It now uses the `is_refund` flag v7.7 added to that event: "↩️ Refund — ₱X" with a red `bi-arrow-counterclockwise` icon (`.rt-icon.refund`). Verified by re-broadcasting an existing refund and an existing payment, which wrote nothing: the toasts appeared as `refund / ↩️ Refund — ₱4,000.00` and `payment / 💳 Payment — ₱2,000.00`, and no KPI moved.
 
 ---
 

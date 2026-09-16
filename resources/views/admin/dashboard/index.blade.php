@@ -610,38 +610,41 @@
             {{-- KPI Cards --}}
             <div class="kpi-grid">
 
+                {{-- Mga live na KPI: data-kpi = key sa DashboardStats::kpis().
+                     Iisang pinagmulan ang tekstong ito at ang JSON na
+                     binabasa ng admin realtime script, kaya ang kusang
+                     update ay hindi puwedeng sumalungat sa refresh. --}}
                 <div class="kpi-card gold" id="rt-revenue-card">
                     <div class="kpi-label">Revenue Today</div>
-                    <div class="kpi-value" id="rt-today-revenue" data-value="{{ $stats['revenue_today'] }}">
-                        ₱{{ number_format($stats['revenue_today'], 0) }}</div>
+                    <div class="kpi-value" id="rt-today-revenue" data-kpi="revenue_today">{{ $stats['formatted']['revenue_today'] }}</div>
                     <div class="kpi-sub"><i class="bi bi-arrow-up up"></i> <span class="up">Live</span></div>
                     <i class="bi bi-cash-coin kpi-icon"></i>
                 </div>
 
-                <div class="kpi-card teal">
+                <div class="kpi-card teal" id="rt-month-revenue-card">
                     <div class="kpi-label">Revenue This Month</div>
-                    <div class="kpi-value">₱{{ number_format($stats['revenue_this_month'], 0) }}</div>
+                    <div class="kpi-value" id="rt-month-revenue" data-kpi="revenue_this_month">{{ $stats['formatted']['revenue_this_month'] }}</div>
                     <div class="kpi-sub"><i class="bi bi-calendar3"></i> {{ now()->format('F Y') }}</div>
                     <i class="bi bi-graph-up kpi-icon"></i>
                 </div>
 
                 <div class="kpi-card navy" id="rt-bookings-card">
                     <div class="kpi-label">Total Bookings</div>
-                    <div class="kpi-value" id="rt-total-bookings">{{ number_format($stats['total_bookings']) }}</div>
+                    <div class="kpi-value" id="rt-total-bookings" data-kpi="total_bookings">{{ $stats['formatted']['total_bookings'] }}</div>
                     <div class="kpi-sub"><i class="bi bi-calendar-check"></i> All time</div>
                     <i class="bi bi-calendar2-week kpi-icon"></i>
                 </div>
 
-                <div class="kpi-card orange">
+                <div class="kpi-card orange" id="rt-pending-card">
                     <div class="kpi-label">Pending Bookings</div>
-                    <div class="kpi-value" id="rt-pending-count">{{ $stats['pending_bookings'] }}</div>
+                    <div class="kpi-value" id="rt-pending-count" data-kpi="pending_bookings">{{ $stats['formatted']['pending_bookings'] }}</div>
                     <div class="kpi-sub"><i class="bi bi-clock"></i> Awaiting confirmation</div>
                     <i class="bi bi-hourglass-split kpi-icon"></i>
                 </div>
 
-                <div class="kpi-card sky">
+                <div class="kpi-card sky" id="rt-guests-card">
                     <div class="kpi-label">Total Guests</div>
-                    <div class="kpi-value">{{ number_format($stats['total_guests']) }}</div>
+                    <div class="kpi-value" id="rt-total-guests" data-kpi="total_guests">{{ $stats['formatted']['total_guests'] }}</div>
                     <div class="kpi-sub"><i class="bi bi-people"></i> Registered accounts</div>
                     <i class="bi bi-person-hearts kpi-icon"></i>
                 </div>
@@ -916,7 +919,7 @@
                 document.addEventListener('DOMContentLoaded', function() {
                     // ── Revenue Chart ────────────────────────────────────────────
                     const revenueCtx = document.getElementById('revenueChart').getContext('2d');
-                    new Chart(revenueCtx, {
+                    const revenueChart = new Chart(revenueCtx, {
                         type: 'bar',
                         data: {
                             labels: @json(collect($stats['revenue_by_month'])->pluck('label')),
@@ -976,7 +979,7 @@
 
                     // ── Booking Sources Chart ────────────────────────────────────
                     const sourceCtx = document.getElementById('sourceChart').getContext('2d');
-                    new Chart(sourceCtx, {
+                    const sourceChart = new Chart(sourceCtx, {
                         type: 'doughnut',
                         data: {
                             labels: ['Online', 'Walk-in', 'Phone', 'Partner'],
@@ -1006,6 +1009,46 @@
                                             .parsed === 1 ? '' : 's')
                                     }
                                 }
+                            }
+                        }
+                    });
+
+                    // ── Live redraw ──────────────────────────────────────────────
+                    //
+                    // Dating iginuguhit ang dalawang chart MINSAN, mula sa 60s na
+                    // cache, at walang anumang nag-a-update sa mga ito — sa kabila
+                    // ng "Live" badge ng Revenue Overview. Ang admin realtime script
+                    // ay nagpapadala ng sariwang data mula sa DashboardStats::kpis()
+                    // kapag may nagbago; iisang pinagmulan ng unang render.
+                    //
+                    // Iginuguhit muli LANG kapag tunay na nagbago ang data: ang
+                    // 60s na salo ay nagtatanong kahit walang pagbabago, at ang
+                    // animation tuwing minuto ay ingay.
+                    const SOURCE_KEYS = ['online', 'walk_in', 'phone', 'partner'];
+                    const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+
+                    document.addEventListener('admin:dashboard-stats', function(e) {
+                        const d = e.detail || {};
+
+                        if (Array.isArray(d.revenue_by_month)) {
+                            const labels = d.revenue_by_month.map(r => r.label);
+                            const amounts = d.revenue_by_month.map(r => Number(r.amount));
+                            const ds = revenueChart.data.datasets[0];
+
+                            if (!same(revenueChart.data.labels, labels) || !same(ds.data.map(Number), amounts)) {
+                                revenueChart.data.labels = labels;
+                                ds.data = amounts;
+                                revenueChart.update();
+                            }
+                        }
+
+                        if (d.booking_sources) {
+                            const counts = SOURCE_KEYS.map(k => Number(d.booking_sources[k] || 0));
+                            const ds = sourceChart.data.datasets[0];
+
+                            if (!same(ds.data.map(Number), counts)) {
+                                ds.data = counts;
+                                sourceChart.update();
                             }
                         }
                     });
