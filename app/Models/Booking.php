@@ -1297,4 +1297,39 @@ class Booking extends Model
             default    => '<span class="badge bg-light">Unknown</span>',
         };
     }
+
+    /**
+     * Ang teksto at CSS class ng "Payment Status" sa mga page na
+     * nakaharap sa guest (checkout at "Waiting for Payment").
+     *
+     * NASA MODEL ITO SA HALIP NA SA BLADE nang may dahilan. Dalawa ang
+     * gumagamit nito: ang unang render ng page, at ang JSON ng
+     * payment.status na binabasa ng watcher tuwing ilang segundo. Kung
+     * dalawang kopya ito, ang page na nag-update nang kusa ay unti-unting
+     * mag-iiba ang sinasabi sa page na bagong na-load — sa BAYAD pa
+     * mismo, kung saan ang pinakamaliit na di-pagkakatugma ay tinatawag
+     * agad ng guest.
+     *
+     * Hiwalay ito sa `payment_status_label`, na tungkol sa yugto ng
+     * REFUND. Dito, ang tanong ay kung magkano pa ang utang.
+     */
+    public function paymentProgressDisplay(): array
+    {
+        return match($this->payment_status) {
+            'paid'     => ['text' => 'Fully Paid', 'class' => 'status-confirmed'],
+            'partial'  => [
+                'text'  => 'Partial — ₱' . number_format((float) $this->balance_due, 2) . ' remaining',
+                'class' => 'status-partial',
+            ],
+            // Dating nahuhulog ang 'refunded' sa default at nagsasabing
+            // "Not yet received" — totoo man na wala nang hawak na pera,
+            // ganap na mali ang ipinahihiwatig nito sa guest na NAGBAYAD
+            // at BINALIKAN. Ginagamit ang klase ng 'unpaid' dahil pareho
+            // silang ibig sabihin ay "walang nakabinbing bayad dito".
+            'refunded' => ['text' => 'Refunded', 'class' => 'status-unpaid'],
+            // Dating blangko ang cell na ito kapag 'unpaid' — mas
+            // nakakalito iyon kaysa sa pagsasabi mismo.
+            default    => ['text' => 'Not yet received', 'class' => 'status-unpaid'],
+        };
+    }
 }

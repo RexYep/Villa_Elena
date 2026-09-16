@@ -51,6 +51,17 @@ Route::middleware('auth')->group(function () {
         ->name('payment.checkout');
     Route::get('/pay/{booking}/success', [PaymentController::class, 'success'])->name('payment.success');
     Route::get('/pay/{booking}/cancel', [PaymentController::class, 'cancel'])->name('payment.cancel');
+
+    // Tinatanong ito ng checkout at ng "Waiting for Payment" na page
+    // tuwing ilang segundo habang naghihintay ng QR Ph settlement.
+    // Isang SELECT lang sa booking na pag-aari na ng humihiling —
+    // maluwag ang throttle dahil normal na may dalawang tab na bukas
+    // ang guest (isa sa checkout, isa sa e-wallet), at ang mawalan ng
+    // sagot dito ay mangangahulugang hindi na nila malalaman na bayad
+    // na sila.
+    Route::get('/pay/{booking}/status', [PaymentController::class, 'status'])
+        ->middleware('throttle:60,1')
+        ->name('payment.status');
 });
 
 // PayMongo webhook — NO auth, NO CSRF

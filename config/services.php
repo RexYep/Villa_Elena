@@ -19,7 +19,7 @@ return [
     'brevo' => [
         'dsn' => env('MAILER_DSN'),
     ],
-    
+
     'slack' => [
         'notifications' => [
             'bot_user_oauth_token' => env('SLACK_BOT_USER_OAUTH_TOKEN'),
@@ -57,6 +57,26 @@ return [
 
     'anthropic' => [
         'key' => env('ANTHROPIC_API_KEY'),
+    ],
+
+    // Which provider App\Services\GeminiService::ask() calls: groq | gemini.
+    // Defaults to groq so an environment that never sets AI_PROVIDER (production
+    // today) keeps doing exactly what it did. Switch in .env, then
+    // `php artisan config:clear` — never by editing the service.
+    'ai' => [
+        'provider' => env('AI_PROVIDER', 'groq'),
+    ],
+
+    'gemini' => [
+        'key' => env('GEMINI_API_KEY'),
+        // gemini-2.5-flash is retired for new users: it 404s while GET /models
+        // still lists it. Check a model with a real generateContent call, not
+        // the listing.
+        'model' => env('GEMINI_MODEL', 'gemini-3.6-flash'),
+        // Leave unset: defaults to `minimal`, because thinking tokens count
+        // against maxOutputTokens (see GeminiService::geminiThinkingLevel()).
+        // 'omit' sends no thinkingConfig at all.
+        'thinking_level' => env('GEMINI_THINKING_LEVEL'),
     ],
 
     'groq' => [

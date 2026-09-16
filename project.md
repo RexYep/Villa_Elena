@@ -1,7 +1,7 @@
 # Villa Elena Private Rental Resort
 ## Resort Management System — Project Documentation
 
-**Version:** 7.5
+**Version:** 7.7
 **Stack:** PHP 8.2 / Laravel 12 / MySQL 8 / Bootstrap 5
 **Local URL:** `http://127.0.0.1:8000` (`php artisan serve`) or `http://localhost:8000` (Docker — see v5.3)
 **Live URL:** `https://villa-elena.onrender.com` (Render, free tier — testing only, not yet handed to real guests)
@@ -10,7 +10,111 @@
 
 ---
 
+## What Changed in v7.7 (Read This First)
+
+### "Waiting for Payment" was a dead end — the guest's page now updates itself
+
+QR Ph is asynchronous. The guest sees the QR on one device and scans it on another, so `payment.success` **can be reached before any money has settled**, and the success callback may never run at all — the webhook is the real recording path, often minutes later. The page told the guest this honestly and then did nothing: no polling, no listener, `grep 'setInterval|fetch|Pusher' payment/checkout.blade.php` returned nothing. The only way to find out they had paid was to refresh and hope.
+
+The checkout page had the same gap from the other direction. Guests do not close it — they scan on a phone while the laptop sits on it, or press Back. After the webhook lands, that abandoned page still shows the old balance and a live **Pay Now** button, and the nearest action to a guest who has already paid is to pay again. That is a second *genuinely different* charge (`pay_xxx` differs), which idempotency cannot catch by definition.
+
+**Online payments were also the only path that broadcast nothing.** `PaymentReceived` was dispatched solely from the three manual paths in `Admin\PaymentController`; `PaymentController::recordPaymongoPayment()` — the shared choke point for both the webhook and the success callback — dispatched no event, so a webhook-recorded payment reached nobody, guest or admin.
+
+**Polling is the backbone; Pusher is only an accelerator.** This split is deliberate and must not be inverted:
+
+- `GET /pay/{booking}/status` (`PaymentController::status()`, `throttle:60,1`) reads the database and is the authority. It works with `BROADCAST_CONNECTION=log` (the `.env.example` default), with a dead websocket, and when the tab was closed at the moment the payment landed.
+- `PaymentReceived` now also broadcasts on `PrivateChannel('booking-payment.{id}')`, authorized in `routes/channels.php` to the booking's owner alone. The page **never reads an amount out of the event** — it only polls immediately on receipt. So a delayed, duplicated or lost broadcast costs nothing, and a refund (`is_refund`) is ignored rather than announced as a payment.
+
+Pusher-only would mean the page breaks silently on every websocket problem, while displaying money.
+
+Other rules that came out of this:
+
+- **`status()` deliberately has no `balance_due <= 0` guard**, the opposite of `showPaymentPage()`. The instant the balance reaches zero is the single most important answer it gives; aborting there would fail the page's last question.
+- The `event()` call in `recordPaymongoPayment()` is wrapped in `try/catch (\Throwable)`. The webhook runs through it and **must never return non-2xx**, and by that line the payment is already recorded and confirmed — a failed Pusher call must not undo that. Polling catches up regardless.
+- `Booking::paymentProgressDisplay()` holds the Payment Status text/class for guest-facing pages, because the first render and the polled JSON are two consumers of one rule. Split in two, a self-updating page would drift from a freshly loaded one — about money. It is separate from `payment_status_label`, which is about the *refund* stage. It also fixes `refunded` rendering as "Not yet received".
+- The watcher backs off (4s → 10s → 30s, stopping at 20 min), pauses on a hidden tab and re-polls immediately on return.
+- **It does not stop on the first read that shows the payment.** `recordPaymongoPayment()` is not atomic: the payment row and `recalculateFinancials()` land *before* `confirmOnFirstPayment()`. The browser test caught a poll in that gap — new `amount_paid`, `status` still `pending` — and the watcher stopped, leaving "Payment Successful… confirmed" above a Booking Status of **Pending**. After the payment is first seen it now re-polls every 3s (max 4) until `booking_status` leaves `pending`. The bound matters: a booking can legitimately *stay* pending when `confirmOnFirstPayment()` refuses a taken slot. An increased `amount_paid` already implies the recompute finished, so status is the only thing left to settle.
+- **A Pusher push re-polls even after polling has stopped** (`poll(true)`). The push is the most trustworthy signal that the state is final; ignoring it once the timer stopped would discard exactly that.
+- **`event(new PaymentReceived)` fires before `BookingMailHelper::paymentRecorded()`, not after.** At the end of the method it arrived ~5s after the payment was saved (the SMTP send), so the 4s poll always won and Pusher accelerated nothing. Moved to just after the booking is confirmed and the in-app notification is written, the push arrived and triggered a poll **0.19s** later, off the polling cycle.
+
+Files: `resources/views/payment/_status_watcher.blade.php` (new, shared), `payment/success.blade.php`, `payment/checkout.blade.php`, `layouts/payment.blade.php` (adds the `csrf-token` meta the private-channel auth needs), `PaymentController`, `PaymentReceived`, `Booking`, `routes/web.php`, `routes/channels.php`.
+
+Verified: `status()` 200 for the owner / 403 for a stranger through the real middleware stack; the channel closure allows only the owner; both pages rendered for real (not just `compileString()`); and the rendered JS executed against a DOM stub, driving the full path — poll → `villa:payment-received` → header swap, amount, status rows, retry link removed — for both the fully-paid and remaining-balance branches.
+
+**Then verified in a real browser** (Chrome, Docker app + Redis + real Pusher app, logged in as a real customer, payments recorded through the real `recordPaymongoPayment()` on throwaway bookings): the private channel reached `subscribed=true` through `/broadcasting/auth`; the success page flipped from Waiting to Successful and the checkout page replaced its **Pay Now** form, both with a reload marker surviving. That run is what found the pending-status race and the late push above — neither was visible to the DOM-stub test, which fed the watcher already-final states. The settle branch was then re-run against the fixed JS with a pending-then-confirmed sequence: announced on the stale read, settled 3s later, stopped.
+
+**Still not covered:** no real PayMongo webhook delivery. The payments were recorded by invoking the same method the webhook calls, so the signature check and `handleWebhookEvent()` routing are untested here.
+
+---
+
+## What Changed in v7.6 (Read This First)
+
+### Mark Paid Out accepted any reference, and never asked which booking
+
+The Mark Paid Out forms had one text box, **Transfer Reference Number**, validated only as `min:4`. Nothing can verify a GCash/Maya/bank receipt number (no API), so anything was accepted, and admins were putting a *booking* reference there. A made-up booking reference and a real one from a *different* booking (e.g. `VE-3LJGN12R` while closing `VE-3LJGNIBY`) both closed the refund. This is the same class of bug as v7.3's Record Payment wrong-reference defect.
+
+All four Mark Paid Out forms (list modal, detail page with a destination, detail page without one, cash card) now include `confirm_booking_ref` from the shared partial `admin/payments/_confirm_booking_ref.blade.php`. `PaymentController::payoutConfirmationProblem()` rejects, before anything is written:
+
+- a confirm reference that is not **this refund's** booking. The error distinguishes "no booking found" from "a different booking".
+- a transfer reference shaped like a booking reference (`VE-XXXXXXXX`)
+- a transfer reference equal to any `payments.reference_number`. That is the guest's inbound PayMongo `pay_…` ID, not the outbound refund.
+- a transfer reference already stored as `transaction_ref` on another payment, because one transfer cannot pay out two refunds
+
+What this still **cannot** catch is a well-formed receipt number that is simply wrong. Only the receipt proves that.
+
+Verified with a rolled-back script against real controllers and renders. Every rejection left the refund `pending` with no destination row written, and each valid case closed it.
+
+---
+
 ## What Changed in v7.5 (Read This First)
+
+### The AI provider is now a `.env` switch (`AI_PROVIDER=groq|gemini`)
+
+Testing Gemini had been done by replacing the contents of `GeminiService.php`. That overwrote the working Groq
+implementation, and the Gemini replacement failed on every call for three independent reasons, each verified
+with a real request:
+
+| Bug | Effect | Evidence |
+|---|---|---|
+| `$url = "https://googleapis.com{$apiKey}"` | Key glued onto the hostname; DNS failure; `null` from every feature. cURL's error message wrote most of the key into `laravel.log` | `cURL error 6: Could not resolve host: googleapis.comaq.ab8rn…` |
+| `GEMINI_MODEL=gemini-2.5-flash` | Retired for new users | `404 … no longer available to new users … use models/gemini-3.6-flash` — while `GET /models` **still lists it** |
+| `responseMimeType: application/json` on every call | Plain-text answers wrapped in JSON | Moderation: `"CLEAN"` (quotes included → `starts with CLEAN` fails → every review to manual queue). Insights: `["…","…"]` |
+
+Plus `env()` called inside the service (returns `null` under production's `config:cache`) and the `$maxTokens`
+parameter silently dropped.
+
+**Now:** `config('services.ai.provider')` selects `askGroq()` (the committed implementation, moved verbatim) or
+`askGemini()`. Default `groq`, so production — which sets no `AI_PROVIDER` — is unchanged. Config lives in
+`config/services.php` under `ai`, `gemini` and `groq`; `.env.example` documents all of it. `ask()`'s contract is
+identical for both providers (`?string`, NULL on any failure), so no caller changed.
+
+Gemini behaviour measured on `gemini-3.6-flash` before writing the request:
+
+- **Thinking eats `maxOutputTokens`.** At a 500-token cap (the briefing's): default → 476 thinking tokens, 100-char
+  fragment, `MAX_TOKENS`; `thinkingLevel: low` → same; `minimal` → 0 thinking tokens, full 1,517-char answer. Default
+  is `minimal` (`GEMINI_THINKING_LEVEL`, `omit` to send none). `thinkingBudget: 0` → `400 Request contains an invalid
+  argument.`, which doesn't name the field — so the retry-without-`thinkingConfig` triggers on any 400.
+- **No JSON mode needed** for the chatbot's intent step: 3/3 runs parsed.
+- Reply parts carry a `thoughtSignature` besides `text`; the parser joins the text of every non-thought part.
+- `MAX_TOKENS` replies are returned (as Groq's are) but logged with thinking/output token counts.
+
+Also: the Gemini key goes in the `x-goog-api-key` header, never the URL; keys are read per call, not in the
+constructor (the old typed `string $apiKey = config(...)` throws `TypeError` when the key is unset — which with
+`GROQ_API_KEY` commented out would 500 every AI page before the switch is consulted); `ConnectionException` is
+logged by class only, because its message contains the URL.
+
+**Verified with real calls on both providers:** `ask()`, the chatbot (availability intent with a property card,
+and a general question), moderation (clean → approved; spam with a phone number → flagged), insights refresh (5
+lines), forecast refresh (Markdown headings render), the 500-token briefing (complete, not truncated). Failure
+paths — retired model, missing key per provider, unknown provider — all return NULL without an exception. The
+new log lines were scanned for key material: none.
+
+> **Found while testing, not fixed:** asked "Do you allow pets?", Gemini answered *"Yes, we do allow pets"* and Groq
+> answered *"we don't accommodate pets"*. The chatbot prompt states no pet policy, so both invented one. Any policy a
+> guest might ask about (pets, smoking, extra guests, noise curfew) needs to be in the prompt, or the bot needs to
+> say it doesn't know.
+
+---
 
 ### Insights and Forecast no longer call Groq on every page visit
 
@@ -2935,8 +3039,13 @@ GET  /pay/{booking}           payment.page
 POST /pay/{booking}/checkout  payment.checkout
 GET  /pay/{booking}/success   payment.success
 GET  /pay/{booking}/cancel    payment.cancel
+GET  /pay/{booking}/status    payment.status   (JSON, throttle:60,1 — v7.7)
 POST /webhooks/paymongo       payment.webhook  (no CSRF)
 ```
+
+`payment.status` is what makes the checkout and "Waiting for Payment" pages
+update without a refresh. It is the authority; the `booking-payment.{id}`
+Pusher broadcast only tells the page to ask again. See v7.7.
 
 ---
 
@@ -3688,6 +3797,7 @@ DELETE /my/profile/devices/{device}           customer.profile.devices.destroy  
 
 | Issue | Cause | Fix Applied |
 |---|---|---|
+| **(v7.5)** After switching to Gemini for testing, every AI feature failed | `GeminiService.php` was overwritten with a Gemini version that built `"https://googleapis.com{$apiKey}"` (DNS failure, key leaked into the log), used retired `gemini-2.5-flash` (404, though still listed by `GET /models`), and forced JSON mode on every call (moderation got `"CLEAN"` with quotes) | `AI_PROVIDER=groq|gemini` switch in `config/services.php`; Groq path restored verbatim; Gemini path uses the real endpoint, header auth, `gemini-3.6-flash`, no JSON mode, `thinkingLevel: minimal`. Verified with real calls on both providers across every AI feature |
 | **(v7.5)** Every visit to `/admin/insights` and `/admin/forecast` spent a Groq request, exhausting the per-minute output-token budget | Both controllers called `GeminiService::ask()` inline in `index()`, with no cache — 3 visits measured as 3 calls on each page. The "Refresh" buttons were `<a href>` links to the page's own GET route, so they were indistinguishable from ordinary navigation and could not have helped | `AiReportStore` keeps the generated text in `Cache::store('database')`; GET reads it (2.11s → 0.03s), `POST …/refresh` is the only path that calls Groq, throttled to 1/min per admin. A failed generation is never stored and never blanks an existing report; the view shows the report's age |
 | **(v7.5)** `/admin/prescriptive`, `/admin/users` and `/admin/properties/{id}` all returned a 500 — `ArgumentCountError: Too few arguments to function Illuminate\Foundation\Vite::__invoke(), 0 passed` | A **CSS** comment inside `@push('styles')` mentioned `@vite` and `@stack('styles')` in its prose. Blade has no idea CSS comments exist — it compiles `@directive` anywhere in the file — so bare `@vite` compiled to `app('Illuminate\Foundation\Vite')()` and ran, inside what the author believed was a comment | Escaped as `@@vite` / `@@stack(...)`, which Blade renders as literal text. Verified by rendering all three pages through the HTTP kernel: 500 before, 200 after |
 | **(v7.5)** Groq's raw error body was shown to guests and admins as if it were the AI's answer | `GeminiService::ask()` returned `'API Error: '.$status.' — '.$body` as its reply, and every caller renders what it gets — so a rate-limited chatbot showed the guest the model id, org id and quota figures out of Groq's JSON, and insights/forecast rendered the same body as their report. The v5.8 fix kept the string return because review moderation matched on the `'API Error:'` prefix; the two user-facing callers never matched on anything | `ask()` returns `?string` — reply, or `NULL` on failure or empty content — with status and body logged as before. Each surface writes its own message: the chatbot apologises and sets `ok => false` (so the front end keeps it out of `history`), both admin panels show an "unavailable" state while keeping the real figures/chart around it. Sentinels `'API Error:'` and `'No insights returned.'` removed |

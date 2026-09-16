@@ -21,8 +21,14 @@
         }
 
         /* ════════════════════════════════════════
-                                       NAVIGATION
-                                    ════════════════════════════════════════ */
+                                               NAVIGATION
+                                            ════════════════════════════════════════ */
+        /* portal.css styles a different `.nav` (the public shell) as a flex row
+           with 40px side padding. Inherited here, it made .nav-inner a
+           content-sized flex item inside a second 40px gutter: 80px lost per
+           side, so at 960px the nav was 994px wide and Sign Up / Sign Out ran
+           off the right edge. display/padding reset so .nav-inner is the only
+           layout box, as this page intends. */
         .nav {
             position: fixed;
             top: 0;
@@ -33,6 +39,8 @@
             transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
             background: none;
             backdrop-filter: none;
+            display: block;
+            padding: 0;
         }
 
         .nav.scrolled {
@@ -68,14 +76,23 @@
             font-weight: 400;
         }
 
-        /* Desktop nav links */
-        .nav-links {
+        /* Desktop nav links. Scoped under .nav because portal.css's ≤900px
+           rule for the customer topnav also matches .nav-links — position:fixed,
+           column, dark panel — which showed this list as a permanently open
+           dropdown between 769 and 900px. */
+        .nav .nav-links {
             display: flex;
+            position: static;
+            flex-direction: row;
             align-items: center;
             gap: 4px;
             list-style: none;
             margin: 0;
             padding: 0;
+            background: none;
+            box-shadow: none;
+            max-height: none;
+            overflow: visible;
         }
 
         .nav-links a {
@@ -222,9 +239,22 @@
             flex: 1;
         }
 
+        /* Sign Out is a POST form, so it gets the same pill as the links. */
+        .mobile-menu .mobile-auth form {
+            flex: 1;
+            margin: 0;
+        }
+
+        .mobile-menu .mobile-auth button {
+            width: 100%;
+            border: none;
+            padding: 12px 24px;
+            font-size: 16px;
+        }
+
         /* ════════════════════════════════════════
-                                       HERO SECTION
-                                    ════════════════════════════════════════ */
+                                               HERO SECTION
+                                            ════════════════════════════════════════ */
         .hero {
             height: 100vh;
             min-height: 680px;
@@ -452,8 +482,8 @@
         }
 
         /* ════════════════════════════════════════
-                                       SHARED SECTION STYLES
-                                    ════════════════════════════════════════ */
+                                               SHARED SECTION STYLES
+                                            ════════════════════════════════════════ */
         .section {
             max-width: 1280px;
             margin: 0 auto;
@@ -501,8 +531,8 @@
         }
 
         /* ════════════════════════════════════════
-                                       PROPERTIES SECTION
-                                    ════════════════════════════════════════ */
+                                               PROPERTIES SECTION
+                                            ════════════════════════════════════════ */
         #properties {
             background: var(--cream);
         }
@@ -909,8 +939,8 @@
         }
 
         /* ════════════════════════════════════════
-                                       AMENITIES SECTION
-                                    ════════════════════════════════════════ */
+                                               AMENITIES SECTION
+                                            ════════════════════════════════════════ */
         #amenities {
             background: var(--stone);
             padding: 0;
@@ -988,8 +1018,8 @@
         }
 
         /* ════════════════════════════════════════
-                                       ROOM TOUR SECTION
-                                    ════════════════════════════════════════ */
+                                               ROOM TOUR SECTION
+                                            ════════════════════════════════════════ */
         #room-tour {
             background: var(--cream);
             padding: 0;
@@ -1130,8 +1160,8 @@
         }
 
         /* ════════════════════════════════════════
-                                       GALLERY SECTION
-                                    ════════════════════════════════════════ */
+                                               GALLERY SECTION
+                                            ════════════════════════════════════════ */
         #gallery {
             background: var(--sand);
             padding: 0;
@@ -1379,8 +1409,8 @@
         }
 
         /* ════════════════════════════════════════
-                                       ABOUT SECTION
-                                    ════════════════════════════════════════ */
+                                               ABOUT SECTION
+                                            ════════════════════════════════════════ */
         #about {
             background: var(--cream);
             padding: 0;
@@ -1486,8 +1516,8 @@
         }
 
         /* ════════════════════════════════════════
-                                       TESTIMONIALS SECTION
-                                    ════════════════════════════════════════ */
+                                               TESTIMONIALS SECTION
+                                            ════════════════════════════════════════ */
         #testimonials {
             background: var(--sand);
             padding: 0;
@@ -1605,8 +1635,8 @@
         }
 
         /* ════════════════════════════════════════
-                                       LOCATION SECTION
-                                    ════════════════════════════════════════ */
+                                               LOCATION SECTION
+                                            ════════════════════════════════════════ */
         #location {
             background: var(--cream);
             padding: 0;
@@ -1691,8 +1721,8 @@
         }
 
         /* ════════════════════════════════════════
-                                       CONTACT SECTION
-                                    ════════════════════════════════════════ */
+                                               CONTACT SECTION
+                                            ════════════════════════════════════════ */
         #contact {
             background: var(--stone);
             padding: 0;
@@ -1837,8 +1867,8 @@
         }
 
         /* ════════════════════════════════════════
-                                       FOOTER
-                                    ════════════════════════════════════════ */
+                                               FOOTER
+                                            ════════════════════════════════════════ */
         .footer {
             background: #1a1009;
             padding: 70px 40px 40px;
@@ -1935,8 +1965,8 @@
         }
 
         /* ════════════════════════════════════════
-                                       ANIMATIONS & SCROLL REVEAL
-                                    ════════════════════════════════════════ */
+                                               ANIMATIONS & SCROLL REVEAL
+                                            ════════════════════════════════════════ */
         .reveal {
             opacity: 0;
             transform: translateY(30px);
@@ -1965,8 +1995,8 @@
         }
 
         /* ════════════════════════════════════════
-                                       RESPONSIVE
-                                    ════════════════════════════════════════ */
+                                               RESPONSIVE
+                                            ════════════════════════════════════════ */
         @media (max-width: 1024px) {
             .about-grid {
                 grid-template-columns: 1fr;
@@ -1993,8 +2023,34 @@
             }
         }
 
-        @media (max-width: 768px) {
-            .nav-links {
+        /* The full nav needs 994px as a guest and 1034px signed in (My Bookings
+           + Sign Out are wider than Sign In + Sign Up). Tighter gutters and link
+           padding bring that to ~850 / ~890px, so a 960px Surface Pro keeps the
+           full bar; below 940px it becomes the hamburger. */
+        @media (max-width: 1100px) {
+            .nav-inner {
+                padding: 0 24px;
+            }
+
+            .nav .nav-links {
+                gap: 2px;
+            }
+
+            .nav-links a {
+                padding: 8px 10px;
+            }
+
+            .nav-right {
+                gap: 8px;
+            }
+
+            .nav-btn {
+                padding: 10px 18px;
+            }
+        }
+
+        @media (max-width: 940px) {
+            .nav .nav-links {
                 display: none;
             }
 
@@ -2002,14 +2058,24 @@
                 display: flex;
             }
 
-            .nav-right .nav-btn {
+            .nav-right .nav-btn,
+            .nav-right form {
                 display: none;
             }
 
             .nav-inner {
                 padding: 0 20px;
             }
+        }
 
+        /* Opened on a narrow window, then widened past the breakpoint. */
+        @media (min-width: 941px) {
+            .mobile-menu.open {
+                display: none;
+            }
+        }
+
+        @media (max-width: 768px) {
             .section {
                 padding: 80px 20px 100px;
             }
@@ -2143,6 +2209,10 @@
         <div class="mobile-auth">
             @auth
                 <a href="{{ route('customer.home') }}" class="nav-btn nav-btn-ghost text-center">My Bookings</a>
+                <form method="POST" action="{{ route('logout') }}">
+                    @csrf
+                    <button type="submit" class="nav-btn nav-btn-ghost">Sign Out</button>
+                </form>
             @else
                 <a href="{{ route('login') }}" class="nav-btn nav-btn-ghost text-center">Sign In</a>
                 <a href="{{ route('register') }}" class="nav-btn nav-btn-gold text-center">Sign Up</a>
@@ -2456,16 +2526,16 @@
 
             @php
                 $galleryShots = [
-                    ['src' => 'images/view1.png', 'alt' => 'Night view of the villa', 'caption' => 'Night View'],
-                    ['src' => 'images/inside-view1.png', 'alt' => 'Inside view', 'caption' => 'Inside View'],
+                    ['src' => 'images/view-12.jpg', 'alt' => 'Night view of the villa', 'caption' => 'Night View'],
+                    ['src' => 'images/view-inside.jpg', 'alt' => 'Inside view', 'caption' => 'Inside View'],
                     ['src' => 'images/kitchen1.png', 'alt' => 'Kitchen area', 'caption' => 'Kitchen Area'],
                     [
-                        'src' => 'images/pool1.png',
+                        'src' => 'images/pool2.jpg',
                         'alt' => 'Resort pool view',
                         'caption' => 'Panoramic Resort Pool View',
                     ],
                     ['src' => 'images/terrace1.png', 'alt' => 'Terrace', 'caption' => 'Terrace'],
-                    ['src' => 'images/karaoke1.png', 'alt' => 'Karaoke room', 'caption' => 'Karaoke'],
+                    ['src' => 'images/karaoke2.jpeg', 'alt' => 'Karaoke room', 'caption' => 'Karaoke'],
                     ['src' => 'images/images10.jpg', 'alt' => 'Dining area', 'caption' => 'Dining Area'],
                 ];
             @endphp

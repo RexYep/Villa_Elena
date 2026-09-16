@@ -299,6 +299,45 @@
                 grid-template-columns: 1fr;
             }
         }
+
+        /* Pumapalit sa payment form kapag dumating ang bayad habang
+           nakabukas pa ang page na ito — karaniwan ito sa QR Ph, kung
+           saan ini-scan ng guest ang QR sa telepono habang nakabukas pa
+           ang checkout sa isa pang device o tab. */
+        .ck-done {
+            text-align: center;
+            background: rgba(22, 163, 74, .06);
+            border: 1px solid rgba(22, 163, 74, .35);
+            border-radius: 12px;
+            padding: 22px 18px;
+            margin: 20px 0;
+        }
+
+        .ck-done-icon {
+            font-size: 30px;
+            color: #16a34a;
+            line-height: 1;
+        }
+
+        .ck-done-title {
+            font-family: 'Playfair Display', serif;
+            font-size: 19px;
+            font-weight: 700;
+            margin: 8px 0 4px;
+        }
+
+        .ck-done-note {
+            font-size: 12.5px;
+            color: var(--muted);
+            line-height: 1.55;
+        }
+
+        .ck-done-amount {
+            font-family: 'Playfair Display', serif;
+            font-size: 26px;
+            font-weight: 700;
+            margin-top: 10px;
+        }
     </style>
 @endpush
 
@@ -328,15 +367,20 @@
                 <div class="summary-row total">
                     <span>Total</span><span>₱{{ number_format($booking->total_amount, 2) }}</span>
                 </div>
-                @if ($booking->amount_paid > 0)
+                {{-- Laging nire-render ang row na ito, nakatago kapag wala
+                     pang naibabayad: kapag dumating ang bayad habang bukas
+                     ang page, kailangan itong may pagsusuotan — walang
+                     element na hindi umiiral sa DOM. --}}
+                <div id="ckPaidRow" @if ($booking->amount_paid <= 0) style="display:none" @endif>
                     <div class="summary-row paid"><span>Already
-                            Paid</span><span>₱{{ number_format($booking->amount_paid, 2) }}</span></div>
-                @endif
+                            Paid</span><span id="ckPaid">₱{{ number_format($booking->amount_paid, 2) }}</span></div>
+                </div>
                 <div class="summary-row balance"><span>Balance
-                        Due</span><span>₱{{ number_format($booking->balance_due, 2) }}</span></div>
+                        Due</span><span id="ckBalance">₱{{ number_format($booking->balance_due, 2) }}</span></div>
             </div>
 
             {{-- Payment Options --}}
+            <div id="ckForm">
             <form method="POST" action="{{ route('payment.checkout', $booking) }}" id="payForm">
                 @csrf
                 <input type="hidden" name="payment_type" id="selectedPaymentType" value="deposit">
@@ -417,6 +461,7 @@
                     Pay Now via PayMongo
                 </button>
             </form>
+            </div>
 
             <a href="{{ route('customer.bookings.show', $booking) }}" class="btn-back">
                 ← Back to booking details
@@ -428,6 +473,17 @@
             </div>
         </div>
     </div>
+
+    {{-- Bakit nagbabantay ang page na ito gayong aalis naman ang guest
+         patungong PayMongo: madalas HINDI ito nasasara. Ini-scan ang QR
+         sa telepono habang nakabukas pa ang checkout sa laptop, o
+         bumabalik sila rito gamit ang Back button. Kapag natanggap na
+         ang bayad, ang naiwang page ay nagpapakita ng lumang balanse at
+         ng buhay na "Pay Now" na button — at ang pinakamalapit na
+         susunod na aksiyon sa isang bayad nang guest ay ang magbayad
+         ulit. Iyon ang eksaktong dobleng singil na hindi kayang saluhin
+         ng idempotency, dahil dalawang tunay na bayad iyon. --}}
+    @include('payment._status_watcher')
 @endsection
 
 @push('scripts')
@@ -475,6 +531,73 @@
                 form.dataset.submitted = '';
                 btn.disabled = false;
                 btn.innerHTML = '<i class="bi bi-lock-fill"></i> Pay Now via PayMongo';
+            });
+        })();
+
+        // ── Realtime: pinananatiling totoo ang page habang nakabukas ──
+        (function () {
+            const BASELINE_PAID = Number(@json((float) $booking->amount_paid));
+            const BOOKING_URL = @json(route('customer.bookings.show', $booking));
+            const PAY_URL = @json(route('payment.page', $booking));
+
+            function peso(n) {
+                return '₱' + Number(n).toLocaleString('en-PH', {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2,
+                });
+            }
+
+            document.addEventListener('villa:payment-state', function (e) {
+                const d = e.detail;
+
+                const balance = document.getElementById('ckBalance');
+                if (balance) balance.textContent = peso(d.balance_due);
+
+                const paid = document.getElementById('ckPaid');
+                const paidRow = document.getElementById('ckPaidRow');
+                if (paid) paid.textContent = peso(d.amount_paid);
+                if (paidRow) paidRow.style.display = Number(d.amount_paid) > 0 ? '' : 'none';
+            });
+
+            document.addEventListener('villa:payment-received', function (e) {
+                const d = e.detail;
+                const received = Math.max(0, Number(d.amount_paid) - BASELINE_PAID);
+                const settled = Number(d.balance_due) <= 0;
+
+                // Inaalis ang buong form, hindi lang dini-disable ang
+                // button: ang natitirang radio at halaga ay naglalarawan
+                // ng isang pagpiling wala nang saysay, at ang page ay
+                // hindi na "checkout" sa puntong ito.
+                const wrap = document.getElementById('ckForm');
+                if (!wrap) return;
+
+                const panel = document.createElement('div');
+                panel.className = 'ck-done';
+                panel.innerHTML =
+                    '<div class="ck-done-icon"><i class="bi bi-check-circle-fill"></i></div>' +
+                    '<div class="ck-done-title">Payment Received</div>' +
+                    '<div class="ck-done-note"></div>' +
+                    '<div class="ck-done-amount"></div>';
+
+                panel.querySelector('.ck-done-note').textContent = settled
+                    ? 'This booking is now fully paid. There is nothing left to pay.'
+                    : 'Your payment has been recorded. A balance of ' + peso(d.balance_due) + ' remains.';
+                panel.querySelector('.ck-done-amount').textContent = peso(received);
+
+                // May natitira pang balanse: ang bagong laman ng page na
+                // ito ang tamang susunod na hakbang, dahil sa BAGONG
+                // halaga na. Hindi ito puwedeng i-update sa lugar —
+                // nakatali ang deposit/full na pagpipilian sa balanseng
+                // umiral noong na-render ang page.
+                const link = document.createElement('a');
+                link.className = 'btn-pay';
+                link.href = settled ? BOOKING_URL : PAY_URL;
+                link.style.textDecoration = 'none';
+                link.innerHTML = settled
+                    ? '<i class="bi bi-calendar-check"></i> View My Booking'
+                    : '<i class="bi bi-arrow-right-circle"></i> Pay Remaining Balance';
+
+                wrap.replaceChildren(panel, link);
             });
         })();
     </script>

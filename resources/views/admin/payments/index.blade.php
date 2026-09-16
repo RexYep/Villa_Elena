@@ -645,7 +645,8 @@
                                                 {{ $payment->amount }},
                                                 @js($payment->refundDestination?->institution_name),
                                                 @js($payment->refundDestination?->account_name),
-                                                @js($payment->refundDestination?->account_number))">
+                                                @js($payment->refundDestination?->account_number),
+                                                @js($payment->booking->booking_ref ?? ''))">
                                             Mark Paid Out
                                         </a>
                                     @endif
@@ -817,6 +818,8 @@
                     style="background:#f8fafc;border-radius:10px;padding:12px 16px;margin-bottom:16px;font-size: 14px;line-height:1.7;">
                 </div>
 
+                @include('admin.payments._confirm_booking_ref', ['bookingRef' => null, 'inputId' => 'payoutBookingRef'])
+
                 <div class="mb-12">
                     <label class="form-label">Transfer Reference Number</label>
                     <input type="text" name="transfer_reference" id="payoutRef" class="form-control"
@@ -864,7 +867,12 @@
         // na kailangang lumipat ng pahina ang admin para makita kung
         // kanino niya dapat ipadala — ang paglipat ay kung saan
         // nawawala o napapalitan ang mga numero.
-        function openPayoutModal(paymentId, amount, institution, accountName, accountNumber) {
+        function openPayoutModal(paymentId, amount, institution, accountName, accountNumber, bookingRef) {
+            const confirmRef = document.getElementById('payoutBookingRef');
+            confirmRef.value = '';
+            confirmRef.placeholder = bookingRef;
+            document.querySelector('#payoutModal [data-expected-ref]').textContent = bookingRef;
+
             document.getElementById('payoutAmount').textContent =
                 parseFloat(amount).toLocaleString('en-PH', {
                     minimumFractionDigits: 2

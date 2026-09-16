@@ -252,26 +252,144 @@
             border-bottom: none;
         }
 
-        /* Cancel form */
-        .cancel-section {
-            background: #fff8f6;
-            border: 1px solid #fdd9cc;
-            border-radius: 12px;
-            padding: 18px;
-        }
-
-        .cancel-title {
+        /* Manage Booking */
+        .btn-manage {
+            display: block;
+            background: #f1f5f9;
+            color: #374151;
+            border-radius: 10px;
+            padding: 13px;
+            text-align: center;
             font-size: 14px;
             font-weight: 600;
-            color: var(--terracotta);
-            margin-bottom: 8px;
+            text-decoration: none;
+            transition: background .2s;
         }
 
-        .cancel-desc {
+        .btn-manage:hover {
+            background: #e2e8f0;
+            color: #374151;
+        }
+
+        .manage-note {
+            font-size: 13px;
+            color: var(--muted);
+            text-align: center;
+            margin-top: 8px;
+            line-height: 1.5;
+        }
+
+        .manage-blocked {
+            background: #f8fafc;
+            border-radius: 10px;
+            padding: 13px;
+            text-align: center;
             font-size: 14px;
             color: var(--muted);
-            margin-bottom: 12px;
+            line-height: 1.6;
+        }
+
+        .cancel-toggle {
+            margin-top: 16px;
+            padding-top: 14px;
+            border-top: 1px solid var(--border);
+        }
+
+        .cancel-toggle summary {
+            list-style: none;
+            cursor: pointer;
+            text-align: center;
+            font-size: 13px;
+            font-weight: 500;
+            color: var(--terracotta);
+            padding: 4px 0;
+        }
+
+        .cancel-toggle summary::-webkit-details-marker {
+            display: none;
+        }
+
+        .cancel-toggle summary::after {
+            content: ' ›';
+            display: inline-block;
+            transition: transform .2s;
+        }
+
+        .cancel-toggle[open] summary::after {
+            transform: rotate(90deg);
+        }
+
+        .cancel-toggle summary:hover {
+            text-decoration: underline;
+        }
+
+        .cancel-panel {
+            margin-top: 12px;
+        }
+
+        .refund-estimate {
+            border-radius: 10px;
+            padding: 12px 14px;
+            font-size: 13px;
             line-height: 1.5;
+            color: var(--muted);
+        }
+
+        .refund-estimate strong {
+            display: block;
+            font-size: 14px;
+            margin-bottom: 2px;
+        }
+
+        .refund-full {
+            background: #f0fdf4;
+        }
+
+        .refund-full strong {
+            color: #15803d;
+        }
+
+        .refund-partial {
+            background: #fffbeb;
+        }
+
+        .refund-partial strong {
+            color: #b45309;
+        }
+
+        .refund-none {
+            background: #fff8f6;
+        }
+
+        .refund-none strong {
+            color: var(--terracotta);
+        }
+
+        .cancel-policy {
+            font-size: 12px;
+            color: var(--muted);
+            margin: 8px 0 14px;
+            line-height: 1.5;
+        }
+
+        .cancel-label {
+            display: block;
+            font-size: 13px;
+            font-weight: 600;
+            margin-bottom: 6px;
+        }
+
+        .cancel-error {
+            font-size: 12px;
+            color: #dc2626;
+            margin-top: 4px;
+        }
+
+        .cancel-final {
+            font-size: 12px;
+            color: var(--muted);
+            text-align: center;
+            margin-top: 6px;
         }
 
         .btn-cancel-booking {
@@ -291,6 +409,11 @@
 
         .btn-cancel-booking:hover {
             opacity: .88;
+        }
+
+        .btn-cancel-booking:disabled {
+            opacity: .6;
+            cursor: default;
         }
 
         /* Property image */
@@ -640,50 +763,81 @@
                 </div>
             </div>
 
-            {{-- Reschedule --}}
-            @if (in_array($booking->status, ['pending', 'confirmed']))
+            {{-- Manage Booking — reschedule at cancel sa iisang card. Ang
+                 reschedule ay ang karaniwang kailangan ng guest, kaya ito
+                 ang butones; ang cancel ay nakatiklop na link, at ang
+                 pulang butones ay makikita lang kapag binuksan. --}}
+            @if ($booking->isCancellable())
                 <div class="card">
+                    <div class="card-head">
+                        <h3>Manage Booking</h3>
+                    </div>
                     <div class="card-body">
                         @if ($booking->isReschedulable())
-                            <a href="{{ route('customer.bookings.reschedule', $booking) }}"
-                                style="display:block;background:#f1f5f9;color:#374151;border-radius:10px;padding:13px;
-                                  text-align:center;font-size:14px;font-weight:600;text-decoration:none;">
+                            <a href="{{ route('customer.bookings.reschedule', $booking) }}" class="btn-manage">
                                 <i class="bi bi-calendar-event me-1"></i> Reschedule Booking
                             </a>
-                            <div
-                                style="font-size: 13px;color:var(--muted);text-align:center;margin-top:8px;line-height:1.5;">
+                            <div class="manage-note">
                                 {{ $booking->reschedulesRemaining() }} of {{ \App\Models\Booking::MAX_RESCHEDULES }}
                                 reschedules left ·
                                 available until {{ \App\Models\Booking::RESCHEDULE_CUTOFF_DAYS }} days before check-in
                             </div>
                         @else
-                            <div
-                                style="background:#f8fafc;border-radius:10px;padding:13px;text-align:center;
-                                    font-size: 14px;color:var(--muted);line-height:1.6;">
+                            <div class="manage-blocked">
                                 <i class="bi bi-calendar-x me-1"></i>
                                 {{ $booking->rescheduleBlockReason() }}
                             </div>
                         @endif
-                    </div>
-                </div>
-            @endif
 
-            {{-- Cancel --}}
-            @if (in_array($booking->status, ['pending', 'confirmed']))
-                <div class="cancel-section">
-                    <div class="cancel-title"><i class="bi bi-x-circle me-1"></i> Cancel Booking</div>
-                    <div class="cancel-desc">
-                        Need to cancel? Please provide a reason below. Cancellations may be subject to our
-                        cancellation policy depending on how close to the check-in date.
+                        {{-- Bukas na kung bumalik mula sa validation error,
+                             para hindi mawala sa guest ang mensahe. --}}
+                        <details class="cancel-toggle" @if ($errors->has('cancellation_reason')) open @endif>
+                            <summary>Cancel this booking</summary>
+
+                            <div class="cancel-panel">
+                                {{-- Estimate ayon sa oras na ito — nagbabago
+                                     habang lumalapit ang check-in. Ang
+                                     parehong kalkulasyon ang ginagamit ng
+                                     cancelBooking(). --}}
+                                <div class="refund-estimate refund-{{ $refundPreviewPct === 100 ? 'full' : ($refundPreviewPct > 0 ? 'partial' : 'none') }}">
+                                    @if ($booking->amount_paid <= 0)
+                                        <strong>No payment to refund</strong>
+                                        You haven't paid anything for this booking yet.
+                                    @elseif ($refundPreviewAmount > 0)
+                                        <strong>
+                                            Estimated refund: ₱{{ number_format($refundPreviewAmount, 2) }}
+                                        </strong>
+                                        {{ $refundPreviewPct }}% of the ₱{{ number_format($booking->amount_paid, 2) }}
+                                        you've paid, if you cancel now. We'll ask where to send it.
+                                    @else
+                                        <strong>No refund</strong>
+                                        Check-in is less than 3 days away, so the
+                                        ₱{{ number_format($booking->amount_paid, 2) }} you've paid is non-refundable.
+                                    @endif
+                                </div>
+
+                                <div class="cancel-policy">
+                                    Full refund within 24 hours of booking or 7+ days before check-in ·
+                                    50% at 3–6 days · none under 3 days.
+                                </div>
+
+                                <form method="POST" action="{{ route('customer.bookings.cancel', $booking) }}"
+                                    id="cancelForm">
+                                    @csrf @method('PATCH')
+                                    <label for="cancellation_reason" class="cancel-label">Reason for cancelling</label>
+                                    <textarea name="cancellation_reason" id="cancellation_reason" class="form-control" rows="2"
+                                        placeholder="Let us know why…" required minlength="5">{{ old('cancellation_reason') }}</textarea>
+                                    @error('cancellation_reason')
+                                        <div class="cancel-error">{{ $message }}</div>
+                                    @enderror
+                                    <button type="submit" class="btn-cancel-booking">
+                                        Confirm Cancellation
+                                    </button>
+                                    <div class="cancel-final">This can't be undone.</div>
+                                </form>
+                            </div>
+                        </details>
                     </div>
-                    <form method="POST" action="{{ route('customer.bookings.cancel', $booking) }}" id="cancelForm">
-                        @csrf @method('PATCH')
-                        <textarea name="cancellation_reason" class="form-control" rows="2" placeholder="Reason for cancellation..."
-                            required minlength="5"></textarea>
-                        <button type="button" class="btn-cancel-booking" onclick="confirmCancel()">
-                            Cancel This Booking
-                        </button>
-                    </form>
                 </div>
             @endif
         </div>
@@ -693,11 +847,19 @@
 
 @push('scripts')
     <script>
-        function confirmCancel() {
-            if (confirm('Are you sure you want to cancel booking {{ $booking->booking_ref }}? This cannot be undone.')) {
-                document.getElementById('cancelForm').submit();
+        // Hindi `onclick` + form.submit(): nilalampasan nito ang `required`
+        // /`minlength` ng textarea. Dito ay tumatakbo na ang validation ng
+        // browser bago dumating ang submit event, at pinipigilan ang
+        // dobleng pag-click.
+        document.getElementById('cancelForm')?.addEventListener('submit', function(e) {
+            const btn = this.querySelector('button[type="submit"]');
+            if (btn.disabled) {
+                e.preventDefault();
+                return;
             }
-        }
+            btn.disabled = true;
+            btn.textContent = 'Cancelling…';
+        });
     </script>
 @endpush
 

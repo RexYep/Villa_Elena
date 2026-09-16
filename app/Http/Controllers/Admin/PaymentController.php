@@ -414,11 +414,13 @@ class PaymentController extends Controller
         $isCash = $payment->payment_method === 'cash';
 
         $referenceRules = [
-            'transfer_reference' => ($isCash ? 'nullable' : 'required') . '|string|min:4|max:100',
+            'confirm_booking_ref' => 'required|string|max:32',
+            'transfer_reference'  => ($isCash ? 'nullable' : 'required') . '|string|min:4|max:100',
         ];
         $referenceMessages = [
-            'transfer_reference.required' => 'Enter the reference number of the transfer you sent, so there is a record of it.',
-            'transfer_reference.min'      => 'That reference looks too short — copy it exactly from your GCash/Maya/bank receipt.',
+            'confirm_booking_ref.required' => 'Type the booking reference of this refund to confirm you are closing the right one.',
+            'transfer_reference.required'  => 'Enter the reference number of the transfer you sent, so there is a record of it.',
+            'transfer_reference.min'       => 'That reference looks too short — copy it exactly from your GCash/Maya/bank receipt.',
         ];
 
         // Kapag kasama ang destinasyon, sabay itong sinusuri kasama ang
@@ -431,7 +433,11 @@ class PaymentController extends Controller
             $validated = $request->validate($referenceRules, $referenceMessages);
         }
 
-        $reference = $validated['transfer_reference'] ?? null;
+        $reference = isset($validated['transfer_reference']) ? trim($validated['transfer_reference']) : null;
+
+        if ($problem = $this->payoutConfirmationProblem($payment, $validated['confirm_booking_ref'], $reference)) {
+            throw ValidationException::withMessages($problem);
+        }
 
         // Naka-lock at muling binabasa ang refund: ang double-click (o
         // dalawang admin na sabay) ay dating nagpapadala ng dalawang
@@ -479,6 +485,70 @@ class PaymentController extends Controller
             . ($reference ? " (ref: {$reference})" : ' (cash, no reference)'));
 
         return back()->with('success', '✅ Refund of ₱' . number_format($payment->amount, 2) . ' marked as paid out.');
+    }
+
+    // ── Mark Paid Out: tamang refund, tunay na reference ───────────
+    /**
+     * Ang mga tsek na hindi kayang gawin ng validation rules.
+     *
+     * Walang API para suriin ang isang GCash/Maya/bank receipt number,
+     * kaya dati ay tinatanggap ang ANUMANG ≥4 na karakter — kasama ang
+     * isang booking reference, na siyang karaniwang maling inilalagay.
+     * Hindi mapatunayan na tunay ang reference, pero puwedeng hulihin ang
+     * mga maling kilala natin:
+     *
+     *  1. Ang kinumpirmang booking reference ay dapat ang booking ng
+     *     refund na ito. Isang tunay pero IBANG booking (VE-3LJGN12R sa
+     *     halip na VE-3LJGNIBY) ay pagsasara ng maling refund.
+     *  2. Ang transfer reference ay hindi booking reference.
+     *  3. Ang transfer reference ay hindi ang PayMongo payment ID ng
+     *     papasok na bayad (`pay_…`) — iyon ay pera ng guest na dumating,
+     *     hindi refund na umalis.
+     *  4. Ang iisang transfer ay hindi puwedeng magbayad ng dalawang
+     *     refund.
+     *
+     * @return array<string, string>|null
+     */
+    private function payoutConfirmationProblem(Payment $payment, string $typedBookingRef, ?string $reference): ?array
+    {
+        $expected = $payment->booking->booking_ref;
+        $typed    = strtoupper(trim($typedBookingRef));
+
+        if ($typed !== $expected) {
+            $exists = Booking::where('booking_ref', $typed)->exists();
+
+            return ['confirm_booking_ref' => ($exists
+                    ? "{$typed} is a different booking — this refund belongs to {$expected}."
+                    : "No booking found with reference \"{$typed}\" — this refund belongs to {$expected}.")
+                . ' Nothing was recorded.'];
+        }
+
+        if ($reference === null || $reference === '') {
+            return null;
+        }
+
+        if (preg_match('/^VE-[A-Z0-9]{8}$/i', $reference)) {
+            return ['transfer_reference' => "\"{$reference}\" is a booking reference, not a transfer reference. "
+                . 'Enter the reference number printed on your GCash / Maya / bank receipt. Nothing was recorded.'];
+        }
+
+        if (Payment::where('reference_number', $reference)->exists()) {
+            return ['transfer_reference' => "\"{$reference}\" is the guest's original online payment ID, not the refund you sent. "
+                . 'Enter the reference number printed on your GCash / Maya / bank receipt. Nothing was recorded.'];
+        }
+
+        $reused = Payment::with('booking:id,booking_ref')
+            ->where('transaction_ref', $reference)
+            ->whereKeyNot($payment->id)
+            ->first();
+
+        if ($reused) {
+            return ['transfer_reference' => "Reference \"{$reference}\" is already recorded for another refund ("
+                . ($reused->booking->booking_ref ?? '#' . $reused->booking_id)
+                . '). One transfer cannot pay out two refunds — check your receipt. Nothing was recorded.'];
+        }
+
+        return null;
     }
 
     // ── Refund destination: iisang validation, iisang pag-save ─────

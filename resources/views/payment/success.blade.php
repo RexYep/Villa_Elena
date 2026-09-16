@@ -228,17 +228,21 @@
 @section('content')
     <div class="card">
         <div class="card-top">
-            @if ($confirmed)
-                <div class="confetti">🎉</div>
-                <div class="success-circle"><i class="bi bi-check-lg"></i></div>
-                <h1>Payment Successful!</h1>
-                <p>Your payment has been received and confirmed.</p>
-            @else
-                <div class="confetti">📷</div>
-                <div class="pending-circle"><i class="bi bi-hourglass-split"></i></div>
-                <h1>Waiting for Payment</h1>
-                <p>We have not yet confirmed the payment for this booking.</p>
-            @endif
+            {{-- Pinapalitan ng laman nito ang sarili kapag dumating ang
+                 bayad habang bukas ang page — tingnan ang script sa ibaba. --}}
+            <div id="payHead">
+                @if ($confirmed)
+                    <div class="confetti">🎉</div>
+                    <div class="success-circle"><i class="bi bi-check-lg"></i></div>
+                    <h1>Payment Successful!</h1>
+                    <p>Your payment has been received and confirmed.</p>
+                @else
+                    <div class="confetti">📷</div>
+                    <div class="pending-circle"><i class="bi bi-hourglass-split"></i></div>
+                    <h1>Waiting for Payment</h1>
+                    <p>We have not yet confirmed the payment for this booking.</p>
+                @endif
+            </div>
         </div>
         <div class="card-body">
             @php
@@ -246,30 +250,36 @@
                 $paidNow = $amountPaid ?? 0;
             @endphp
 
-            @if ($confirmed)
-                <div class="amount-box">
-                    <div class="amount-label">Amount Paid</div>
-                    <div class="amount-val">₱{{ number_format($paidNow, 2) }}</div>
-                </div>
-            @else
-                <div class="pending-note">
-                    <i class="bi bi-info-circle-fill"></i>
-                    <div>
-                        <strong>If you have already paid</strong>, don't worry—we automatically receive
-                        confirmation from your bank or e-wallet, usually within a few minutes. We will send you a
-                        notification and an email once it arrives.
-                        <div style="margin-top:8px;">
-                            <strong>If not yet</strong>, you can retry the payment from your booking—you won't
-                            be charged twice.
+            <div id="payAmount">
+                @if ($confirmed)
+                    <div class="amount-box">
+                        <div class="amount-label">Amount Paid</div>
+                        <div class="amount-val">₱{{ number_format($paidNow, 2) }}</div>
+                    </div>
+                @else
+                    <div class="pending-note">
+                        <i class="bi bi-info-circle-fill"></i>
+                        <div>
+                            {{-- Hindi na "usually within a few minutes" ang
+                                 sinasabi nito: hindi na kailangang bumalik
+                                 o mag-refresh ang guest, kaya ang totoong
+                                 tagubilin ngayon ay MANATILI lang dito. --}}
+                            <strong>If you have already paid</strong>, keep this page open — we are checking
+                            for your payment right now, and this page will update by itself the moment it
+                            arrives. We will also send you a notification and an email.
+                            <div style="margin-top:8px;">
+                                <strong>If not yet</strong>, you can retry the payment from your booking—you won't
+                                be charged twice.
+                            </div>
                         </div>
                     </div>
-                </div>
 
-                <div class="amount-box">
-                    <div class="amount-label">Amount Due</div>
-                    <div class="amount-val">₱{{ number_format($booking->balance_due, 2) }}</div>
-                </div>
-            @endif
+                    <div class="amount-box">
+                        <div class="amount-label">Amount Due</div>
+                        <div class="amount-val">₱{{ number_format($booking->balance_due, 2) }}</div>
+                    </div>
+                @endif
+            </div>
 
             <div class="detail-row"><span class="lbl">Booking Ref</span><span
                     class="val">{{ $booking->booking_ref }}</span></div>
@@ -281,7 +291,7 @@
                     class="val">{{ $booking->check_out_date->format('M d, Y') }}</span></div>
             <div class="detail-row">
                 <span class="lbl">Booking Status</span>
-                <span class="val">
+                <span class="val" id="payBookingStatus">
                     @if ($booking->status === 'confirmed')
                         <span class="status-confirmed">Confirmed</span>
                     @else
@@ -291,17 +301,13 @@
             </div>
             <div class="detail-row">
                 <span class="lbl">Payment Status</span>
-                <span class="val">
-                    @if ($booking->payment_status === 'paid')
-                        <span class="status-confirmed">Fully Paid</span>
-                    @elseif($booking->payment_status === 'partial')
-                        <span class="status-partial">Partial — ₱{{ number_format($booking->balance_due, 2) }}
-                            remaining</span>
-                    @else
-                        {{-- Dating blangko ang cell na ito kapag 'unpaid' —
-                         mas nakakalito iyon kaysa sa pagsasabi mismo. --}}
-                        <span class="status-unpaid">Not yet received</span>
-                    @endif
+                {{-- Galing sa Booking::paymentProgressDisplay() — iisa ang
+                     pinagmulan nito at ng isinasagot ng payment.status sa
+                     watcher, kaya hindi puwedeng mag-iba ang sinasabi ng
+                     kusang nag-update na page sa bagong na-load na page. --}}
+                @php($paymentDisplay = $booking->paymentProgressDisplay())
+                <span class="val" id="payPaymentStatus">
+                    <span class="{{ $paymentDisplay['class'] }}">{{ $paymentDisplay['text'] }}</span>
                 </span>
             </div>
 
@@ -309,12 +315,101 @@
                 <i class="bi bi-calendar-check me-2"></i> View My Booking
             </a>
             @if (!$confirmed && $booking->balance_due > 0)
-                <a href="{{ route('payment.page', $booking) }}" class="btn-secondary">
+                <a href="{{ route('payment.page', $booking) }}" class="btn-secondary" id="payRetryLink">
                     <i class="bi bi-arrow-clockwise"></i> Try the payment again.
                 </a>
             @endif
             <a href="{{ route('customer.home') }}" class="btn-secondary">← Back to Dashboard</a>
         </div>
     </div>
+
+    {{-- Ang mismong page na ito ang dahilan kung bakit umiiral ang
+         watcher. Ang "Waiting for Payment" ay isang estadong WALANG
+         katapusan kung walang nagmamasid: asynchronous ang QR Ph, kaya
+         maaaring ang webhook na lang ang magtala ng bayad, minuto
+         matapos makarating dito ang guest. Walang binabantayan kapag
+         nakumpirma na ang bayad — wala nang hinihintay. --}}
+    @if (!$confirmed)
+        @include('payment._status_watcher')
+
+        @push('scripts')
+            <script>
+                (function () {
+                    const BASELINE_PAID = Number(@json((float) $booking->amount_paid));
+
+                    function peso(n) {
+                        return '₱' + Number(n).toLocaleString('en-PH', {
+                            minimumFractionDigits: 2,
+                            maximumFractionDigits: 2,
+                        });
+                    }
+
+                    // Bawat tanong, kahit hindi pa dumarating ang bayad.
+                    // Puwedeng magbago ang balanse habang bukas ang page
+                    // sa ibang dahilan (halimbawa, may naitalang cash sa
+                    // front desk), at mas mabuti nang tumpak ito kaysa
+                    // manatiling luma hanggang mag-refresh.
+                    document.addEventListener('villa:payment-state', function (e) {
+                        const d = e.detail;
+
+                        const status = document.getElementById('payPaymentStatus');
+                        if (status && d.payment_display) {
+                            const span = document.createElement('span');
+                            span.className = d.payment_display.class;
+                            span.textContent = d.payment_display.text;
+                            status.replaceChildren(span);
+                        }
+
+                        const booking = document.getElementById('payBookingStatus');
+                        if (booking) {
+                            const span = document.createElement('span');
+                            if (d.booking_status === 'confirmed') span.className = 'status-confirmed';
+                            span.textContent = d.booking_status_label;
+                            booking.replaceChildren(span);
+                        }
+                    });
+
+                    // Dumating na. Ito ang sandaling dating hindi
+                    // kailanman naaabot ng page nang hindi nagre-refresh.
+                    document.addEventListener('villa:payment-received', function (e) {
+                        const d = e.detail;
+
+                        // Ang IPINAKIKITANG "Amount Paid" ay ang bagong
+                        // dating na bayad, hindi ang kabuuang naibayad na
+                        // — ganito rin ang ibig sabihin nito kapag
+                        // server-rendered ang confirmed na estado, kaya
+                        // pareho ang basa ng guest anuman ang daanan.
+                        const received = Math.max(0, Number(d.amount_paid) - BASELINE_PAID);
+
+                        const head = document.getElementById('payHead');
+                        if (head) {
+                            head.innerHTML =
+                                '<div class="confetti">🎉</div>' +
+                                '<div class="success-circle"><i class="bi bi-check-lg"></i></div>' +
+                                '<h1>Payment Successful!</h1>' +
+                                '<p>Your payment has been received and confirmed.</p>';
+                        }
+
+                        const amount = document.getElementById('payAmount');
+                        if (amount) {
+                            amount.innerHTML =
+                                '<div class="amount-box">' +
+                                '<div class="amount-label">Amount Paid</div>' +
+                                '<div class="amount-val"></div>' +
+                                '</div>';
+                            amount.querySelector('.amount-val').textContent = peso(received);
+                        }
+
+                        // Walang dapat subukang muli — bayad na. Kung
+                        // maiiwan ito, ang pinakamalapit na aksiyon sa
+                        // guest matapos magbayad ay ang magbayad ulit.
+                        document.getElementById('payRetryLink')?.remove();
+
+                        document.title = 'Payment Successful — Villa Elena Resort';
+                    });
+                })();
+            </script>
+        @endpush
+    @endif
 @endsection
 

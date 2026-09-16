@@ -64,22 +64,38 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
     develop:
+      # `initial_sync: true` on every sync entry: when watch starts, it first
+      # copies the CURRENT host files into the container, instead of only
+      # syncing files edited after it started. Without it, the container runs
+      # whatever code was baked into the image at its last build, so every
+      # edit made while watch was off (or since the last --build) stayed
+      # invisible until that same file was touched again. That is how an
+      # image built 2026-09-07 was still serving a PaymentController without
+      # the v7.1 duplicate-payment guard days later (project.md v7.3).
+      # Still only applies under `docker compose up --watch` — a container
+      # started any other way (plain `up`, Docker Desktop restart) gets no
+      # sync at all.
       watch:
         - action: sync
           path: ./app
           target: /var/www/html/app
+          initial_sync: true
         - action: sync
           path: ./resources
           target: /var/www/html/resources
+          initial_sync: true
         - action: sync
           path: ./routes
           target: /var/www/html/routes
+          initial_sync: true
         - action: sync
           path: ./config
           target: /var/www/html/config
+          initial_sync: true
         - action: sync
           path: ./database
           target: /var/www/html/database
+          initial_sync: true
         # Isang FILE lang, sinadya — hindi ang buong ./bootstrap.
         # Dito nakatira ang middleware config (kasama ang CSRF exemption
         # ng PayMongo webhook), kaya kailangan itong ma-sync; pero ang
@@ -91,6 +107,7 @@ services:
         - action: sync
           path: ./bootstrap/app.php
           target: /var/www/html/bootstrap/app.php
+          initial_sync: true
         - action: rebuild
           path: ./composer.json
         - action: rebuild

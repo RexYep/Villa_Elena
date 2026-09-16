@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Events\PaymentReceived;
 use App\Helpers\NotificationHelper;
 use App\Helpers\BookingMailHelper;
 use App\Models\Booking;
@@ -686,7 +687,7 @@ class PaymentController extends Controller
         }
 
         try {
-            Payment::create([
+            $payment = Payment::create([
                 'booking_id' => $booking->id,
                 'amount' => $amount,
                 'payment_method' => $stored,
@@ -744,6 +745,35 @@ class PaymentController extends Controller
             'sent_at' => now(),
         ]);
 
+        // Realtime: sabihin sa mga nakabukas na page na may dumating na.
+        //
+        // Ang ONLINE na bayad — mismong ang asynchronous na uri — ang
+        // tanging hindi nagba-broadcast noon. Ang PaymentReceived ay
+        // ipinapadala lang ng mga manwal na path sa Admin\PaymentController,
+        // kaya ang bayad na naitala ng webhook ay hindi umaabot kahit
+        // kanino: nakatitig ang guest sa "Waiting for Payment", at hindi
+        // rin ito lumilitaw sa admin dashboard.
+        //
+        // NARITO, SA HALIP NA SA DULO, nang sadya: pinal na ang estado sa
+        // puntong ito (naitala, na-recompute, nakumpirma), at ang email
+        // sa ibaba ay ilang segundo. Sinukat sa browser (v7.7): noong nasa
+        // dulo, ~5s ang pagitan ng naitalang bayad at ng pagdating ng push,
+        // kaya laging inuunahan ito ng 4s na polling — accelerator na
+        // walang pinabibilis.
+        //
+        // NAKABALOT sa try/catch nang sadya. Dumadaan dito ang webhook, na
+        // BAWAL magbalik ng non-2xx (io-off ng PayMongo ang webhook na
+        // paulit-ulit na pumapalya, at hindi ito bumabalik mag-isa); at
+        // naitala na ang bayad — hindi ito dapat ibagsak ng isang sumablay
+        // na Pusher call, o hadlangan ang email sa ibaba. Ang polling sa
+        // page ng guest ang bahalang humabol.
+        try {
+            event(new PaymentReceived($payment));
+        } catch (\Throwable $e) {
+            \Log::error('Broadcast of PaymentReceived failed for booking '
+                .$booking->booking_ref.': '.$e->getMessage());
+        }
+
         // Confirmation / resibo — ipinapadala sa BAWAT matagumpay na
         // bayad, hindi lang sa una. Dati, naka-gate ito sa $wasPending,
         // kaya ang guest na nagbayad ng 50% downpayment ay nakatanggap
@@ -754,5 +784,42 @@ class PaymentController extends Controller
         BookingMailHelper::paymentRecorded($booking, (float) $amount, $wasPending);
 
         return true;
+    }
+
+    // ── Payment status (polled ng checkout/success page) ───────────
+    // GET /pay/{booking}/status
+    /**
+     * Ang AWTORIDAD kung nasaan na ang bayad ng isang booking.
+     *
+     * Ito ang dahilan kung bakit hindi na kailangang mag-refresh ng
+     * guest. Ang Pusher event ay PAALALA lang — maaaring hindi ito
+     * dumating (walang PUSHER_APP_KEY sa ilang environment, patay ang
+     * websocket, o sarado ang tab noong ipinadala ito), kaya hindi
+     * puwedeng ito lang ang aasahan kung pera ang pinag-uusapan. Dito
+     * nagtatanong ang page tuwing ilang segundo, at dito rin ito agad
+     * tumatanong kapag may dumating na event.
+     *
+     * Sinasadyang WALA ritong abort_if para sa balance_due <= 0 —
+     * kabaligtaran ito ng showPaymentPage(). Ang mismong sandaling
+     * nagiging zero ang balanse ang pinakamahalagang sagot na maibibigay
+     * nito; kung mag-a-abort ito roon, mabibigo ang huling tanong ng
+     * page at hindi na nito malalamang bayad na.
+     */
+    public function status(Booking $booking)
+    {
+        abort_if($booking->user_id !== Auth::id(), 403);
+
+        return response()->json([
+            'amount_paid' => (float) $booking->amount_paid,
+            'balance_due' => (float) $booking->balance_due,
+            'total_amount' => (float) $booking->total_amount,
+            'payment_status' => $booking->payment_status,
+            // Iisang pinagmulan ang teksto at class na ito at ang
+            // ipinakita ng page noong una itong na-render — tingnan ang
+            // Booking::paymentProgressDisplay().
+            'payment_display' => $booking->paymentProgressDisplay(),
+            'booking_status' => $booking->status,
+            'booking_status_label' => ucfirst(str_replace('_', ' ', (string) $booking->status)),
+        ]);
     }
 }

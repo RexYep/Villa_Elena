@@ -525,7 +525,7 @@
                             {{-- Nakabukas agad ito kapag ito na ang TANGING daan —
                                  walang saysay na itago ang tanging magagawa. --}}
                             <details id="manual-payout" style="margin-top:16px;"
-                                {{ $payment->canSendTransfer() ? '' : 'open' }}>
+                                {{ $payment->canSendTransfer() && old('_form') !== 'payout' ? '' : 'open' }}>
                                 <summary style="cursor:pointer;font-size: 14px;font-weight:600;color:var(--stone);">
                                     I sent it myself — record it by hand
                                 </summary>
@@ -534,12 +534,15 @@
                                     style="margin-top:12px;">
                                     @csrf
                                     @method('PATCH')
+                                    <input type="hidden" name="_form" value="payout">
 
                                     <div style="font-size: 14px;color:var(--muted);margin-bottom:12px;">
                                         Only use this if you already sent
                                         <strong>₱{{ number_format($payment->amount, 2) }}</strong>
                                         to the account above from your own GCash / Maya / bank app.
                                     </div>
+
+                                    @include('admin.payments._confirm_booking_ref', ['bookingRef' => $payment->booking->booking_ref])
 
                                     <label class="field-lbl">Transfer Reference Number</label>
                                     <input type="text" name="transfer_reference" class="form-control"
@@ -683,6 +686,8 @@
                                             value="{{ old('account_name', $payment->booking->user->full_name ?? '') }}">
                                     </div>
 
+                                    @include('admin.payments._confirm_booking_ref', ['bookingRef' => $payment->booking->booking_ref])
+
                                     <label class="field-lbl">Transfer Reference Number</label>
                                     <input type="text" name="transfer_reference" class="form-control"
                                         minlength="4" maxlength="100" placeholder="e.g. 1029384756123" required
@@ -727,6 +732,8 @@
                         Hand <strong>₱{{ number_format($payment->amount, 2) }}</strong> to the guest, then record
                         it here.
                     </div>
+
+                    @include('admin.payments._confirm_booking_ref', ['bookingRef' => $payment->booking->booking_ref])
 
                     <label class="field-lbl">Receipt / OR Number <span style="font-weight:400;">(optional)</span></label>
                     <input type="text" name="transfer_reference" class="form-control" minlength="4" maxlength="100"
