@@ -21,7 +21,7 @@ class ChatbotController extends Controller
         ]);
 
         $userMessage = trim($request->input('message'));
-        $history     = $request->input('history', []);
+        $history     = $this->cleanHistory($request->input('history', []));
 
         // ── Step 1: Extract intent via AI ─────────────────────────
         // Note: single-villa resort — walang "search among many properties",
@@ -266,5 +266,32 @@ CONVERSATION HISTORY:
             'property_cards' => $propertyCards,
             'intent'         => $intent['intent'] ?? 'general_question',
         ]);
+    }
+
+    /**
+     * `history` comes straight from the browser and is pasted into the
+     * prompt, so it is clamped rather than validated: the last 8 turns,
+     * known roles only, each trimmed to 1,000 characters. Clamping instead
+     * of a 422 matters — one long Elena reply would otherwise break the
+     * chat for the rest of that visit. Unclamped, a script could send a
+     * huge history on every call and burn the shared Groq token budget.
+     */
+    private function cleanHistory(mixed $history): array
+    {
+        if (! is_array($history)) {
+            return [];
+        }
+
+        return collect($history)
+            ->filter(fn ($entry) => is_array($entry)
+                && in_array($entry['role'] ?? null, ['user', 'assistant'], true)
+                && is_string($entry['content'] ?? null))
+            ->take(-8)
+            ->map(fn ($entry) => [
+                'role'    => $entry['role'],
+                'content' => mb_substr($entry['content'], 0, 1000),
+            ])
+            ->values()
+            ->all();
     }
 }

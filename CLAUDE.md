@@ -142,6 +142,16 @@ Outbound mail (registration, 2FA send/resend, verification, forgot-password, wal
 
 Notification `link` values must be generated as relative URLs (`route($name, $params, false)`) — an absolute URL bakes in whatever `APP_URL`/tunnel host was active at creation time and goes dead if that changes.
 
+### Rate limiting (v7.8)
+
+Every public route that sends mail, calls the AI or checks a secret uses a **named limiter** from `AppServiceProvider::configureRateLimiting()`; the full table is in `project.md` v7.8.
+
+- **Per-minute limits alone are not enough.** Brevo's free tier (300/day) is shared by 2FA codes, password resets and booking confirmations, and the Groq budget is shared by the chatbot, review moderation and admin reports. Anything that sends mail or calls the AI gets an hourly or daily cap too.
+- **Over the limit, send the guest back to the form with a message, never to an error page.** Put it where that page reads it: `error` flash on auth pages, the form's **named error bag** on the profile page, `contact_error` on the contact form, JSON `{ok:false, reply}` for the chatbot.
+- Every `Limit` inside one limiter needs its own key prefix (`m:`/`h:`/`d:`); a shared key means a shared counter.
+- **Never throttle `/webhooks/paymongo*`**: a 429 is a failed delivery, and PayMongo disables the webhook.
+- Login is locked on **failed** attempts per account (`AuthController::login()`), not on requests per IP. A 2FA code is cancelled after 5 wrong guesses.
+
 ### Non-obvious column/enum names
 
 These have caused real bugs before (see `project.md` §13 for the full list) — don't assume Laravel-convention defaults:
@@ -191,7 +201,7 @@ Vite multi-entry build — one JS/CSS pair per portal section (`admin`, `portal`
 
 ## Testing
 
-`tests/` currently only contains the default Laravel skeleton (`ExampleTest.php` in both `Unit` and `Feature`) — there is no real test suite covering booking/pricing/payment logic yet. Testing config uses in-memory SQLite, array session/cache/mail, sync queue (see `phpunit.xml`).
+`tests/` has the default Laravel skeleton (`ExampleTest.php` in both `Unit` and `Feature`) plus `tests/Feature/RateLimitingTest.php` — there is no real test suite covering booking/pricing/payment logic yet. The migrations use MySQL-only syntax and don't run on the SQLite test DB, so tests that need tables create minimal ones themselves (see `RateLimitingTest::makeUsersTable()`); `Feature\ExampleTest` fails for that reason. Testing config uses in-memory SQLite, array session/cache/mail, sync queue (see `phpunit.xml`).
 
 ## Deployment
 

@@ -28,12 +28,12 @@ Route::middleware('maintenance.check')->group(function () {
     Route::get('terms-of-service', [PortalController::class, 'terms'])->name('portal.terms');
 
     Route::post('contact', [PortalController::class, 'submitContact'])
-        ->middleware('throttle:5,60')->name('portal.contact.send');
+        ->middleware('throttle:contact')->name('portal.contact.send');
 
     // Booking form + submit — requires login (handled inside controller)
     Route::get('book/{property}', [PortalController::class, 'bookingForm'])->name('portal.book');
     Route::post('book/{property}', [PortalController::class, 'submitBooking'])
-        ->middleware(['auth', 'verified', 'throttle:5,60'])
+        ->middleware(['auth', 'verified', 'throttle:booking-submit'])
         ->name('portal.book.submit');
     Route::get('booking/confirmed/{booking}', [PortalController::class, 'confirmation'])->name('portal.confirmation');
 });
@@ -94,20 +94,20 @@ Route::get('/cron/run-schedule/{token}', function (string $token) {
 // ── Authentication Routes ──────────────────────────────────────────────────
 Route::middleware('guest')->group(function () {
     Route::get('/login', [AuthController::class, 'showLogin'])->name('login');
-    Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:5,1');
+    Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:login');
 
     Route::get('/register', [AuthController::class, 'showRegister'])->name('register');
-    Route::post('/register', [AuthController::class, 'register'])->middleware('throttle:3,1');
+    Route::post('/register', [AuthController::class, 'register'])->middleware('throttle:register');
 
     Route::get('/forgot-password', [AuthController::class, 'showForgotPassword'])->name('password.request');
-    Route::post('/forgot-password', [AuthController::class, 'sendResetLink'])->name('password.email')->middleware('throttle:3,1');
+    Route::post('/forgot-password', [AuthController::class, 'sendResetLink'])->name('password.email')->middleware('throttle:password-email');
 
     Route::get('/reset-password/{token}', [AuthController::class, 'showResetPassword'])->name('password.reset');
-    Route::post('/reset-password', [AuthController::class, 'resetPassword'])->name('password.update')->middleware('throttle:3,1');
+    Route::post('/reset-password', [AuthController::class, 'resetPassword'])->name('password.update')->middleware('throttle:password-reset');
 
     Route::get('/two-factor/verify', [AuthController::class, 'showTwoFactor'])->name('two-factor.verify');
-    Route::post('/two-factor/verify', [AuthController::class, 'verifyTwoFactor'])->middleware('throttle:5,1');
-    Route::post('/two-factor/resend', [AuthController::class, 'resendTwoFactor'])->name('two-factor.resend')->middleware('throttle:3,1');
+    Route::post('/two-factor/verify', [AuthController::class, 'verifyTwoFactor'])->middleware('throttle:two-factor-verify');
+    Route::post('/two-factor/resend', [AuthController::class, 'resendTwoFactor'])->name('two-factor.resend')->middleware('throttle:two-factor-resend');
 });
 
 // ── Logout (requires auth) ─────────────────────────────────────────────────
@@ -122,7 +122,7 @@ Route::middleware('auth')->group(function () {
         ->name('verification.notice');
 
     Route::post('/email/verification-notification', [AuthController::class, 'resendVerification'])
-        ->middleware('throttle:6,1')
+        ->middleware('throttle:verification-send')
         ->name('verification.send');
 });
 
@@ -135,4 +135,4 @@ Route::get('/email/verify/{id}/{hash}', [AuthController::class, 'verifyEmail'])
 
 Route::post('/chatbot', [ChatbotController::class, 'reply'])
     ->name('chatbot.reply')
-    ->middleware(['throttle:10,1', 'maintenance.check']);
+    ->middleware(['maintenance.check', 'throttle:chatbot']);

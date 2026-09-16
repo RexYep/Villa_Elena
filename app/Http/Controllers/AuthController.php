@@ -15,6 +15,7 @@ use Illuminate\Support\Facades\Password;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Cookie;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Str;
 use App\Helpers\NotificationHelper;
 
@@ -23,6 +24,12 @@ class AuthController extends Controller
     private const TRUSTED_DEVICE_COOKIE = 'trusted_device';
     private const TRUSTED_DEVICE_DAYS   = 60;
     private const OTP_TTL_MINUTES       = 10;
+    // Wrong guesses allowed against ONE code before it is cancelled. The
+    // route throttle is per network only, so without this a 6-digit code
+    // could be guessed from many IPs inside its 10-minute life.
+    private const OTP_MAX_ATTEMPTS      = 5;
+    private const LOGIN_MAX_FAILURES    = 5;   // per email + IP, per minute
+    private const LOGIN_MAX_FAILURES_PER_ACCOUNT = 15; // per email, any IP, per 15 minutes
 
     // ── Show Login Page ────────────────────────────────────────────
     public function showLogin()
@@ -48,29 +55,63 @@ class AuthController extends Controller
         // exists or the password was wrong — a single generic message
         // for both prevents user enumeration (attackers probing which
         // emails are registered).
+        // Failed-login lockout. Only FAILURES count — the old route-level
+        // `throttle:5,1` also counted successful logins, per IP only, so a
+        // household or resort Wi-Fi shared five logins a minute while one
+        // attacker rotating IPs could keep guessing a single account.
+        // Two keys: email+IP (Laravel Breeze's rule) catches one guesser,
+        // email alone catches a guesser spread across many IPs.
+        $email       = strtolower(trim($request->email));
+        $lockoutKeys = [
+            "login:{$email}|{$request->ip()}" => [self::LOGIN_MAX_FAILURES, 60],
+            "login:{$email}"                  => [self::LOGIN_MAX_FAILURES_PER_ACCOUNT, 15 * 60],
+        ];
+
+        foreach ($lockoutKeys as $key => [$maxFailures]) {
+            if (RateLimiter::tooManyAttempts($key, $maxFailures)) {
+                $minutes = (int) ceil(RateLimiter::availableIn($key) / 60);
+
+                return back()
+                    ->withErrors(['email' => "Too many failed login attempts. Please try again in {$minutes} " . Str::plural('minute', $minutes) . '.'])
+                    ->withInput($request->only('email', 'remember'));
+            }
+        }
+
+        $failed = function () use ($request, $lockoutKeys) {
+            foreach ($lockoutKeys as $key => [, $decaySeconds]) {
+                RateLimiter::hit($key, $decaySeconds);
+            }
+
+            return back()->withErrors(['email' => 'Invalid email or password.'])->withInput($request->only('email', 'remember'));
+        };
+
         $user = User::where('email', $request->email)->first();
 
         if (!$user || !Hash::check($request->password, $user->password)) {
-            return back()->withErrors(['email' => 'Invalid email or password.'])->withInput();
+            return $failed();
+        }
+
+        // The password was right: whatever happens next, it isn't guessing.
+        foreach (array_keys($lockoutKeys) as $key) {
+            RateLimiter::clear($key);
         }
 
         // Check if account is active
         if (!$user->isActive()) {
-            return back()->withErrors(['email' => 'Your account has been deactivated. Please contact the administrator.'])->withInput();
+            return back()->withErrors(['email' => 'Your account has been deactivated. Please contact the administrator.'])->withInput($request->only('email', 'remember'));
         }
 
         // 2FA is opt-in (toggled in the customer profile) and only bites on
         // a device we haven't seen before — a matching, unexpired
         // trusted_devices row skips straight to a normal login.
         if ($user->two_factor_enabled && !$this->isTrustedDevice($user, $request)) {
-            $code = (string) random_int(100000, 999999);
-            Cache::put("2fa_otp_{$user->id}", Hash::make($code), now()->addMinutes(self::OTP_TTL_MINUTES));
+            $code = $this->issueTwoFactorCode($user);
 
             try {
                 $user->notify(new TwoFactorCodeNotification($code));
             } catch (\Exception $e) {
                 Log::error('Failed to send 2FA code: ' . $e->getMessage());
-                return back()->withErrors(['email' => 'The verification code cannot be sent right now. Please try again later.'])->withInput();
+                return back()->withErrors(['email' => 'The verification code cannot be sent right now. Please try again later.'])->withInput($request->only('email', 'remember'));
             }
 
             $request->session()->put('2fa_user_id', $user->id);
@@ -84,7 +125,7 @@ class AuthController extends Controller
             return $this->redirectByRole($user);
         }
 
-        return back()->withErrors(['email' => 'Invalid email or password.'])->withInput();
+        return $failed();
     }
 
     // ── Two-Factor: Show Verification Page ─────────────────────────
@@ -119,10 +160,17 @@ class AuthController extends Controller
         $hashedCode = Cache::get("2fa_otp_{$user->id}");
 
         if (!$hashedCode || !Hash::check($request->code, $hashedCode)) {
+            if ($hashedCode && $this->otpAttemptsExhausted($user)) {
+                Cache::forget("2fa_otp_{$user->id}");
+
+                return back()->withErrors(['code' => 'Too many incorrect codes. This code has been cancelled — please request a new one.']);
+            }
+
             return back()->withErrors(['code' => 'Invalid or expired code. Please try again.']);
         }
 
         Cache::forget("2fa_otp_{$user->id}");
+        Cache::forget("2fa_attempts_{$user->id}");
         $remember = $request->session()->pull('2fa_remember', false);
         $request->session()->forget('2fa_user_id');
 
@@ -142,8 +190,7 @@ class AuthController extends Controller
             return redirect()->route('login');
         }
 
-        $code = (string) random_int(100000, 999999);
-        Cache::put("2fa_otp_{$user->id}", Hash::make($code), now()->addMinutes(self::OTP_TTL_MINUTES));
+        $code = $this->issueTwoFactorCode($user);
 
         try {
             $user->notify(new TwoFactorCodeNotification($code));
@@ -153,6 +200,27 @@ class AuthController extends Controller
         }
 
         return back()->with('success', 'A new code has been sent to your email.');
+    }
+
+    // ── Two-Factor: Store A Fresh Code, Resetting The Guess Counter ─
+    private function issueTwoFactorCode(User $user): string
+    {
+        $code = (string) random_int(100000, 999999);
+
+        Cache::put("2fa_otp_{$user->id}", Hash::make($code), now()->addMinutes(self::OTP_TTL_MINUTES));
+        Cache::forget("2fa_attempts_{$user->id}");
+
+        return $code;
+    }
+
+    // ── Two-Factor: Count A Wrong Guess; True Once The Code Is Burnt ─
+    private function otpAttemptsExhausted(User $user): bool
+    {
+        $key = "2fa_attempts_{$user->id}";
+
+        Cache::add($key, 0, now()->addMinutes(self::OTP_TTL_MINUTES));
+
+        return Cache::increment($key) >= self::OTP_MAX_ATTEMPTS;
     }
 
     // ── Check If The Current Browser Is A Trusted Device ────────────

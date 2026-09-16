@@ -702,6 +702,12 @@
 
         qrPanel.style.display = 'none';
         addMessage('user', text);
+
+        // Snapshot BEFORE adding this message: the server appends the
+        // current message to the prompt itself, so including it here sent
+        // it to the AI twice and wasted tokens on every turn.
+        const priorHistory = history.slice(-8);
+
         history.push({
             role: 'user',
             content: text
@@ -718,15 +724,30 @@
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
+                    // Without this Laravel answers errors with an HTML page,
+                    // res.json() throws, and every failure looks identical.
+                    'Accept': 'application/json',
                     'X-CSRF-TOKEN': '{{ csrf_token() }}',
                 },
                 body: JSON.stringify({
                     message: text,
-                    history: history.slice(-8)
+                    history: priorHistory
                 }),
             });
 
+            // 419: the page outlived its session (left open for hours), so
+            // the CSRF token baked into it is dead. Retrying can never work
+            // until the page is reloaded — say so instead of "try again".
+            if (res.status === 419) {
+                throw Object.assign(new Error('Your session has expired. Please refresh the page to keep chatting. 🔄'), { friendly: true });
+            }
+
             const data = await res.json();
+
+            // 429 carries its own `reply` explaining how long to wait.
+            if (!res.ok && !data.reply) {
+                throw new Error();
+            }
             const reply = data.reply || 'Sorry, I could not process your request.';
             const cards = data.property_cards || [];
 
@@ -750,7 +771,7 @@
 
         } catch (err) {
             removeTyping();
-            addMessage('bot', 'Sorry, something went wrong. Please try again. 🙏');
+            addMessage('bot', err.friendly ? err.message : 'Sorry, something went wrong. Please try again. 🙏');
         }
 
         isLoading = false;

@@ -1,12 +1,68 @@
 # Villa Elena Private Rental Resort
 ## Resort Management System — Project Documentation
 
-**Version:** 7.7
+**Version:** 7.8
 **Stack:** PHP 8.2 / Laravel 12 / MySQL 8 / Bootstrap 5
 **Local URL:** `http://127.0.0.1:8000` (`php artisan serve`) or `http://localhost:8000` (Docker — see v5.3)
 **Live URL:** `https://villa-elena.onrender.com` (Render, free tier — testing only, not yet handed to real guests)
 **Database (local):** `villa_elena_db` (MySQL, XAMPP or standalone MySQL — same database either way)
 **Database (live):** Aiven MySQL free tier, database `defaultdb`
+
+---
+
+## What Changed in v7.8 (Read This First)
+
+### A guest booking twice got a bare "429 Too Many Requests" page
+
+`POST /book/{property}` was `throttle:5,60`: five POSTs per user per **hour**, and every rejected POST counted too (validation errors, the pending-booking rule, a taken slot). A guest who retried a few times hit Laravel's plain 429 page, because `resources/views/errors/` didn't exist.
+
+An audit of every route found the same problem worse elsewhere. The limits were all per minute with no daily cap, and **Brevo's free tier is 300 emails/day for the whole app**: `throttle:3,1` on register, forgot-password or 2FA resend is ~4,300 emails a day from one script. Once that quota is gone, **2FA users can't log in**, password resets stop and booking confirmations stop, with no alert. The chatbot's 10/min made **two Groq calls per message**, drawing on the same Groq budget as review moderation and the admin AI reports.
+
+### Named limiters: `AppServiceProvider::configureRateLimiting()`
+
+| Limiter | Route(s) | Limits |
+|---|---|---|
+| `booking-submit` | `POST /book/{property}` | 10 per 10 min per user |
+| `login` | `POST /login` | 30/min per IP (flood guard only; see lockout below) |
+| `register` | `POST /register` | 3/min, 10/hour, 20/day per IP |
+| `password-email` | `POST /forgot-password` | 3/min and 10/hour per IP, **3/hour per address** |
+| `password-reset` | `POST /reset-password` | 5/min per IP |
+| `two-factor-verify` | `POST /two-factor/verify` | 10/min per IP |
+| `two-factor-resend` | `POST /two-factor/resend` | 2/min and 6/hour per pending login, 20/hour per IP |
+| `verification-send` | `POST /email/verification-notification` | 2/min, 6/hour per user |
+| `chatbot` | `POST /chatbot` | 10/min, 60/hour, 150/day per user or IP |
+| `password-confirm` | `PUT my/profile/password`, `PUT my/profile/2fa`, `DELETE my/profile` | 5/min per user |
+| `review-write` | `POST my/bookings/{booking}/review`, `PUT my/reviews/{review}` | 10/min per user |
+| `contact` | `POST /contact` | 5/hour per IP |
+
+Rules that must survive edits:
+
+- **Over the limit, a guest goes back to their form with a message, never to an error page.** The message goes where that page actually reads it: `error` flash on auth pages (`layouts/auth.blade.php`), a field error on booking (`dates`) and reviews (`content`), `contact_error` on the contact form, and **the form's own named error bag** on the profile page (`updatePassword` / `twoFactor` / `deactivate`); in the default bag it would never appear. The chatbot gets JSON `{ok: false, reply}` with status 429. Passwords are never flashed back as old input.
+- **Every `Limit` inside one limiter needs its own key prefix** (`m:`, `h:`, `d:`, `e:`). The middleware keys counters by limiter name + key, so two Limits with the same key share one counter with two different decay windows.
+- `resources/views/errors/429.blade.php` is the fallback for the plain `throttle:N,M` routes that remain (`payment.checkout`, `payment.status`, `verification.verify`).
+- **Never throttle `/webhooks/paymongo*`.** A 429 counts as a failed delivery, and PayMongo disables the webhook.
+
+### Login lockout counts failures per account, not requests per IP
+
+`throttle:5,1` counted successful logins too and was per IP only, so a shared Wi-Fi or carrier NAT shared five logins a minute while an attacker rotating IPs could keep guessing one account. `AuthController::login()` now uses `RateLimiter` on **failed** attempts only: 5 per minute per email+IP, and 15 per 15 minutes per email from any IP. A correct password clears both counters, even if the account then turns out to be deactivated.
+
+### 2FA: a code is cancelled after 5 wrong guesses
+
+The route throttle is per IP, so a 6-digit code could be guessed from many IPs within its 10 minutes. `verifyTwoFactor()` counts wrong guesses in `2fa_attempts_{id}`; the 5th cancels the code. `issueTwoFactorCode()` (used by both login and resend) resets the counter.
+
+### Chatbot
+
+- **`history` is clamped, not validated:** the last 8 turns, `user`/`assistant` roles only, 1,000 characters each (`ChatbotController::cleanHistory()`). A 422 would break the chat for the rest of the visit after one long reply.
+- **The current message was sent to the AI twice:** the widget put it in `history` and the server also appends it. The widget now snapshots `history` before adding the message.
+- The widget sends `Accept: application/json`. Without it, errors came back as HTML, `res.json()` threw, and every failure read "something went wrong". A 419 (the page outlived its session) now says to refresh the page, since retrying can never work.
+
+### Tests
+
+`tests/Feature/RateLimitingTest.php` covers every limiter above, the login lockout, the 2FA cancel and history clamping. It needs no migrations (they use MySQL-only syntax and don't run on the SQLite test DB). Limiters are tested through throwaway routes, and the login tests create a minimal `users` table. `ExampleTest` still fails because it renders the home page, which needs MySQL. That was already true before this change.
+
+### Not verified: does Render pass the real client IP?
+
+Every per-IP limit assumes `$request->ip()` is the guest's address (`trustProxies(at: '*')`). If Render's proxy chain hands Laravel a proxy address instead, **all guests share one bucket**. Check `login_activities.ip_address` in production: many different users on the same one or two IPs means the proxy config needs fixing before these limits can be trusted.
 
 ---
 
@@ -3671,11 +3727,11 @@ GET  /properties/{property}         portal.property
 GET  /reviews                       portal.reviews            ← NEW v5.0 (all approved reviews)
 GET  /privacy-policy                portal.privacy            ← NEW v6.1
 GET  /terms-of-service              portal.terms              ← NEW v6.1
-POST /contact                       portal.contact.send       ← NEW v5.0 (throttle:5,60)
+POST /contact                       portal.contact.send       ← NEW v5.0 (throttle:contact — v7.8)
 GET  /book/{property}               portal.book
-POST /book/{property}               portal.book.submit
+POST /book/{property}               portal.book.submit        (throttle:booking-submit — v7.8)
 GET  /booking/confirmed/{booking}   portal.confirmation
-POST /chatbot                       chatbot.reply
+POST /chatbot                       chatbot.reply             (throttle:chatbot — v7.8)
 GET  /pay/{booking}                 payment.page
 POST /pay/{booking}/checkout        payment.checkout
 GET  /pay/{booking}/success         payment.success
@@ -3683,16 +3739,16 @@ GET  /pay/{booking}/cancel          payment.cancel
 POST /webhooks/paymongo             payment.webhook           (no CSRF)
 POST /webhooks/paymongo/transfer    payment.webhook.transfer  (no CSRF)  ← NEW v5.9
 GET  /login                         login
-POST /login
+POST /login                                                    (throttle:login + failed-login lockout — v7.8)
 GET  /register                      register
-POST /register
+POST /register                                                 (throttle:register — v7.8)
 GET  /forgot-password               password.request
-POST /forgot-password               password.email
+POST /forgot-password               password.email            (throttle:password-email — v7.8)
 GET  /reset-password/{token}        password.reset
-POST /reset-password                password.update
+POST /reset-password                password.update           (throttle:password-reset — v7.8)
 GET  /two-factor/verify             two-factor.verify         ← NEW v5.0
-POST /two-factor/verify                                        ← NEW v5.0 (throttle:5,1)
-POST /two-factor/resend             two-factor.resend         ← NEW v5.0 (throttle:3,1)
+POST /two-factor/verify                                        ← NEW v5.0 (throttle:two-factor-verify — v7.8)
+POST /two-factor/resend             two-factor.resend         ← NEW v5.0 (throttle:two-factor-resend — v7.8)
 POST /logout                        logout
 ```
 
