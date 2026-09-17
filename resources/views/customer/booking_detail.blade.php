@@ -439,107 +439,48 @@
             margin-bottom: 3px;
         }
 
-        /* Report an issue (v7.11) */
+        /* Report an issue (v7.11) — ang form ay nasa customer/partials/issue_report_modal */
         .issue-card {
             border-color: #fecaca;
         }
 
-        .issue-intro {
-            font-size: 14px;
+        .issue-cta {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 14px;
+            flex-wrap: wrap;
+        }
+
+        .issue-cta-title {
+            font-weight: 600;
+            font-size: 15px;
+            color: var(--stone);
+        }
+
+        .issue-cta-sub {
+            font-size: 13px;
             color: var(--muted);
-            margin-bottom: 14px;
-            line-height: 1.5;
+            margin-top: 2px;
         }
 
-        .issue-card fieldset {
-            border: none;
-            padding: 0;
-            margin: 0;
+        @media (max-width:600px) {
+            .issue-cta .btn-report-issue {
+                width: 100%;
+            }
         }
 
-        .issue-label {
-            display: block;
+        .issue-list.with-cta {
+            margin-top: 16px;
+            padding-top: 14px;
+            border-top: 1px solid var(--border);
+        }
+
+        .issue-list-label {
             font-size: 13px;
             font-weight: 600;
             color: var(--stone);
-            margin-bottom: 8px;
-        }
-
-        .issue-optional {
-            font-weight: 400;
-            color: var(--muted);
-        }
-
-        .issue-pick {
-            display: grid;
-            grid-template-columns: repeat(4, 1fr);
-            gap: 8px;
-        }
-
-        .issue-pick label {
-            position: relative;
-            border: 1.5px solid var(--border);
-            border-radius: 10px;
-            padding: 10px 4px;
-            min-height: 44px;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            gap: 4px;
-            font-size: 13px;
-            cursor: pointer;
-            text-align: center;
-        }
-
-        .issue-pick label i {
-            font-size: 18px;
-        }
-
-        .issue-pick input {
-            position: absolute;
-            opacity: 0;
-            pointer-events: none;
-        }
-
-        .issue-pick label:has(input:checked) {
-            border-color: #dc2626;
-            background: #fef2f2;
-            color: #b91c1c;
-            font-weight: 600;
-        }
-
-        .issue-pick label:has(input:focus-visible) {
-            outline: 2px solid #dc2626;
-            outline-offset: 2px;
-        }
-
-        .issue-error {
-            color: #dc2626;
-            font-size: 13px;
-            margin-top: 6px;
-        }
-
-        .btn-issue {
-            margin-top: 14px;
-            width: 100%;
-            background: #dc2626;
-            color: #fff;
-            border: none;
-            border-radius: 10px;
-            padding: 13px;
-            font-size: 14px;
-            font-weight: 600;
-            cursor: pointer;
-        }
-
-        .btn-issue:hover {
-            background: #b91c1c;
-        }
-
-        .issue-list.with-form {
-            margin-top: 20px;
-            padding-top: 16px;
-            border-top: 1px solid var(--border);
+            margin-bottom: 4px;
         }
 
         .issue-item {
@@ -594,12 +535,6 @@
         .ws-in-progress { background: #dbeafe; color: #1d4ed8; }
         .ws-completed { background: #dcfce7; color: #15803d; }
         .ws-cancelled { background: #f1f5f9; color: #475569; }
-
-        @media (max-width:420px) {
-            .issue-pick {
-                grid-template-columns: repeat(2, 1fr);
-            }
-        }
 
         @media (max-width:900px) {
             .detail-grid {
@@ -794,58 +729,27 @@
 
         {{-- Left --}}
         <div>
-            {{-- Report an issue (v7.11) — form lang habang naka-check-in;
-                 ang listahan ng mga ulat ay nananatili pagkatapos. --}}
+            {{-- Report an issue (v7.11) — button na nagbubukas ng popup habang
+                 naka-check-in; ang listahan ng mga ulat ay nananatili pagkatapos. --}}
             @if ($booking->canReportIssues() || $booking->issueReports->isNotEmpty())
-                @php $issueErrors = $errors->issueReport; @endphp
                 <div class="card issue-card" id="report-issue">
-                    <div class="card-head">
-                        <h3><i class="bi bi-tools me-2"></i>Having a problem during your stay?</h3>
-                    </div>
                     <div class="card-body">
                         @if ($booking->canReportIssues())
-                            <p class="issue-intro">
-                                Let us know here — it goes straight to our staff on duty, so there's no need to look for
-                                someone in person.
-                            </p>
-                            <form method="POST" action="{{ route('customer.bookings.issues.store', $booking) }}" id="issueForm">
-                                @csrf
-                                <fieldset>
-                                    <legend class="issue-label">What's the problem?</legend>
-                                    <div class="issue-pick">
-                                        @foreach (\App\Models\IssueReport::CATEGORIES as $key => $cat)
-                                            <label>
-                                                <input type="radio" name="category" value="{{ $key }}" required
-                                                    @checked(old('category') === $key)>
-                                                <i class="bi bi-{{ $cat['icon'] }}" aria-hidden="true"></i>
-                                                <span>{{ $cat['label'] }}</span>
-                                            </label>
-                                        @endforeach
-                                    </div>
-                                </fieldset>
-                                @if ($issueErrors->has('category'))
-                                    <div class="issue-error">{{ $issueErrors->first('category') }}</div>
-                                @endif
-
-                                <label for="issueDescription" class="issue-label" style="margin-top:14px;">
-                                    Tell us a bit more <span class="issue-optional">(required for "Other")</span>
-                                </label>
-                                <textarea name="description" id="issueDescription" class="form-control" rows="2"
-                                    maxlength="{{ \App\Models\IssueReport::DESCRIPTION_MAX }}"
-                                    placeholder="e.g. The aircon in the second bedroom is blowing warm air">{{ old('description') }}</textarea>
-                                @if ($issueErrors->has('description'))
-                                    <div class="issue-error">{{ $issueErrors->first('description') }}</div>
-                                @endif
-
-                                <button type="submit" class="btn-issue">
-                                    <i class="bi bi-send me-1"></i> Send to staff
+                            <div class="issue-cta">
+                                <div>
+                                    <div class="issue-cta-title">Having a problem during your stay?</div>
+                                    <div class="issue-cta-sub">Let our staff on duty know — no need to look for someone.</div>
+                                </div>
+                                <button type="button" class="btn-report-issue" data-bs-toggle="modal"
+                                    data-bs-target="#issueReportModal">
+                                    <i class="bi bi-exclamation-triangle"></i> Report an Issue
                                 </button>
-                            </form>
+                            </div>
                         @endif
 
                         @if ($booking->issueReports->isNotEmpty())
-                            <div class="issue-list {{ $booking->canReportIssues() ? 'with-form' : '' }}">
-                                <div class="issue-label">Your reports</div>
+                            <div class="issue-list {{ $booking->canReportIssues() ? 'with-cta' : '' }}">
+                                <div class="issue-list-label">Your reports</div>
                                 @foreach ($booking->issueReports as $report)
                                     <div class="issue-item">
                                         <i class="bi bi-{{ $report->category_icon }}" aria-hidden="true"></i>
@@ -1076,6 +980,10 @@
         </div>
 
     </div>
+
+    @if ($booking->canReportIssues())
+        @include('customer.partials.issue_report_modal', ['booking' => $booking])
+    @endif
 @endsection
 
 @push('scripts')
@@ -1084,17 +992,6 @@
         // /`minlength` ng textarea. Dito ay tumatakbo na ang validation ng
         // browser bago dumating ang submit event, at pinipigilan ang
         // dobleng pag-click.
-        // Pinipigilan ang dobleng pag-send ng ulat.
-        document.getElementById('issueForm')?.addEventListener('submit', function(e) {
-            const btn = this.querySelector('button[type="submit"]');
-            if (btn.disabled) {
-                e.preventDefault();
-                return;
-            }
-            btn.disabled = true;
-            btn.textContent = 'Sending…';
-        });
-
         document.getElementById('cancelForm')?.addEventListener('submit', function(e) {
             const btn = this.querySelector('button[type="submit"]');
             if (btn.disabled) {

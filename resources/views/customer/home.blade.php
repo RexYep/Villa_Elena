@@ -14,13 +14,7 @@
             padding: 14px 18px;
             margin-bottom: 20px;
             color: var(--stone);
-            text-decoration: none;
             font-size: 14px;
-        }
-
-        .stay-strip:hover {
-            border-color: #1d4ed8;
-            color: var(--stone);
         }
 
         .stay-strip > i:first-child {
@@ -35,6 +29,45 @@
 
         .stay-strip strong {
             display: block;
+        }
+
+        .stay-strip-actions {
+            display: flex;
+            gap: 8px;
+            flex-shrink: 0;
+        }
+
+        .btn-stay-view {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 44px;
+            padding: 0 16px;
+            border-radius: 10px;
+            background: #f1f5f9;
+            color: #374151;
+            font-size: 14px;
+            font-weight: 600;
+            text-decoration: none;
+        }
+
+        .btn-stay-view:hover {
+            background: #e2e8f0;
+            color: #374151;
+        }
+
+        @media (max-width:700px) {
+            .stay-strip {
+                flex-wrap: wrap;
+            }
+
+            .stay-strip-actions {
+                width: 100%;
+            }
+
+            .stay-strip-actions > * {
+                flex: 1;
+            }
         }
 
         :root {
@@ -564,16 +597,22 @@
         </div>
     </div>
 
-    {{-- Naka-check-in ngayon — shortcut papunta sa "Report an issue" (v7.11) --}}
+    {{-- Naka-check-in ngayon — "Report an Issue" popup direkta dito (v7.11) --}}
     @if ($currentStay)
-        <a href="{{ route('customer.bookings.show', $currentStay) }}#report-issue" class="stay-strip">
+        <div class="stay-strip">
             <i class="bi bi-house-heart" aria-hidden="true"></i>
             <span>
                 <strong>You're checked in at {{ $currentStay->property->property_name ?? 'Villa Elena' }}</strong>
                 Something not working? Report it to our staff.
             </span>
-            <i class="bi bi-chevron-right" aria-hidden="true"></i>
-        </a>
+            <div class="stay-strip-actions">
+                <a href="{{ route('customer.bookings.show', $currentStay) }}" class="btn-stay-view">View booking</a>
+                <button type="button" class="btn-report-issue" data-bs-toggle="modal" data-bs-target="#issueReportModal">
+                    <i class="bi bi-exclamation-triangle"></i> Report an Issue
+                </button>
+            </div>
+        </div>
+        @include('customer.partials.issue_report_modal', ['booking' => $currentStay])
     @endif
 
     {{-- Stats --}}
