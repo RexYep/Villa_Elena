@@ -8,6 +8,7 @@ use App\Http\Controllers\Controller;
 use App\Models\AvailabilityBlock;
 use App\Models\Booking;
 use App\Models\HousekeepingTask;
+use App\Models\IssueReport;
 use App\Models\Notification;
 use App\Models\Payment;
 use App\Models\Property;
@@ -49,30 +50,24 @@ class FrontDeskController extends Controller
             ->take(10)
             ->get();
 
-        $pendingTasks = $this->attachCleaningDeadlines(
-            HousekeepingTask::where('status', 'pending')
-                ->with(['property', 'booking'])
-                ->orderBy('scheduled_date')
-                ->get()
-        );
+        // Housekeeping (v7.11): mga task na ipinadala ng admin, at mga ulat
+        // ng problema mula sa guest o staff. Urgent at pinakamalapit na
+        // deadline sa itaas.
+        $openTasks = HousekeepingTask::open()
+            ->orderByRaw("priority = 'urgent' desc")
+            ->orderBy('due_date')
+            ->orderByRaw('due_time is null, due_time')
+            ->get();
 
-        $inProgressTasks = $this->attachCleaningDeadlines(
-            HousekeepingTask::where('status', 'in_progress')
-                ->with(['property', 'booking'])
-                ->get()
-        );
+        $inProgressTasks = $openTasks->where('status', 'in_progress')->values();
+        $pendingTasks    = $openTasks->where('status', 'pending')->values();
 
-        // Ang pinaka-madaliang task — ito ang ipinapakita sa banner sa
-        // itaas ng page. Naiipon dati ang mga task dahil kailangan pang
-        // pumunta sa hiwalay na tab para makita at maisara ang mga ito;
-        // 11 sa 13 ang naging overdue, 6 ang naipit sa "in progress"
-        // dahil binabaligtad sila ng auto-checkout pero walang pumipindot
-        // ng "Complete". Sa banner, hindi na ito mapapalampas.
-        $urgentTask = collect($pendingTasks)
-            ->merge($inProgressTasks)
-            ->filter(fn ($t) => $t->ready_by !== null)
-            ->sortBy('ready_by')
-            ->first();
+        $openReports = IssueReport::open()
+            ->with(['reporter', 'booking'])
+            ->oldest()
+            ->get();
+
+        $urgentItem = $this->mostUrgentHousekeeping($openTasks, $openReports);
 
         // Villa lang ang ipinapakita sa frontdesk. Ang mga `type=room`
         // na record ay info-only na simula v4.0 (hindi na hiwalay na
@@ -111,63 +106,47 @@ class FrontDeskController extends Controller
         $stats = [
             'check_ins_today'  => $checkIns->count(),
             'check_outs_today' => $checkOuts->count(),
-            'pending_tasks'    => $pendingTasks->count(),
+            'pending_tasks'    => $openTasks->count() + $openReports->count(),
             'pending_bookings' => Booking::where('status', 'pending')->count(),
         ];
 
         return view('staff.frontdesk', compact(
             'checkIns', 'checkOuts', 'currentGuests', 'pendingBookings',
-            'pendingTasks', 'inProgressTasks', 'urgentTask', 'villa',
+            'pendingTasks', 'inProgressTasks', 'openReports', 'urgentItem', 'villa',
             'availableProperties', 'stats', 'nextSlots'
         ));
     }
 
     /**
-     * Nilalagyan ang bawat housekeeping task ng TOTOONG deadline nito:
-     * ang oras ng susunod na check-in pagkatapos ng checkout na siyang
-     * pinagmulan ng task.
+     * Ang isang bagay na ipinapakita sa banner sa itaas ng frontdesk.
      *
-     * Petsa lang ang ipinapakita dati ("Scheduled: Aug 16"), na halos
-     * walang silbi sa modelong ito — dalawang oras lang ang pagitan ng
-     * checkout at ng susunod na check-in (5PM→7PM at 6AM→8AM). Ang
-     * mahalagang tanong ay hindi "anong araw" kundi "ilang oras pa bago
-     * dumating ang susunod na bisita" — at dahil isang villa lang ito,
-     * walang ibang unit na mapaglilipatan kung hindi handa sa oras.
+     * Ulat ng guest ay laging nangunguna: ang guest ay nasa villa ngayon at
+     * naghihintay. Sunod ang task na overdue, urgent, o may deadline sa loob
+     * ng 4 na oras. Ang task para sa susunod na linggo ay hindi banner —
+     * nasa Housekeeping tab na lang, kung hindi ay laging pula ang itaas ng
+     * page at nawawalan ng kahulugan.
+     *
+     * @return array{kind: string, item: HousekeepingTask|IssueReport}|null
      */
-    private function attachCleaningDeadlines($tasks)
+    private function mostUrgentHousekeeping($tasks, $reports): ?array
     {
-        if ($tasks->isEmpty()) {
-            return $tasks;
+        $guestReport = $reports->first(fn ($r) => $r->isFromGuest());
+        if ($guestReport) {
+            return ['kind' => 'report', 'item' => $guestReport];
         }
 
-        // Isang query lang para sa lahat ng paparating na booking, sa
-        // halip na isa kada task.
-        $upcoming = Booking::whereIn('property_id', $tasks->pluck('property_id')->unique()->all())
-            ->whereNotIn('status', ['cancelled', 'no_show'])
-            ->where('check_in_date', '>=', today()->subDays(60))
-            ->orderBy('check_in_date')
-            ->orderBy('check_in_time')
-            ->get();
+        $task = $tasks
+            ->filter(fn ($t) => $t->priority === 'urgent' || in_array($t->due_tone, ['late', 'soon'], true))
+            ->sortBy(fn ($t) => $t->due_at?->timestamp ?? PHP_INT_MAX)
+            ->first();
 
-        foreach ($tasks as $task) {
-            // Sukatan: ang checkout ng booking na nagpasimula ng task.
-            // Kung wala (manual na task), ang due_date na lang.
-            $after = $task->booking
-                ? $task->booking->checkOutDateTime()
-                : ($task->due_date ? \Carbon\Carbon::parse($task->due_date)->endOfDay() : null);
-
-            $next = $after
-                ? $upcoming->first(fn ($b) =>
-                    $b->property_id === $task->property_id
-                    && $b->id !== $task->booking_id
-                    && $b->checkInDateTime()->gte($after))
-                : null;
-
-            $task->ready_by   = $next?->checkInDateTime();
-            $task->next_guest = $next?->user->full_name ?? null;
+        if ($task) {
+            return ['kind' => 'task', 'item' => $task];
         }
 
-        return $tasks;
+        $staffReport = $reports->first();
+
+        return $staffReport ? ['kind' => 'report', 'item' => $staffReport] : null;
     }
 
     // ── Availability (slot grid) ───────────────────────────────────
@@ -362,8 +341,22 @@ class FrontDeskController extends Controller
         $quote = $property->quoteFor($checkin, $request->slot);
         $isPeak = in_array($checkin->dayOfWeek, [5, 6]) || ($checkin->dayOfWeek === 0 && $checkin->format('H:i') < '18:00');
 
+        // Live availability para sa walk-in form — parehong mga kondisyong
+        // tinatanggihan ng storeWalkin() (CHECK-OUT na lumipas, hindi
+        // check-in; at hasConflict()). Ang tunay na garantiya ay nananatili
+        // sa reserveSlot() sa pag-submit.
+        if ($checkout->isPast()) {
+            [$available, $message] = [false, 'This whole slot has already passed (check-out time has elapsed).'];
+        } elseif (Booking::hasConflict($property->id, $checkin, $checkout)) {
+            [$available, $message] = [false, 'The villa is already booked for this date and slot.'];
+        } else {
+            [$available, $message] = [true, 'Available — this slot is open.'];
+        }
+
         return response()->json([
             'valid'       => true,
+            'available'   => $available,
+            'message'     => $message,
             'is_peak'     => $isPeak,
             'hours'       => round($checkin->diffInHours($checkout), 1),
             'day_label'   => $checkin->format('D, M j'),
@@ -454,6 +447,13 @@ class FrontDeskController extends Controller
         // ma-validate na natin ang payment_amount laban sa totoong total
         // bago pa gumawa ng kahit anong record.
         $property = Property::findOrFail($request->property_id);
+
+        // Capacity guard — dating `min:1` lang, walang upper bound.
+        $request->validate([
+            'num_guests' => 'integer|max:' . $property->max_capacity,
+        ], [
+            'num_guests.max' => 'Villa Elena accommodates up to :max guests.',
+        ]);
 
         // Awtomatiko ring tumatama ang seasonal promo sa walk-in — hindi
         // ito bagay na pinipili ni staff. Ang `total` ang batayan ng
@@ -752,16 +752,6 @@ class FrontDeskController extends Controller
         $booking->property->update(['status' => 'occupied']);
         NotificationHelper::guestCheckedIn($booking->load(['user','property']));
 
-        HousekeepingTask::create([
-            'property_id'    => $booking->property_id,
-            'booking_id'     => $booking->id,
-            'task_type'      => 'checkout_clean',
-            'due_date'       => $booking->check_out_date,
-            'scheduled_date' => $booking->check_out_date,
-            'status'         => 'pending',
-            'notes'          => "Post-checkout cleaning for booking {$booking->booking_ref}",
-        ]);
-
         Notification::create([
             'user_id' => $booking->user_id,
             'type'    => 'in_app',
@@ -821,10 +811,6 @@ class FrontDeskController extends Controller
         $booking->property->update(['status' => 'available']);
         NotificationHelper::guestCheckedOut($booking->load(['user','property']));
 
-        HousekeepingTask::where('booking_id', $booking->id)
-            ->where('task_type', 'checkout_clean')
-            ->update(['status' => 'in_progress']);
-
         Notification::create([
             'user_id' => $booking->user_id,
             'type'    => 'in_app',
@@ -850,9 +836,9 @@ class FrontDeskController extends Controller
             \Illuminate\Support\Facades\Log::error('Failed to broadcast FrontdeskUpdated (checkout): ' . $e->getMessage());
         }
 
-        // Sinasabi kung kailan dapat handa ang villa, hindi lang na
-        // "activated" ang task — ito ang oras na aktwal na mahalaga sa
-        // staff, at kadalasan makitid ito (2 oras sa pagitan ng slots).
+        // Sinasabi kailan dumarating ang susunod na guest — kadalasan
+        // makitid ito (2 oras sa pagitan ng slots). Walang awtomatikong
+        // cleaning task na simula v7.11; ang admin ang nagpapadala ng task.
         $nextIn = Booking::where('property_id', $booking->property_id)
             ->whereNotIn('status', ['cancelled', 'no_show'])
             ->where('id', '!=', $booking->id)
@@ -863,50 +849,9 @@ class FrontDeskController extends Controller
 
         $message = "✅ {$booking->user->full_name} checked out.";
         $message .= $nextIn
-            ? ' Villa must be cleaned and ready by ' . $nextIn->checkInDateTime()->format('M j, g:i A') . '.'
-            : ' Housekeeping task activated — no booking follows yet.';
+            ? ' Next guest arrives ' . $nextIn->checkInDateTime()->format('M j, g:i A') . '.'
+            : ' No booking follows yet.';
 
         return back()->with('success', $message);
-    }
-
-    // ── Housekeeping Tasks ─────────────────────────────────────────
-    public function startTask(HousekeepingTask $task)
-    {
-        $task->update(['status' => 'in_progress']);
-        StaffLog::record('task_started', 'housekeeping_tasks', $task->id,
-            "Started task for {$task->property->property_name}");
-
-        try {
-            event(new FrontdeskUpdated(
-                'task_started',
-                "Housekeeping task for {$task->property->property_name} started by " . Auth::user()->full_name . ".",
-                taskId: $task->id,
-                actor: Auth::user()->full_name,
-            ));
-        } catch (\Exception $e) {
-            \Illuminate\Support\Facades\Log::error('Failed to broadcast FrontdeskUpdated (task_started): ' . $e->getMessage());
-        }
-
-        return back()->with('success', "Task started.");
-    }
-
-    public function completeTask(HousekeepingTask $task)
-    {
-        $task->update(['status' => 'completed', 'completed_at' => now()]);
-        StaffLog::record('task_completed', 'housekeeping_tasks', $task->id,
-            "Completed task for {$task->property->property_name}");
-
-        try {
-            event(new FrontdeskUpdated(
-                'task_completed',
-                "Housekeeping task for {$task->property->property_name} completed by " . Auth::user()->full_name . ".",
-                taskId: $task->id,
-                actor: Auth::user()->full_name,
-            ));
-        } catch (\Exception $e) {
-            \Illuminate\Support\Facades\Log::error('Failed to broadcast FrontdeskUpdated (task_completed): ' . $e->getMessage());
-        }
-
-        return back()->with('success', "✅ Housekeeping task marked as complete.");
     }
 }

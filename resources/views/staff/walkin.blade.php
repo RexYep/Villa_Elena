@@ -190,6 +190,29 @@
             color: var(--navy);
         }
 
+        .availability-status {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            padding: 9px 13px;
+            border-radius: 8px;
+            margin-top: 10px;
+            background: #f1f5f9;
+            color: var(--muted);
+        }
+
+        .availability-status.is-available {
+            background: var(--tag-green-bg);
+            color: var(--tag-green-fg);
+        }
+
+        .availability-status.is-unavailable {
+            background: var(--tag-red-bg);
+            color: var(--tag-red-fg);
+        }
+
         .btn-submit:disabled {
             background: #cbd5e1;
             color: #64748b;
@@ -387,8 +410,7 @@
                     <label class="form-label">Check-in Date</label>
                     <input type="date" name="check_in_date" id="checkinDate"
                         class="form-control {{ $errors->has('check_in_date') ? 'is-invalid' : '' }}"
-                        value="{{ old('check_in_date', $prefill['date'] ?? date('Y-m-d')) }}" min="{{ date('Y-m-d') }}"
-                        onchange="updatePrice()">
+                        value="{{ old('check_in_date', $prefill['date'] ?? date('Y-m-d')) }}" min="{{ date('Y-m-d') }}">
                     @error('check_in_date')
                         <div class="invalid-feedback">{{ $message }}</div>
                     @enderror
@@ -399,19 +421,21 @@
                     <div class="two-col">
                         <div class="form-check">
                             <input type="radio" name="slot" value="day" id="slot_day" class="form-check-input"
-                                {{ $selectedSlot === 'day' ? 'checked' : '' }} onchange="updatePrice()">
+                                {{ $selectedSlot === 'day' ? 'checked' : '' }}>
                             <label for="slot_day" class="form-check-label">Day (8:00 AM – 5:00 PM)</label>
                         </div>
                         <div class="form-check">
                             <input type="radio" name="slot" value="night" id="slot_night"
-                                class="form-check-input" {{ $selectedSlot === 'night' ? 'checked' : '' }}
-                                onchange="updatePrice()">
+                                class="form-check-input" {{ $selectedSlot === 'night' ? 'checked' : '' }}>
                             <label for="slot_night" class="form-check-label">Night (7:00 PM – 6:00 AM)</label>
                         </div>
                     </div>
                     @error('slot')
                         <div class="invalid-feedback d-block">{{ $message }}</div>
                     @enderror
+                    <div id="availabilityStatus" class="availability-status" role="status" aria-live="polite">
+                        <i class="bi bi-calendar-event"></i> <span>Pick a date and slot to check availability.</span>
+                    </div>
                     @if (($prefill['date'] ?? null) && !old('check_in_date'))
                         <div
                             style="background:var(--tag-green-bg);color:var(--tag-green-fg);border-radius:8px;padding:9px 13px;font-size: 14px;margin-top:10px;">
@@ -423,8 +447,17 @@
                 <div class="two-col mb-14">
                     <div>
                         <label class="form-label">Number of Guests</label>
-                        <input type="number" name="num_guests" id="numGuests" class="form-control"
-                            value="{{ old('num_guests', 1) }}" min="1" max="30">
+                        <select name="num_guests" id="numGuests"
+                            class="form-select {{ $errors->has('num_guests') ? 'is-invalid' : '' }}" required>
+                            @for ($g = 1; $g <= ($availableProperties->first()->max_capacity ?? 1); $g++)
+                                <option value="{{ $g }}" {{ (int) old('num_guests', 1) === $g ? 'selected' : '' }}>
+                                    {{ $g }} guest{{ $g > 1 ? 's' : '' }}
+                                </option>
+                            @endfor
+                        </select>
+                        @error('num_guests')
+                            <div class="invalid-feedback">{{ $message }}</div>
+                        @enderror
                     </div>
                     <div>
                         <label class="form-label">Special Requests <span class="optional-tag">(optional)</span></label>
@@ -563,6 +596,29 @@
         // naman ng server. Isang pinagmumulan na lang ngayon.
         let calculatedTotal = 0;
         let quoteAbortController = null;
+        // null = hindi pa nasuri / hindi nasuri (network error) — pinapayagan
+        // ang submit kung null, dahil reserveSlot() ang tunay na check.
+        let slotAvailable = null;
+        let overpaid = false;
+
+        // Iisang lugar na nagpapasya sa submit button — dating dalawang
+        // function ang parehong nag-toggle nito, kaya ang isang ay kayang
+        // i-enable muli ang button na idinisable ng isa.
+        function syncSubmit() {
+            const submitBtn = document.querySelector('.btn-submit');
+            if (submitBtn) submitBtn.disabled = overpaid || slotAvailable === false;
+        }
+
+        function setAvailability(state, icon, text) {
+            const el = document.getElementById('availabilityStatus');
+            el.className = 'availability-status' + (state ? ' is-' + state : '');
+            el.replaceChildren();
+            const i = document.createElement('i');
+            i.className = 'bi ' + icon;
+            const span = document.createElement('span');
+            span.textContent = text;
+            el.append(i, ' ', span);
+        }
 
         const QUOTE_URL = "{{ route('staff.walkin.quote') }}";
         const PROPERTY_ID = "{{ $availableProperties->first()->id ?? '' }}";
@@ -582,11 +638,14 @@
                 return;
             }
 
-            // Update max guests — hindi ito nakadepende sa presyo.
-            document.getElementById('numGuests').max = parseInt(propDiv.dataset.max);
-
             if (quoteAbortController) quoteAbortController.abort();
             quoteAbortController = new AbortController();
+
+            // Naka-disable habang sinusuri, para hindi mai-submit ang isang
+            // slot na hindi pa nakumpirmang bukas.
+            slotAvailable = false;
+            syncSubmit();
+            setAvailability('', 'bi-hourglass-split', 'Checking availability…');
 
             const params = new URLSearchParams({
                 property_id: PROPERTY_ID,
@@ -604,8 +663,15 @@
                 .then(data => {
                     if (!data.valid) {
                         preview.style.display = 'none';
+                        setAvailability('unavailable', 'bi-exclamation-circle', 'Select a valid date and slot.');
                         return;
                     }
+                    slotAvailable = !!data.available;
+                    setAvailability(
+                        data.available ? 'available' : 'unavailable',
+                        data.available ? 'bi-check-circle-fill' : 'bi-x-circle-fill',
+                        data.message
+                    );
                     renderQuote(data);
                 })
                 .catch(err => {
@@ -615,6 +681,9 @@
                     // isang numerong baka mali.
                     preview.style.display = 'none';
                     calculatedTotal = 0;
+                    slotAvailable = null;
+                    setAvailability('', 'bi-wifi-off', 'Couldn’t check availability. It will be verified on submit.');
+                    syncSubmit();
                 });
         }
 
@@ -647,9 +716,6 @@
             calculatedTotal = data.total;
             preview.style.display = 'block';
 
-            const submitBtn = document.querySelector('.btn-submit');
-            if (submitBtn) submitBtn.disabled = false;
-
             updatePaymentPreview();
         }
 
@@ -659,21 +725,20 @@
             const summary = document.getElementById('paymentSummary');
             const typeDisplay = document.getElementById('paymentTypeDisplay');
             const typeHidden = document.getElementById('paymentTypeHidden');
-            const submitBtn = document.querySelector('.btn-submit');
 
             // Overpayment guard (dapat tumugma sa backend validation) — hindi
             // puwedeng lumagpas ang natanggap na bayad sa kabuuang halaga.
-            if (calculatedTotal > 0 && paid > calculatedTotal) {
+            overpaid = calculatedTotal > 0 && paid > calculatedTotal;
+            syncSubmit();
+            if (overpaid) {
                 paidInput.classList.add('is-invalid');
                 typeDisplay.textContent =
                     `⚠️ Exceeds the total (₱${calculatedTotal.toLocaleString('en-PH',{minimumFractionDigits:2})}). If there is change, just type the net amount received..`;
                 typeDisplay.style.color = '#dc2626';
-                if (submitBtn) submitBtn.disabled = true;
                 summary.style.display = 'none';
                 return;
             }
             paidInput.classList.remove('is-invalid');
-            if (submitBtn) submitBtn.disabled = false;
 
             if (paid <= 0 || calculatedTotal <= 0) {
                 summary.style.display = 'none';
@@ -710,6 +775,7 @@
         }
 
         document.getElementById('checkinDate').addEventListener('change', updatePrice);
+        document.querySelectorAll('input[name="slot"]').forEach(el => el.addEventListener('change', updatePrice));
 
         // Run on load — may default check-in date + slot na naka-preset,
         // para agad makita ni staff ang price preview.

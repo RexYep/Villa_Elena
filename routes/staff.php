@@ -5,6 +5,7 @@
 
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Staff\FrontDeskController;
+use App\Http\Controllers\Staff\HousekeepingController;
 
 Route::prefix('staff')
     ->name('staff.')
@@ -33,8 +34,13 @@ Route::prefix('staff')
     // Payment recording
     Route::post('/bookings/{booking}/payment',  [FrontDeskController::class, 'recordPayment'])->name('payment');
 
-    // Housekeeping
-    Route::patch('/tasks/{task}/start',         [FrontDeskController::class, 'startTask'])->name('tasks.start');
-    Route::patch('/tasks/{task}/complete',      [FrontDeskController::class, 'completeTask'])->name('tasks.complete');
+    // Housekeeping — task mula sa admin, at ulat ng problema (v7.11)
+    Route::patch('/tasks/{task}/start',         [HousekeepingController::class, 'startTask'])->name('tasks.start');
+    Route::patch('/tasks/{task}/complete',      [HousekeepingController::class, 'completeTask'])->name('tasks.complete');
+    Route::post('/reports',                     [HousekeepingController::class, 'storeReport'])
+        ->middleware('throttle:issue-report')
+        ->name('reports.store');
+    Route::patch('/reports/{report}/start',     [HousekeepingController::class, 'startReport'])->name('reports.start');
+    Route::patch('/reports/{report}/complete',  [HousekeepingController::class, 'completeReport'])->name('reports.complete');
 
 });

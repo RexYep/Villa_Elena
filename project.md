@@ -1,12 +1,32 @@
 # Villa Elena Private Rental Resort
 ## Resort Management System — Project Documentation
 
-**Version:** 7.10
+**Version:** 7.11
 **Stack:** PHP 8.2 / Laravel 12 / MySQL 8 / Bootstrap 5
 **Local URL:** `http://127.0.0.1:8000` (`php artisan serve`) or `http://localhost:8000` (Docker — see v5.3)
 **Live URL:** `https://villa-elena.onrender.com` (Render, free tier — testing only, not yet handed to real guests)
 **Database (local):** `villa_elena_db` (MySQL, XAMPP or standalone MySQL — same database either way)
 **Database (live):** Aiven MySQL free tier, database `defaultdb`
+
+---
+
+## What Changed in v7.11 (Read This First)
+
+### Housekeeping: the admin sends tasks; guests and staff report problems
+
+Decided with the owner: cleaning tasks are **no longer created automatically** at check-in. The admin sends tasks to the staff frontdesk, staff work through them, and guests who are checked in can report problems from their account instead of looking for staff or the owner in person.
+
+- **Removed:** the `checkout_clean` auto-create in all three check-in paths (`Staff\FrontDeskController::checkIn()`, `Admin\BookingController::updateStatus()`, `AutoCheckInOutBookings::autoCheckIns()`), the checkout flip to `in_progress` (both checkout paths), the `extendStay()` due-date sync, and `attachCleaningDeadlines()`. Checkout's flash now says when the next guest arrives, not "Villa must be cleaned by…". **Don't reintroduce an automatic task** — that was the owner's call.
+- **Migration `2026_09_17_100000`** adds `title`, `location` (free text: the `type=room` rows have no names), `priority` (`normal|urgent`), `due_time` (nullable = any time that day), `created_by`, `started_at`, and `cancelled` to `housekeeping_tasks.status`. The 5 automatic tasks still open were set to `cancelled` with a note saying why, not deleted.
+- **New `issue_reports` table** (`2026_09_17_100001`): `category` (aircon, plumbing, electrical, cleanliness, wifi, pool, other), `description` (required only for `other`), `reporter_role` (`customer|staff`), `booking_id`, same four statuses. Separate from tasks because a task is an order from the admin and a report comes from inside the villa.
+- **Shared status flow** in `App\Models\Concerns\HasWorkStatus`: `markStarted()` / `markCompleted()` / `markCancelled()` are **conditional UPDATEs** (`WHERE status IN (…)`) that return `false` if another click got there first. The frontdesk is one shared monitor and the admin page can be open at the same time, so don't replace them with read-then-`update()`.
+- **Guest reports go to staff and admin at the same time** (`FrontdeskBroadcast` + `NotificationHelper::issueReported()`), not through the admin first: the admin portal isn't always open, and the guest is waiting in the villa. The form shows **only while `Booking::canReportIssues()`** (`status = checked_in`); the guest's list of reports stays on the booking page afterwards, with guest wording (`Received / Being fixed / Fixed / Closed`). **No guest notification on status changes yet.** The owner wants to review the feature before deciding.
+- **Staff** (one shared account, no notification bell): the Housekeeping tab lists open reports and tasks, and has a *Report issue* modal. The top banner (`mostUrgentHousekeeping()`) shows a guest report first, then a task that's overdue, urgent or due within 4h. `issue_reported` / `task_assigned` broadcasts show a **sticky** toast and a specific refresh-banner message. Actions redirect back with `tab=housekeeping`. Who did a task isn't recorded because the account is shared.
+- **Admin** `/admin/housekeeping`: open vs. done/cancelled view, stats (open reports, open tasks, overdue, done this week), New Task modal (validation errors reopen it via the `newTask` bag; a due time already passed today is refused), Mark done / Cancel / Mark fixed / Close. Staff get an in-app admin notification when they finish something. The sidebar shows a red count of open reports.
+- `throttle:issue-report`: 3/min and 20/h per user, on both the guest and the staff report routes. Reports send no mail and use no AI, but each one alerts the frontdesk and every admin.
+- **Blade pitfall found while building this:** the one-line `@php($x = …)` form breaks any file that has a `@php … @endphp` block **later** in it. The compiler pairs the inline `@php(` with that later `@endphp` and swallows everything in between. Symptoms: `unexpected token "endforeach"`, and in the same process `$__empty_-1` in other views' `@forelse`. Use the block form (`@php $x = …; @endphp`).
+
+Verified with real HTTP requests through the kernel, for each role, inside a rolled-back transaction: admin creates task → guest "Other" without a description is rejected → guest report stored, admin notified → staff frontdesk renders the guest-report banner and the task → start, second start refused, fix → guest page shows "Fixed" → staff task done → staff report → admin closes it → admin housekeeping (both views), admin dashboard, guest booking page and guest dashboard all 200 → a report on a booking that isn't checked in is refused. **Not verified in a real browser with Pusher**: the sticky toast and the modals' focus/open behaviour.
 
 ---
 
@@ -2475,7 +2495,8 @@ Managed via Laravel migrations with sequential timestamps to resolve foreign key
 | 08 | `pricing_rules` | Date-range pricing overrides (e.g. holidays) — takes priority over the standard day/time pricing segments |
 | 09 | `discounts` | **Seasonal promos** — automatic discounts on the villa base rate, matched against the booking's check-in date and slot (v6.0). Originally shaped for promo codes; `code` is now nullable and unused by the automatic flow |
 | 10 | `notifications` | In-app notifications for all users (now with a click-through `link`) |
-| 11 | `housekeeping_tasks` | Housekeeping job assignments |
+| 11 | `housekeeping_tasks` | Tasks the admin sends to the staff frontdesk (v7.11: no longer auto-created) |
+| 11a | `issue_reports` | Problems reported by checked-in guests or staff (v7.11) |
 | 12 | `packages` | Bundled booking packages |
 | 13 | `availability_blocks` | Manual date blocks per property |
 | 14 | `staff_logs` | Audit trail of all admin/staff actions |
@@ -2821,8 +2842,8 @@ ALTER TABLE bookings ADD COLUMN check_out_time TIME NOT NULL DEFAULT '12:00:00' 
 | From | To | Side Effects |
 |---|---|---|
 | `pending` | `confirmed` | Manual admin confirmation |
-| `confirmed` | `checked_in` | Property → occupied; housekeeping task (`checkout_clean`) created |
-| `checked_in` | `checked_out` | Property → available; housekeeping task activated |
+| `confirmed` | `checked_in` | Property → occupied (no housekeeping task since v7.11 — the admin sends tasks) |
+| `checked_in` | `checked_out` | Property → available |
 | `pending/confirmed` | `cancelled` | Property → available; guest notified; admin notified |
 
 **Extra Routes:**
@@ -3015,7 +3036,7 @@ Clicking a free slot opens `/staff/walkin?date=…&slot=…` with both pre-fille
 
 Nothing used to close the loop: check-in creates the task, auto-checkout flips it to `in_progress`, and marking it complete was manual and buried in a tab. **11 of 13 open tasks were overdue** (worst: 48 days) and 6 were stuck in `in_progress`. Fixed by surfacing the most urgent task in a banner at the top of the page with a one-click **Mark cleaned**, and by having checkout's success message name the deadline (`"Villa must be cleaned and ready by Aug 19, 8:00 AM"`) instead of the old `"Housekeeping task activated"`.
 
-**Still open on housekeeping:** `task_type` has three values no code ever creates — `daily_clean`, `maintenance`, `inspection` (all 53 rows are `checkout_clean`) — and staff has no way to create a task manually, so a broken aircon can't be logged. The two are the same gap; see Pending/Optional.
+**Resolved in v7.11:** `task_type` has three values no code ever creates — `daily_clean`, `maintenance`, `inspection` (all 53 rows are `checkout_clean`) — and staff has no way to create a task manually, so a broken aircon can't be logged. The two are the same gap; see Pending/Optional.
 
 **Walk-in Booking Form** (`/staff/walkin`):
 - Select an existing guest, **or** register a new one on-the-spot — **(v5.4)** for a new guest, staff is asked whether to also create a login account (defaults to **No**); either way a guest record (`User`, role=`customer`) is created for booking/payment/review history, but email + the password-reset email are only involved if the answer is Yes. See [What Changed in v5.4](#what-changed-in-v54-read-this-first)
@@ -3031,12 +3052,12 @@ Nothing used to close the loop: check-in creates the task, auto-checkout flips i
 
 **Check-in side effects:**
 - Booking → `checked_in`, Property → `occupied`
-- Housekeeping task created (`checkout_clean`) for checkout date
+- ~~Housekeeping task created (`checkout_clean`)~~ — removed in v7.11; the admin sends tasks
 - Guest notified, Admin notified
 
 **Check-out side effects:**
 - Booking → `checked_out`, Property → `available`
-- Housekeeping task → `in_progress`
+- ~~Housekeeping task → `in_progress`~~ — removed in v7.11
 - Guest notified, Admin notified
 
 ---
@@ -3810,6 +3831,11 @@ GET    /admin/notifications                   admin.notifications.index    ← N
 GET    /admin/notifications/{n}/open          admin.notifications.open     ← NEW v5.0
 POST   /admin/notifications/mark-read         admin.notifications.markRead  (moved to Admin\NotificationController v5.0)
 GET    /admin/bookings/lookup                 admin.bookings.lookup  (AJAX)
+GET    /admin/housekeeping                    admin.housekeeping.index          ← NEW v7.11 (?view=open|closed)
+POST   /admin/housekeeping/tasks              admin.housekeeping.tasks.store    ← NEW v7.11
+PATCH  /admin/housekeeping/tasks/{task}       admin.housekeeping.tasks.update   ← NEW v7.11 (status=completed|cancelled)
+PATCH  /admin/housekeeping/reports/{report}   admin.housekeeping.reports.update ← NEW v7.11 (status=completed|cancelled)
+GET    /admin/bookings/quote                  admin.bookings.quote  (AJAX: live price + promo + availability for the create form; quoteFor() + hasConflict())
 GET    /admin/properties         (CRUD)
 GET    /admin/bookings           (CRUD)
 PATCH  /admin/bookings/{id}/status
@@ -3868,6 +3894,9 @@ POST   /staff/walkin                          staff.walkin.store
 POST   /staff/bookings/{booking}/payment      staff.payment
 PATCH  /staff/tasks/{task}/start              staff.tasks.start
 PATCH  /staff/tasks/{task}/complete           staff.tasks.complete
+POST   /staff/reports                         staff.reports.store     ← NEW v7.11 (throttle:issue-report)
+PATCH  /staff/reports/{report}/start          staff.reports.start     ← NEW v7.11
+PATCH  /staff/reports/{report}/complete       staff.reports.complete  ← NEW v7.11
 ```
 
 ### Customer Routes (`/my/`)
@@ -3876,6 +3905,7 @@ GET    /my/                                   customer.home
 GET    /my/bookings                           customer.bookings
 GET    /my/bookings/{booking}                 customer.bookings.show
 PATCH  /my/bookings/{booking}/cancel          customer.bookings.cancel
+POST   /my/bookings/{booking}/issues          customer.bookings.issues.store  ← NEW v7.11 (checked_in only, throttle:issue-report)
 GET    /my/bookings/{booking}/reschedule      customer.bookings.reschedule        ← NEW v5.0
 PATCH  /my/bookings/{booking}/reschedule      customer.bookings.reschedule.update ← NEW v5.0
 GET    /my/notifications                      customer.notifications
@@ -4157,7 +4187,7 @@ Re-verified directly against the live code/database (not just re-stated from mem
 | ~~(v5.6) Automated refunds via the PayMongo Refunds API~~ | ❌ **Impossible — closed (v5.7)** | Verified against live payments: `POST /v1/refunds` returns `400 parameter_invalid — "Refunds are not allowed for payments with source type qrph."` Tried on both payments, full and partial amounts, before and after settlement. Not a timing or balance issue; QR Ph simply cannot be refunded through PayMongo at all, by API or dashboard. Refunds must be sent out-of-band via the resort's own GCash/Maya. This is now a permanent property of the design, not a backlog item |
 | **(v5.7)** Safeguards on "Mark Paid Out" | 🔲 **Recommended — the flow is now unguarded** | Since no automation is possible, the honour-system button is the only control on real money leaving. It was skipped during live testing by someone who knew the process, and the app then told the guest "Refund Sent" while holding the cash. Three fixes proposed: (1) state plainly in the Issue Refund UI that PayMongo cannot refund QR Ph and the transfer must be made by hand; (2) surface the guest's payout destination — `users.phone` is populated for all 10 users and is the GCash number — in the Mark Paid Out confirmation; (3) require the GCash/Maya transfer reference, stored in the refund row's `reference_number`. (3) is the substantive one: a reference cannot be supplied if the transfer never happened, which turns a checkbox into evidence and creates a trail reconcilable against PayMongo |
 | **(v5.5)** Booking `VE-OLRWMOGX` — ₱3,999.96 recorded as paid with no `Payment` row | 🔲 **Needs a human decision** | Found while scanning all 45 bookings for stored-vs-computed drift. The code path that caused it is fixed (walk-in now rejects an amount with no payment method), but this existing row is **real business data** and was deliberately left untouched. Someone has to establish whether ₱4,000 was actually received, then either create a matching cash `Payment` row or reset the booking to unpaid |
-| **(v5.5)** Housekeeping — 3 dead `task_type` values, and no way to create a task manually | 🔲 **Open** | All 53 tasks are `checkout_clean`; `daily_clean`, `maintenance`, and `inspection` exist in the ENUM but no code ever creates them. The same gap explains why: tasks are only ever generated automatically at check-in, so staff can't log e.g. a broken aircon. Either build manual task creation (which makes the three values usable) or drop them from the ENUM |
+| **(v5.5)** Housekeeping — 3 dead `task_type` values, and no way to create a task manually | ✅ **Resolved (v7.11)** | All 53 tasks are `checkout_clean`; `daily_clean`, `maintenance`, and `inspection` exist in the ENUM but no code ever creates them. The same gap explains why: tasks are only ever generated automatically at check-in, so staff can't log e.g. a broken aircon. Built in v7.11: the admin creates tasks of all four types; staff and guests file issue reports |
 | **(v5.5)** Only 5 housekeeping tasks remain open, all with real deadlines | ✅ **Resolved (2026-08-15)** | Was 13 open with 11 overdue (worst 48 days) and 6 stuck in `in_progress`. Backlog closed by migration; recurrence prevented by the deadline display + one-click banner. Kept here as the record of what the numbers were before |
 | **(v5.5)** Docker container can silently run stale code against a migrated database | 🔲 **Workflow discipline, not a code fix** | `resources/`, `app/`, `routes/`, `config/`, `database/` only sync into the container under `docker compose up --watch`. A plain `docker compose up` freezes them at image-build time — but migrations run from the host still hit the same MySQL, producing old code against a new schema (observed: container writing `payment_type='deposit'` into an ENUM that no longer had it → `Data truncated`). Restart the container after any migration if Watch isn't running; diagnose by grepping the file **inside** the container rather than assuming a cache |
 

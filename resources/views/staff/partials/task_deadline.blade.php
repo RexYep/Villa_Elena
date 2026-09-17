@@ -1,34 +1,18 @@
 {{--
-    Deadline line para sa isang housekeeping task.
+    Deadline line para sa isang housekeeping task (v7.11).
 
-    Ang "Ready by" ay ang oras ng SUSUNOD na check-in, hindi ang
-    scheduled_date — dalawang oras lang ang pagitan ng checkout at ng
-    susunod na slot (5PM→7PM, 6AM→8AM), kaya ang petsa lang ay hindi
-    sapat para malaman kung kailan talaga kailangang tapos.
-
-    Kung walang naka-book na kasunod, walang deadline — ipapakita na
-    lang ang scheduled date, at hindi ito minamadali.
+    Ang due date/time ay itinakda ng admin nang ipadala ang task. Walang
+    oras → "any time" sa araw na iyon, at overdue lang pagkatapos ng araw.
 --}}
-@if($task->ready_by)
-    @php
-        $minutesLeft = now()->diffInMinutes($task->ready_by, false);
-        $tone = $minutesLeft < 0 ? 'late' : ($minutesLeft <= 240 ? 'soon' : 'ok');
-    @endphp
-    <div class="task-ready {{ $tone }}">
-        @if($minutesLeft < 0)
+@if ($task->due_at)
+    <div class="task-ready {{ $task->due_tone }}">
+        @if ($task->isOverdue())
             <i class="bi bi-exclamation-triangle-fill"></i>
-            Next guest was due {{ $task->ready_by->format('M j, g:i A') }} — {{ $task->ready_by->diffForHumans() }}
+            Overdue — was due {{ $task->due_label }}
         @else
             <i class="bi bi-clock-fill"></i>
-            Ready by {{ $task->ready_by->format('M j, g:i A') }}
-            ({{ $task->ready_by->diffForHumans(null, true) }} left)
+            Due {{ $task->due_label }}
+            ({{ $task->due_at->diffForHumans(null, true) }} left)
         @endif
-        @if($task->next_guest)
-            · {{ $task->next_guest }}
-        @endif
-    </div>
-@else
-    <div class="task-date">
-        Scheduled: {{ $task->scheduled_date?->format('M d, Y') ?? '—' }} · no booking follows yet
     </div>
 @endif

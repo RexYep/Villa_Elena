@@ -51,8 +51,14 @@ class HomeController extends Controller
             ->take(5)
             ->get();
 
+        // Naka-check-in ngayon → shortcut sa "Report an issue" (v7.11)
+        $currentStay = Booking::where('user_id', $user->id)
+            ->where('status', 'checked_in')
+            ->with('property')
+            ->first();
+
         return view('customer.home', compact(
-            'upcomingBookings', 'recentBookings', 'stats', 'unreadNotifications'
+            'upcomingBookings', 'recentBookings', 'stats', 'unreadNotifications', 'currentStay'
         ));
     }
 
@@ -80,7 +86,7 @@ class HomeController extends Controller
 
         // Kasama ang `payments.refundTransfers` para hindi maging isang
         // query kada refund ang `refundStage()` sa badge ng pahina.
-        $booking->load(['property.images', 'payments.refundTransfers', 'extras']);
+        $booking->load(['property.images', 'payments.refundTransfers', 'extras', 'issueReports' => fn ($q) => $q->latest()]);
 
         // Ipinapasa rin ang eligible refund preview (kung sakaling
         // i-cancel ng guest ang booking na ito ngayon) para maipakita

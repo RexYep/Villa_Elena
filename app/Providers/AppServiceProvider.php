@@ -183,6 +183,16 @@ class AppServiceProvider extends ServiceProvider
             ->by('u:'.$this->throttleIdentity($request))
             ->response($this->throttledBack('Too many review submissions.', 'content')));
 
+        // Issue reports (guest + staff). No mail or AI, but each one alerts
+        // the frontdesk and every admin, so a stuck double-tap or a bored
+        // guest shouldn't be able to flood both.
+        RateLimiter::for('issue-report', fn (Request $request) => [
+            Limit::perMinute(3)->by('m:'.$this->throttleIdentity($request))
+                ->response($this->throttledBack('Too many reports in a row.')),
+            Limit::perHour(20)->by('h:'.$this->throttleIdentity($request))
+                ->response($this->throttledBack('Too many reports this hour.')),
+        ]);
+
         // Contact form emails the resort. The page reads `contact_error`,
         // not `error`, so it has its own response.
         RateLimiter::for('contact', fn (Request $request) => Limit::perHour(5)

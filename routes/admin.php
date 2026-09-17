@@ -16,6 +16,7 @@ use App\Http\Controllers\Admin\CalendarController;
 use App\Http\Controllers\Admin\NotificationController;
 use App\Http\Controllers\Admin\PromotionController;
 use App\Http\Controllers\Admin\ProfileController;
+use App\Http\Controllers\Admin\HousekeepingController;
 
 
 Route::prefix('admin')
@@ -46,7 +47,11 @@ Route::get('bookings/lookup', function (\Illuminate\Http\Request $request) {
     ]);
     })->name('bookings.lookup');
 
-    // Bookings
+    // Bookings — `bookings/quote` must be registered before the resource,
+    // or `bookings/{booking}` (show) swallows it.
+    Route::get('bookings/quote', [BookingController::class, 'quote'])
+        ->middleware('throttle:60,1')
+        ->name('bookings.quote');
     Route::resource('bookings', BookingController::class);
     Route::patch('bookings/{booking}/status', [BookingController::class, 'updateStatus'])->name('bookings.status');
     Route::patch('bookings/{booking}/extend', [BookingController::class, 'extendStay'])->name('bookings.extend');
@@ -71,6 +76,12 @@ Route::get('bookings/lookup', function (\Illuminate\Http\Request $request) {
     Route::patch('promotions/{promotion}/toggle',  [PromotionController::class, 'toggle'])->name('promotions.toggle');
     Route::post('promotions/{promotion}/notify',   [PromotionController::class, 'notify'])->name('promotions.notify');
     Route::delete('promotions/{promotion}',        [PromotionController::class, 'destroy'])->name('promotions.destroy');
+
+    // Housekeeping (v7.11) — admin nagpapadala ng task; nagsusubaybay ng ulat
+    Route::get('housekeeping',                        [HousekeepingController::class, 'index'])->name('housekeeping.index');
+    Route::post('housekeeping/tasks',                 [HousekeepingController::class, 'store'])->name('housekeeping.tasks.store');
+    Route::patch('housekeeping/tasks/{task}',         [HousekeepingController::class, 'updateTask'])->name('housekeeping.tasks.update');
+    Route::patch('housekeeping/reports/{report}',     [HousekeepingController::class, 'updateReport'])->name('housekeeping.reports.update');
 
     // Users
     Route::resource('users', UserController::class);

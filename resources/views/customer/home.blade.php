@@ -4,6 +4,39 @@
 
 @push('styles')
     <style>
+        .stay-strip {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            background: #fff;
+            border: 1.5px solid #bfdbfe;
+            border-radius: 14px;
+            padding: 14px 18px;
+            margin-bottom: 20px;
+            color: var(--stone);
+            text-decoration: none;
+            font-size: 14px;
+        }
+
+        .stay-strip:hover {
+            border-color: #1d4ed8;
+            color: var(--stone);
+        }
+
+        .stay-strip > i:first-child {
+            font-size: 22px;
+            color: #1d4ed8;
+        }
+
+        .stay-strip span {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .stay-strip strong {
+            display: block;
+        }
+
         :root {
             --sand-dark: #ede6d6;
         }
@@ -530,6 +563,18 @@
             </a>
         </div>
     </div>
+
+    {{-- Naka-check-in ngayon — shortcut papunta sa "Report an issue" (v7.11) --}}
+    @if ($currentStay)
+        <a href="{{ route('customer.bookings.show', $currentStay) }}#report-issue" class="stay-strip">
+            <i class="bi bi-house-heart" aria-hidden="true"></i>
+            <span>
+                <strong>You're checked in at {{ $currentStay->property->property_name ?? 'Villa Elena' }}</strong>
+                Something not working? Report it to our staff.
+            </span>
+            <i class="bi bi-chevron-right" aria-hidden="true"></i>
+        </a>
+    @endif
 
     {{-- Stats --}}
     <div class="stats-row">

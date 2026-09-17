@@ -76,9 +76,61 @@ class BookingController extends Controller
         // i-book habang may kasalukuyang naka-check-in. Ang totoong
         // per-date/slot check ay `Booking::hasConflict()` pa rin sa
         // `store()` sa ibaba.
-        $properties = Property::where('status', '!=', 'maintenance')->where('type', 'villa')->orderBy('property_name')->get();
-        $customers  = User::where('role', 'customer')->orderBy('full_name')->get();
-        return view('admin.bookings.create', compact('properties', 'customers'));
+        //
+        // Iisang villa lang ang bookable, kaya awtomatiko itong pinipili —
+        // walang dropdown. `null` kung naka-maintenance (hinaharap ng view).
+        $villa     = Property::where('status', '!=', 'maintenance')->where('type', 'villa')->orderBy('id')->first();
+        $customers = User::where('role', 'customer')->orderBy('full_name')->get();
+        return view('admin.bookings.create', compact('villa', 'customers'));
+    }
+
+    // ── Live Quote + Availability (AJAX, create form) ──────────────
+    // Parehong quoteFor() / hasConflict() na ginagamit ng store(), kaya
+    // hindi puwedeng magkaiba ang preview at ang totoong resulta. Huwag
+    // kuwentahin ang presyo sa JS — tingnan ang CLAUDE.md.
+    public function quote(Request $request)
+    {
+        $validator = validator($request->all(), [
+            'property_id' => 'required|exists:properties,id,type,villa',
+            'checkin'     => 'required|date',
+            'slot'        => 'required|in:' . implode(',', array_keys(Booking::SLOTS)),
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json(['valid' => false, 'message' => 'Select a valid date and slot.'], 422);
+        }
+
+        $property = Property::findOrFail($request->property_id);
+        [$checkIn, $checkOut] = Booking::slotDateTimes($request->slot, $request->checkin);
+
+        $quote = $property->quoteFor($checkIn, $request->slot);
+        $payload = [
+            'valid'       => true,
+            'slot_label'  => ucfirst($request->slot) . ' (' . round($checkIn->diffInHours($checkOut)) . ' hrs)',
+            'day_label'   => $checkIn->format('D, M j, Y'),
+            'base'        => $quote['base'],
+            'discount'    => $quote['discount'],
+            'total'       => $quote['total'],
+            'promo_label' => $quote['promo']?->label,
+            'promo_value' => $quote['promo']?->value_label,
+        ];
+
+        // Parehong kondisyon na tinatanggihan ng store().
+        if ($checkIn->isPast()) {
+            return response()->json($payload + [
+                'available' => false,
+                'message'   => 'This check-in slot has already passed. Pick a later date or slot.',
+            ]);
+        }
+
+        if (Booking::hasConflict($property->id, $checkIn, $checkOut)) {
+            return response()->json($payload + [
+                'available' => false,
+                'message'   => 'The villa is already booked for this date and slot.',
+            ]);
+        }
+
+        return response()->json($payload + ['available' => true, 'message' => 'Available']);
     }
 
     // ── Store New Booking ──────────────────────────────────────────
@@ -86,7 +138,8 @@ class BookingController extends Controller
     {
         $request->validate([
             'user_id'          => 'required|exists:users,id',
-            'property_id'      => 'required|exists:properties,id',
+            // Villa lang — ang mga Room record ay hindi bookable.
+            'property_id'      => 'required|exists:properties,id,type,villa',
             'check_in_date'    => 'required|date|after_or_equal:today',
             'slot'             => 'required|in:' . implode(',', array_keys(Booking::SLOTS)),
             'num_guests'       => 'required|integer|min:1',
@@ -95,6 +148,15 @@ class BookingController extends Controller
         ]);
 
         $property = Property::findOrFail($request->property_id);
+
+        // Capacity guard — hiwalay sa validate() sa itaas dahil kailangan
+        // ng property para malaman ang max_capacity. Dating walang upper
+        // bound, kaya tinatanggap ang hal. 50 guest sa villang 30 ang max.
+        $request->validate([
+            'num_guests' => 'integer|max:' . $property->max_capacity,
+        ], [
+            'num_guests.max' => 'Villa Elena accommodates up to :max guests.',
+        ]);
 
         [$checkIn, $checkOut] = Booking::slotDateTimes($request->slot, $request->check_in_date);
 
@@ -315,15 +377,6 @@ class BookingController extends Controller
         if ($newStatus === 'checked_in') {
             $updates['actual_check_in'] = now();
             $booking->property->update(['status' => 'occupied']);
-            // Auto-create checkout housekeeping task
-            HousekeepingTask::create([
-                'property_id' => $booking->property_id,
-                'booking_id'  => $booking->id,
-                'task_type'   => 'checkout_clean',
-                'due_date'    => $booking->check_out_date,
-                'status'      => 'pending',
-                'notes'       => "Post-checkout cleaning for booking {$booking->booking_ref}",
-            ]);
         }
 
         if ($newStatus === 'checked_out') {
@@ -476,13 +529,6 @@ class BookingController extends Controller
         if ($extended === null) {
             return back()->withErrors(['extend' => 'Hindi pwedeng i-extend — may susunod na guest na naka-schedule mag-check-in bago pa man mapaglinis ang Villa. Sabihan na lang ang guest na kailangan nilang mag check-out sa oras na naka-schedule.']);
         }
-
-        // Housekeeping task (checkout_clean) ay dapat maging updated na rin
-        // ang due_date nito para tama ang schedule.
-        $booking->housekeepingTasks()
-            ->where('task_type', 'checkout_clean')
-            ->where('status', 'pending')
-            ->update(['due_date' => $newCheckout->format('Y-m-d')]);
 
         Notification::create([
             'user_id' => $booking->user_id,

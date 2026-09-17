@@ -22,6 +22,12 @@
     font-size: 15px; background: rgba(201,168,76,.2); color: #c9a84c;
 }
 .rt-fd-body { flex: 1; min-width: 0; font-size: 12.5px; line-height: 1.5; }
+.rt-fd-sticky { border-left-color: #ef4444; }
+.rt-fd-sticky .rt-fd-icon { background: rgba(239,68,68,.2); color: #fca5a5; }
+.rt-fd-dismiss {
+    background: rgba(255,255,255,.1); border: none; color: #fff;
+    width: 26px; height: 26px; border-radius: 7px; cursor: pointer; flex-shrink: 0;
+}
 @keyframes rtFdSlideIn {
     from { opacity: 0; transform: translateX(60px) scale(.9); }
     to   { opacity: 1; transform: translateX(0) scale(1); }
@@ -74,29 +80,51 @@
                 disableForm('#checkinForm_' + data.booking_id, data.actor);
             }
         }
-        if (data.task_id && (data.action === 'task_started' || data.action === 'task_completed')) {
+        // Lang kapag isinara (done/fixed/cancelled): pagkatapos ng "Start"
+        // ay dapat manatiling pwedeng pindutin ang "Done".
+        const closesWork = /_(completed|cancelled|fixed)$/.test(data.action || '');
+        if (data.task_id && closesWork) {
             disableForms('.task-form-' + data.task_id, data.actor);
+        }
+        if (data.report_id && closesWork) {
+            disableForms('.report-form-' + data.report_id, data.actor);
         }
 
         // Full row/stat data (counts, new pending bookings, property grid)
         // isn't patched live to avoid duplicating the whole page's Blade
         // logic in JS — surface a lightweight prompt instead.
-        showRefreshBanner();
+        showRefreshBanner(NEW_WORK[data.action]);
     });
 
+    // Bagong gawain para sa staff (v7.11). Ang toast ay nananatili hanggang
+    // isara — ang frontdesk ay isang monitor na hindi laging tinitingnan, at
+    // ang 6 na segundong toast ay madaling makaligtaan.
+    const NEW_WORK = {
+        issue_reported: 'A new problem was reported — refresh to see it.',
+        task_assigned:  'The admin sent a new task — refresh to see it.',
+    };
+
     function showFdToast(data) {
+        const sticky = !!NEW_WORK[data.action];
         const container = document.getElementById('rt-fd-container');
         const toast = document.createElement('div');
-        toast.className = 'rt-fd-toast';
+        toast.className = 'rt-fd-toast' + (sticky ? ' rt-fd-sticky' : '');
         toast.innerHTML = `
-            <div class="rt-fd-icon"><i class="bi bi-lightning-charge"></i></div>
+            <div class="rt-fd-icon"><i class="bi bi-${sticky ? 'bell-fill' : 'lightning-charge'}"></i></div>
             <div class="rt-fd-body">${escapeHtml(data.message)}</div>
+            ${sticky ? '<button type="button" class="rt-fd-dismiss" aria-label="Dismiss">✕</button>' : ''}
         `;
         container.appendChild(toast);
-        setTimeout(() => {
+
+        const remove = () => {
             toast.classList.add('removing');
             setTimeout(() => toast.remove(), 300);
-        }, 6000);
+        };
+        if (sticky) {
+            toast.querySelector('.rt-fd-dismiss').addEventListener('click', remove);
+        } else {
+            setTimeout(remove, 6000);
+        }
     }
 
     function disableForm(selector, actor) {
@@ -129,9 +157,16 @@
     }
 
     let bannerShown = false;
-    function showRefreshBanner() {
+    function showRefreshBanner(text) {
         const banner = document.getElementById('rt-fd-banner');
-        if (!banner || bannerShown) return;
+        if (!banner) return;
+        // Ang mensahe tungkol sa bagong gawain ay pumapalit sa pangkalahatang
+        // "Another staff member made changes" — hindi staff ang nagpadala.
+        if (text) {
+            const label = banner.querySelector('span');
+            if (label) label.innerHTML = '<i class="bi bi-bell-fill me-1"></i> ' + escapeHtml(text);
+        }
+        if (bannerShown) return;
         bannerShown = true;
         banner.style.display = 'flex';
     }

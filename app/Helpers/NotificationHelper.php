@@ -366,4 +366,29 @@ class NotificationHelper
             route('admin.bookings.show', $booking, false)
         );
     }
+
+    // ── Preset: Housekeeping (v7.11) ──────────────────────────────
+    // Ang staff ay isang pinagsasaluhang account na walang notification
+    // bell — nakakatanggap nila sa frontdesk sa pamamagitan ng
+    // `FrontdeskBroadcast`. Ang mga ito ay para sa admin.
+    public static function issueReported($report): void
+    {
+        $description = $report->description ? " — \"{$report->description}\"" : ".";
+
+        self::notifyAdmin(
+            "Issue Reported — {$report->category_label}",
+            "{$report->source_label} reported a {$report->category_label} problem{$description} " .
+            "Staff were alerted at the frontdesk.",
+            route("admin.housekeeping.index", [], false)
+        );
+    }
+
+    public static function housekeepingDone(string $what, string $status): void
+    {
+        self::notifyAdmin(
+            "Housekeeping {$status}",
+            "{$what} was marked {$status} at the frontdesk.",
+            route("admin.housekeeping.index", ["view" => "closed"], false)
+        );
+    }
 }

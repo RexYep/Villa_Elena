@@ -18,6 +18,7 @@ class FrontdeskUpdated implements ShouldBroadcast
         public ?int $bookingId = null,
         public ?int $taskId = null,
         public ?string $actor = null,
+        public ?int $reportId = null,
     ) {}
 
     public function broadcastOn(): array
@@ -38,6 +39,7 @@ class FrontdeskUpdated implements ShouldBroadcast
             'booking_id' => $this->bookingId,
             'task_id'    => $this->taskId,
             'actor'      => $this->actor,
+            'report_id'  => $this->reportId,
         ];
     }
 }

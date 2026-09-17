@@ -439,6 +439,168 @@
             margin-bottom: 3px;
         }
 
+        /* Report an issue (v7.11) */
+        .issue-card {
+            border-color: #fecaca;
+        }
+
+        .issue-intro {
+            font-size: 14px;
+            color: var(--muted);
+            margin-bottom: 14px;
+            line-height: 1.5;
+        }
+
+        .issue-card fieldset {
+            border: none;
+            padding: 0;
+            margin: 0;
+        }
+
+        .issue-label {
+            display: block;
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--stone);
+            margin-bottom: 8px;
+        }
+
+        .issue-optional {
+            font-weight: 400;
+            color: var(--muted);
+        }
+
+        .issue-pick {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 8px;
+        }
+
+        .issue-pick label {
+            position: relative;
+            border: 1.5px solid var(--border);
+            border-radius: 10px;
+            padding: 10px 4px;
+            min-height: 44px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 4px;
+            font-size: 13px;
+            cursor: pointer;
+            text-align: center;
+        }
+
+        .issue-pick label i {
+            font-size: 18px;
+        }
+
+        .issue-pick input {
+            position: absolute;
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        .issue-pick label:has(input:checked) {
+            border-color: #dc2626;
+            background: #fef2f2;
+            color: #b91c1c;
+            font-weight: 600;
+        }
+
+        .issue-pick label:has(input:focus-visible) {
+            outline: 2px solid #dc2626;
+            outline-offset: 2px;
+        }
+
+        .issue-error {
+            color: #dc2626;
+            font-size: 13px;
+            margin-top: 6px;
+        }
+
+        .btn-issue {
+            margin-top: 14px;
+            width: 100%;
+            background: #dc2626;
+            color: #fff;
+            border: none;
+            border-radius: 10px;
+            padding: 13px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+        }
+
+        .btn-issue:hover {
+            background: #b91c1c;
+        }
+
+        .issue-list.with-form {
+            margin-top: 20px;
+            padding-top: 16px;
+            border-top: 1px solid var(--border);
+        }
+
+        .issue-item {
+            display: flex;
+            align-items: flex-start;
+            gap: 10px;
+            padding: 10px 0;
+            border-bottom: 1px solid #f4efe6;
+        }
+
+        .issue-item:last-child {
+            border-bottom: none;
+        }
+
+        .issue-item > i {
+            font-size: 18px;
+            color: var(--muted);
+            margin-top: 1px;
+        }
+
+        .issue-item-main {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .issue-item-title {
+            font-size: 14px;
+            font-weight: 600;
+        }
+
+        .issue-item-desc {
+            font-size: 13px;
+            color: var(--stone);
+            overflow-wrap: anywhere;
+        }
+
+        .issue-item-time {
+            font-size: 12px;
+            color: var(--muted);
+            margin-top: 2px;
+        }
+
+        .issue-status {
+            padding: 3px 10px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+            white-space: nowrap;
+        }
+
+        .ws-pending { background: #fef9c3; color: #a16207; }
+        .ws-in-progress { background: #dbeafe; color: #1d4ed8; }
+        .ws-completed { background: #dcfce7; color: #15803d; }
+        .ws-cancelled { background: #f1f5f9; color: #475569; }
+
+        @media (max-width:420px) {
+            .issue-pick {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+
         @media (max-width:900px) {
             .detail-grid {
                 grid-template-columns: 1fr;
@@ -632,6 +794,77 @@
 
         {{-- Left --}}
         <div>
+            {{-- Report an issue (v7.11) — form lang habang naka-check-in;
+                 ang listahan ng mga ulat ay nananatili pagkatapos. --}}
+            @if ($booking->canReportIssues() || $booking->issueReports->isNotEmpty())
+                @php $issueErrors = $errors->issueReport; @endphp
+                <div class="card issue-card" id="report-issue">
+                    <div class="card-head">
+                        <h3><i class="bi bi-tools me-2"></i>Having a problem during your stay?</h3>
+                    </div>
+                    <div class="card-body">
+                        @if ($booking->canReportIssues())
+                            <p class="issue-intro">
+                                Let us know here — it goes straight to our staff on duty, so there's no need to look for
+                                someone in person.
+                            </p>
+                            <form method="POST" action="{{ route('customer.bookings.issues.store', $booking) }}" id="issueForm">
+                                @csrf
+                                <fieldset>
+                                    <legend class="issue-label">What's the problem?</legend>
+                                    <div class="issue-pick">
+                                        @foreach (\App\Models\IssueReport::CATEGORIES as $key => $cat)
+                                            <label>
+                                                <input type="radio" name="category" value="{{ $key }}" required
+                                                    @checked(old('category') === $key)>
+                                                <i class="bi bi-{{ $cat['icon'] }}" aria-hidden="true"></i>
+                                                <span>{{ $cat['label'] }}</span>
+                                            </label>
+                                        @endforeach
+                                    </div>
+                                </fieldset>
+                                @if ($issueErrors->has('category'))
+                                    <div class="issue-error">{{ $issueErrors->first('category') }}</div>
+                                @endif
+
+                                <label for="issueDescription" class="issue-label" style="margin-top:14px;">
+                                    Tell us a bit more <span class="issue-optional">(required for "Other")</span>
+                                </label>
+                                <textarea name="description" id="issueDescription" class="form-control" rows="2"
+                                    maxlength="{{ \App\Models\IssueReport::DESCRIPTION_MAX }}"
+                                    placeholder="e.g. The aircon in the second bedroom is blowing warm air">{{ old('description') }}</textarea>
+                                @if ($issueErrors->has('description'))
+                                    <div class="issue-error">{{ $issueErrors->first('description') }}</div>
+                                @endif
+
+                                <button type="submit" class="btn-issue">
+                                    <i class="bi bi-send me-1"></i> Send to staff
+                                </button>
+                            </form>
+                        @endif
+
+                        @if ($booking->issueReports->isNotEmpty())
+                            <div class="issue-list {{ $booking->canReportIssues() ? 'with-form' : '' }}">
+                                <div class="issue-label">Your reports</div>
+                                @foreach ($booking->issueReports as $report)
+                                    <div class="issue-item">
+                                        <i class="bi bi-{{ $report->category_icon }}" aria-hidden="true"></i>
+                                        <div class="issue-item-main">
+                                            <div class="issue-item-title">{{ $report->category_label }}</div>
+                                            @if ($report->description)
+                                                <div class="issue-item-desc">{{ $report->description }}</div>
+                                            @endif
+                                            <div class="issue-item-time">Sent {{ $report->created_at->format('M j, g:i A') }}</div>
+                                        </div>
+                                        <span class="issue-status {{ $report->status_class }}">{{ $report->guest_status_label }}</span>
+                                    </div>
+                                @endforeach
+                            </div>
+                        @endif
+                    </div>
+                </div>
+            @endif
+
             {{-- Booking Info --}}
             <div class="card">
                 <div class="card-head">
@@ -851,6 +1084,17 @@
         // /`minlength` ng textarea. Dito ay tumatakbo na ang validation ng
         // browser bago dumating ang submit event, at pinipigilan ang
         // dobleng pag-click.
+        // Pinipigilan ang dobleng pag-send ng ulat.
+        document.getElementById('issueForm')?.addEventListener('submit', function(e) {
+            const btn = this.querySelector('button[type="submit"]');
+            if (btn.disabled) {
+                e.preventDefault();
+                return;
+            }
+            btn.disabled = true;
+            btn.textContent = 'Sending…';
+        });
+
         document.getElementById('cancelForm')?.addEventListener('submit', function(e) {
             const btn = this.querySelector('button[type="submit"]');
             if (btn.disabled) {

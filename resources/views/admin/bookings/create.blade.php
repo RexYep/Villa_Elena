@@ -34,6 +34,35 @@
             color: var(--text-main);
         }
 
+        .btn-submit:disabled {
+            opacity: .55;
+            cursor: not-allowed;
+        }
+
+        /* Live availability badge above the price preview */
+        .availability-status {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 13px;
+            font-weight: 600;
+            padding: 10px 12px;
+            border-radius: 10px;
+            margin-bottom: 12px;
+            background: var(--sand);
+            color: var(--muted);
+        }
+
+        .availability-status.is-available {
+            background: #e6f4ea;
+            color: #1e7b3c;
+        }
+
+        .availability-status.is-unavailable {
+            background: #fdecea;
+            color: #b3261e;
+        }
+
         /* Price Preview */
         .price-preview {
             background: var(--terracotta);
@@ -173,21 +202,20 @@
                     </div>
                     <div class="form-card-body">
                         <div class="mb-3">
-                            <label class="form-label">Property <span class="req">*</span></label>
-                            <select name="property_id" id="propertySelect"
-                                class="form-select @error('property_id') is-invalid @enderror" required>
-                                <option value="">Choose a property...</option>
-                                @foreach ($properties as $property)
-                                    <option value="{{ $property->id }}" data-price="{{ $property->base_price }}"
-                                        data-weekend="{{ $property->weekend_price ?? $property->base_price }}"
-                                        {{ old('property_id') == $property->id ? 'selected' : '' }}>
-                                        {{ $property->property_name }} —
-                                        ₱{{ number_format($property->base_price, 2) }}/night
-                                    </option>
-                                @endforeach
-                            </select>
+                            <label class="form-label">Property</label>
+                            @if ($villa)
+                                {{-- Single-villa model: nothing to choose, so it's fixed. --}}
+                                <input type="hidden" name="property_id" id="propertyId" value="{{ $villa->id }}">
+                                <input type="text" class="form-control" value="{{ $villa->property_name }}" readonly
+                                    tabindex="-1" aria-label="Property">
+                            @else
+                                <input type="hidden" id="propertyId" value="">
+                                <div class="alert alert-warning mb-0">
+                                    <i class="bi bi-tools me-2"></i>The villa is under maintenance and can't be booked right now.
+                                </div>
+                            @endif
                             @error('property_id')
-                                <span class="invalid-feedback">{{ $message }}</span>
+                                <span class="invalid-feedback d-block">{{ $message }}</span>
                             @enderror
                         </div>
                         <div class="mb-3">
@@ -221,9 +249,14 @@
                         <div class="two-col">
                             <div>
                                 <label class="form-label">Number of Guests <span class="req">*</span></label>
-                                <input type="number" name="num_guests"
-                                    class="form-control @error('num_guests') is-invalid @enderror"
-                                    value="{{ old('num_guests', 1) }}" min="1" required>
+                                <select name="num_guests"
+                                    class="form-select @error('num_guests') is-invalid @enderror" required>
+                                    @for ($g = 1; $g <= ($villa->max_capacity ?? 1); $g++)
+                                        <option value="{{ $g }}" {{ (int) old('num_guests', 1) === $g ? 'selected' : '' }}>
+                                            {{ $g }} guest{{ $g > 1 ? 's' : '' }}
+                                        </option>
+                                    @endfor
+                                </select>
                                 @error('num_guests')
                                     <span class="invalid-feedback">{{ $message }}</span>
                                 @enderror
@@ -264,15 +297,26 @@
                         <h3>Price Preview</h3>
                     </div>
                     <div class="form-card-body">
+                        <div id="availabilityStatus" class="availability-status" role="status" aria-live="polite">
+                            <i class="bi bi-calendar-event"></i> <span>Pick a date and slot to check availability.</span>
+                        </div>
                         <div class="price-preview">
                             <h4>Estimated Cost</h4>
                             <div class="price-row">
+                                <span>Date</span>
+                                <span id="previewDate">—</span>
+                            </div>
+                            <div class="price-row">
                                 <span>Slot</span>
-                                <span id="previewNights">—</span>
+                                <span id="previewSlot">—</span>
                             </div>
                             <div class="price-row">
                                 <span>Package Rate</span>
                                 <span id="previewRate">—</span>
+                            </div>
+                            <div class="price-row" id="previewPromoRow" hidden>
+                                <span id="previewPromoLabel">Promo</span>
+                                <span id="previewDiscount">—</span>
                             </div>
                             <div class="price-row">
                                 <span>Total</span>
@@ -280,14 +324,14 @@
                             </div>
                         </div>
                         <p class="text-muted-theme" style="font-size: 13px;margin-top:10px;text-align:center;">
-                            Final price calculated on submit based on seasonal pricing rules.
+                            Includes seasonal pricing and any promo active on the check-in date.
                         </p>
                     </div>
                 </div>
 
                 <div class="form-card">
                     <div class="form-card-body">
-                        <button type="submit" class="btn-submit">
+                        <button type="submit" class="btn-submit" id="submitBtn" {{ $villa ? '' : 'disabled' }}>
                             <i class="bi bi-calendar-plus me-2"></i> Create Booking
                         </button>
                         <a href="{{ route('admin.bookings.index') }}" class="btn-cancel">Cancel</a>
@@ -302,52 +346,111 @@
 
 @push('scripts')
     <script>
-        const SLOT_TIMES = {
-            day: '08:00',
-            night: '19:00'
-        };
+        (function() {
+            // Price and availability both come from the server (quoteFor() +
+            // hasConflict(), the same calls store() makes). Never compute
+            // pricing here — a JS copy can't see pricing_rules or promos.
+            const QUOTE_URL = @json(route('admin.bookings.quote'));
+            const propertyId = document.getElementById('propertyId').value;
+            const checkInEl = document.getElementById('checkIn');
+            const submitBtn = document.getElementById('submitBtn');
+            const statusEl = document.getElementById('availabilityStatus');
+            const $ = id => document.getElementById(id);
+            const peso = n => '₱' + Number(n).toLocaleString('en-PH', {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2
+            });
 
-        function updatePreview() {
-            const checkIn = document.getElementById('checkIn').value;
-            const slotInput = document.querySelector('input[name="slot"]:checked');
-            const select = document.getElementById('propertySelect');
-            const option = select.options[select.selectedIndex];
+            let controller = null;
 
-            if (!checkIn || !slotInput || !option.value) return;
-
-            const slot = slotInput.value;
-            const ciTime = SLOT_TIMES[slot];
-
-            const basePrice = parseFloat(option.dataset.price) || 0;
-            const weekendPrice = parseFloat(option.dataset.weekend) || basePrice;
-
-            // Flat/package price base lang sa CHECK-IN day/slot — hindi per-night.
-            // Kailangang tumugma ito sa Property::getPackagePrice() sa backend.
-            // Preview lang ito; hindi kasama ang holiday/pricing-rule overrides.
-            const d1 = new Date(checkIn);
-            const dow = d1.getDay(); // 0=Sunday ... 6=Saturday
-            let price;
-
-            if (dow === 0) {
-                price = ciTime < '18:00' ? weekendPrice : basePrice;
-            } else if (dow === 5 || dow === 6) {
-                price = weekendPrice;
-            } else {
-                price = basePrice;
+            function setStatus(state, icon, text) {
+                statusEl.className = 'availability-status' + (state ? ' is-' + state : '');
+                statusEl.innerHTML = '';
+                const i = document.createElement('i');
+                i.className = 'bi ' + icon;
+                const span = document.createElement('span');
+                span.textContent = text;
+                statusEl.append(i, ' ', span);
             }
 
-            document.getElementById('previewNights').textContent = slot === 'day' ? 'Day (9 hrs)' : 'Night (11 hrs)';
-            document.getElementById('previewRate').textContent = '₱' + basePrice.toLocaleString('en-PH', {
-                minimumFractionDigits: 2
-            });
-            document.getElementById('previewTotal').textContent = '₱' + price.toLocaleString('en-PH', {
-                minimumFractionDigits: 2
-            });
-        }
+            function resetPreview() {
+                ['previewDate', 'previewSlot', 'previewRate', 'previewTotal'].forEach(id => $(id).textContent = '—');
+                $('previewPromoRow').hidden = true;
+            }
 
-        document.getElementById('checkIn').addEventListener('change', updatePreview);
-        document.querySelectorAll('input[name="slot"]').forEach(el => el.addEventListener('change', updatePreview));
-        document.getElementById('propertySelect').addEventListener('change', updatePreview);
+            async function refresh() {
+                const checkIn = checkInEl.value;
+                const slotInput = document.querySelector('input[name="slot"]:checked');
+
+                if (!propertyId) return;
+                if (!checkIn || !slotInput) {
+                    resetPreview();
+                    setStatus('', 'bi-calendar-event', 'Pick a date and slot to check availability.');
+                    submitBtn.disabled = true;
+                    return;
+                }
+
+                // Only the latest selection's answer may land.
+                if (controller) controller.abort();
+                controller = new AbortController();
+
+                submitBtn.disabled = true;
+                setStatus('', 'bi-hourglass-split', 'Checking availability…');
+
+                try {
+                    const params = new URLSearchParams({
+                        property_id: propertyId,
+                        checkin: checkIn,
+                        slot: slotInput.value
+                    });
+                    const res = await fetch(QUOTE_URL + '?' + params, {
+                        headers: {
+                            'Accept': 'application/json',
+                            'X-Requested-With': 'XMLHttpRequest'
+                        },
+                        signal: controller.signal
+                    });
+                    const data = await res.json();
+
+                    if (!data.valid) {
+                        resetPreview();
+                        setStatus('unavailable', 'bi-exclamation-circle', data.message || 'Select a valid date and slot.');
+                        return;
+                    }
+
+                    $('previewDate').textContent = data.day_label;
+                    $('previewSlot').textContent = data.slot_label;
+                    $('previewRate').textContent = peso(data.base);
+                    $('previewTotal').textContent = peso(data.total);
+
+                    if (data.discount > 0) {
+                        $('previewPromoLabel').textContent = (data.promo_label || 'Promo') +
+                            (data.promo_value ? ' (' + data.promo_value + ')' : '');
+                        $('previewDiscount').textContent = '−' + peso(data.discount);
+                        $('previewPromoRow').hidden = false;
+                    } else {
+                        $('previewPromoRow').hidden = true;
+                    }
+
+                    if (data.available) {
+                        setStatus('available', 'bi-check-circle-fill', 'Available — this slot is open.');
+                        submitBtn.disabled = false;
+                    } else {
+                        setStatus('unavailable', 'bi-x-circle-fill', data.message);
+                    }
+                } catch (e) {
+                    if (e.name === 'AbortError') return;
+                    // Can't verify: let the admin submit — store() still
+                    // checks availability atomically via reserveSlot().
+                    setStatus('', 'bi-wifi-off', 'Couldn’t check availability. It will be verified on submit.');
+                    submitBtn.disabled = false;
+                }
+            }
+
+            checkInEl.addEventListener('change', refresh);
+            document.querySelectorAll('input[name="slot"]').forEach(el => el.addEventListener('change', refresh));
+            refresh();
+        })();
     </script>
 @endpush
 

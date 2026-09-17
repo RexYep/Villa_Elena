@@ -909,6 +909,21 @@ class Booking extends Model
         return $this->hasMany(HousekeepingTask::class);
     }
 
+    public function issueReports()
+    {
+        return $this->hasMany(IssueReport::class);
+    }
+
+    /**
+     * Pwede bang mag-ulat ng problema ang guest? Lang habang naka-check-in:
+     * ang ulat ay para sa problemang kasalukuyang kinakaharap sa villa, at
+     * ang staff na tumatanggap ay nasa villa sa oras na iyon.
+     */
+    public function canReportIssues(): bool
+    {
+        return $this->status === 'checked_in';
+    }
+
     // ── Yugto ng refund ────────────────────────────────────────────
     /**
      * Nasaan na ang pera ng guest?

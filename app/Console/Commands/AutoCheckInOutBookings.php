@@ -248,19 +248,6 @@ class AutoCheckInOutBookings extends Command
 
             NotificationHelper::guestCheckedIn($booking);
 
-            // Kapareho ng ginagawa sa manual check-in — gumawa (o gamitin
-            // na existing) ng checkout-cleaning housekeeping task.
-            HousekeepingTask::firstOrCreate(
-                ['booking_id' => $booking->id, 'task_type' => 'checkout_clean'],
-                [
-                    'property_id'    => $booking->property_id,
-                    'due_date'       => $booking->check_out_date,
-                    'scheduled_date' => $booking->check_out_date,
-                    'status'         => 'pending',
-                    'notes'          => "Post-checkout cleaning for booking {$booking->booking_ref}",
-                ]
-            );
-
             Notification::create([
                 'user_id' => $booking->user_id,
                 'type'    => 'in_app',
@@ -301,10 +288,6 @@ class AutoCheckInOutBookings extends Command
             $booking->property->update(['status' => 'available']);
 
             NotificationHelper::guestCheckedOut($booking);
-
-            HousekeepingTask::where('booking_id', $booking->id)
-                ->where('task_type', 'checkout_clean')
-                ->update(['status' => 'in_progress']);
 
             Notification::create([
                 'user_id' => $booking->user_id,

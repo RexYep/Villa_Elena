@@ -27,6 +27,14 @@
             <span class="nav-icon"><i class="bi bi-tags"></i></span>
             Promotions
         </a>
+        @php $openHousekeeping = \App\Models\IssueReport::open()->count(); @endphp
+        <a href="{{ route('admin.housekeeping.index') }}" class="nav-item-custom {{ request()->routeIs('admin.housekeeping.*') ? 'active' : '' }}">
+            <span class="nav-icon"><i class="bi bi-brush"></i></span>
+            Housekeeping
+            @if ($openHousekeeping)
+                <span class="nav-count" title="{{ $openHousekeeping }} open issue report{{ $openHousekeeping > 1 ? 's' : '' }}">{{ $openHousekeeping }}</span>
+            @endif
+        </a>
     </div>
 
     <div class="sidebar-section">

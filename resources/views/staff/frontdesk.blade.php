@@ -197,11 +197,10 @@
             }
         }
 
-        /* ── Cleaning banner ──
-       Ang mga housekeeping task ay naiipon dati dahil kailangan pang
-       pumunta sa hiwalay na tab para makita at maisara ang mga ito. Dito na
-       ito lumalabas, kasama ang totoong deadline (oras ng susunod na
-       check-in), na may isang pindot na "Mark cleaned". */
+        /* ── Housekeeping banner ──
+       Ang pinaka-madaliang item (ulat ng guest, o task na overdue/urgent/
+       malapit na deadline) ay ipinapakita dito sa itaas, na may pindutang
+       Start / Done — kung nasa tab lang, naiipon at nakakaligtaan. */
         .clean-banner {
             display: flex;
             align-items: center;
@@ -320,14 +319,151 @@
             color: #15803d;
         }
 
+        .banner-actions {
+            display: flex;
+            gap: 8px;
+            flex-shrink: 0;
+        }
+
+        .btn-clean-start {
+            background: #1d4ed8;
+        }
+
+        .btn-clean-start:hover {
+            background: #1e40af;
+        }
+
+        /* ── Housekeeping tab (v7.11) ── */
+        .hk-toolbar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            margin-bottom: 14px;
+        }
+
+        .hk-toolbar p {
+            font-size: 13px;
+            color: var(--muted);
+            margin: 0;
+        }
+
+        .btn-report {
+            background: #dc2626;
+            color: #fff;
+            border: none;
+            border-radius: 9px;
+            padding: 10px 16px;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            font-family: 'DM Sans', sans-serif;
+            display: inline-flex;
+            align-items: center;
+            gap: 7px;
+            flex-shrink: 0;
+        }
+
+        .btn-report:hover {
+            background: #b91c1c;
+        }
+
+        .task-actions {
+            display: flex;
+            gap: 6px;
+            flex-shrink: 0;
+        }
+
+        .ws-badge {
+            display: inline-block;
+            margin-left: 6px;
+            padding: 1px 8px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+            vertical-align: 1px;
+        }
+
+        .ws-pending { background: #fef3c7; color: #92400e; }
+        .ws-in-progress { background: #dbeafe; color: #1d4ed8; }
+        .ws-completed { background: #dcfce7; color: #15803d; }
+        .ws-cancelled { background: #e2e8f0; color: #475569; }
+        .ws-urgent { background: #fee2e2; color: #b91c1c; }
+
+        .category-pick {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 8px;
+        }
+
+        .category-pick label {
+            border: 1.5px solid #e4ddd0;
+            border-radius: 9px;
+            padding: 10px 4px;
+            text-align: center;
+            font-size: 13px;
+            cursor: pointer;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .category-pick label i {
+            font-size: 18px;
+        }
+
+        .category-pick input {
+            position: absolute;
+            opacity: 0;
+        }
+
+        .category-pick label:has(input:checked) {
+            border-color: #dc2626;
+            background: #fef2f2;
+            color: #b91c1c;
+            font-weight: 600;
+        }
+
+        .category-pick label:has(input:focus-visible) {
+            outline: 2px solid #dc2626;
+            outline-offset: 2px;
+        }
+
         @media (max-width:640px) {
             .clean-banner {
                 flex-wrap: wrap;
             }
 
+            .banner-actions {
+                width: 100%;
+            }
+
+            .banner-actions form {
+                flex: 1;
+            }
+
             .btn-clean {
                 width: 100%;
                 justify-content: center;
+            }
+
+            .hk-toolbar {
+                flex-direction: column;
+                align-items: stretch;
+            }
+
+            .task-row {
+                flex-wrap: wrap;
+            }
+
+            .task-actions {
+                width: 100%;
+                padding-left: 46px;
+            }
+
+            .category-pick {
+                grid-template-columns: repeat(2, 1fr);
             }
         }
 
@@ -894,43 +1030,78 @@
         </div>
     @endif
 
-    {{-- Villa needs cleaning --}}
-    @if ($urgentTask)
-        @php
-            $readyBy = $urgentTask->ready_by;
-            $hoursLeft = now()->diffInMinutes($readyBy, false) / 60;
-            $tone = $hoursLeft < 0 ? 'urgent' : ($hoursLeft <= 4 ? 'soon' : 'calm');
-        @endphp
-        <div class="clean-banner {{ $tone }}">
-            <div class="clean-icon"><i class="bi bi-brush-fill"></i></div>
-            <div class="clean-main">
-                <div class="clean-title">
-                    @if ($hoursLeft < 0)
-                        Villa still not marked cleaned — next guest was due {{ $readyBy->diffForHumans() }}
-                    @else
-                        Villa must be ready by {{ $readyBy->format('g:i A') }}
-                        @if ($readyBy->isToday())
-                            today
-                        @else
-                            on {{ $readyBy->format('M j') }}
+    {{-- Pinaka-madaliang housekeeping item: ulat ng guest, o task na
+         overdue/urgent/malapit na deadline (FrontDeskController::mostUrgentHousekeeping) --}}
+    @if ($urgentItem)
+        @php $item = $urgentItem['item']; @endphp
+        @if ($urgentItem['kind'] === 'report')
+            <div class="clean-banner urgent">
+                <div class="clean-icon"><i class="bi bi-{{ $item->category_icon }}"></i></div>
+                <div class="clean-main">
+                    <div class="clean-title">
+                        {{ $item->isFromGuest() ? 'Guest reported a problem' : 'Issue reported' }}:
+                        {{ $item->category_label }}
+                    </div>
+                    <div class="clean-sub">
+                        @if ($item->description)
+                            "{{ \Illuminate\Support\Str::limit($item->description, 120) }}" ·
                         @endif
-                    @endif
+                        {{ $item->source_label }} · {{ $item->created_at->diffForHumans() }}
+                        · {{ $item->status_label }}
+                    </div>
                 </div>
-                <div class="clean-sub">
-                    @if ($urgentTask->next_guest)
-                        Next check-in: {{ $urgentTask->next_guest }} ·
+                <div class="banner-actions">
+                    @if ($item->status === 'pending')
+                        <form method="POST" action="{{ route('staff.reports.start', $item) }}" class="report-form-{{ $item->id }}">
+                            @csrf @method('PATCH')
+                            <button type="submit" class="btn-clean btn-clean-start"><i class="bi bi-play-fill"></i> Start fixing</button>
+                        </form>
                     @endif
-                    {{ $hoursLeft >= 0 ? 'about ' . $readyBy->diffForHumans(null, true) . ' left' : 'overdue' }}
-                    · {{ ucfirst(str_replace('_', ' ', $urgentTask->status)) }}
+                    <form method="POST" action="{{ route('staff.reports.complete', $item) }}" class="report-form-{{ $item->id }}">
+                        @csrf @method('PATCH')
+                        <button type="submit" class="btn-clean"><i class="bi bi-check-lg"></i> Mark fixed</button>
+                    </form>
                 </div>
             </div>
-            <form method="POST" action="{{ route('staff.tasks.complete', $urgentTask) }}">
-                @csrf @method('PATCH')
-                <button type="submit" class="btn-clean">
-                    <i class="bi bi-check-lg"></i> Mark cleaned
-                </button>
-            </form>
-        </div>
+        @else
+            @php $tone = $item->due_tone === 'late' ? 'urgent' : ($item->due_tone === 'soon' || $item->priority === 'urgent' ? 'soon' : 'calm'); @endphp
+            <div class="clean-banner {{ $tone }}">
+                <div class="clean-icon"><i class="bi bi-{{ $item->type_icon }}"></i></div>
+                <div class="clean-main">
+                    <div class="clean-title">
+                        @if ($item->priority === 'urgent')
+                            Urgent task:
+                        @else
+                            Task from admin:
+                        @endif
+                        {{ $item->headline }}
+                    </div>
+                    <div class="clean-sub">
+                        @if ($item->isOverdue())
+                            Overdue — was due {{ $item->due_label }}
+                        @else
+                            Due {{ $item->due_label }} ({{ $item->due_at->diffForHumans(null, true) }} left)
+                        @endif
+                        @if ($item->location)
+                            · {{ $item->location }}
+                        @endif
+                        · {{ $item->status_label }}
+                    </div>
+                </div>
+                <div class="banner-actions">
+                    @if ($item->status === 'pending')
+                        <form method="POST" action="{{ route('staff.tasks.start', $item) }}" class="task-form-{{ $item->id }}">
+                            @csrf @method('PATCH')
+                            <button type="submit" class="btn-clean btn-clean-start"><i class="bi bi-play-fill"></i> Start</button>
+                        </form>
+                    @endif
+                    <form method="POST" action="{{ route('staff.tasks.complete', $item) }}" class="task-form-{{ $item->id }}">
+                        @csrf @method('PATCH')
+                        <button type="submit" class="btn-clean"><i class="bi bi-check-lg"></i> Mark done</button>
+                    </form>
+                </div>
+            </div>
+        @endif
     @endif
 
     {{-- Tabs --}}
@@ -953,7 +1124,7 @@
         </button>
         <button class="tab-btn" onclick="switchTab('housekeeping', this)">
             <i class="bi bi-brush"></i> Housekeeping
-            <span class="cnt">{{ $pendingTasks->count() + $inProgressTasks->count() }}</span>
+            <span class="cnt">{{ $stats['pending_tasks'] }}</span>
         </button>
         <a href="{{ route('staff.availability') }}" class="tab-btn" style="text-decoration:none;">
             <i class="bi bi-calendar3"></i> Availability
@@ -1177,83 +1348,102 @@
         </div>
     </div>
 
-    {{-- Tab: Housekeeping --}}
+    {{-- Tab: Housekeeping — mga ulat ng problema at mga task mula sa admin (v7.11) --}}
     <div class="tab-content" id="tab-housekeeping">
-        @if ($inProgressTasks->count())
-            <div class="card mb-3">
-                <div class="card-head">
-                    <h3><i class="bi bi-brush me-2" style="color:#1d4ed8;"></i>In Progress</h3>
-                </div>
-                <div class="card-body">
-                    @foreach ($inProgressTasks as $task)
-                        <div class="task-row">
-                            <div class="task-type-icon tag-blue">
-                                <i class="bi bi-brush"></i>
-                            </div>
-                            <div class="task-info">
-                                <div class="task-prop">{{ $task->property->property_name }}</div>
-                                <div class="task-details">{{ ucfirst(str_replace('_', ' ', $task->task_type)) }}
-                                    @if ($task->notes)
-                                        · {{ $task->notes }}
-                                    @endif
-                                </div>
-                                @include('staff.partials.task_deadline', ['task' => $task])
-                            </div>
-                            <div>
-                                <form method="POST" action="{{ route('staff.tasks.complete', $task) }}"
-                                    id="taskCompleteForm_{{ $task->id }}" class="task-form-{{ $task->id }}">
-                                    @csrf @method('PATCH')
-                                    <button type="submit" class="btn-sm btn-complete">
-                                        <i class="bi bi-check-lg"></i> Mark Done
-                                    </button>
-                                </form>
-                            </div>
-                        </div>
-                    @endforeach
-                </div>
+        <div class="hk-toolbar">
+            <p>Tasks are sent by the admin. Guests can report problems from their account while checked in.</p>
+            <button type="button" class="btn-report" onclick="openReportModal()">
+                <i class="bi bi-exclamation-triangle"></i> Report issue
+            </button>
+        </div>
+
+        <div class="card mb-3">
+            <div class="card-head">
+                <h3><i class="bi bi-exclamation-octagon me-2" style="color:#dc2626;"></i>Issue Reports</h3>
+                <span class="text-muted-theme" style="font-size: 14px;">{{ $openReports->count() }} open</span>
             </div>
-        @endif
+            <div class="card-body">
+                @forelse ($openReports as $report)
+                    <div class="task-row">
+                        <div class="task-type-icon {{ $report->isFromGuest() ? 'tag-red' : 'tag-amber' }}">
+                            <i class="bi bi-{{ $report->category_icon }}"></i>
+                        </div>
+                        <div class="task-info">
+                            <div class="task-prop">
+                                {{ $report->category_label }}
+                                <span class="ws-badge {{ $report->status_class }}">{{ $report->status_label }}</span>
+                            </div>
+                            @if ($report->description)
+                                <div class="task-details">{{ $report->description }}</div>
+                            @endif
+                            <div class="task-date">{{ $report->source_label }} · {{ $report->created_at->diffForHumans() }}</div>
+                        </div>
+                        <div class="task-actions">
+                            @if ($report->status === 'pending')
+                                <form method="POST" action="{{ route('staff.reports.start', $report) }}" class="report-form-{{ $report->id }}">
+                                    @csrf @method('PATCH')
+                                    <button type="submit" class="btn-sm btn-start"><i class="bi bi-play-fill"></i> Start</button>
+                                </form>
+                            @endif
+                            <form method="POST" action="{{ route('staff.reports.complete', $report) }}" class="report-form-{{ $report->id }}">
+                                @csrf @method('PATCH')
+                                <button type="submit" class="btn-sm btn-complete"><i class="bi bi-check-lg"></i> Fixed</button>
+                            </form>
+                        </div>
+                    </div>
+                @empty
+                    <div class="empty">
+                        <i class="bi bi-emoji-smile"></i>
+                        <p>No reported problems.</p>
+                    </div>
+                @endforelse
+            </div>
+        </div>
 
         <div class="card">
             <div class="card-head">
-                <h3><i class="bi bi-list-task me-2" style="color:#a16207;"></i>Pending Tasks</h3>
+                <h3><i class="bi bi-list-task me-2" style="color:#a16207;"></i>Tasks from Admin</h3>
+                <span class="text-muted-theme" style="font-size: 14px;">{{ $inProgressTasks->count() + $pendingTasks->count() }} open</span>
             </div>
             <div class="card-body">
-                @forelse($pendingTasks as $task)
+                @forelse ($inProgressTasks->concat($pendingTasks) as $task)
                     <div class="task-row">
-                        <div class="task-type-icon tag-amber">
-                            <i class="bi bi-{{ $task->task_type === 'checkout_clean' ? 'brush' : 'tools' }}"></i>
+                        <div class="task-type-icon {{ $task->status === 'in_progress' ? 'tag-blue' : 'tag-amber' }}">
+                            <i class="bi bi-{{ $task->type_icon }}"></i>
                         </div>
                         <div class="task-info">
-                            <div class="task-prop">{{ $task->property->property_name }}</div>
-                            <div class="task-details">{{ ucfirst(str_replace('_', ' ', $task->task_type)) }}
+                            <div class="task-prop">
+                                {{ $task->headline }}
+                                @if ($task->priority === 'urgent')
+                                    <span class="ws-badge ws-urgent">Urgent</span>
+                                @endif
+                                <span class="ws-badge {{ $task->status_class }}">{{ $task->status_label }}</span>
+                            </div>
+                            <div class="task-details">
+                                {{ $task->type_label }}@if ($task->location) · {{ $task->location }}@endif
                                 @if ($task->notes)
                                     · {{ $task->notes }}
                                 @endif
                             </div>
                             @include('staff.partials.task_deadline', ['task' => $task])
                         </div>
-                        <div style="display:flex;gap:6px;" class="task-actions-{{ $task->id }}">
-                            <form method="POST" action="{{ route('staff.tasks.start', $task) }}"
-                                id="taskStartForm_{{ $task->id }}" class="task-form-{{ $task->id }}">
+                        <div class="task-actions">
+                            @if ($task->status === 'pending')
+                                <form method="POST" action="{{ route('staff.tasks.start', $task) }}" class="task-form-{{ $task->id }}">
+                                    @csrf @method('PATCH')
+                                    <button type="submit" class="btn-sm btn-start"><i class="bi bi-play-fill"></i> Start</button>
+                                </form>
+                            @endif
+                            <form method="POST" action="{{ route('staff.tasks.complete', $task) }}" class="task-form-{{ $task->id }}">
                                 @csrf @method('PATCH')
-                                <button type="submit" class="btn-sm btn-start">
-                                    <i class="bi bi-play-fill"></i> Start
-                                </button>
-                            </form>
-                            <form method="POST" action="{{ route('staff.tasks.complete', $task) }}"
-                                id="taskCompleteForm_{{ $task->id }}" class="task-form-{{ $task->id }}">
-                                @csrf @method('PATCH')
-                                <button type="submit" class="btn-sm btn-complete">
-                                    <i class="bi bi-check-lg"></i> Done
-                                </button>
+                                <button type="submit" class="btn-sm btn-complete"><i class="bi bi-check-lg"></i> Done</button>
                             </form>
                         </div>
                     </div>
                 @empty
                     <div class="empty">
                         <i class="bi bi-check-circle"></i>
-                        <p>All housekeeping tasks are complete!</p>
+                        <p>No tasks from the admin right now.</p>
                     </div>
                 @endforelse
             </div>
@@ -1269,6 +1459,54 @@
 @endsection
 
 @section('modals')
+    <!-- Report Issue Modal (v7.11) -->
+    @php $reportErrors = $errors->issueReport; @endphp
+    <div id="reportModal" class="modal-overlay" style="display:none;" role="dialog" aria-modal="true" aria-labelledby="reportModalTitle">
+        <div class="modal-box" style="width:460px;">
+            <div class="modal-head">
+                <div class="modal-title" id="reportModalTitle">Report an Issue</div>
+                <button type="button" onclick="closeReportModal()" class="modal-close" aria-label="Close">✕</button>
+            </div>
+            <form method="POST" action="{{ route('staff.reports.store') }}">
+                @csrf
+                <div class="modal-body">
+                    <div style="font-size: 14px;font-weight:600;color:#374151;margin-bottom:8px;" id="reportCategoryLabel">
+                        What kind of problem?</div>
+                    <div class="category-pick" role="radiogroup" aria-labelledby="reportCategoryLabel">
+                        @foreach (\App\Models\IssueReport::CATEGORIES as $key => $cat)
+                            <label>
+                                <input type="radio" name="category" value="{{ $key }}" required @checked(old('category') === $key)>
+                                <i class="bi bi-{{ $cat['icon'] }}"></i>
+                                {{ $cat['label'] }}
+                            </label>
+                        @endforeach
+                    </div>
+                    @if ($reportErrors->has('category'))
+                        <div style="color:#dc2626;font-size:13px;margin-top:6px;">{{ $reportErrors->first('category') }}</div>
+                    @endif
+
+                    <label for="reportDescription"
+                        style="font-size: 14px;font-weight:600;color:#374151;display:block;margin:16px 0 6px;">
+                        Details <span style="color:#6B7A8D;font-weight:400;">(required for "Other")</span></label>
+                    <textarea name="description" id="reportDescription" rows="3" maxlength="{{ \App\Models\IssueReport::DESCRIPTION_MAX }}"
+                        style="border:1.5px solid #e4ddd0;border-radius:8px;padding:10px 14px;font-size:13px;font-family:'DM Sans',sans-serif;width:100%;"
+                        placeholder="e.g. Light in Room B keeps flickering">{{ old('description') }}</textarea>
+                    @if ($reportErrors->has('description'))
+                        <div style="color:#dc2626;font-size:13px;margin-top:6px;">{{ $reportErrors->first('description') }}</div>
+                    @endif
+
+                    <p style="font-size:13px;color:#6B7A8D;margin:12px 0 16px;">
+                        It's logged on this frontdesk and the admin is notified.
+                    </p>
+                    <button type="submit"
+                        style="background:#dc2626;color:#fff;border:none;border-radius:9px;padding:13px;font-size:14px;font-weight:600;cursor:pointer;width:100%;font-family:'DM Sans',sans-serif;">
+                        <i class="bi bi-send me-2"></i> Submit Report
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <!-- Payment Modal -->
     <div id="paymentModal" class="modal-overlay" style="display:none;">
         <div class="modal-box" style="width:420px;">
@@ -1540,6 +1778,28 @@
             closeCheckinConfirmModal();
             form.submit();
         }
+
+        // ── Report Issue modal (v7.11) ──────────────────────────────────
+        function openReportModal() {
+            document.getElementById('reportModal').style.display = 'flex';
+        }
+
+        function closeReportModal() {
+            document.getElementById('reportModal').style.display = 'none';
+        }
+
+        document.getElementById('reportModal').addEventListener('click', function(e) {
+            if (e.target === this) closeReportModal();
+        });
+
+        // Bumalik sa Housekeeping tab pagkatapos ng Start/Done/Report —
+        // kung hindi ay itinatapon ang staff pabalik sa Check-ins tab.
+        @if (session('tab') === 'housekeeping' || $errors->issueReport->any())
+            switchTab('housekeeping', document.querySelector('[onclick*="housekeeping"]'));
+        @endif
+        @if ($errors->issueReport->any())
+            openReportModal();
+        @endif
 
         // Auto-dismiss alerts
         setTimeout(() => {

@@ -10,6 +10,7 @@ use App\Http\Controllers\Customer\ReviewController as CustomerReviewController;
 use App\Http\Controllers\Customer\ProfileController;
 use App\Http\Controllers\Customer\PaymentController as CustomerPaymentController;
 use App\Http\Controllers\Customer\RefundDestinationController;
+use App\Http\Controllers\Customer\IssueReportController;
 
 
 Route::prefix('my')
@@ -21,6 +22,10 @@ Route::prefix('my')
     Route::get('bookings',    [HomeController::class, 'bookings'])->name('bookings');
     Route::get('bookings/{booking}', [HomeController::class, 'bookingDetail'])->name('bookings.show');
     Route::patch('bookings/{booking}/cancel', [HomeController::class, 'cancelBooking'])->name('bookings.cancel');
+    // Ulat ng problema habang naka-check-in (v7.11)
+    Route::post('bookings/{booking}/issues', [IssueReportController::class, 'store'])
+        ->middleware('throttle:issue-report')
+        ->name('bookings.issues.store');
     Route::get('notifications', [HomeController::class, 'notifications'])->name('notifications');
     Route::get('notifications/{notification}/open', [HomeController::class, 'openNotification'])->name('notifications.open');
     Route::get('bookings/{booking}/review',        [CustomerReviewController::class, 'create'])->name('reviews.create');
