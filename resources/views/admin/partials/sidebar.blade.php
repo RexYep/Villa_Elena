@@ -11,9 +11,18 @@
             <span class="nav-icon"><i class="bi bi-grid-1x2"></i></span>
             Dashboard
         </a>
+        @php $pendingBookings = \App\Services\DashboardStats::pendingBookings(); @endphp
         <a href="{{ route('admin.bookings.index') }}" class="nav-item-custom {{ request()->routeIs('admin.bookings.*') ? 'active' : '' }}">
             <span class="nav-icon"><i class="bi bi-calendar-check"></i></span>
             Bookings
+            {{-- LAGING naka-render, hindi @if tulad ng Housekeeping sa ibaba:
+                 kailangang may elementong mahanap ang live na refetch kapag
+                 0 pa ang bilang at may dumating na bagong booking. Ang
+                 `hidden` ang nagtatago, hindi ang kawalan sa DOM. Walang
+                 numero ang title dahil hindi ito ina-update ng refetch. --}}
+            <span class="nav-count" data-kpi="pending_bookings" data-kpi-hide-zero
+                  title="Pending bookings awaiting action"
+                  @if (! $pendingBookings) hidden @endif>{{ $pendingBookings }}</span>
         </a>
         <a href="{{ route('admin.properties.index') }}" class="nav-item-custom {{ request()->routeIs('admin.properties.*') ? 'active' : '' }}">
             <span class="nav-icon"><i class="bi bi-house-door"></i></span>

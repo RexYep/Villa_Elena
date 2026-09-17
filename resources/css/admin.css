@@ -105,7 +105,7 @@ body {
     color: var(--text-main);
 }
 .nav-item-custom.active .nav-icon { background: var(--terracotta); color: #fff; }
-/* Bilang ng bukas na ulat ng problema (Housekeeping) */
+/* Badge ng bilang sa sidebar (Housekeeping, Bookings) */
 .nav-count {
     margin-left: auto;
     min-width: 20px; height: 20px;
@@ -115,6 +115,8 @@ body {
     font-size: 12px; font-weight: 600;
     display: inline-flex; align-items: center; justify-content: center;
 }
+/* Kailangan: ang `display` sa itaas ay tumatalo sa [hidden] ng browser. */
+.nav-count[hidden] { display: none; }
 .sidebar-footer { margin-top: auto; padding: 16px; border-top: 1px solid var(--border); }
 .user-card {
     display: flex; align-items: center; gap: 10px;

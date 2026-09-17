@@ -212,6 +212,11 @@
         // dumoble ang signal (hal. booking.updated AT stats.changed para sa
         // iisang pagbabago), maantala, o mawala. Nasa ITAAS ng PUSHER_KEY
         // guard nang sadya: ang 60s na refetch ay ang salo kapag walang Pusher.
+        //
+        // Simula sa badge ng Bookings, may [data-kpi] na ang BAWAT admin
+        // page at hindi na lang ang dashboard, kaya tumatakbo rin dito ang
+        // 60s na tick. Hindi ito dumadami: iisa pa rin ang request kada
+        // bukas na tab kada minuto — ang naiba lang ay kung aling page.
         const kpiEls = document.querySelectorAll('[data-kpi]');
         const STATS_URL = @json(route('admin.dashboard.stats'));
         let statsTimer = null;
@@ -241,6 +246,16 @@
                             if (next === undefined || el.textContent.trim() === next) return;
 
                             el.textContent = next;
+
+                            // Nawawala ang badge ng sidebar kapag 0 — ang
+                            // "0" ay ingay, hindi impormasyon. Nananatili
+                            // ito sa DOM para may ma-update kapag tumaas
+                            // muli mula sa 0; doon nabibigo ang pagtatago
+                            // sa pamamagitan ng conditional sa Blade.
+                            if (el.hasAttribute('data-kpi-hide-zero')) {
+                                el.hidden = (next === '0');
+                            }
+
                             // I-flash lang ang card na tunay na nagbago.
                             const card = el.closest('.kpi-card');
                             if (card && card.id) flashElement(card.id);

@@ -25,9 +25,22 @@ use App\Models\User;
 class DashboardStats
 {
 
+    /**
+     * Bilang ng booking na naghihintay ng aksyon.
+     *
+     * Hiwalay dahil dalawa na ang gumagamit: ang `pending_bookings` na
+     * KPI ng dashboard, at ang badge sa tabi ng "Bookings" sa sidebar na
+     * nakikita sa BAWAT admin page. Iisang query para hindi kailanman
+     * magkaiba ang dalawang numerong magkatabi sa iisang screen.
+     */
+    public static function pendingBookings(): int
+    {
+        return Booking::where('status', 'pending')->count();
+    }
+
     public static function kpis(): array
     {
-        $pending = Booking::where('status', 'pending')->count();
+        $pending = static::pendingBookings();
         $total = Booking::count();
         // Iisang query sa dating `total_guests` ng dashboard: bawat
         // customer account, verified o hindi.

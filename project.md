@@ -1,12 +1,32 @@
 # Villa Elena Private Rental Resort
 ## Resort Management System — Project Documentation
 
-**Version:** 7.11
+**Version:** 7.12
 **Stack:** PHP 8.2 / Laravel 12 / MySQL 8 / Bootstrap 5
 **Local URL:** `http://127.0.0.1:8000` (`php artisan serve`) or `http://localhost:8000` (Docker — see v5.3)
 **Live URL:** `https://villa-elena.onrender.com` (Render, free tier — testing only, not yet handed to real guests)
 **Database (local):** `villa_elena_db` (MySQL, XAMPP or standalone MySQL — same database either way)
 **Database (live):** Aiven MySQL free tier, database `defaultdb`
+
+---
+
+## What Changed in v7.12 (Read This First)
+
+### A live count of pending bookings on the admin sidebar
+
+Asked for: when a guest places a booking, the admin should see it on the **Bookings** sidebar item without reloading, from whatever admin page they happen to be on.
+
+Almost all of the machinery already existed from v7.9 — a new booking already fired `stats.changed`, and `DashboardStats::kpis()` already returned `pending_bookings`. **No new event, route, broadcast or polling loop was added.** The badge is a second reader of the signal the dashboard already uses.
+
+- **`DashboardStats::pendingBookings()`** is the one query (`status = 'pending'`), now called by both `kpis()` and the sidebar. Split out rather than duplicated because the badge and the dashboard's Pending KPI can be **on the same screen**, and two copies of that query are two numbers that can disagree. Verified equal in one process.
+- **The badge is always in the DOM, hidden at zero** — deliberately *not* wrapped in `@if` the way the Housekeeping count above it is. With `@if` there is no element to update when the count rises from 0, which is exactly the "a booking just arrived" case the feature exists for. `<span class="nav-count" data-kpi="pending_bookings" data-kpi-hide-zero … hidden>`; the refetch clears `hidden` when the value isn't `"0"`.
+- **`.nav-count[hidden] { display: none; }` is required, not decorative.** The rule above it sets `display: inline-flex`, which beats the browser's built-in `[hidden]` rule — without the override the badge shows a permanent `0`.
+- **Scope change worth knowing:** `[data-kpi]` now exists on **every** admin page (the sidebar is in `layouts/admin.blade.php`), not just the dashboard, so `refreshStats()`'s existing `if (!kpiEls.length) return;` guard now passes everywhere and the 60s fallback tick runs on every admin page. This does **not** multiply load — it is still one request per open tab per minute; only *which* page makes it changed. Keeping the fallback is the point: it is what carries the badge when Pusher is down, which `.env.example`'s `BROADCAST_CONNECTION=log` default makes the normal local state.
+- **What the number means:** bookings *awaiting action*, not bookings placed today. Payment promotes a booking to `confirmed` via `confirmOnFirstPayment()`, whose `update()` trips the same `saved` hook, so the badge drops live. Two deliberate consequences: a booking that was **paid but whose slot had been taken** is left `pending` on purpose and therefore **stays** in the count (correct — it needs a human); and a **cancelled** booking leaves the count with nobody having acted on it.
+
+**The v7.5 directive-in-comment bug happened again while writing this, and was caught before it shipped.** A Tagalog code comment inside the `<script>` block of `realtime.blade.php` mentioned `@if` in prose. Blade compiles directives inside JS comments, and a bare `@if` with no parentheses compiles to `<?php if: ?>` — a parse error that would have 500'd **every** admin page, since that partial is in the shared layout. Blade `{{-- --}}` comments are safe (stripped before directives compile, confirmed), but `//` and `/* */` comments are not. `php -l` on the output of `Blade::compileString()` catches this class; the v7.5 `@vite` variant it does *not* catch, because that one compiles to valid PHP and only fails at render.
+
+Verified: both partials compile and **render** without error; the badge markup renders `hidden` at 0 and visible showing `1` with one pending booking (tested inside a rolled-back transaction, dev data unchanged, count back to 0 after); `npm run build` clean. **Not verified in a real browser with Pusher connected** — the live decrement on payment was reasoned from the `saved` hook, not watched.
 
 ---
 
