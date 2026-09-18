@@ -793,16 +793,6 @@
                             <div class="label">Phone</div>
                             <div class="value">{{ $booking->user->phone ?? 'N/A' }}</div>
                         </div>
-                        <div class="info-item">
-                            <div class="label">ID Type</div>
-                            <div class="value">{{ $booking->user->id_type ?? 'Not provided' }}</div>
-                        </div>
-                        @if ($booking->user->id_number)
-                            <div class="info-item">
-                                <div class="label">ID Number</div>
-                                <div class="value">{{ $booking->user->id_number }}</div>
-                            </div>
-                        @endif
                         @if ($booking->user->address)
                             <div class="info-item" style="grid-column:1/-1;">
                                 <div class="label">Address</div>

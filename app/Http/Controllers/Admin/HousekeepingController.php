@@ -37,16 +37,49 @@ class HousekeepingController extends Controller
             ->paginate(15, ['*'], 'tasks_page')
             ->withQueryString();
 
-        $reports = IssueReport::query()
+        $reports = $this->reports($request, $view);
+        $stats   = $this->stats();
+
+        return view('admin.housekeeping.index', compact('view', 'tasks', 'reports', 'stats'));
+    }
+
+    /**
+     * GET /admin/housekeeping/live — ang stats row at ang Issue Reports card,
+     * muling ni-render ng parehong partial na ginamit ng index(). Tinatawag
+     * ng page kapag may `issues.changed` (bagong ulat o nagbagong status),
+     * at tuwing 60s bilang salo. Walang kopya ng listahan sa JS.
+     */
+    public function live(Request $request)
+    {
+        $view    = $request->query('view') === 'closed' ? 'closed' : 'open';
+        $reports = $this->reports($request, $view);
+        $stats   = $this->stats();
+
+        return response()->json([
+            'stats_html'   => view('admin.housekeeping._stats', compact('stats'))->render(),
+            'reports_html' => view('admin.housekeeping._reports', compact('reports', 'view'))->render(),
+        ]);
+    }
+
+    private function reports(Request $request, string $view)
+    {
+        return IssueReport::query()
             ->with(['reporter', 'booking'])
             ->when($view === 'open',
                 fn ($q) => $q->open()->oldest(),
                 fn ($q) => $q->closed()->orderByDesc('updated_at')->orderByDesc('id'))
             ->paginate(15, ['*'], 'reports_page')
-            ->withQueryString();
+            // Mula man sa index() o sa live(), ang pagination links ay
+            // laging tumuturo sa page mismo, hindi sa JSON endpoint.
+            ->withPath(route('admin.housekeeping.index'))
+            ->appends($request->except('reports_page'));
+    }
 
+    private function stats(): array
+    {
         $weekStart = now()->startOfWeek();
-        $stats = [
+
+        return [
             'open_tasks'   => HousekeepingTask::open()->count(),
             'open_reports' => IssueReport::open()->count(),
             // Overdue ay nangangailangan ng due_time, kaya kinukuwenta sa PHP
@@ -55,8 +88,6 @@ class HousekeepingController extends Controller
             'done_week'    => HousekeepingTask::where('status', 'completed')->where('completed_at', '>=', $weekStart)->count()
                             + IssueReport::where('status', 'completed')->where('completed_at', '>=', $weekStart)->count(),
         ];
-
-        return view('admin.housekeeping.index', compact('view', 'tasks', 'reports', 'stats'));
     }
 
     public function store(Request $request)

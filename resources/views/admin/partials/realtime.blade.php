@@ -306,6 +306,9 @@
         // Exposed so other admin pages (e.g. the calendar) can bind their own
         // listeners on this same connection instead of opening a second one.
         window.rtChannel = channel;
+        // Naglo-load ang script na ito PAGKATAPOS ng page scripts, kaya ang
+        // page na gustong makinig ay naghihintay sa event na ito.
+        document.dispatchEvent(new CustomEvent('admin:realtime-ready', { detail: { channel } }));
 
         // ── Personal Notification Bell (Notification model rows) ──────
         if (authUserId) {

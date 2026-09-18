@@ -470,71 +470,6 @@
             }
         }
 
-        .issue-list.with-cta {
-            margin-top: 16px;
-            padding-top: 14px;
-            border-top: 1px solid var(--border);
-        }
-
-        .issue-list-label {
-            font-size: 13px;
-            font-weight: 600;
-            color: var(--stone);
-            margin-bottom: 4px;
-        }
-
-        .issue-item {
-            display: flex;
-            align-items: flex-start;
-            gap: 10px;
-            padding: 10px 0;
-            border-bottom: 1px solid #f4efe6;
-        }
-
-        .issue-item:last-child {
-            border-bottom: none;
-        }
-
-        .issue-item > i {
-            font-size: 18px;
-            color: var(--muted);
-            margin-top: 1px;
-        }
-
-        .issue-item-main {
-            flex: 1;
-            min-width: 0;
-        }
-
-        .issue-item-title {
-            font-size: 14px;
-            font-weight: 600;
-        }
-
-        .issue-item-desc {
-            font-size: 13px;
-            color: var(--stone);
-            overflow-wrap: anywhere;
-        }
-
-        .issue-item-time {
-            font-size: 12px;
-            color: var(--muted);
-            margin-top: 2px;
-        }
-
-        .issue-status {
-            padding: 3px 10px;
-            border-radius: 20px;
-            font-size: 12px;
-            font-weight: 600;
-            white-space: nowrap;
-        }
-
-        .ws-pending { background: #fef9c3; color: #a16207; }
-        .ws-in-progress { background: #dbeafe; color: #1d4ed8; }
-        .ws-completed { background: #dcfce7; color: #15803d; }
-        .ws-cancelled { background: #f1f5f9; color: #475569; }
 
         @media (max-width:900px) {
             .detail-grid {
@@ -747,24 +682,12 @@
                             </div>
                         @endif
 
-                        @if ($booking->issueReports->isNotEmpty())
-                            <div class="issue-list {{ $booking->canReportIssues() ? 'with-cta' : '' }}">
-                                <div class="issue-list-label">Your reports</div>
-                                @foreach ($booking->issueReports as $report)
-                                    <div class="issue-item">
-                                        <i class="bi bi-{{ $report->category_icon }}" aria-hidden="true"></i>
-                                        <div class="issue-item-main">
-                                            <div class="issue-item-title">{{ $report->category_label }}</div>
-                                            @if ($report->description)
-                                                <div class="issue-item-desc">{{ $report->description }}</div>
-                                            @endif
-                                            <div class="issue-item-time">Sent {{ $report->created_at->format('M j, g:i A') }}</div>
-                                        </div>
-                                        <span class="issue-status {{ $report->status_class }}">{{ $report->guest_status_label }}</span>
-                                    </div>
-                                @endforeach
-                            </div>
-                        @endif
+                        <div id="issueListLive" data-url="{{ route('customer.bookings.issues.index', $booking) }}">
+                            @include('customer.partials._issue_list', [
+                                'reports' => $booking->issueReports,
+                                'withCta' => $booking->canReportIssues(),
+                            ])
+                        </div>
                     </div>
                 </div>
             @endif
@@ -1004,3 +927,11 @@
     </script>
 @endpush
 
+
+@push('styles')
+    @include('customer.partials._issue_list_styles')
+@endpush
+
+@push('scripts')
+    @include('customer.partials._issue_list_live')
+@endpush

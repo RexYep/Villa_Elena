@@ -658,17 +658,6 @@
                                     <span class="toggle-slider"></span>
                                 </label>
                             </div>
-                            <div class="toggle-row">
-                                <div class="toggle-info">
-                                    <div class="toggle-title">Require ID Upload</div>
-                                    <div class="toggle-desc">Guests must upload a valid ID during booking</div>
-                                </div>
-                                <label class="toggle-switch">
-                                    <input type="checkbox" name="require_id_upload" value="1"
-                                        {{ ($settings['require_id_upload'] ?? '0') === '1' ? 'checked' : '' }}>
-                                    <span class="toggle-slider"></span>
-                                </label>
-                            </div>
                         </div>
                     </div>
                 </div>

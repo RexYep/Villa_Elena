@@ -973,7 +973,7 @@
         </div>
         <div class="stat-card">
             <div class="stat-icon tag-purple"><i class="bi bi-brush"></i></div>
-            <div class="stat-val">{{ $stats['pending_tasks'] }}</div>
+            <div class="stat-val" id="fdHousekeepingStat">{{ $stats['pending_tasks'] }}</div>
             <div class="stat-lbl">Housekeeping</div>
         </div>
     </div>
@@ -1032,77 +1032,9 @@
 
     {{-- Pinaka-madaliang housekeeping item: ulat ng guest, o task na
          overdue/urgent/malapit na deadline (FrontDeskController::mostUrgentHousekeeping) --}}
-    @if ($urgentItem)
-        @php $item = $urgentItem['item']; @endphp
-        @if ($urgentItem['kind'] === 'report')
-            <div class="clean-banner urgent">
-                <div class="clean-icon"><i class="bi bi-{{ $item->category_icon }}"></i></div>
-                <div class="clean-main">
-                    <div class="clean-title">
-                        {{ $item->isFromGuest() ? 'Guest reported a problem' : 'Issue reported' }}:
-                        {{ $item->category_label }}
-                    </div>
-                    <div class="clean-sub">
-                        @if ($item->description)
-                            "{{ \Illuminate\Support\Str::limit($item->description, 120) }}" ·
-                        @endif
-                        {{ $item->source_label }} · {{ $item->created_at->diffForHumans() }}
-                        · {{ $item->status_label }}
-                    </div>
-                </div>
-                <div class="banner-actions">
-                    @if ($item->status === 'pending')
-                        <form method="POST" action="{{ route('staff.reports.start', $item) }}" class="report-form-{{ $item->id }}">
-                            @csrf @method('PATCH')
-                            <button type="submit" class="btn-clean btn-clean-start"><i class="bi bi-play-fill"></i> Start fixing</button>
-                        </form>
-                    @endif
-                    <form method="POST" action="{{ route('staff.reports.complete', $item) }}" class="report-form-{{ $item->id }}">
-                        @csrf @method('PATCH')
-                        <button type="submit" class="btn-clean"><i class="bi bi-check-lg"></i> Mark fixed</button>
-                    </form>
-                </div>
-            </div>
-        @else
-            @php $tone = $item->due_tone === 'late' ? 'urgent' : ($item->due_tone === 'soon' || $item->priority === 'urgent' ? 'soon' : 'calm'); @endphp
-            <div class="clean-banner {{ $tone }}">
-                <div class="clean-icon"><i class="bi bi-{{ $item->type_icon }}"></i></div>
-                <div class="clean-main">
-                    <div class="clean-title">
-                        @if ($item->priority === 'urgent')
-                            Urgent task:
-                        @else
-                            Task from admin:
-                        @endif
-                        {{ $item->headline }}
-                    </div>
-                    <div class="clean-sub">
-                        @if ($item->isOverdue())
-                            Overdue — was due {{ $item->due_label }}
-                        @else
-                            Due {{ $item->due_label }} ({{ $item->due_at->diffForHumans(null, true) }} left)
-                        @endif
-                        @if ($item->location)
-                            · {{ $item->location }}
-                        @endif
-                        · {{ $item->status_label }}
-                    </div>
-                </div>
-                <div class="banner-actions">
-                    @if ($item->status === 'pending')
-                        <form method="POST" action="{{ route('staff.tasks.start', $item) }}" class="task-form-{{ $item->id }}">
-                            @csrf @method('PATCH')
-                            <button type="submit" class="btn-clean btn-clean-start"><i class="bi bi-play-fill"></i> Start</button>
-                        </form>
-                    @endif
-                    <form method="POST" action="{{ route('staff.tasks.complete', $item) }}" class="task-form-{{ $item->id }}">
-                        @csrf @method('PATCH')
-                        <button type="submit" class="btn-clean"><i class="bi bi-check-lg"></i> Mark done</button>
-                    </form>
-                </div>
-            </div>
-        @endif
-    @endif
+    <div id="fdUrgentLive">
+        @include('staff.partials._urgent_housekeeping')
+    </div>
 
     {{-- Tabs --}}
     <div class="tab-bar">
@@ -1124,7 +1056,7 @@
         </button>
         <button class="tab-btn" onclick="switchTab('housekeeping', this)">
             <i class="bi bi-brush"></i> Housekeeping
-            <span class="cnt">{{ $stats['pending_tasks'] }}</span>
+            <span class="cnt" id="fdHousekeepingTabCount">{{ $stats['pending_tasks'] }}</span>
         </button>
         <a href="{{ route('staff.availability') }}" class="tab-btn" style="text-decoration:none;">
             <i class="bi bi-calendar3"></i> Availability
@@ -1357,47 +1289,9 @@
             </button>
         </div>
 
-        <div class="card mb-3">
-            <div class="card-head">
-                <h3><i class="bi bi-exclamation-octagon me-2" style="color:#dc2626;"></i>Issue Reports</h3>
-                <span class="text-muted-theme" style="font-size: 14px;">{{ $openReports->count() }} open</span>
-            </div>
-            <div class="card-body">
-                @forelse ($openReports as $report)
-                    <div class="task-row">
-                        <div class="task-type-icon {{ $report->isFromGuest() ? 'tag-red' : 'tag-amber' }}">
-                            <i class="bi bi-{{ $report->category_icon }}"></i>
-                        </div>
-                        <div class="task-info">
-                            <div class="task-prop">
-                                {{ $report->category_label }}
-                                <span class="ws-badge {{ $report->status_class }}">{{ $report->status_label }}</span>
-                            </div>
-                            @if ($report->description)
-                                <div class="task-details">{{ $report->description }}</div>
-                            @endif
-                            <div class="task-date">{{ $report->source_label }} · {{ $report->created_at->diffForHumans() }}</div>
-                        </div>
-                        <div class="task-actions">
-                            @if ($report->status === 'pending')
-                                <form method="POST" action="{{ route('staff.reports.start', $report) }}" class="report-form-{{ $report->id }}">
-                                    @csrf @method('PATCH')
-                                    <button type="submit" class="btn-sm btn-start"><i class="bi bi-play-fill"></i> Start</button>
-                                </form>
-                            @endif
-                            <form method="POST" action="{{ route('staff.reports.complete', $report) }}" class="report-form-{{ $report->id }}">
-                                @csrf @method('PATCH')
-                                <button type="submit" class="btn-sm btn-complete"><i class="bi bi-check-lg"></i> Fixed</button>
-                            </form>
-                        </div>
-                    </div>
-                @empty
-                    <div class="empty">
-                        <i class="bi bi-emoji-smile"></i>
-                        <p>No reported problems.</p>
-                    </div>
-                @endforelse
-            </div>
+        {{-- Live: kinukuha muli sa staff.frontdesk.housekeeping kapag may issues.changed --}}
+        <div id="fdIssueReportsLive">
+            @include('staff.partials._issue_reports')
         </div>
 
         <div class="card">
@@ -1800,6 +1694,56 @@
         @if ($errors->issueReport->any())
             openReportModal();
         @endif
+
+        // ── Live Issue Reports (urgent banner + card + bilang) ─────────
+        // Ang server ang nagre-render (staff.frontdesk.housekeeping, parehong
+        // partial ng page) — walang kopya ng listahan sa JS. Signal:
+        // `issues.changed` mula sa IssueReport hooks; salo: bawat 60s.
+        (function() {
+            const LIVE_URL = @json(route('staff.frontdesk.housekeeping'));
+            const urgentEl = document.getElementById('fdUrgentLive');
+            const reportsEl = document.getElementById('fdIssueReportsLive');
+            const countEls = [document.getElementById('fdHousekeepingStat'), document.getElementById('fdHousekeepingTabCount')];
+            let timer = null;
+            let inFlight = false;
+
+            function swap(el, html) {
+                if (el && el.innerHTML.trim() !== html.trim()) el.innerHTML = html;
+            }
+
+            function refresh() {
+                clearTimeout(timer);
+                timer = setTimeout(function() {
+                    if (inFlight) return;
+                    inFlight = true;
+                    fetch(LIVE_URL, {
+                            headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+                            credentials: 'same-origin',
+                        })
+                        .then(res => { if (!res.ok) throw new Error(res.status); return res.json(); })
+                        .then(data => {
+                            swap(urgentEl, data.urgent_html);
+                            swap(reportsEl, data.reports_html);
+                            countEls.forEach(el => { if (el) el.textContent = data.count; });
+                        })
+                        .catch(() => {})
+                        .finally(() => { inFlight = false; });
+                }, 300);
+            }
+
+            function listen(channel) {
+                if (channel && !channel.__fdIssues) {
+                    channel.__fdIssues = true;
+                    channel.bind('issues.changed', refresh);
+                }
+            }
+
+            listen(window.rtStaffChannel);
+            document.addEventListener('staff:realtime-ready', e => listen(e.detail.channel));
+
+            setInterval(() => { if (!document.hidden) refresh(); }, 60000);
+            document.addEventListener('visibilitychange', () => { if (!document.hidden) refresh(); });
+        })();
 
         // Auto-dismiss alerts
         setTimeout(() => {

@@ -81,8 +81,17 @@ trait HasWorkStatus
 
         if ($updated) {
             $this->refresh();
+            // Query-builder UPDATE ito, kaya walang Eloquent `updated`
+            // event na tumatakbo — dito ang tanging lugar na alam na
+            // nagbago ang status.
+            $this->workStatusChanged();
         }
 
         return $updated > 0;
+    }
+
+    /** Hook para sa model na kailangang kumilos kapag nagbago ang status. */
+    protected function workStatusChanged(): void
+    {
     }
 }

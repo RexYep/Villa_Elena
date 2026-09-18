@@ -34,12 +34,10 @@ class ProfileController extends Controller
             'full_name' => 'required|string|max:150',
             'phone' => 'required|string|max:20',
             'address' => 'nullable|string',
-            'id_type' => 'nullable|string|max:50',
-            'id_number' => 'nullable|string|max:100',
             'avatar' => 'nullable|image|mimes:jpg,jpeg,png,webp|max:3048',
         ]);
 
-        $data = $request->only(['full_name', 'phone', 'address', 'id_type', 'id_number']);
+        $data = $request->only(['full_name', 'phone', 'address']);
 
         if ($request->hasFile('avatar')) {
             if ($user->profile_image) {

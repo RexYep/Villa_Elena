@@ -37,6 +37,12 @@
             flex-shrink: 0;
         }
 
+        .stay-issues {
+            padding: 12px 18px;
+            margin-top: -8px;
+            margin-bottom: 20px;
+        }
+
         .btn-stay-view {
             display: inline-flex;
             align-items: center;
@@ -612,6 +618,14 @@
                 </button>
             </div>
         </div>
+
+        {{-- Status ng mga ulat para sa kasalukuyang stay — live, tulad ng booking page --}}
+        <div class="card stay-issues" id="issueListLive"
+            data-url="{{ route('customer.bookings.issues.index', $currentStay) }}"
+            @if ($currentStay->issueReports->isEmpty()) hidden @endif>
+            @include('customer.partials._issue_list', ['reports' => $currentStay->issueReports])
+        </div>
+
         @include('customer.partials.issue_report_modal', ['booking' => $currentStay])
     @endif
 
@@ -763,3 +777,11 @@
     </div>
 @endsection
 
+
+@push('styles')
+    @include('customer.partials._issue_list_styles')
+@endpush
+
+@push('scripts')
+    @include('customer.partials._issue_list_live')
+@endpush

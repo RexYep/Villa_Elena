@@ -54,7 +54,7 @@ class HomeController extends Controller
         // Naka-check-in ngayon → shortcut sa "Report an issue" (v7.11)
         $currentStay = Booking::where('user_id', $user->id)
             ->where('status', 'checked_in')
-            ->with('property')
+            ->with(['property', 'issueReports' => fn ($q) => $q->latest()])
             ->first();
 
         return view('customer.home', compact(

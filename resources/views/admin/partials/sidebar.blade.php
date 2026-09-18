@@ -40,9 +40,11 @@
         <a href="{{ route('admin.housekeeping.index') }}" class="nav-item-custom {{ request()->routeIs('admin.housekeeping.*') ? 'active' : '' }}">
             <span class="nav-icon"><i class="bi bi-brush"></i></span>
             Housekeeping
-            @if ($openHousekeeping)
-                <span class="nav-count" title="{{ $openHousekeeping }} open issue report{{ $openHousekeeping > 1 ? 's' : '' }}">{{ $openHousekeeping }}</span>
-            @endif
+            {{-- Laging naka-render (tingnan ang badge ng Bookings sa itaas) —
+                 ina-update ng KPI refetch kapag may bagong ulat o nagbago ang status. --}}
+            <span class="nav-count" data-kpi="open_reports" data-kpi-hide-zero
+                  title="Open issue reports"
+                  @if (! $openHousekeeping) hidden @endif>{{ $openHousekeeping }}</span>
         </a>
     </div>
 
@@ -50,12 +52,9 @@
         <div class="sidebar-section-label">People</div>
         <a href="{{ route('admin.users.index') }}" class="nav-item-custom {{ request()->routeIs('admin.users.*') ? 'active' : '' }}">
             <span class="nav-icon"><i class="bi bi-people"></i></span>
-            Guests
+            Users
         </a>
-        <a href="#" class="nav-item-custom {{ request()->routeIs('admin.staff.*') ? 'active' : '' }}">
-            <span class="nav-icon"><i class="bi bi-person-badge"></i></span>
-            Staff
-        </a>
+
         <a href="{{ route('admin.reviews.index') }}" class="nav-item-custom {{ request()->routeIs('admin.reviews.*') ? 'active' : '' }}">
             <span class="nav-icon"><i class="bi bi-star"></i></span>
             Reviews

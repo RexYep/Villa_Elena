@@ -320,23 +320,8 @@
         <div class="alert alert-danger">{{ session('error') }}</div>
     @endif
 
-    <div class="stats-row">
-        <div class="stat-card">
-            <div class="stat-val {{ $stats['open_reports'] ? 'alert-val' : '' }}">{{ $stats['open_reports'] }}</div>
-            <div class="stat-lbl">Open issue reports</div>
-        </div>
-        <div class="stat-card">
-            <div class="stat-val">{{ $stats['open_tasks'] }}</div>
-            <div class="stat-lbl">Open tasks</div>
-        </div>
-        <div class="stat-card">
-            <div class="stat-val {{ $stats['overdue'] ? 'alert-val' : '' }}">{{ $stats['overdue'] }}</div>
-            <div class="stat-lbl">Overdue tasks</div>
-        </div>
-        <div class="stat-card">
-            <div class="stat-val">{{ $stats['done_week'] }}</div>
-            <div class="stat-lbl">Done this week</div>
-        </div>
+    <div id="hkStatsLive">
+        @include('admin.housekeeping._stats')
     </div>
 
     <div class="hk-top">
@@ -354,65 +339,10 @@
 
     <div class="hk-grid">
 
-        {{-- Issue reports — mula sa guest (naka-check-in) o staff --}}
-        <div class="table-card">
-            <div class="table-header">
-                <h3>Issue Reports</h3>
-                <span class="count">{{ $reports->total() }} {{ $view === 'open' ? 'open' : 'closed' }}</span>
-            </div>
-
-            @forelse ($reports as $report)
-                <div class="hk-row">
-                    <div class="hk-icon {{ $report->isFromGuest() ? 'guest' : '' }}">
-                        <i class="bi bi-{{ $report->category_icon }}"></i>
-                    </div>
-                    <div class="hk-main">
-                        <div class="hk-title">
-                            {{ $report->category_label }}
-                            <span class="ws-badge tag-source">{{ $report->isFromGuest() ? 'Guest' : 'Staff' }}</span>
-                            <span class="ws-badge {{ $report->status_class }}">{{ $report->status_label }}</span>
-                        </div>
-                        @if ($report->description)
-                            <div class="hk-desc">{{ $report->description }}</div>
-                        @endif
-                        <div class="hk-meta">
-                            {{ $report->source_label }} · reported {{ $report->created_at->diffForHumans() }}
-                            @if ($report->status === 'in_progress' && $report->started_at)
-                                · being fixed since {{ $report->started_at->format('g:i A') }}
-                            @elseif ($report->status === 'completed' && $report->completed_at)
-                                · fixed {{ $report->completed_at->format('M j, g:i A') }}
-                                ({{ $report->created_at->diffForHumans($report->completed_at, true) }} after the report)
-                            @elseif ($report->status === 'cancelled')
-                                · closed {{ $report->updated_at->format('M j, g:i A') }}
-                            @endif
-                        </div>
-                        @if ($report->isOpen())
-                            <div class="hk-actions">
-                                <form method="POST" action="{{ route('admin.housekeeping.reports.update', $report) }}">
-                                    @csrf @method('PATCH')
-                                    <input type="hidden" name="status" value="completed">
-                                    <button type="submit" class="hk-btn done"><i class="bi bi-check-lg"></i> Mark fixed</button>
-                                </form>
-                                <form method="POST" action="{{ route('admin.housekeeping.reports.update', $report) }}"
-                                    onsubmit="return confirm('Close this report without fixing it? Use this when it wasn\'t a real problem.')">
-                                    @csrf @method('PATCH')
-                                    <input type="hidden" name="status" value="cancelled">
-                                    <button type="submit" class="hk-btn cancel">Close</button>
-                                </form>
-                            </div>
-                        @endif
-                    </div>
-                </div>
-            @empty
-                <div class="hk-empty">
-                    <i class="bi bi-emoji-smile"></i>
-                    {{ $view === 'open' ? 'No open reports. Guests can report problems from their booking page while checked in.' : 'No closed reports yet.' }}
-                </div>
-            @endforelse
-
-            @if ($reports->hasPages())
-                <div class="pagination-wrap">{{ $reports->links() }}</div>
-            @endif
+        {{-- Issue reports — mula sa guest (naka-check-in) o staff. Live: kinukuha
+             muli sa admin.housekeeping.live kapag may issues.changed. --}}
+        <div id="hkReportsLive" style="min-width:0;">
+            @include('admin.housekeeping._reports')
         </div>
 
         {{-- Tasks na ipinadala sa staff --}}
@@ -593,3 +523,52 @@
         </script>
     @endif
 @endsection
+
+@push('scripts')
+    <script>
+        // Live Issue Reports (stats row + card). Ang server ang nagre-render
+        // (admin.housekeeping.live, parehong partial ng page) — walang kopya
+        // ng listahan dito. Signal: `issues.changed`; salo: bawat 60s.
+        (function() {
+            const LIVE_URL = @json(route('admin.housekeeping.live')) + window.location.search;
+            const statsEl = document.getElementById('hkStatsLive');
+            const reportsEl = document.getElementById('hkReportsLive');
+            let timer = null;
+            let inFlight = false;
+
+            function refresh() {
+                clearTimeout(timer);
+                timer = setTimeout(function() {
+                    if (inFlight) return;
+                    inFlight = true;
+                    fetch(LIVE_URL, {
+                            headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+                            credentials: 'same-origin',
+                        })
+                        .then(res => { if (!res.ok) throw new Error(res.status); return res.json(); })
+                        .then(data => {
+                            // Palitan lang kapag may nagbago, para hindi
+                            // gumalaw ang DOM sa bawat 60s na tick.
+                            if (statsEl.innerHTML.trim() !== data.stats_html.trim()) statsEl.innerHTML = data.stats_html;
+                            if (reportsEl.innerHTML.trim() !== data.reports_html.trim()) reportsEl.innerHTML = data.reports_html;
+                        })
+                        .catch(() => {})
+                        .finally(() => { inFlight = false; });
+                }, 300);
+            }
+
+            function listen(channel) {
+                if (channel && !channel.__hkIssues) {
+                    channel.__hkIssues = true;
+                    channel.bind('issues.changed', refresh);
+                }
+            }
+
+            listen(window.rtChannel);
+            document.addEventListener('admin:realtime-ready', e => listen(e.detail.channel));
+
+            setInterval(() => { if (!document.hidden) refresh(); }, 60000);
+            document.addEventListener('visibilitychange', () => { if (!document.hidden) refresh(); });
+        })();
+    </script>
+@endpush

@@ -47,7 +47,7 @@ Route::middleware('auth')->group(function () {
     // tanggapin ang dose-dosenang session-creation kada minuto mula sa
     // iisang guest — at hindi libre sa gateway ang bawat isa.
     Route::post('/pay/{booking}/checkout', [PaymentController::class, 'createCheckout'])
-        ->middleware('throttle:8,1')
+        ->middleware('throttle:payment-checkout')
         ->name('payment.checkout');
     Route::get('/pay/{booking}/success', [PaymentController::class, 'success'])->name('payment.success');
     Route::get('/pay/{booking}/cancel', [PaymentController::class, 'cancel'])->name('payment.cancel');
@@ -60,7 +60,7 @@ Route::middleware('auth')->group(function () {
     // sagot dito ay mangangahulugang hindi na nila malalaman na bayad
     // na sila.
     Route::get('/pay/{booking}/status', [PaymentController::class, 'status'])
-        ->middleware('throttle:60,1')
+        ->middleware('throttle:payment-status')
         ->name('payment.status');
 });
 

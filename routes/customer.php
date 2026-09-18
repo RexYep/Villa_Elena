@@ -26,6 +26,9 @@ Route::prefix('my')
     Route::post('bookings/{booking}/issues', [IssueReportController::class, 'store'])
         ->middleware('throttle:issue-report')
         ->name('bookings.issues.store');
+    Route::get('bookings/{booking}/issues', [IssueReportController::class, 'index'])
+        ->middleware('throttle:60,1')
+        ->name('bookings.issues.index');
     Route::get('notifications', [HomeController::class, 'notifications'])->name('notifications');
     Route::get('notifications/{notification}/open', [HomeController::class, 'openNotification'])->name('notifications.open');
     Route::get('bookings/{booking}/review',        [CustomerReviewController::class, 'create'])->name('reviews.create');

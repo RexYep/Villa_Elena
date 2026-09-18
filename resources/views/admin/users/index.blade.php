@@ -330,10 +330,17 @@
                         <tr>
                             <td>
                                 <div class="d-flex-gap-10">
-                                    <div class="avatar-cell"
-                                        style="background:{{ $color }}22;color:{{ $color }};">
-                                        {{ strtoupper(substr($user->full_name, 0, 1)) }}
-                                    </div>
+                                    @if ($user->profile_image)
+                                        <div class="avatar-cell" style="background:{{ $color }}22;padding:0;overflow:hidden;">
+                                            <img src="{{ $user->profile_image_url }}" alt="{{ $user->full_name }}"
+                                                style="width:100%;height:100%;object-fit:cover;border-radius:50%;">
+                                        </div>
+                                    @else
+                                        <div class="avatar-cell"
+                                            style="background:{{ $color }}22;color:{{ $color }};">
+                                            {{ strtoupper(substr($user->full_name, 0, 1)) }}
+                                        </div>
+                                    @endif
                                     <div>
                                         <a href="{{ route('admin.users.show', $user) }}"
                                             style="font-weight:600;color:var(--stone);text-decoration:none;">

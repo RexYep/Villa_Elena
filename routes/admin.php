@@ -79,6 +79,9 @@ Route::get('bookings/lookup', function (\Illuminate\Http\Request $request) {
 
     // Housekeeping (v7.11) — admin nagpapadala ng task; nagsusubaybay ng ulat
     Route::get('housekeeping',                        [HousekeepingController::class, 'index'])->name('housekeeping.index');
+    Route::get('housekeeping/live',                   [HousekeepingController::class, 'live'])
+        ->middleware('throttle:60,1')
+        ->name('housekeeping.live');
     Route::post('housekeeping/tasks',                 [HousekeepingController::class, 'store'])->name('housekeeping.tasks.store');
     Route::patch('housekeeping/tasks/{task}',         [HousekeepingController::class, 'updateTask'])->name('housekeeping.tasks.update');
     Route::patch('housekeeping/reports/{report}',     [HousekeepingController::class, 'updateReport'])->name('housekeeping.reports.update');

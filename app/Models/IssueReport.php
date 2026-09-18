@@ -93,6 +93,59 @@ class IssueReport extends Model
         'completed_at' => 'datetime',
     ];
 
+    /** Ang toast/notification ng guest kapag nagbago ang status ng ulat niya. */
+    public const GUEST_STATUS_MESSAGES = [
+        'in_progress' => 'Your :category issue is being fixed.',
+        'completed'   => 'Your :category issue has been fixed.',
+        'cancelled'   => 'Your :category report was closed.',
+    ];
+
+    protected static function booted(): void
+    {
+        // Ang bagong ulat ay lumalabas agad sa staff frontdesk at admin
+        // Housekeeping — mula sa guest man o staff, anumang controller.
+        static::created(fn () => static::touchLive());
+    }
+
+    /**
+     * Sabihan ang mga bukas na page na kunin muli ang listahan, at ang
+     * admin KPI refetch (sidebar badge ng Housekeeping). Minsan kada request.
+     */
+    public static function touchLive(): void
+    {
+        \App\Services\BroadcastOnce::dispatch('issue-reports', fn () => new \App\Events\IssueReportsChanged);
+        \App\Services\DashboardStats::touch();
+    }
+
+    /**
+     * Tumatakbo pagkatapos ng bawat matagumpay na markStarted/Completed/
+     * Cancelled — mula sa staff, admin, o anumang daanan sa hinaharap.
+     */
+    protected function workStatusChanged(): void
+    {
+        static::touchLive();
+
+        if (! $this->isFromGuest() || ! $this->reported_by || ! isset(self::GUEST_STATUS_MESSAGES[$this->status])) {
+            return;
+        }
+
+        $message = str_replace(':category', $this->category_label, self::GUEST_STATUS_MESSAGES[$this->status]);
+        [$userId, $reportId, $bookingId, $status] = [$this->reported_by, $this->id, (int) $this->booking_id, $this->status];
+
+        // Pagkatapos ng response, at hindi kailanman naghahagis — ang
+        // status ay nakaimbak na; ang abiso ay pangalawa lang.
+        \App\Services\BroadcastOnce::dispatch("guest-issue-{$reportId}-{$status}", function () use ($userId, $reportId, $bookingId, $status, $message) {
+            \App\Helpers\NotificationHelper::notifyGuest(
+                $userId,
+                'Issue report update',
+                $message,
+                $bookingId ? route('customer.bookings.show', $bookingId, false) . '#report-issue' : null,
+            );
+
+            return new \App\Events\GuestIssueReportUpdated($userId, $reportId, $bookingId, $status, $message);
+        });
+    }
+
     public function property()
     {
         return $this->belongsTo(Property::class);

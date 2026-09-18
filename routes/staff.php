@@ -27,6 +27,9 @@ Route::prefix('staff')
     Route::patch('/checkout/{booking}',         [FrontDeskController::class, 'checkOut'])->name('checkout');
 
     // Walk-in booking
+    Route::get('/frontdesk/housekeeping',       [FrontDeskController::class, 'housekeepingLive'])
+        ->middleware('throttle:60,1')
+        ->name('frontdesk.housekeeping');
     Route::get('/walkin',                       [FrontDeskController::class, 'walkinForm'])->name('walkin');
     Route::get('/walkin/quote',                 [FrontDeskController::class, 'priceQuote'])->name('walkin.quote');
     Route::post('/walkin',                      [FrontDeskController::class, 'storeWalkin'])->name('walkin.store');

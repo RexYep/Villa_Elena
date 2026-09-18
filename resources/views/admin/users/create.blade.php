@@ -138,32 +138,13 @@
                 </div>
             </div>
 
-            {{-- ID & Address --}}
+            {{-- Address --}}
             <div class="form-card">
                 <div class="form-card-header">
-                    <div class="card-icon tag-green"><i class="bi bi-card-text"></i></div>
-                    <h3>ID & Address</h3>
+                    <div class="card-icon tag-green"><i class="bi bi-geo-alt"></i></div>
+                    <h3>Address</h3>
                 </div>
                 <div class="form-card-body">
-                    <div class="two-col mb-3">
-                        <div>
-                            <label class="form-label">ID Type</label>
-                            <select name="id_type" class="form-select">
-                                <option value="">None provided</option>
-                                @foreach (["Driver's License", 'Passport', 'SSS ID', 'PhilHealth ID', "Voter's ID", 'National ID', 'PRC ID', 'Postal ID'] as $idType)
-                                    <option value="{{ $idType }}"
-                                        {{ old('id_type', $user->id_type ?? '') == $idType ? 'selected' : '' }}>
-                                        {{ $idType }}
-                                    </option>
-                                @endforeach
-                            </select>
-                        </div>
-                        <div>
-                            <label class="form-label">ID Number</label>
-                            <input type="text" name="id_number" class="form-control"
-                                value="{{ old('id_number', $user->id_number ?? '') }}" placeholder="ID number">
-                        </div>
-                    </div>
                     <div>
                         <label class="form-label">Home Address</label>
                         <textarea name="address" class="form-control" rows="2" placeholder="Full home address">{{ old('address', $user->address ?? '') }}</textarea>

@@ -545,33 +545,13 @@
                         <div class="hint" style="margin-top:6px;">Contact the resort to change your email address.</div>
                     </div>
 
-                    <div class="two-col mb-16">
-                        <div>
-                            <label class="form-label">Phone Number</label>
-                            <input type="text" name="phone" class="form-control @error('phone') is-invalid @enderror"
-                                value="{{ old('phone', $user->phone) }}" placeholder="09XX-XXX-XXXX" required>
-                            @error('phone')
-                                <div class="field-error">{{ $message }}</div>
-                            @enderror
-                        </div>
-                        <div>
-                            <label class="form-label">ID Type</label>
-                            <select name="id_type" class="form-select">
-                                <option value="">None provided</option>
-                                @foreach (["Driver's License", 'Passport', 'SSS ID', 'PhilHealth ID', "Voter's ID", 'National ID', 'PRC ID', 'Postal ID'] as $idType)
-                                    <option value="{{ $idType }}"
-                                        {{ old('id_type', $user->id_type) == $idType ? 'selected' : '' }}>
-                                        {{ $idType }}
-                                    </option>
-                                @endforeach
-                            </select>
-                        </div>
-                    </div>
-
                     <div class="mb-16">
-                        <label class="form-label">ID Number</label>
-                        <input type="text" name="id_number" class="form-control"
-                            value="{{ old('id_number', $user->id_number) }}">
+                        <label class="form-label">Phone Number</label>
+                        <input type="text" name="phone" class="form-control @error('phone') is-invalid @enderror"
+                            value="{{ old('phone', $user->phone) }}" placeholder="09XX-XXX-XXXX" required>
+                        @error('phone')
+                            <div class="field-error">{{ $message }}</div>
+                        @enderror
                     </div>
 
                     <div class="mb-16">

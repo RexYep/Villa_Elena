@@ -403,22 +403,6 @@
                         </div>
                     </div>
                     <div class="info-row">
-                        <div class="info-icon"><i class="bi bi-card-text"></i></div>
-                        <div>
-                            <div class="info-label">ID Type</div>
-                            <div class="info-value">{{ $user->id_type ?? '—' }}</div>
-                        </div>
-                    </div>
-                    @if ($user->id_number)
-                        <div class="info-row">
-                            <div class="info-icon"><i class="bi bi-upc"></i></div>
-                            <div>
-                                <div class="info-label">ID Number</div>
-                                <div class="info-value">{{ $user->id_number }}</div>
-                            </div>
-                        </div>
-                    @endif
-                    <div class="info-row">
                         <div class="info-icon"><i class="bi bi-clock-history"></i></div>
                         <div>
                             <div class="info-label">Last Login</div>

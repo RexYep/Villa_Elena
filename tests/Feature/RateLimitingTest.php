@@ -192,6 +192,79 @@ class RateLimitingTest extends TestCase
         $this->post('/_limit/contact')->assertSessionHas('contact_error');
     }
 
+    // The payment tests hit the REAL routes in routes/web.php, not throwaway
+    // copies: the bug was in which throttle those routes declare. They were
+    // `throttle:60,1` and `throttle:8,1`, and a numeric throttle keys its
+    // counter by user id alone, so the checkout page's own status polling
+    // (15/min) used up checkout's 8/min and "Pay Now" answered a bare 429.
+
+    public function test_status_polling_does_not_use_up_the_checkout_allowance(): void
+    {
+        [$user, $booking] = $this->payingGuest();
+
+        // 20 polls = the first 80 seconds on the checkout page.
+        for ($i = 0; $i < 20; $i++) {
+            $this->actingAs($user)->getJson(route('payment.status', $booking))->assertOk();
+        }
+
+        // No payment_type, so the controller stops at validation — before
+        // the checkout lock or any PayMongo call. Reaching that validation
+        // error is the proof the throttle let the request through.
+        $this->actingAs($user)->from(route('payment.page', $booking))
+            ->post(route('payment.checkout', $booking))
+            ->assertRedirect(route('payment.page', $booking))
+            ->assertSessionHasErrors('payment_type')
+            ->assertSessionMissing('error');
+    }
+
+    public function test_checkout_is_capped_at_eight_and_returns_to_the_checkout_page(): void
+    {
+        [$user, $booking] = $this->payingGuest();
+
+        for ($i = 0; $i < 8; $i++) {
+            $this->actingAs($user)->post(route('payment.checkout', $booking))
+                ->assertSessionHasErrors('payment_type');
+        }
+
+        $this->actingAs($user)->from(route('payment.page', $booking))
+            ->post(route('payment.checkout', $booking))
+            ->assertRedirect(route('payment.page', $booking))
+            ->assertSessionHas('error', fn ($m) => str_contains($m, 'Too many payment attempts'))
+            ->assertSessionDoesntHaveErrors('payment_type');
+    }
+
+    public function test_status_is_capped_at_sixty_with_a_status_the_watcher_retries_on(): void
+    {
+        [$user, $booking] = $this->payingGuest();
+
+        for ($i = 0; $i < 60; $i++) {
+            $this->actingAs($user)->getJson(route('payment.status', $booking))->assertOk();
+        }
+
+        // The watcher treats any non-2xx as "try again next tick".
+        $this->actingAs($user)->getJson(route('payment.status', $booking))->assertStatus(429);
+    }
+
+    /** @return array{0: User, 1: \App\Models\Booking} */
+    private function payingGuest(): array
+    {
+        \Illuminate\Support\Facades\Schema::create('bookings', function ($table) {
+            $table->id();
+            $table->unsignedBigInteger('user_id');
+            $table->string('status')->default('pending');
+            $table->string('payment_status')->default('unpaid');
+            $table->decimal('total_amount', 10, 2)->default(4000);
+            $table->decimal('amount_paid', 10, 2)->default(0);
+            $table->decimal('balance_due', 10, 2)->default(4000);
+            $table->softDeletes();
+            $table->timestamps();
+        });
+
+        \Illuminate\Support\Facades\DB::table('bookings')->insert(['id' => 1, 'user_id' => 77]);
+
+        return [(new User)->forceFill(['id' => 77]), \App\Models\Booking::findOrFail(1)];
+    }
+
     private function makeUsersTable(): void
     {
         \Illuminate\Support\Facades\Schema::create('users', function ($table) {

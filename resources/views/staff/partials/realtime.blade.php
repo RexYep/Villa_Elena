@@ -90,22 +90,31 @@
             disableForms('.report-form-' + data.report_id, data.actor);
         }
 
+        // Ang mga ulat ng problema (issue_*) ay live na sa frontdesk — ang
+        // listahan, banner at bilang ay kinukuha muli sa `issues.changed`
+        // — kaya walang "refresh to see it" para sa mga iyon.
+        if (/^issue_/.test(data.action || '')) return;
+
         // Full row/stat data (counts, new pending bookings, property grid)
         // isn't patched live to avoid duplicating the whole page's Blade
         // logic in JS — surface a lightweight prompt instead.
         showRefreshBanner(NEW_WORK[data.action]);
     });
 
-    // Bagong gawain para sa staff (v7.11). Ang toast ay nananatili hanggang
-    // isara — ang frontdesk ay isang monitor na hindi laging tinitingnan, at
-    // ang 6 na segundong toast ay madaling makaligtaan.
+    // Bagong gawain para sa staff (v7.11) na HINDI pa live sa page — kaya
+    // may "refresh" na banner.
     const NEW_WORK = {
-        issue_reported: 'A new problem was reported — refresh to see it.',
         task_assigned:  'The admin sent a new task — refresh to see it.',
     };
 
+    // Ang toast ay nananatili hanggang isara — ang frontdesk ay isang
+    // monitor na hindi laging tinitingnan, at ang 6 na segundong toast ay
+    // madaling makaligtaan. Ang bagong ulat ay sticky pa rin kahit live
+    // na ang listahan: ang toast ang pumupukaw ng pansin.
+    const STICKY = ['issue_reported', 'task_assigned'];
+
     function showFdToast(data) {
-        const sticky = !!NEW_WORK[data.action];
+        const sticky = STICKY.includes(data.action);
         const container = document.getElementById('rt-fd-container');
         const toast = document.createElement('div');
         toast.className = 'rt-fd-toast' + (sticky ? ' rt-fd-sticky' : '');

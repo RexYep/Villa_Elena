@@ -252,7 +252,7 @@ class AutoCheckInOutBookings extends Command
                 'user_id' => $booking->user_id,
                 'type'    => 'in_app',
                 'title'   => 'Welcome to Villa Elena!',
-                'message' => "You have been automatically checked in to {$booking->property->property_name}. Enjoy your stay! Check-out: {$booking->check_out_date->format('F d, Y')}.",
+                'message' => "You have been  checked in to {$booking->property->property_name}. Enjoy your stay! Check-out: {$booking->check_out_date->format('F d, Y')}.",
                 'link'    => route('customer.bookings.show', $booking, false),
                 'is_read' => 0,
                 'status'  => 'sent',

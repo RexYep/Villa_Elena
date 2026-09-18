@@ -18,6 +18,26 @@ use Illuminate\Support\Facades\Auth;
  */
 class IssueReportController extends Controller
 {
+    /**
+     * GET /my/bookings/{booking}/issues — ang listahan ng ulat, muling
+     * ni-render ng parehong partial ng booking page at dashboard. Tinatawag
+     * kapag may `issue.updated` sa private channel ng guest, at tuwing 60s.
+     */
+    public function index(Booking $booking)
+    {
+        abort_if($booking->user_id !== Auth::id(), 403);
+
+        $reports = $booking->issueReports()->latest()->get();
+
+        return response()->json([
+            'count' => $reports->count(),
+            'html'  => view('customer.partials._issue_list', [
+                'reports' => $reports,
+                'withCta' => $booking->canReportIssues(),
+            ])->render(),
+        ]);
+    }
+
     public function store(Request $request, Booking $booking)
     {
         abort_if($booking->user_id !== Auth::id(), 403);

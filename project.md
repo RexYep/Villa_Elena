@@ -1,12 +1,45 @@
 # Villa Elena Private Rental Resort
 ## Resort Management System — Project Documentation
 
-**Version:** 7.12
+**Version:** 7.14
 **Stack:** PHP 8.2 / Laravel 12 / MySQL 8 / Bootstrap 5
 **Local URL:** `http://127.0.0.1:8000` (`php artisan serve`) or `http://localhost:8000` (Docker — see v5.3)
 **Live URL:** `https://villa-elena.onrender.com` (Render, free tier — testing only, not yet handed to real guests)
 **Database (local):** `villa_elena_db` (MySQL, XAMPP or standalone MySQL — same database either way)
 **Database (live):** Aiven MySQL free tier, database `defaultdb`
+
+---
+
+## What Changed in v7.14 (Read This First)
+
+### Issue reports update live on all three surfaces; guests are told when their report's status changes
+
+Asked for by the owner: new reports and status changes (pending → in progress → fixed/closed) should appear on the staff frontdesk, the admin Housekeeping page and the guest's pages without a refresh. The owner also answered the v7.11 open question: **guests now get a toast and an in-app notification** when their report's status changes ("Your Aircon issue is being fixed.").
+
+- **The signal comes from the model, not the controllers.** `IssueReport`'s `created` hook and `HasWorkStatus::transition()` call `IssueReport::touchLive()`. `transition()` is a query-builder UPDATE, so no Eloquent `updated` event fires; it now calls a `workStatusChanged()` hook (a no-op on `HousekeepingTask`) after a successful change. Any future path that uses `markStarted/Completed/Cancelled()` is covered with nothing extra.
+- **`IssueReportsChanged`** (`issues.changed`, empty, `ShouldBroadcastNow`) goes on `staff-frontdesk` **and** `admin-dashboard` through `BroadcastOnce`. `touchLive()` also calls `DashboardStats::touch()`: `kpis()` now returns `open_reports`, and the sidebar Housekeeping badge is `data-kpi="open_reports" data-kpi-hide-zero`, always in the DOM (the v7.12 pattern). It was an `@if` before and could not come back from 0.
+- **Pages refetch server-rendered HTML; nothing is rebuilt in JS** (same as the v7.10 Availability grid). Each also refetches every 60s and when the tab becomes visible.
+  - Staff: `GET /staff/frontdesk/housekeeping` returns the urgent banner (`staff/partials/_urgent_housekeeping`), the Issue Reports card (`_issue_reports`) and the Housekeeping count, used for both the stat card and the tab. `FrontDeskController::housekeeping()` is shared by `index()` and the endpoint.
+  - Admin: `GET /admin/housekeeping/live` returns the stats row (`admin/housekeeping/_stats`) and the Issue Reports card (`_reports`). Its paginator is pinned with `withPath(route('admin.housekeeping.index'))`, so pagination links never point at the JSON endpoint. `admin/partials/realtime.blade.php` now fires `admin:realtime-ready` (it loads after page scripts, like the staff partial).
+  - Guest: `GET /my/bookings/{booking}/issues` (owner only, 403 otherwise) returns `customer/partials/_issue_list`. That partial is now shared by the booking page and a **new "Your reports" card on the dashboard** under the "You're checked in" bar, which is hidden until there is a report. The list CSS moved to `_issue_list_styles`.
+- **Guest toast:** `workStatusChanged()` queues, per report and status, an in-app notification (`NotificationHelper::notifyGuest`, linking to `#report-issue`) and `GuestIssueReportUpdated` (`issue.updated`) on the guest's private `notifications.{id}` channel. `layouts/customer.blade.php` shows the toast on every customer page and dispatches `customer:issues-changed`, which the lists listen for. The toast text is the only thing read from the event. No email is sent: Brevo's quota is shared with 2FA and confirmations.
+- **Staff banner:** issue actions (`issue_*`) no longer show the "refresh to see it" banner, since the list is live. A new report still gets a **sticky toast** (`STICKY` in `staff/partials/realtime.blade.php`). `task_assigned` keeps its banner: tasks from the admin are not live yet.
+
+Verified inside rolled-back transactions: create → `issues.changed` + `stats.changed`, no guest event. Start → guest event on `private-notifications.{id}` with "Your Aircon issue is being fixed." plus a notification row. A second start returns `false` and sends nothing. Complete → "…has been fixed.". All three endpoints return the new report and status. `/admin/housekeeping` (both views), `/admin/dashboard`, `/staff/frontdesk`, `/my/` and `/my/bookings/{id}` all return 200 through the HTTP kernel, and another guest gets 403 on the issues endpoint. `npm run build` is clean. **Not verified in a real browser with Pusher connected.**
+
+---
+
+## What Changed in v7.13 (Read This First)
+
+### Guest ID fields and the "Require ID Upload" setting removed
+
+Decided with the owner: the system no longer asks for any guest ID.
+
+- **There never was an ID photo upload.** Admin → Settings had a **Require ID Upload** toggle ("Guests must upload a valid ID during booking"), but it was dead: `SettingsController` saved `require_id_upload` and **nothing ever read it**. The booking flow had no upload field for it to require. The toggle and its entry in `$toggles` are gone. An old `require_id_upload` row may still be in `settings`; nothing reads it, so it's harmless.
+- **The optional ID Type / ID Number text fields were removed from every page:** the customer profile form (`Customer\ProfileController` validation and `only()`), admin user create and edit (`Admin\UserController` `store()`/`update()`; the form card is now just "Address"), and the display rows on the admin user page and the admin booking page's guest panel.
+- **The `users.id_type` / `users.id_number` columns were deliberately kept**, along with their `User::$fillable` entries and docblock. Dropping them would permanently delete ID numbers guests had already entered, including on production. Removing only the UI is fully reversible. Nothing writes them any more: a stale form that still posts them is ignored, because both controllers now build their data from explicit field lists.
+
+Verified with real requests through the HTTP kernel, inside a rolled-back transaction: `/admin/settings`, `/admin/users/create`, `/admin/users/{id}/edit`, `/admin/users/{id}`, `/admin/bookings/{id}` and `/my/profile` all return 200 with no ID text. A profile `PUT` that still included `id_type`/`id_number` saved name, phone and address and left both ID columns unchanged.
 
 ---
 
@@ -40,7 +73,7 @@ Decided with the owner: cleaning tasks are **no longer created automatically** a
 - **Migration `2026_09_17_100000`** adds `title`, `location` (free text: the `type=room` rows have no names), `priority` (`normal|urgent`), `due_time` (nullable = any time that day), `created_by`, `started_at`, and `cancelled` to `housekeeping_tasks.status`. The 5 automatic tasks still open were set to `cancelled` with a note saying why, not deleted.
 - **New `issue_reports` table** (`2026_09_17_100001`): `category` (aircon, plumbing, electrical, cleanliness, wifi, pool, other), `description` (required only for `other`), `reporter_role` (`customer|staff`), `booking_id`, same four statuses. Separate from tasks because a task is an order from the admin and a report comes from inside the villa.
 - **Shared status flow** in `App\Models\Concerns\HasWorkStatus`: `markStarted()` / `markCompleted()` / `markCancelled()` are **conditional UPDATEs** (`WHERE status IN (…)`) that return `false` if another click got there first. The frontdesk is one shared monitor and the admin page can be open at the same time, so don't replace them with read-then-`update()`.
-- **Guest reports go to staff and admin at the same time** (`FrontdeskBroadcast` + `NotificationHelper::issueReported()`), not through the admin first: the admin portal isn't always open, and the guest is waiting in the villa. The form is a **popup** (`customer/partials/issue_report_modal.blade.php`, one copy shared by both pages), opened by a **Report an Issue** button that shows **only while `Booking::canReportIssues()`** (`status = checked_in`): on the booking page, and on the dashboard's "You're checked in" bar, which also has **View booking**. Submitting from the dashboard returns to the dashboard; a validation error reopens the popup with the input kept. The guest's list of reports stays on the booking page (also after checkout), with guest wording (`Received / Being fixed / Fixed / Closed`). **No guest notification on status changes yet.** The owner wants to review the feature before deciding.
+- **Guest reports go to staff and admin at the same time** (`FrontdeskBroadcast` + `NotificationHelper::issueReported()`), not through the admin first: the admin portal isn't always open, and the guest is waiting in the villa. The form is a **popup** (`customer/partials/issue_report_modal.blade.php`, one copy shared by both pages), opened by a **Report an Issue** button that shows **only while `Booking::canReportIssues()`** (`status = checked_in`): on the booking page, and on the dashboard's "You're checked in" bar, which also has **View booking**. Submitting from the dashboard returns to the dashboard; a validation error reopens the popup with the input kept. The guest's list of reports stays on the booking page (also after checkout), with guest wording (`Received / Being fixed / Fixed / Closed`). ~~No guest notification on status changes yet.~~ Superseded in v7.14: guests get a toast and an in-app notification, and the list is live.
 - **Staff** (one shared account, no notification bell): the Housekeeping tab lists open reports and tasks, and has a *Report issue* modal. The top banner (`mostUrgentHousekeeping()`) shows a guest report first, then a task that's overdue, urgent or due within 4h. `issue_reported` / `task_assigned` broadcasts show a **sticky** toast and a specific refresh-banner message. Actions redirect back with `tab=housekeeping`. Who did a task isn't recorded because the account is shared.
 - **Admin** `/admin/housekeeping`: open vs. done/cancelled view, stats (open reports, open tasks, overdue, done this week), New Task modal (validation errors reopen it via the `newTask` bag; a due time already passed today is refused), Mark done / Cancel / Mark fixed / Close. Staff get an in-app admin notification when they finish something. The sidebar shows a red count of open reports.
 - `throttle:issue-report`: 3/min and 20/h per user, on both the guest and the staff report routes. Reports send no mail and use no AI, but each one alerts the frontdesk and every admin.
@@ -124,12 +157,15 @@ An audit of every route found the same problem worse elsewhere. The limits were 
 | `password-confirm` | `PUT my/profile/password`, `PUT my/profile/2fa`, `DELETE my/profile` | 5/min per user |
 | `review-write` | `POST my/bookings/{booking}/review`, `PUT my/reviews/{review}` | 10/min per user |
 | `contact` | `POST /contact` | 5/hour per IP |
+| `payment-checkout` | `POST /pay/{booking}/checkout` | 8/min per user; over the limit → back to the checkout page with an `error` flash |
+| `payment-status` | `GET /pay/{booking}/status` | 60/min per user; over the limit → default 429, which the watcher retries |
 
 Rules that must survive edits:
 
 - **Over the limit, a guest goes back to their form with a message, never to an error page.** The message goes where that page actually reads it: `error` flash on auth pages (`layouts/auth.blade.php`), a field error on booking (`dates`) and reviews (`content`), `contact_error` on the contact form, and **the form's own named error bag** on the profile page (`updatePassword` / `twoFactor` / `deactivate`); in the default bag it would never appear. The chatbot gets JSON `{ok: false, reply}` with status 429. Passwords are never flashed back as old input.
 - **Every `Limit` inside one limiter needs its own key prefix** (`m:`, `h:`, `d:`, `e:`). The middleware keys counters by limiter name + key, so two Limits with the same key share one counter with two different decay windows.
-- `resources/views/errors/429.blade.php` is the fallback for the plain `throttle:N,M` routes that remain (`payment.checkout`, `payment.status`, `verification.verify`).
+- `resources/views/errors/429.blade.php` is the fallback for the plain `throttle:N,M` routes that remain (`verification.verify` and the `throttle:60,1` admin/staff/customer routes).
+- **A plain `throttle:N,M` counter is keyed by user id alone, with no route and no limit in the key**, so every numeric-throttle route a user hits shares one counter. `payment.checkout` (`throttle:8,1`) and `payment.status` (`throttle:60,1`) collided this way: the checkout page polls status 15 times a minute, so about 32 seconds after it opened, "Pay Now" answered a bare 429. Both routes now have named limiters, which include the limiter name in the key. Give a route a named limiter whenever it needs its own allowance (`RateLimitingTest` covers this pair).
 - **Never throttle `/webhooks/paymongo*`.** A 429 counts as a failed delivery, and PayMongo disables the webhook.
 
 ### Login lockout counts failures per account, not requests per IP
@@ -168,7 +204,7 @@ The checkout page had the same gap from the other direction. Guests do not close
 
 **Polling is the backbone; Pusher is only an accelerator.** This split is deliberate and must not be inverted:
 
-- `GET /pay/{booking}/status` (`PaymentController::status()`, `throttle:60,1`) reads the database and is the authority. It works with `BROADCAST_CONNECTION=log` (the `.env.example` default), with a dead websocket, and when the tab was closed at the moment the payment landed.
+- `GET /pay/{booking}/status` (`PaymentController::status()`, `throttle:payment-status`) reads the database and is the authority. It works with `BROADCAST_CONNECTION=log` (the `.env.example` default), with a dead websocket, and when the tab was closed at the moment the payment landed.
 - `PaymentReceived` now also broadcasts on `PrivateChannel('booking-payment.{id}')`, authorized in `routes/channels.php` to the booking's owner alone. The page **never reads an amount out of the event** — it only polls immediately on receipt. So a delayed, duplicated or lost broadcast costs nothing, and a refund (`is_refund`) is ignored rather than announced as a payment.
 
 Pusher-only would mean the page breaks silently on every websocket problem, while displaying money.
@@ -2946,7 +2982,7 @@ Setting::set('resort_name', 'New Name')     // upsert + cache clear
 | Notifications | `customer.notifications` / `.notifications.open` | All notifications, now **click-through to the relevant booking/review** + per-item mark-as-read |
 
 **v5.0 — Profile Management** (`ProfileController`, `resources/views/customer/profile.blade.php`):
-- Edit name/phone/address/ID info + avatar upload (`Storage::disk('public')`, replaces old avatar on change).
+- Edit name/phone/address + avatar upload (`Storage::disk('public')`, replaces old avatar on change).
 - Change password — requires current password, `min:8|confirmed`, rotates `remember_token`.
 - **Deactivate account** (soft delete via `status = 0`, not a hard `DELETE`) — chosen deliberately because `bookings`/`reviews`/`notifications` all `cascadeOnDelete()` on `user_id`; a real delete would silently wipe a guest's entire booking/payment/review history. Deactivating logs the guest out and blocks future logins (same convention as `Admin\UserController::toggleStatus()`) but keeps every record intact.
 
@@ -3183,10 +3219,10 @@ PAYMONGO_WEBHOOK_SECRET=whsk_xxxxxxxxxxxx
 **Routes:**
 ```
 GET  /pay/{booking}           payment.page
-POST /pay/{booking}/checkout  payment.checkout
+POST /pay/{booking}/checkout  payment.checkout (throttle:payment-checkout)
 GET  /pay/{booking}/success   payment.success
 GET  /pay/{booking}/cancel    payment.cancel
-GET  /pay/{booking}/status    payment.status   (JSON, throttle:60,1 — v7.7)
+GET  /pay/{booking}/status    payment.status   (JSON, throttle:payment-status — v7.7)
 POST /webhooks/paymongo       payment.webhook  (no CSRF)
 ```
 
@@ -3852,6 +3888,7 @@ GET    /admin/notifications/{n}/open          admin.notifications.open     ← N
 POST   /admin/notifications/mark-read         admin.notifications.markRead  (moved to Admin\NotificationController v5.0)
 GET    /admin/bookings/lookup                 admin.bookings.lookup  (AJAX)
 GET    /admin/housekeeping                    admin.housekeeping.index          ← NEW v7.11 (?view=open|closed)
+GET    /admin/housekeeping/live               admin.housekeeping.live           ← NEW v7.14 (AJAX: stats + Issue Reports HTML)
 POST   /admin/housekeeping/tasks              admin.housekeeping.tasks.store    ← NEW v7.11
 PATCH  /admin/housekeeping/tasks/{task}       admin.housekeeping.tasks.update   ← NEW v7.11 (status=completed|cancelled)
 PATCH  /admin/housekeeping/reports/{report}   admin.housekeeping.reports.update ← NEW v7.11 (status=completed|cancelled)
@@ -3914,6 +3951,7 @@ POST   /staff/walkin                          staff.walkin.store
 POST   /staff/bookings/{booking}/payment      staff.payment
 PATCH  /staff/tasks/{task}/start              staff.tasks.start
 PATCH  /staff/tasks/{task}/complete           staff.tasks.complete
+GET    /staff/frontdesk/housekeeping          staff.frontdesk.housekeeping ← NEW v7.14 (AJAX: urgent banner + Issue Reports HTML + count)
 POST   /staff/reports                         staff.reports.store     ← NEW v7.11 (throttle:issue-report)
 PATCH  /staff/reports/{report}/start          staff.reports.start     ← NEW v7.11
 PATCH  /staff/reports/{report}/complete       staff.reports.complete  ← NEW v7.11
@@ -3926,6 +3964,7 @@ GET    /my/bookings                           customer.bookings
 GET    /my/bookings/{booking}                 customer.bookings.show
 PATCH  /my/bookings/{booking}/cancel          customer.bookings.cancel
 POST   /my/bookings/{booking}/issues          customer.bookings.issues.store  ← NEW v7.11 (checked_in only, throttle:issue-report)
+GET    /my/bookings/{booking}/issues          customer.bookings.issues.index  ← NEW v7.14 (AJAX: the guest's report list HTML, owner only)
 GET    /my/bookings/{booking}/reschedule      customer.bookings.reschedule        ← NEW v5.0
 PATCH  /my/bookings/{booking}/reschedule      customer.bookings.reschedule.update ← NEW v5.0
 GET    /my/notifications                      customer.notifications

@@ -62,8 +62,6 @@ class UserController extends Controller
             'role'      => 'required|in:customer,staff,admin',
             'password'  => 'required|string|min:8|confirmed',
             'address'   => 'nullable|string',
-            'id_type'   => 'nullable|string',
-            'id_number' => 'nullable|string',
         ]);
 
         $user = User::create([
@@ -73,8 +71,6 @@ class UserController extends Controller
             'role'       => $request->role,
             'password'   => Hash::make($request->password),
             'address'    => $request->address,
-            'id_type'    => $request->id_type,
-            'id_number'  => $request->id_number,
             'status'     => 1,
         ]);
 
@@ -117,8 +113,6 @@ class UserController extends Controller
             'phone'     => 'required|string|max:20',
             'role'      => 'required|in:customer,staff,admin',
             'address'   => 'nullable|string',
-            'id_type'   => 'nullable|string',
-            'id_number' => 'nullable|string',
             'password'  => 'nullable|string|min:8|confirmed',
         ]);
 
@@ -128,8 +122,6 @@ class UserController extends Controller
             'phone'     => $request->phone,
             'role'      => $request->role,
             'address'   => $request->address,
-            'id_type'   => $request->id_type,
-            'id_number' => $request->id_number,
         ];
 
         if ($request->filled('password')) {

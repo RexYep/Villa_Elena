@@ -81,7 +81,7 @@ class SettingsController extends Controller
         // Notifications), dahil sa guest mismo dapat manggaling ang
         // desisyon kung tatanggap sila ng booking confirmation emails,
         // hindi sa isang resort-wide na admin switch.
-        $toggles = ['maintenance_mode', 'allow_online_booking', 'require_id_upload'];
+        $toggles = ['maintenance_mode', 'allow_online_booking'];
         foreach ($toggles as $toggle) {
             Setting::set($toggle, $request->has($toggle) ? '1' : '0');
         }

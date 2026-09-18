@@ -50,24 +50,13 @@ class FrontDeskController extends Controller
             ->take(10)
             ->get();
 
-        // Housekeeping (v7.11): mga task na ipinadala ng admin, at mga ulat
-        // ng problema mula sa guest o staff. Urgent at pinakamalapit na
-        // deadline sa itaas.
-        $openTasks = HousekeepingTask::open()
-            ->orderByRaw("priority = 'urgent' desc")
-            ->orderBy('due_date')
-            ->orderByRaw('due_time is null, due_time')
-            ->get();
-
-        $inProgressTasks = $openTasks->where('status', 'in_progress')->values();
-        $pendingTasks    = $openTasks->where('status', 'pending')->values();
-
-        $openReports = IssueReport::open()
-            ->with(['reporter', 'booking'])
-            ->oldest()
-            ->get();
-
-        $urgentItem = $this->mostUrgentHousekeeping($openTasks, $openReports);
+        [
+            'openTasks'       => $openTasks,
+            'inProgressTasks' => $inProgressTasks,
+            'pendingTasks'    => $pendingTasks,
+            'openReports'     => $openReports,
+            'urgentItem'      => $urgentItem,
+        ] = $this->housekeeping();
 
         // Villa lang ang ipinapakita sa frontdesk. Ang mga `type=room`
         // na record ay info-only na simula v4.0 (hindi na hiwalay na
@@ -115,6 +104,49 @@ class FrontDeskController extends Controller
             'pendingTasks', 'inProgressTasks', 'openReports', 'urgentItem', 'villa',
             'availableProperties', 'stats', 'nextSlots'
         ));
+    }
+
+    /**
+     * Housekeeping (v7.11): mga task na ipinadala ng admin, at mga ulat ng
+     * problema mula sa guest o staff. Urgent at pinakamalapit na deadline
+     * sa itaas. Iisang pinagmulan para sa index() at housekeepingLive().
+     */
+    private function housekeeping(): array
+    {
+        $openTasks = HousekeepingTask::open()
+            ->orderByRaw("priority = 'urgent' desc")
+            ->orderBy('due_date')
+            ->orderByRaw('due_time is null, due_time')
+            ->get();
+
+        $openReports = IssueReport::open()
+            ->with(['reporter', 'booking'])
+            ->oldest()
+            ->get();
+
+        return [
+            'openTasks'       => $openTasks,
+            'inProgressTasks' => $openTasks->where('status', 'in_progress')->values(),
+            'pendingTasks'    => $openTasks->where('status', 'pending')->values(),
+            'openReports'     => $openReports,
+            'urgentItem'      => $this->mostUrgentHousekeeping($openTasks, $openReports),
+        ];
+    }
+
+    /**
+     * GET /staff/frontdesk/housekeeping — ang urgent banner, ang Issue
+     * Reports card at ang bilang, muling ni-render ng parehong partial ng
+     * frontdesk. Tinatawag kapag may `issues.changed`, at tuwing 60s.
+     */
+    public function housekeepingLive()
+    {
+        ['openTasks' => $openTasks, 'openReports' => $openReports, 'urgentItem' => $urgentItem] = $this->housekeeping();
+
+        return response()->json([
+            'count'        => $openTasks->count() + $openReports->count(),
+            'urgent_html'  => view('staff.partials._urgent_housekeeping', compact('urgentItem'))->render(),
+            'reports_html' => view('staff.partials._issue_reports', compact('openReports'))->render(),
+        ]);
     }
 
     /**

@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Events\DashboardStatsChanged;
 use App\Models\Booking;
+use App\Models\IssueReport;
 use App\Models\Payment;
 use App\Models\User;
 
@@ -45,6 +46,8 @@ class DashboardStats
         // Iisang query sa dating `total_guests` ng dashboard: bawat
         // customer account, verified o hindi.
         $guests = User::where('role', 'customer')->count();
+        // Badge ng Housekeeping sa sidebar — nasa bawat admin page.
+        $openReports = IssueReport::open()->count();
 
         // Ang refund ay naitatala bilang Payment row na `payment_type =
         // refund` na may POSITIBONG halaga, kaya kailangang hindi isama —
@@ -96,6 +99,7 @@ class DashboardStats
             'revenue_today' => $today,
             'revenue_this_month' => $month,
             'total_guests' => $guests,
+            'open_reports' => $openReports,
             'revenue_by_month' => $revenueByMonth,
             'booking_sources' => $sources,
             // Ang format ay nasa server para ang page at ang JSON ay
@@ -107,6 +111,7 @@ class DashboardStats
                 'revenue_today' => '₱'.number_format($today, 0),
                 'revenue_this_month' => '₱'.number_format($month, 0),
                 'total_guests' => number_format($guests),
+                'open_reports' => (string) $openReports,
             ],
         ];
     }

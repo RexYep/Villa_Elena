@@ -193,6 +193,21 @@ class AppServiceProvider extends ServiceProvider
                 ->response($this->throttledBack('Too many reports this hour.')),
         ]);
 
+        // Payment checkout and the status endpoint its page polls. These were
+        // `throttle:8,1` and `throttle:60,1`, but a numeric throttle keys its
+        // counter by user id alone — no route, no limit — so both shared one
+        // counter. The checkout page polls status 15 times a minute, so after
+        // ~32s of reading it, "Pay Now" answered a bare 429. Named limiters
+        // key by limiter name as well, so each route counts only itself.
+        RateLimiter::for('payment-checkout', fn (Request $request) => Limit::perMinute(8)
+            ->by('m:'.$this->throttleIdentity($request))
+            ->response($this->throttledBack('Too many payment attempts.')));
+
+        // No custom response: the watcher treats any non-2xx as "retry on
+        // the next tick", so the default 429 is already the right answer.
+        RateLimiter::for('payment-status', fn (Request $request) => Limit::perMinute(60)
+            ->by('m:'.$this->throttleIdentity($request)));
+
         // Contact form emails the resort. The page reads `contact_error`,
         // not `error`, so it has its own response.
         RateLimiter::for('contact', fn (Request $request) => Limit::perHour(5)
