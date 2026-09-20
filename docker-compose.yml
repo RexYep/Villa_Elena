@@ -96,6 +96,11 @@ services:
           path: ./database
           target: /var/www/html/database
           initial_sync: true
+        - action: sync
+          path: ./public/build
+          target: /var/www/html/public/build
+          initial_sync: true
+
         # Isang FILE lang, sinadya — hindi ang buong ./bootstrap.
         # Dito nakatira ang middleware config (kasama ang CSRF exemption
         # ng PayMongo webhook), kaya kailangan itong ma-sync; pero ang

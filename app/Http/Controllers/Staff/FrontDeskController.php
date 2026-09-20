@@ -258,9 +258,14 @@ class FrontDeskController extends Controller
      */
     private function buildSlotGrid(Property $villa, \Carbon\Carbon $start, int $days): array
     {
-        // Isang query lang para sa lahat ng block sa saklaw — hindi
-        // kasama sa hasConflict() ang AvailabilityBlock, kaya hiwalay
-        // itong sinasala dito.
+        // Isang query lang para sa lahat ng block sa saklaw. Marunong
+        // nang tumingin ng block ang hasConflict() (v7.17), kaya HINDI
+        // na ito ang nag-iisang tagapagpatupad — pero kailangan pa rin
+        // dito ang mismong row para sa DAHILAN na ipinapakita sa grid
+        // ("Maintenance", "Owner use"), na hindi kayang ibalik ng isang
+        // boolean. Dapat manatiling katumbas ng
+        // AvailabilityBlock::coveringDate() ang pagsusuri sa ibaba —
+        // check-in date ang batayan ng dalawa.
         $rangeEnd = $start->copy()->addDays($days);
 
         $blocks = AvailabilityBlock::where('property_id', $villa->id)
@@ -646,7 +651,11 @@ class FrontDeskController extends Controller
 
         if (!$booking) {
             return back()
-                ->withErrors(['check_in_date' => 'Naka-book na ang Villa sa napiling petsa/slot. Pumili ng ibang slot.'])
+                ->withErrors(['check_in_date' => Booking::unavailableMessage(
+                    $request->property_id, $checkin,
+                    'Naka-book na ang Villa sa napiling petsa/slot. Pumili ng ibang slot.',
+                    forStaff: true
+                )])
                 ->withInput();
         }
 

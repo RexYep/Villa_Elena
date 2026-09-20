@@ -303,7 +303,7 @@
                 <div id="existingGuestFields">
                     <label class="form-label">Select Guest</label>
                     <select name="user_id" class="form-select {{ $errors->has('user_id') ? 'is-invalid' : '' }}">
-                        <option value="">-- Select existing guest --</option>
+                        <option value="">Select existing guest</option>
                         @foreach ($customers as $customer)
                             <option value="{{ $customer->id }}" {{ old('user_id') == $customer->id ? 'selected' : '' }}>
                                 {{ $customer->full_name }} —
@@ -450,7 +450,8 @@
                         <select name="num_guests" id="numGuests"
                             class="form-select {{ $errors->has('num_guests') ? 'is-invalid' : '' }}" required>
                             @for ($g = 1; $g <= ($availableProperties->first()->max_capacity ?? 1); $g++)
-                                <option value="{{ $g }}" {{ (int) old('num_guests', 1) === $g ? 'selected' : '' }}>
+                                <option value="{{ $g }}"
+                                    {{ (int) old('num_guests', 1) === $g ? 'selected' : '' }}>
                                     {{ $g }} guest{{ $g > 1 ? 's' : '' }}
                                 </option>
                             @endfor
@@ -468,7 +469,8 @@
 
                 {{-- Price Preview --}}
                 <div class="price-preview" id="pricePreview" style="display:none;">
-                    <div class="text-muted-theme section-label" style="font-size: 14px;margin-bottom:10px;">Price Breakdown
+                    <div class="text-muted-theme section-label" style="font-size: 14px;margin-bottom:10px;">Price
+                        Breakdown
                     </div>
                     <div id="nightBreakdown"></div>
                     <div class="price-row total">
@@ -502,7 +504,7 @@
                         <label class="form-label">Payment Method</label>
                         <select name="payment_method"
                             class="form-select {{ $errors->has('payment_method') ? 'is-invalid' : '' }}">
-                            <option value="">-- Select --</option>
+                            <option value="">Select</option>
                             <option value="cash" {{ old('payment_method') == 'cash' ? 'selected' : '' }}>Cash</option>
                             <option value="qrph" {{ old('payment_method') == 'qrph' ? 'selected' : '' }}>QR Ph (GCash /
                                 Maya / bank app)</option>

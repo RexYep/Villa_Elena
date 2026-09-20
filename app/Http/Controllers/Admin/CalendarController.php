@@ -100,24 +100,58 @@ class CalendarController extends Controller
             ->get();
 
         foreach ($blocks as $block) {
+            $reason = ucfirst(str_replace('_', ' ', $block->reason));
+            $endExclusive = \Carbon\Carbon::parse($block->end_date)->addDay()->format('Y-m-d');
+
+            $props = [
+                'type'       => 'block',
+                'block_id'   => $block->id,
+                'property'   => $block->property->property_name ?? 'N/A',
+                'reason'     => $reason,
+                'notes'      => $block->notes,
+                'start_date' => $block->start_date,
+                'end_date'   => $block->end_date,
+            ];
+
+            // DALAWANG event kada block, sinasadya.
+            //
+            // Dati ay iisa, at `display => 'background'` — at ang
+            // background event sa FullCalendar ay HINDI kailanman
+            // nagpapakita ng title. Kaya ang dahilan ng block ay
+            // ginagawa lang at itinatapon, at ang tanging palatandaan
+            // ay isang #fee2e2 na tint na halos hindi mapansin sa isang
+            // maputing calendar — "walang senyas" ang tingin ng admin.
+            // Hindi rin kailanman naaabot ang eventClick na `type ===
+            // 'block'` sa view, dahil hindi naman puwedeng i-click ang
+            // background event: patay na code ang buong block-detail
+            // modal (at ang Delete na kasama nito).
+            //
+            // 1) Naka-label na all-day bar — ito ang nakikita at
+            //    nacli-click. 2) Ang tint pa rin sa buong araw, para
+            //    mabasa agad na sarado ang petsa at hindi lang "may
+            //    nakaiskedyul dito".
             $events[] = [
                 'id'              => 'block-' . $block->id,
-                'title'           => '🔒 ' . ($block->property->property_name ?? 'N/A') . ' — ' . ucfirst(str_replace('_', ' ', $block->reason)),
+                'title'           => '🔒 Blocked — ' . $reason,
                 'start'           => $block->start_date,
-                'end'             => \Carbon\Carbon::parse($block->end_date)->addDay()->format('Y-m-d'),
-                'backgroundColor' => '#fee2e2',
-                'borderColor'     => '#fca5a5',
-                'textColor'       => '#dc2626',
-                'display'         => 'background', // renders as background stripe
-                'extendedProps'   => [
-                    'type'       => 'block',
-                    'block_id'   => $block->id,
-                    'property'   => $block->property->property_name ?? 'N/A',
-                    'reason'     => ucfirst(str_replace('_', ' ', $block->reason)),
-                    'notes'      => $block->notes,
-                    'start_date' => $block->start_date,
-                    'end_date'   => $block->end_date,
-                ],
+                'end'             => $endExclusive,
+                'allDay'          => true,
+                'backgroundColor' => '#dc2626',
+                'borderColor'     => '#b91c1c',
+                'textColor'       => '#fff',
+                'extendedProps'   => $props,
+            ];
+
+            // Kailangang may extendedProps.type pa rin ito: dumadaan
+            // ang RAW JSON sa property/status filter ng view, na
+            // dire-diretsong bumabasa ng `e.extendedProps.type`.
+            $events[] = [
+                'id'              => 'block-bg-' . $block->id,
+                'start'           => $block->start_date,
+                'end'             => $endExclusive,
+                'display'         => 'background',
+                'backgroundColor' => '#fecaca',
+                'extendedProps'   => ['type' => 'block'],
             ];
         }
 
@@ -168,7 +202,11 @@ class CalendarController extends Controller
         if ($moved === null) {
             return response()->json([
                 'success' => false,
-                'message' => 'Another booking already holds that date and slot. The booking was not moved.',
+                'message' => Booking::unavailableMessage(
+                    $booking->property_id, $newCheckIn,
+                    'Another booking already holds that date and slot. The booking was not moved.',
+                    forStaff: true
+                ),
             ], 409);
         }
 

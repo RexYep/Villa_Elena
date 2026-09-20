@@ -60,6 +60,32 @@ class AvailabilityBlock extends Model
         'end_date'   => 'date',
     ];
 
+    /**
+     * Ang mga block na sumasaklaw sa isang CHECK-IN date.
+     *
+     * CHECK-IN date ang batayan, hindi ang buong haba ng stay — at
+     * sinasadya ito: ganito na tumitingin ang staff availability grid
+     * mula pa noong una (`$date->betweenIncluded($b->start_date,
+     * $b->end_date)`), at kailangang EKSAKTONG pareho ang grid at ang
+     * guard. Kapag nagkaiba sila, babalik mismo ang bug na inaayos
+     * dito: "Blocked" ang nakikita ni staff pero tinatanggap pa rin ng
+     * booking form ang petsa.
+     *
+     * Kaya rin hindi kasama ang check-OUT: natatapos ang Night slot ng
+     * 6AM kinabukasan, at ang pag-block sa araw na iyon ay hindi
+     * nangangahulugang bawal na rin ang gabing nauna rito.
+     */
+    public function scopeCoveringDate($query, int $propertyId, $date)
+    {
+        $day = $date instanceof \Carbon\Carbon
+            ? $date->copy()->startOfDay()
+            : \Carbon\Carbon::parse($date)->startOfDay();
+
+        return $query->where('property_id', $propertyId)
+            ->whereDate('start_date', '<=', $day)
+            ->whereDate('end_date', '>=', $day);
+    }
+
     public function property()
     {
         return $this->belongsTo(Property::class);

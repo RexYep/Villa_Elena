@@ -70,7 +70,7 @@
         <a href="{{ route('customer.notifications') }}" class="nav-link-item {{ request()->routeIs('customer.notifications') ? 'active' : '' }}">Notifications</a>
         <a href="{{ route('customer.reviews.index') }}" class="nav-link-item {{ request()->routeIs('customer.reviews.*') ? 'active' : '' }}">My Reviews</a>
         <a href="{{ route('customer.payments.index') }}" class="nav-link-item {{ request()->routeIs('customer.payments.*') ? 'active' : '' }}">Payments</a>
-        <a href="{{ route('customer.profile.edit') }}" class="nav-link-item {{ request()->routeIs('customer.profile.*') ? 'active' : '' }}">Profile</a>
+        <a href="{{ route('customer.profile.edit') }}" class="nav-link-item {{ request()->routeIs('customer.profile.*') ? 'active' : '' }}">Settings</a>
         <form method="POST" action="{{ route('logout') }}" class="nav-link-mobile-signout">
             @csrf
             <button type="submit" class="nav-link-item" style="width:100%;text-align:left;background:none;border:none;cursor:pointer;">Sign out</button>

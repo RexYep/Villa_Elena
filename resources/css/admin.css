@@ -34,30 +34,48 @@ body {
 }
 
 /* ── SIDEBAR ─────────────────────────────────────────────── */
+/* Dark rail, matching the logged-in customer topnav (portal.css
+   `.topnav`), which is --stone. Everything below reuses tokens that
+   already exist rather than introducing a second brown: --gold-light
+   for the wordmark and the active item, --gold-dim for the active
+   background — the exact pair portal.css's `.nav-link-item.active`
+   uses — so the two shells can't drift apart.
+
+   The --sb-* tokens are declared ON .sidebar, not in :root, so they
+   reach every descendant without leaking to the topbar, cards or
+   tables, which stay light (--cream / --sand). Sidebar text is a
+   white alpha rather than --muted/--text-main: both are dark warm
+   tones built for a light background and are illegible here. */
 .sidebar {
+    --sb-text: rgba(255, 255, 255, .55);   /* idle label, 5.8:1 on --stone */
+    --sb-text-strong: #fff;                /* hover / current user */
+    --sb-label: rgba(255, 255, 255, .5);   /* section headings, 5.0:1 */
+    --sb-line: rgba(255, 255, 255, .1);    /* hairlines; --border vanishes */
+    --sb-chip: rgba(255, 255, 255, .08);   /* icon tiles, hover, user card */
+
     position: fixed;
     top: 0; left: 0;
     width: var(--sidebar-w);
     height: 100vh;
-    background: var(--cream);
+    background: var(--stone);
     display: flex;
     flex-direction: column;
-    border-right: 1px solid var(--border);
+    border-right: 1px solid var(--sb-line);
     z-index: 1000;
     overflow-y: auto;
     transition: transform .3s ease;
 }
-.sidebar-brand { padding: 28px 24px 20px; border-bottom: 1px solid var(--border); }
+.sidebar-brand { padding: 28px 24px 20px; border-bottom: 1px solid var(--sb-line); }
 .sidebar-brand h1 {
     font-family: 'Cormorant Garamond', serif;
-    color: var(--text-main);
+    color: var(--gold-light);
     font-size: 22px;
     font-weight: 700;
     letter-spacing: 0.3px;
     line-height: 1.2;
 }
 .sidebar-brand p {
-    color: var(--muted);
+    color: var(--sb-text);
     font-size: 13px;
     letter-spacing: 1.5px;
     text-transform: uppercase;
@@ -69,7 +87,7 @@ body {
     font-weight: 600;
     letter-spacing: 1.5px;
     text-transform: uppercase;
-    color: var(--muted);
+    color: var(--sb-label);
     padding: 0 8px;
     margin-bottom: 6px;
 }
@@ -79,18 +97,18 @@ body {
     gap: 12px;
     padding: 10px 12px;
     border-radius: 8px;
-    color: var(--muted);
+    color: var(--sb-text);
     text-decoration: none;
     font-size: 14px;
     font-weight: 400;
     transition: all .2s;
     margin-bottom: 2px;
 }
-.nav-item-custom:hover { background: var(--sand); color: var(--text-main); }
+.nav-item-custom:hover { background: var(--sb-chip); color: var(--sb-text-strong); }
 .nav-item-custom.active {
-    background: var(--sand);
-    color: var(--terracotta);
-    border-left: 3px solid var(--terracotta);
+    background: var(--gold-dim);
+    color: var(--gold-light);
+    border-left: 3px solid var(--gold-light);
     padding-left: 9px;
     font-weight: 600;
 }
@@ -101,8 +119,8 @@ body {
     display: flex; align-items: center; justify-content: center;
     font-size: 15px;
     flex-shrink: 0;
-    background: var(--border);
-    color: var(--text-main);
+    background: var(--sb-chip);
+    color: rgba(255, 255, 255, .7);
 }
 .nav-item-custom.active .nav-icon { background: var(--terracotta); color: #fff; }
 /* Badge ng bilang sa sidebar (Housekeeping, Bookings) */
@@ -117,12 +135,12 @@ body {
 }
 /* Kailangan: ang `display` sa itaas ay tumatalo sa [hidden] ng browser. */
 .nav-count[hidden] { display: none; }
-.sidebar-footer { margin-top: auto; padding: 16px; border-top: 1px solid var(--border); }
+.sidebar-footer { margin-top: auto; padding: 16px; border-top: 1px solid var(--sb-line); }
 .user-card {
     display: flex; align-items: center; gap: 10px;
     padding: 10px 12px;
     border-radius: 10px;
-    background: var(--sand);
+    background: var(--sb-chip);
     text-decoration: none;
     transition: background .2s;
 }
@@ -138,8 +156,8 @@ body {
     font-size: 15px; font-weight: 600;
     flex-shrink: 0;
 }
-.user-info .name { color: var(--text-main); font-size: 13px; font-weight: 500; }
-.user-info .role-badge { font-size: 12px; color: var(--gold); letter-spacing: 0.5px; text-transform: uppercase; }
+.user-info .name { color: var(--sb-text-strong); font-size: 13px; font-weight: 500; }
+.user-info .role-badge { font-size: 12px; color: var(--gold-light); letter-spacing: 0.5px; text-transform: uppercase; }
 
 /* ── TOPBAR ──────────────────────────────────────────────── */
 .topbar {

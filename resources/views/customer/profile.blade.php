@@ -1,11 +1,11 @@
 @extends('layouts.customer')
 
-@section('title', 'My Profile — Villa Elena')
+@section('title', 'Settings — Villa Elena')
 
 @push('styles')
     <style>
         .main {
-            max-width: 640px;
+            max-width: 1000px;
         }
 
         .page-title {
@@ -347,69 +347,213 @@
             padding: 8px 0;
         }
 
-        .profile-tabs {
-            display: flex;
-            gap: 6px;
-            background: var(--sand);
-            border-radius: 12px;
-            padding: 5px;
-            margin-bottom: 24px;
+        /* ── Settings shell ───────────────────────────────────────────
+           Ang listahan sa kaliwa ang buong mapa ng pahina: nakikita
+           agad ang bawat bagay na pwedeng baguhin, naka-pangkat, nang
+           hindi kailangang buksan ang tatlong tab para malaman kung
+           ano ang nasa loob. Isang bagay lang ang nasa kanan. */
+        .settings-shell {
+            display: grid;
+            grid-template-columns: 264px minmax(0, 1fr);
+            gap: 28px;
+            align-items: start;
         }
 
-        .profile-tab-btn {
-            flex: 1;
+        .settings-rail {
+            background: #fff;
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            overflow: hidden;
+            position: sticky;
+            top: calc(var(--nav-h) + 24px);
+        }
+
+        .rail-head {
+            padding: 15px 20px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .rail-head h3 {
+            font-family: 'Playfair Display', serif;
+            font-size: 16px;
+            font-weight: 600;
+        }
+
+        .rail-group {
+            padding: 10px 0;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .rail-group:last-child {
+            border-bottom: none;
+        }
+
+        .rail-group-label {
+            font-size: 11px;
+            font-weight: 600;
+            letter-spacing: .9px;
+            text-transform: uppercase;
+            color: var(--muted);
+            padding: 4px 20px 6px;
+        }
+
+        .rail-item {
             display: flex;
             align-items: center;
-            justify-content: center;
-            gap: 7px;
-            padding: 10px 12px;
-            border: none;
-            border-radius: 9px;
+            gap: 10px;
+            width: 100%;
+            padding: 10px 20px;
             background: none;
-            color: var(--muted);
+            border: none;
+            border-left: 3px solid transparent;
             font-family: 'Jost', sans-serif;
-            font-size: 13px;
-            font-weight: 600;
+            font-size: 14px;
+            color: #374151;
+            text-align: left;
             cursor: pointer;
-            transition: all .2s;
+            transition: background .15s, color .15s;
+        }
+
+        .rail-item:hover {
+            background: var(--sand);
+            color: var(--stone);
+        }
+
+        .rail-item:focus-visible {
+            outline: 2px solid var(--gold);
+            outline-offset: -2px;
+        }
+
+        .rail-item.active {
+            background: #faf5ea;
+            color: var(--stone);
+            font-weight: 600;
+            border-left-color: var(--terracotta);
+        }
+
+        .rail-item i {
+            width: 18px;
+            font-size: 15px;
+            text-align: center;
+            color: var(--muted);
+        }
+
+        .rail-item.active i {
+            color: var(--terracotta);
+        }
+
+        .rail-item .chev {
+            margin-left: auto;
+            font-size: 12px;
+            color: var(--muted);
+        }
+
+        .rail-item.is-danger i {
+            color: #dc2626;
+        }
+
+        /* Ang mga bagay na iisang pindot lang — ang switch ay nasa
+           mismong listahan, hindi kailangang buksan ang panel. Ang
+           pangalan ay pindutan pa rin: doon nakatira ang paliwanag. */
+        .rail-row {
+            display: flex;
+            align-items: center;
+        }
+
+        .rail-row .rail-item {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .rail-row .rail-item span {
+            overflow: hidden;
+            text-overflow: ellipsis;
             white-space: nowrap;
         }
 
-        .profile-tab-btn.active {
-            background: #fff;
-            color: var(--stone);
-            box-shadow: 0 1px 4px rgba(0, 0, 0, .08);
+        .rail-row-switch {
+            display: flex;
+            align-items: center;
+            padding: 0 18px 0 6px;
         }
 
-        .profile-tab {
+        .settings-panel {
             display: none;
+            max-width: 660px;
         }
 
-        .profile-tab.active {
+        .settings-panel.active {
             display: block;
         }
 
+        /* Ang huling card sa loob ng panel ay walang kasunod — ang
+           24px na puwang sa ilalim nito ay nagpapalayo lang sa dulo
+           ng pahina. */
+        .settings-panel> :last-child {
+            margin-bottom: 0;
+        }
+
+        /* Nakikita lang sa telepono, kung saan pinapalitan ng panel
+           ang listahan. Sa desktop ay magkatabi silang dalawa, kaya
+           walang babalikan. */
+        .panel-back {
+            display: none;
+            align-items: center;
+            gap: 6px;
+            background: none;
+            border: none;
+            padding: 6px 2px;
+            margin-bottom: 12px;
+            font-family: 'Jost', sans-serif;
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--muted);
+            cursor: pointer;
+        }
+
+        .panel-back:hover {
+            color: var(--stone);
+        }
+
+        /* Isang bagay lang sa screen sa telepono. Walang lugar para sa
+           dalawang hanay, at ang salansanin sila ay nangangahulugang
+           lampasan ang buong listahan bago marating ang form na
+           binuksan mo. Kaya ang panel ang pumapalit sa listahan, at
+           ang "Settings" ang nagbabalik. */
+        @media (max-width:900px) {
+            .settings-shell {
+                grid-template-columns: minmax(0, 1fr);
+                gap: 0;
+            }
+
+            .settings-rail {
+                position: static;
+            }
+
+            .settings-shell[data-view="panel"] .settings-rail {
+                display: none;
+            }
+
+            .settings-shell[data-view="list"] .settings-panels {
+                display: none;
+            }
+
+            .panel-back {
+                display: inline-flex;
+            }
+
+            .settings-panel {
+                max-width: none;
+            }
+
+            /* 44px ang pinakamaliit na target na kayang tamaan ng daliri
+               nang hindi nagkakamali. */
+            .rail-item {
+                padding: 12px 20px;
+            }
+        }
+
         @media (max-width:560px) {
-
-            /* Dating `.profile-tab-btn span { display: none }` — tatlong hubad
-                   na icon ang naiiwan sa telepono (tao / kalasag / kampana), at
-                   walang paraan ang bisita para malaman kung alin ang alin.
-                   Lumiliit na lang ngayon ang teksto; ang ICON ang unang binibitiw
-                   sa pinakamakikipot na screen, hindi ang salita. */
-            .profile-tabs {
-                gap: 4px;
-                padding: 4px;
-            }
-
-            .profile-tab-btn {
-                gap: 5px;
-                padding: 9px 6px;
-                font-size: 12px;
-            }
-
-            .profile-tab-btn i {
-                font-size: 13px;
-            }
 
             .two-col {
                 grid-template-columns: 1fr;
@@ -434,46 +578,133 @@
             .toggle-switch {
                 margin-top: 2px;
             }
-        }
 
-        /* Sa ~360px pababa ay hindi na sabay kasya ang icon at ang salita sa
-               isang tab. Ang salita ang nananatili. */
-        @media (max-width:400px) {
-            .profile-tab-btn i {
-                display: none;
+            /* Ang switch sa listahan ay laging katabi ng pangalan; ang
+               `margin-top` sa itaas ay para sa mga nasa loob ng panel,
+               kung saan may paliwanag sa ibaba ng pangalan. */
+            .rail-row-switch .toggle-switch {
+                margin-top: 0;
             }
         }
     </style>
 @endpush
 
 @section('content')
-    <div class="page-title">My Profile</div>
+    <div class="page-title">Settings</div>
     <div class="page-sub" style="margin-bottom:20px;">Manage your account information and security</div>
 
     @if (session('success'))
         <div class="alert alert-success"><i class="bi bi-check-circle me-2"></i>{{ session('success') }}</div>
     @endif
 
-    @php $securityTabActive = $errors->twoFactor->any(); @endphp
+    {{-- Kung may bumalik na error, ang panel na pinanggalingan nito ang
+         dapat bumukas — kung hindi, nasa ibang panel ang mensahe at
+         hindi ito makikita ng bisita. Bawat form ay may sariling error
+         bag (`ProfileController`), kaya alam natin kung alin. --}}
+    @php
+        $openPanel = null;
+        if ($errors->twoFactor->any()) {
+            $openPanel = 'two-factor';
+        } elseif ($errors->updatePassword->any()) {
+            $openPanel = 'password';
+        } elseif ($errors->deactivate->any()) {
+            $openPanel = 'deactivate';
+        } elseif ($errors->getBag('default')->any()) {
+            $openPanel = 'profile';
+        }
+    @endphp
 
-    <div class="profile-tabs">
-        <button type="button" class="profile-tab-btn {{ $securityTabActive ? '' : 'active' }}"
-            onclick="showProfileTab('account', this)">
-            <i class="bi bi-person"></i> <span>Account</span>
-        </button>
-        <button type="button" class="profile-tab-btn {{ $securityTabActive ? 'active' : '' }}"
-            onclick="showProfileTab('security', this)">
-            <i class="bi bi-shield-lock"></i> <span>Security</span>
-        </button>
-        <button type="button" class="profile-tab-btn" onclick="showProfileTab('notifications', this)">
-            <i class="bi bi-bell"></i> <span>Notifications</span>
-        </button>
-    </div>
+    <div class="settings-shell" id="settingsShell" data-view="list" data-open="{{ $openPanel }}">
 
-    {{-- ═══════════════════════ ACCOUNT TAB ═══════════════════════ --}}
-    <div class="profile-tab {{ $securityTabActive ? '' : 'active' }}" id="ptab-account">
+        {{-- ── Ang listahan ─────────────────────────────────────────── --}}
+        <nav class="settings-rail" aria-label="Settings sections">
+            <div class="rail-head">
+                <h3>Settings</h3>
+            </div>
 
-        {{-- ── Profile Info ─────────────────────────────────────────── --}}
+            <div class="rail-group">
+                <div class="rail-group-label">Account</div>
+                <button type="button" class="rail-item" data-panel="profile">
+                    <i class="bi bi-person"></i> <span>Profile</span> <span class="chev">›</span>
+                </button>
+                <button type="button" class="rail-item" data-panel="password">
+                    <i class="bi bi-key"></i> <span>Change password</span> <span class="chev">›</span>
+                </button>
+                <button type="button" class="rail-item is-danger" data-panel="deactivate">
+                    <i class="bi bi-exclamation-triangle"></i> <span>Deactivate account</span> <span
+                        class="chev">›</span>
+                </button>
+            </div>
+
+            <div class="rail-group">
+                <div class="rail-group-label">Security</div>
+                <div class="rail-row">
+                    <button type="button" class="rail-item" data-panel="two-factor">
+                        <i class="bi bi-shield-lock"></i> <span>Two-factor login</span>
+                    </button>
+                    <div class="rail-row-switch">
+                        @if ($user->two_factor_enabled)
+                            {{-- Ang pagpatay nito ay humihingi ng password, kaya
+                                 hindi ito kayang tapusin ng switch mag-isa: ang
+                                 panel ang nagtatanong. Pinipigilan ng
+                                 `preventDefault()` ang switch na magmukhang
+                                 patay na gayong buhay pa. --}}
+                            <label class="toggle-switch" title="Turn off two-factor login">
+                                <input type="checkbox" checked aria-label="Two-factor login is on. Turn it off."
+                                    data-2fa-off>
+                                <span class="toggle-slider"></span>
+                            </label>
+                        @else
+                            <form method="POST" action="{{ route('customer.profile.2fa.toggle') }}" data-keep-panel>
+                                @csrf @method('PUT')
+                                <label class="toggle-switch" title="Turn on two-factor login">
+                                    <input type="checkbox" aria-label="Two-factor login is off. Turn it on."
+                                        onchange="this.form.submit()">
+                                    <span class="toggle-slider"></span>
+                                </label>
+                            </form>
+                        @endif
+                    </div>
+                </div>
+                @if ($user->two_factor_enabled)
+                    <button type="button" class="rail-item" data-panel="devices">
+                        <i class="bi bi-laptop"></i> <span>Trusted devices</span> <span class="chev">›</span>
+                    </button>
+                @endif
+                <button type="button" class="rail-item" data-panel="activity">
+                    <i class="bi bi-clock-history"></i> <span>Login activity</span> <span class="chev">›</span>
+                </button>
+            </div>
+
+            <div class="rail-group">
+                <div class="rail-group-label">Notifications</div>
+                <div class="rail-row">
+                    <button type="button" class="rail-item" data-panel="notifications">
+                        <i class="bi bi-envelope"></i> <span>Booking emails</span>
+                    </button>
+                    <div class="rail-row-switch">
+                        <form method="POST" action="{{ route('customer.profile.email-notifications') }}"
+                            data-keep-panel>
+                            @csrf @method('PUT')
+                            <label class="toggle-switch" title="Booking confirmation emails">
+                                <input type="checkbox" name="email_notifications_enabled" value="1"
+                                    aria-label="Booking confirmation emails"
+                                    {{ $user->email_notifications_enabled ? 'checked' : '' }}
+                                    onchange="this.form.submit()">
+                                <span class="toggle-slider"></span>
+                            </label>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </nav>
+
+        {{-- ── Ang binuksan ─────────────────────────────────────────── --}}
+        <div class="settings-panels">
+            <button type="button" class="panel-back" id="panelBack">‹ Settings</button>
+
+            {{-- ── Profile Info ─────────────────────────────────────── --}}
+            <div class="settings-panel" id="panel-profile">
         <form method="POST" action="{{ route('customer.profile.update') }}" enctype="multipart/form-data">
             @csrf
             @method('PUT')
@@ -563,9 +794,11 @@
                 </div>
             </div>
         </form>
+            </div>
 
-        {{-- ── Change Password ──────────────────────────────────────── --}}
-        <form method="POST" action="{{ route('customer.profile.password') }}">
+            {{-- ── Change Password ──────────────────────────────────── --}}
+            <div class="settings-panel" id="panel-password">
+                <form method="POST" action="{{ route('customer.profile.password') }}">
             @csrf
             @method('PUT')
             <div class="form-card">
@@ -602,9 +835,11 @@
                 </div>
             </div>
         </form>
+            </div>
 
-        {{-- ── Deactivate Account ───────────────────────────────────── --}}
-        <form method="POST" action="{{ route('customer.profile.deactivate') }}"
+            {{-- ── Deactivate Account ───────────────────────────────── --}}
+            <div class="settings-panel" id="panel-deactivate">
+                <form method="POST" action="{{ route('customer.profile.deactivate') }}"
             onsubmit="return confirm('Are you sure you want to deactivate your account? You will be logged out and unable to log back in until an admin reactivates it.');">
             @csrf
             @method('DELETE')
@@ -630,15 +865,11 @@
                 </div>
             </div>
         </form>
+            </div>
 
-    </div>
-    {{-- ═══════════════════════ END ACCOUNT TAB ═══════════════════════ --}}
-
-    {{-- ═══════════════════════ NOTIFICATIONS TAB ═══════════════════════ --}}
-    <div class="profile-tab" id="ptab-notifications">
-
-        {{-- ── Notifications ─────────────────────────────────────────── --}}
-        <div class="form-card">
+            {{-- ── Booking emails ───────────────────────────────────── --}}
+            <div class="settings-panel" id="panel-notifications">
+                <div class="form-card">
             <div class="form-card-head">
                 <i class="bi bi-envelope"></i>
                 <h3>Notifications</h3>
@@ -662,15 +893,11 @@
                 </form>
             </div>
         </div>
+            </div>
 
-    </div>
-    {{-- ═══════════════════════ END NOTIFICATIONS TAB ═══════════════════════ --}}
-
-    {{-- ═══════════════════════ SECURITY TAB ═══════════════════════ --}}
-    <div class="profile-tab {{ $securityTabActive ? 'active' : '' }}" id="ptab-security">
-
-        {{-- ── Security: 2FA + Trusted Devices + Login Activity ────────── --}}
-        <div class="form-card">
+            {{-- ── Two-Factor Authentication ────────────────────────── --}}
+            <div class="settings-panel" id="panel-two-factor">
+                <div class="form-card">
             <div class="form-card-head">
                 <i class="bi bi-fingerprint"></i>
                 <h3>Two-Factor Authentication</h3>
@@ -719,9 +946,12 @@
                 @endif
             </div>
         </div>
+            </div>
 
-        @if ($user->two_factor_enabled)
-            <div class="form-card">
+            {{-- ── Trusted Devices ──────────────────────────────────── --}}
+            @if ($user->two_factor_enabled)
+                <div class="settings-panel" id="panel-devices">
+                    <div class="form-card">
                 <div class="form-card-head">
                     <i class="bi bi-laptop"></i>
                     <h3>Trusted Devices</h3>
@@ -752,9 +982,12 @@
                     @endforelse
                 </div>
             </div>
-        @endif
+                </div>
+            @endif
 
-        <div class="form-card">
+            {{-- ── Recent Login Activity ────────────────────────────── --}}
+            <div class="settings-panel" id="panel-activity">
+                <div class="form-card">
             <div class="form-card-head">
                 <i class="bi bi-clock-history"></i>
                 <h3>Recent Login Activity</h3>
@@ -777,19 +1010,138 @@
                 @endforelse
             </div>
         </div>
+            </div>
 
-    </div>
-    {{-- ═══════════════════════ END SECURITY TAB ═══════════════════════ --}}
+        </div>{{-- .settings-panels --}}
+    </div>{{-- .settings-shell --}}
 @endsection
 
 @push('scripts')
     <script>
-        function showProfileTab(name, btn) {
-            document.querySelectorAll('.profile-tab').forEach(el => el.classList.remove('active'));
-            document.querySelectorAll('.profile-tab-btn').forEach(el => el.classList.remove('active'));
-            document.getElementById('ptab-' + name).classList.add('active');
-            btn.classList.add('active');
-        }
+        // ── Settings navigation ──────────────────────────────────────────
+        // Ang `location.hash` ang nag-iisang nagsasabi kung ano ang nakabukas.
+        // Dahil doon, ang likod na pindutan ng browser at ang pag-refresh ay
+        // parehong bumabalik sa parehong lugar nang walang dagdag na code —
+        // hindi kayang gawin iyon ng isang variable sa loob ng script.
+        (function() {
+            const shell = document.getElementById('settingsShell');
+            if (!shell) return;
+
+            const items = Array.from(shell.querySelectorAll('.rail-item[data-panel]'));
+            const keys = items.map(el => el.dataset.panel);
+            const FALLBACK = 'profile';
+            const LIST = 'settings';
+            const STORE = 've-settings-panel';
+
+            // Hindi lahat ng form ay nasa loob ng panel (nasa listahan ang
+            // dalawang switch), at ang sagot ng server ay isang redirect na
+            // hindi nagdadala ng `#hash`. Kaya inaalala kung saan tayo
+            // nanggaling, at minsan lang itong binabasa.
+            function remember(key) {
+                try {
+                    sessionStorage.setItem(STORE, key);
+                } catch (e) {
+                    /* private mode — hindi mahalaga, babalik lang sa Profile */
+                }
+            }
+
+            function recall() {
+                try {
+                    const key = sessionStorage.getItem(STORE);
+                    sessionStorage.removeItem(STORE);
+                    return key;
+                } catch (e) {
+                    return null;
+                }
+            }
+
+            function show(key, updateHash) {
+                if (keys.indexOf(key) === -1) key = FALLBACK;
+
+                shell.querySelectorAll('.settings-panel').forEach(panel => {
+                    panel.classList.toggle('active', panel.id === 'panel-' + key);
+                });
+                items.forEach(el => {
+                    const on = el.dataset.panel === key;
+                    el.classList.toggle('active', on);
+                    if (on) {
+                        el.setAttribute('aria-current', 'true');
+                    } else {
+                        el.removeAttribute('aria-current');
+                    }
+                });
+
+                shell.dataset.view = 'panel';
+                if (updateHash && location.hash.slice(1) !== key) location.hash = key;
+            }
+
+            function fromHash() {
+                const key = decodeURIComponent(location.hash.slice(1));
+
+                if (!key || key === LIST) {
+                    // Nananatiling pili ang isang panel para sa desktop, kung
+                    // saan laging may nasa kanan; sa telepono ay ang listahan
+                    // ang nasa harap.
+                    show(FALLBACK, false);
+                    shell.dataset.view = 'list';
+                    return;
+                }
+                show(key, false);
+            }
+
+            items.forEach(el => {
+                el.addEventListener('click', () => show(el.dataset.panel, true));
+            });
+
+            const back = document.getElementById('panelBack');
+            if (back) back.addEventListener('click', () => {
+                location.hash = LIST;
+            });
+
+            // Ang switch ng 2FA ay hindi kayang patayin ang sarili: password
+            // muna. Ang panel ang humihingi nito, kaya doon tayo dinadala —
+            // at bukas na agad ang form, dahil iyon ang hiniling ng pindot.
+            const offSwitch = shell.querySelector('[data-2fa-off]');
+            if (offSwitch) offSwitch.addEventListener('click', function(e) {
+                e.preventDefault();
+                show('two-factor', true);
+                const form = document.getElementById('disable2faForm');
+                if (form) {
+                    form.style.display = 'block';
+                    const field = form.querySelector('input[type="password"]');
+                    if (field) field.focus();
+                }
+            });
+
+            shell.querySelectorAll('form').forEach(form => {
+                form.addEventListener('submit', () => {
+                    const panel = form.closest('.settings-panel');
+                    if (panel) {
+                        remember(panel.id.replace('panel-', ''));
+                    } else if (form.hasAttribute('data-keep-panel')) {
+                        // Isang switch sa listahan — doon din tayo babalik.
+                        remember(LIST);
+                    }
+                });
+            });
+
+            window.addEventListener('hashchange', fromHash);
+
+            const forced = shell.dataset.open;
+            const recalled = recall();
+
+            if (!location.hash && forced) {
+                show(forced, true); // may error — dapat itong makita agad
+            } else if (!location.hash && recalled) {
+                if (recalled === LIST) {
+                    fromHash();
+                } else {
+                    show(recalled, true);
+                }
+            } else {
+                fromHash();
+            }
+        })();
 
         // ── Profile photo ────────────────────────────────────────────────
         // Ang pagpili ng file ay dapat may nakikitang kasagutan agad: ang

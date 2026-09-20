@@ -207,7 +207,9 @@ class BookingController extends Controller
         ]));
 
         if ($booking === null) {
-            return back()->withErrors(['check_in_date' => 'This villa is already booked for the selected date/slot.'])->withInput();
+            return back()->withErrors(['check_in_date' => Booking::unavailableMessage(
+                $request->property_id, $checkIn, 'This villa is already booked for the selected date/slot.', forStaff: true
+            )])->withInput();
         }
 
         $promo?->increment('used_count');

@@ -47,52 +47,69 @@ body {
 }
 
 /* ── SIDEBAR ── */
-/* Light/cream sidebar, mirroring admin's shell — the staff portal used
-   to have a dark navy rail, which was the most visible mismatch between
-   the two panels. */
+/* Dark rail, matching admin (admin.css `.sidebar`) and the logged-in
+   customer topnav (portal.css `.topnav`) — all three are --stone.
+
+   History, so this doesn't get "fixed" back by mistake: staff originally
+   had a dark NAVY rail, which was migrated to cream in v5.5 to match
+   admin's cream shell. In v7.15 admin's rail went dark --stone, so this
+   followed in v7.16. The rule that survived both moves is that staff and
+   admin match each other; the colour they match on is what changed.
+
+   The --sb-* tokens are declared ON .sidebar, not in :root, so they reach
+   every descendant without leaking into the topbar, cards or tables,
+   which stay light (--white / --bg). Sidebar text is a white alpha
+   because --muted/--text-main are dark warm tones built for a light
+   background and are illegible here. */
 .sidebar {
+    --sb-text: rgba(255, 255, 255, .55);   /* idle label, 5.8:1 on --stone */
+    --sb-text-strong: #fff;                /* hover / current user */
+    --sb-label: rgba(255, 255, 255, .5);   /* section headings, 5.0:1 */
+    --sb-line: rgba(255, 255, 255, .1);    /* hairlines; --border vanishes */
+    --sb-chip: rgba(255, 255, 255, .08);   /* hover */
+
     position: fixed; top: 0; left: 0; width: var(--sidebar-w); height: 100vh;
-    background: var(--cream); z-index: 100; display: flex; flex-direction: column;
-    border-right: 1px solid var(--border);
+    background: var(--stone); z-index: 100; display: flex; flex-direction: column;
+    border-right: 1px solid var(--sb-line);
 }
 .sidebar-brand {
-    padding: 22px 24px 18px; border-bottom: 1px solid var(--border);
+    padding: 22px 24px 18px; border-bottom: 1px solid var(--sb-line);
     text-decoration: none; display: block;
 }
-.brand-name { font-family: 'Playfair Display', serif; color: var(--text-main); font-size: 18px; font-weight: 700; }
-.brand-role { color: var(--muted); font-size: 13px; letter-spacing: 1px; text-transform: uppercase; margin-top: 2px; }
+.brand-name { font-family: 'Playfair Display', serif; color: var(--gold-light); font-size: 18px; font-weight: 700; }
+.brand-role { color: var(--sb-text); font-size: 13px; letter-spacing: 1px; text-transform: uppercase; margin-top: 2px; }
 .sidebar-nav { flex: 1; padding: 16px 12px; overflow-y: auto; }
 .nav-label {
-    font-size: 12px; color: var(--muted); text-transform: uppercase;
+    font-size: 12px; color: var(--sb-label); text-transform: uppercase;
     letter-spacing: 1.5px; padding: 10px 12px 6px; font-weight: 600;
 }
 .nav-item {
     display: flex; align-items: center; gap: 11px; padding: 10px 14px; border-radius: 9px;
-    color: var(--muted); text-decoration: none; font-size: 13.5px; font-weight: 500;
+    color: var(--sb-text); text-decoration: none; font-size: 13.5px; font-weight: 500;
     margin-bottom: 2px; transition: all .2s;
 }
-.nav-item:hover { background: var(--sand); color: var(--text-main); }
+.nav-item:hover { background: var(--sb-chip); color: var(--sb-text-strong); }
 .nav-item.active {
-    background: var(--sand); color: var(--terracotta);
-    border-left: 3px solid var(--terracotta); padding-left: 11px; font-weight: 600;
+    background: var(--gold-dim); color: var(--gold-light);
+    border-left: 3px solid var(--gold-light); padding-left: 11px; font-weight: 600;
 }
 .nav-item i { font-size: 16px; width: 20px; text-align: center; }
 .nav-badge {
-    margin-left: auto; background: var(--gold-dim); color: var(--gold);
+    margin-left: auto; background: rgba(184, 148, 63, .35); color: #fff;
     padding: 1px 8px; border-radius: 100px; font-size: 12px; font-weight: 700;
 }
 .nav-badge.red { background: var(--tag-red-bg); color: var(--tag-red-fg); }
-.sidebar-footer { margin-top: auto; padding: 16px 20px; border-top: 1px solid var(--border); }
+.sidebar-footer { margin-top: auto; padding: 16px 20px; border-top: 1px solid var(--sb-line); }
 .staff-info { display: flex; align-items: center; gap: 10px; }
 .staff-avatar {
     width: 34px; height: 34px; border-radius: 50%; background: var(--terracotta);
     color: #fff; display: flex; align-items: center; justify-content: center;
     font-weight: 700; font-size: 13px;
 }
-.staff-name { color: var(--text-main); font-size: 13px; font-weight: 500; }
-.staff-tag  { color: var(--muted); font-size: 13px; }
+.staff-name { color: var(--sb-text-strong); font-size: 13px; font-weight: 500; }
+.staff-tag  { color: var(--sb-text); font-size: 13px; }
 .logout-btn {
-    margin-left: auto; color: var(--muted); font-size: 18px;
+    margin-left: auto; color: var(--sb-text); font-size: 18px;
     text-decoration: none; transition: color .2s; background: none; border: none; cursor: pointer;
 }
 .logout-btn:hover { color: var(--terracotta); }

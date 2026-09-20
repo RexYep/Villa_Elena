@@ -491,7 +491,9 @@ class PortalController extends Controller
         ]));
 
         if ($booking === null) {
-            return back()->withErrors(['dates' => 'This selected date/slot is no longer available. Please choose another.'])->withInput();
+            return back()->withErrors(['dates' => Booking::unavailableMessage(
+                $property->id, $checkin, 'This selected date/slot is no longer available. Please choose another.'
+            )])->withInput();
         }
 
         // Atomic sa antas ng SQL (`used_count = used_count + 1`), kaya

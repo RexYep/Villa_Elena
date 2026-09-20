@@ -103,7 +103,9 @@ class BookingController extends Controller
         );
 
         if ($moved === null) {
-            return back()->withErrors(['dates' => 'Sorry, the Villa is not available on the selected date/slot.'])->withInput();
+            return back()->withErrors(['dates' => Booking::unavailableMessage(
+                $booking->property_id, $checkin, 'Sorry, the Villa is not available on the selected date/slot.'
+            )])->withInput();
         }
 
         // Panatilihing tapat ang bilang ng paggamit kapag lumipat ang

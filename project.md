@@ -1,12 +1,71 @@
 # Villa Elena Private Rental Resort
 ## Resort Management System — Project Documentation
 
-**Version:** 7.14
+**Version:** 7.17
 **Stack:** PHP 8.2 / Laravel 12 / MySQL 8 / Bootstrap 5
 **Local URL:** `http://127.0.0.1:8000` (`php artisan serve`) or `http://localhost:8000` (Docker — see v5.3)
 **Live URL:** `https://villa-elena.onrender.com` (Render, free tier — testing only, not yet handed to real guests)
 **Database (local):** `villa_elena_db` (MySQL, XAMPP or standalone MySQL — same database either way)
 **Database (live):** Aiven MySQL free tier, database `defaultdb`
+
+---
+
+## What Changed in v7.17 (Read This First)
+
+### Blocked dates were not blocking anything
+
+Reported from use: the admin blocks a date in Admin → Calendar, and the guest portal, the staff walk-in form and the admin's own Create Booking all still accept it.
+
+**One root cause, in one method.** `Booking::hasConflict()` queried only the `bookings` table and never looked at `availability_blocks`. Every booking path reaches it through `reserveSlot()`, so **no path anywhere enforced a block**. The only code in the whole system that read a block was `FrontDeskController::buildSlotGrid()`, with its own separate query, purely to draw the staff grid — which is exactly why staff could *see* "Blocked" and still book the slot: the grid and the guard were reading different sources. There was no safety net underneath either, because the `slot_hold` UNIQUE index is built from booking rows, not blocks.
+
+Measured before the fix, on a blocked date: `hasConflict()` returned false; the public price preview answered `available: true`; and the customer portal, the staff walk-in and the admin create form each **created a booking** — the guest one landing on the payment page.
+
+- **`AvailabilityBlock::scopeCoveringDate($propertyId, $date)`** is now the single predicate, and `hasConflict()` consults it first. Because `reserveSlot()` calls `hasConflict()` **inside its lock**, all seven paths (portal submit, admin create, staff walk-in, customer reschedule, calendar drag-move, extend stay) inherit the check from that one addition.
+- **Check-IN date is the test**, matching what the staff grid has always done (`$date->betweenIncluded(...)`). The grid and the guard must stay identical or the bug returns in miniature. A consequence worth knowing: blocking day D does **not** stop the Night slot of D−1, which merely ends at 6AM on D. Blocking a date closes both of that date's own slots.
+- **Hard block, by the owner's decision** — the admin cannot override it from the booking form. To book a blocked date, delete the block first. `extendStay()` is included: extending a checked-in guest into a blocked day is refused, since the extension claims new time on a closed day.
+- **Existing bookings are never touched.** Blocking a date that already holds a booking changes nothing about it; only *new* bookings and *moves* are refused. Verified.
+- **`Booking::blockOn()` returns the row, not a boolean,** because `reserveSlot()` answers NULL for two different situations and they cannot say the same thing to a person. "Already booked" on a date the admin deliberately closed sends staff hunting for a booking that does not exist. `Booking::unavailableMessage()` holds the wording for all five refusal sites so they can't drift — guests get "That date is not open for booking", staff and admin get the reason and where to remove it.
+
+### The calendar's block marker was invisible, and its click handler was dead
+
+Blocks *were* being sent to the calendar, as a single event with `display => 'background'`. FullCalendar never renders a title on a background event, so the reason was built and thrown away, and the only marker was a `#fee2e2` tint that is hard to see on a light calendar. Worse, background events are not clickable, so `eventClick`'s `type === 'block'` branch and the whole block-detail modal — including its Delete button — **could never be reached**.
+
+Each block is now **two** events: a labelled all-day bar (`🔒 Blocked — Maintenance`, solid red, carrying the `extendedProps` the modal needs) plus the day tint, now `#fecaca`. Both carry `extendedProps.type`, because the view's property/status filter reads that key off the raw JSON and would throw on an event without it.
+
+Verified with real requests through the kernel, inside rolled-back transactions (dev data unchanged — 75 bookings, 3 blocks, before and after): on a blocked date the customer portal, staff walk-in, admin create and customer reschedule are all refused with the right message, the price preview reports unavailable, and the staff grid still reads "Blocked"; on an open date all four **still create bookings normally**; a booking sitting on a newly blocked date is unchanged; the Night slot of the previous day stays bookable; and the calendar payload returns one labelled and one background event per block with no missing `extendedProps.type`. **Not verified in a browser:** how the new calendar bar actually looks, since logging in needs a password.
+
+---
+
+## What Changed in v7.16 (Read This First)
+
+### Staff sidebar repainted to match admin's
+
+Follow-up to v7.15: with admin's rail dark and staff's still cream, the two panels no longer matched — the exact problem v5.5 had fixed. `staff.css`'s `.sidebar` block now carries the same treatment, so the alignment rule holds again.
+
+- Same `--sb-*` tokens, declared on `.sidebar` for the same reason (they must not leak into the staff topbar or cards, which stay light). Same `--stone` surface, same `--gold-light` on `--gold-dim` active item, same white-alpha text ramp. `--terracotta` again survives in exactly one place — the staff avatar.
+- **One rule needed a different answer from admin's.** `.nav-badge` was `--gold` text on a `--gold-dim` background, but the active row is *itself* `--gold-dim`, so the badge would have vanished on precisely the item you are looking at. It is now `#fff` on `rgba(184,148,63,.35)`, which reads on both the plain rail and the active row. Checked in the browser with the Frontdesk item active and a count showing — this is the one thing the admin change didn't have to solve, since admin's count badge is solid red.
+- `.nav-badge.red` is unchanged: a light red chip on a dark rail is loud on purpose.
+- The comment block above `.sidebar` now records the whole history (navy → cream in v5.5 → stone in v7.16) so the cream state doesn't get restored by someone reading only the old note.
+
+Verified in a real browser against the built CSS, using the actual sidebar markup extracted from `layouts/staff.blade.php` and rendered as a throwaway page (logging in needs a password): brand, section label, idle items, the active item with its badge, and the footer user row were each inspected; the content surface stayed light. The preview file was deleted afterwards.
+
+---
+
+## What Changed in v7.15 (Read This First)
+
+### Admin sidebar repainted to the customer topnav's brown
+
+Owner's call: the admin rail should be the same colour as the logged-in customer navigation, not cream.
+
+- **No new colours were invented.** The rail is `--stone` (#2c2416) — the exact token `portal.css`'s `.topnav` uses. The wordmark and the active item are `--gold-light` on `--gold-dim`, which is literally the pair `.nav-link-item.active` uses on the customer side, so the two shells can't drift apart. Idle label → hover is `rgba(255,255,255,.55)` → `#fff`, again matching the customer nav.
+- **`--terracotta` survives in exactly one place:** the active item's icon tile. It is admin's identity colour and the single warm accent against the gold; as *text* on `--stone` it only reaches 3.95:1, which is why the active label itself is gold (7.2:1) rather than terracotta.
+- **The `--sb-*` tokens are declared on `.sidebar`, not in `:root`.** They cascade to every descendant but cannot leak into the topbar, cards or tables, which stay light (`--cream` / `--sand`). Changing `--cream` itself would have repainted the topbar too — that is the trap this avoids.
+- **Every rule inside the rail had to move, not just the background.** `--muted`, `--text-main`, `--border` and `--sand` are all light-background tones; left alone, the section labels, nav labels, icon tiles, hairlines and user card would have been illegible or would have punched light blocks into the dark rail. All six affected classes (`nav-item-custom`, `nav-icon`, `nav-count`, `user-card`, `user-info`, `sidebar-section-label`) are used **only** in `admin/partials/sidebar.blade.php`, so nothing outside the rail was touched.
+- Contrast on `--stone`: idle label 5.8:1, section heading 5.0:1, active label 7.2:1, user name 15.9:1 — all above 4.5:1.
+
+**This briefly left the staff rail cream** — the same mismatch v5.5 had removed, in reverse. Closed in v7.16, below.
+
+Verified in a real browser against the built CSS (a throwaway page rendering the actual sidebar partial, since logging in requires a password): brand, section labels, idle items, the active item with its badge, and the user card were each inspected; the content surface stayed light. The preview files were deleted afterwards.
 
 ---
 
@@ -2245,7 +2304,7 @@ The refund tier reads `checkInDateTime()` (the *new* date), so one reschedule tu
 | "Properties" tab | One card per property row — so three blank cards, since those room records have `property_name = NULL` since v5.0 | Removed. Superseded by the Villa strip and the new Availability page |
 | Slot availability | **Did not exist anywhere.** The admin calendar is `check_in_date`→`check_out_date` based and therefore **slot-blind** — a Day booking and a Night booking on the same date look identical, so you can't tell which half of the day is free without clicking each event. The walk-in form did no availability check at all until submit | New **Availability page** (own sidebar item, `/staff/availability`) — a 14-day slot grid, Day and Night per row, four states (Available / Booked / Blocked / Passed). Clicking a free slot opens the walk-in form pre-filled with that date and slot |
 | Housekeeping | Task shows a due **date** only. Nothing ever closed the loop: check-in creates the task, auto-checkout flips it to `in_progress`, and "Complete" is manual — buried in a tab. Result: **11 of 13 open tasks overdue** (worst: 48 days), 6 stuck in `in_progress` | Each task now shows its **real deadline** — the *next check-in time* — because the turnaround between slots is only 2 hours (5PM→7PM, 6AM→8AM). A colour-coded banner sits at the top of the frontdesk with a one-click **Mark cleaned**. Checkout's success message now names the deadline instead of saying "task activated" |
-| Theme | Its own navy/gold palette, dark sidebar | Same stone/terracotta earth theme as admin, cream sidebar. This was never really a design decision — **admin used to be navy too** and was migrated to the earth palette; staff simply never got migrated with it |
+| Theme | Its own navy/gold palette, dark sidebar | Same stone/terracotta earth theme as admin, cream sidebar. This was never really a design decision — **admin used to be navy too** and was migrated to the earth palette; staff simply never got migrated with it. *(Both rails went dark --stone in v7.15/v7.16. The rule that survived every move is that staff matches admin; only the colour they match on changed.)* |
 
 `buildSlotGrid()` deliberately calls `Booking::hasConflict()` per slot rather than writing its own overlap query, so the grid and the actual booking rules can never disagree — including expired unpaid holds freeing up automatically.
 
@@ -4192,7 +4251,7 @@ DELETE /my/profile/devices/{device}           customer.profile.devices.destroy  
 | 65 | **(v5.5)** Staff Availability Page — 14-day Day/Night slot grid with walk-in prefill | ✅ Complete |
 | 66 | **(v5.5)** Frontdesk Single-Villa Rework (Villa status strip; removed misleading unit counters) | ✅ Complete |
 | 67 | **(v5.5)** Housekeeping Deadlines + Cleaning Banner + Backlog Cleared (13 → 5) | ✅ Complete |
-| 68 | **(v5.5)** Staff Portal Theme Aligned to Admin (earth palette, cream sidebar) | ✅ Complete |
+| 68 | **(v5.5)** Staff Portal Theme Aligned to Admin (earth palette, cream sidebar — both rails later went dark --stone in v7.15/v7.16, still aligned) | ✅ Complete |
 | 69 | **(v5.5)** Public Portal Polish (social contact rows, reviewer avatars, dashboard CTA fix) | ✅ Complete |
 | 70 | **(v5.6)** Refund Lifecycle Notifications (guest cancel, refund approved, refund sent) | ✅ Complete |
 | 71 | **(v5.6)** PayMongo Webhook Signature Verification Fixed | ✅ Complete |

@@ -566,6 +566,23 @@ class Booking extends Model
         \Carbon\Carbon $newCheckOut,
         ?int $excludeBookingId = null
     ): bool {
+        // Ang admin block (Admin → Calendar → Block Dates) ay
+        // hinaharangan DITO, hindi sa bawat controller. Lahat ng
+        // gumagawa o lumilipat ng booking ay dumadaan sa reserveSlot(),
+        // at ang reserveSlot() ay tumatawag nito sa loob ng lock nito —
+        // kaya iisang dagdag ang sumasakop sa lahat ng pitong daanan.
+        //
+        // Bago ito (v7.17), ang `availability_blocks` ay binabasa LAMANG
+        // ng staff availability grid, at pang-DISPLAY lang. Ibig sabihin
+        // nakikita ni staff ang "Blocked" habang tinatanggap pa rin ng
+        // LAHAT ng booking path ang petsa — pati ang public portal, kaya
+        // nakakapag-book ang guest sa isang petsang ipinasara ng admin.
+        // Walang nakakasalo nito sa ilalim: ang `slot_hold` UNIQUE index
+        // ay gawa sa datos ng booking, hindi ng block.
+        if (static::blockOn($propertyId, $newCheckIn) !== null) {
+            return true;
+        }
+
         $query = static::where('property_id', $propertyId)
             ->whereNotIn('status', ['cancelled', 'no_show'])
             // Anti-abuse: mga "pending" (unpaid) booking na lumagpas na sa
@@ -596,6 +613,48 @@ class Booking extends Model
         }
 
         return false;
+    }
+
+    /**
+     * Ang admin block na sumasaklaw sa check-in date na ito, kung meron.
+     *
+     * Ibinabalik ang mismong ROW, hindi boolean, dahil dalawa ang
+     * kailangan sa kanya: ang desisyon (hasConflict) at ang DAHILAN na
+     * ipinapakita sa tao. Pareho ang NULL na sagot ng reserveSlot() sa
+     * "nakuha na ng iba" at sa "ipinasara ng admin", pero hindi
+     * puwedeng pareho ang sasabihin — ang "naka-book na" sa isang
+     * sadyang ipinasarang petsa ay nagpapahanap kay staff ng isang
+     * booking na wala naman.
+     */
+    public static function blockOn(int $propertyId, \Carbon\Carbon $checkIn): ?AvailabilityBlock
+    {
+        return AvailabilityBlock::coveringDate($propertyId, $checkIn)->first();
+    }
+
+    /**
+     * Mensaheng nakikita ng tao kapag tinanggihan ang slot.
+     *
+     * Iisang lugar para hindi mag-drift ang limang call site ng
+     * reserveSlot(); ipinapasa ng caller ang sarili nitong "nakuha na"
+     * na pananalita, dahil magkaiba ang tono ng guest at ng staff.
+     */
+    public static function unavailableMessage(
+        int $propertyId,
+        \Carbon\Carbon $checkIn,
+        string $takenMessage,
+        bool $forStaff = false
+    ): string {
+        $block = static::blockOn($propertyId, $checkIn);
+
+        if (! $block) {
+            return $takenMessage;
+        }
+
+        $reason = ucfirst(str_replace('_', ' ', $block->reason));
+
+        return $forStaff
+            ? "That date is blocked ({$reason}) and cannot be booked. An admin can remove the block in Calendar → Blocked Dates."
+            : 'That date is not open for booking. Please choose another date.';
     }
 
     // ── Atomic Slot Reservation ─────────────────────────────────────
