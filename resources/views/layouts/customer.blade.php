@@ -60,54 +60,9 @@
         }
     </style>
 </head>
-<body>
+<body class="cust-shell">
 
-<nav class="topnav">
-    <a href="{{ route('customer.home') }}" class="nav-brand">Villa Elena <span>Resort</span></a>
-    <div class="nav-links" id="accountNavLinks">
-        <a href="{{ route('customer.home') }}" class="nav-link-item {{ request()->routeIs('customer.home') ? 'active' : '' }}">Dashboard</a>
-        <a href="{{ route('customer.bookings') }}" class="nav-link-item {{ request()->routeIs('customer.bookings*') ? 'active' : '' }}">My Bookings</a>
-        <a href="{{ route('customer.notifications') }}" class="nav-link-item {{ request()->routeIs('customer.notifications') ? 'active' : '' }}">Notifications</a>
-        <a href="{{ route('customer.reviews.index') }}" class="nav-link-item {{ request()->routeIs('customer.reviews.*') ? 'active' : '' }}">My Reviews</a>
-        <a href="{{ route('customer.payments.index') }}" class="nav-link-item {{ request()->routeIs('customer.payments.*') ? 'active' : '' }}">Payments</a>
-        <a href="{{ route('customer.profile.edit') }}" class="nav-link-item {{ request()->routeIs('customer.profile.*') ? 'active' : '' }}">Settings</a>
-        <form method="POST" action="{{ route('logout') }}" class="nav-link-mobile-signout">
-            @csrf
-            <button type="submit" class="nav-link-item" style="width:100%;text-align:left;background:none;border:none;cursor:pointer;">Sign out</button>
-        </form>
-    </div>
-    <div class="nav-right">
-        <a href="{{ route('customer.notifications') }}" class="notif-btn" id="notifBellLink">
-            <i class="bi bi-bell"></i>
-            @isset($unreadNotifications)
-                @if($unreadNotifications->count() > 0)
-                    <span class="notif-dot" id="notifDot"></span>
-                @endif
-            @endisset
-        </a>
-        <a href="{{ route('customer.profile.edit') }}" class="user-pill" style="text-decoration:none;">
-            @if(Auth::user()->profile_image)
-                <img src="{{ Auth::user()->profile_image_url }}" alt="Avatar" class="user-avatar" style="object-fit:cover;">
-            @else
-                <div class="user-avatar">{{ strtoupper(substr(Auth::user()->full_name, 0, 1)) }}</div>
-            @endif
-            <span class="user-name">{{ explode(' ', Auth::user()->full_name)[0] }}</span>
-        </a>
-        {{-- Walang inline na `display:inline` dito: ang media query na},
-  q{             nagtatago nito sa telepono ay natatalo ng inline style, kaya},
-  q{             nananatiling nakasiksik ang "Sign out" sa topbar kahit nasa},
-  q{             hamburger menu na ito. Ang klase ang humahawak ng display. --}}
-        <form method="POST" action="{{ route('logout') }}" class="nav-logout-form">
-            @csrf
-            <button type="submit" style="background:none;border:none;cursor:pointer;padding:0;">
-                <span class="logout-link">Sign out</span>
-            </button>
-        </form>
-        <button type="button" class="nav-hamburger" id="accountNavToggle" aria-label="Toggle menu" aria-expanded="false">
-            <i class="bi bi-list"></i>
-        </button>
-    </div>
-</nav>
+@include('customer.partials.sidebar')
 
 <main class="main">
 @yield('content')
@@ -178,12 +133,24 @@
     }
 
     channel.bind('notification.created', function () {
+        // Ang kampana ay nasa bar ng telepono lang; ang bilang ay nasa
+        // sidebar. Alinman sa dalawa ang nakikita, depende sa lapad —
+        // kaya pareho silang ina-update, at wala ring reklamo kung wala
+        // ang isa sa kanila.
         const link = document.getElementById('notifBellLink');
         if (link && !document.getElementById('notifDot')) {
             const dot = document.createElement('span');
             dot.className = 'notif-dot';
             dot.id = 'notifDot';
             link.appendChild(dot);
+        }
+
+        const count = document.getElementById('custNavUnread');
+        if (count) {
+            const current = parseInt(count.textContent, 10);
+            const next = (count.hidden || isNaN(current)) ? 1 : current + 1;
+            count.textContent = next > 99 ? '99+' : next;
+            count.hidden = false;
         }
     });
 })();
