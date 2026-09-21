@@ -1179,16 +1179,60 @@
             padding: 80px 40px;
         }
 
+        /* Prev/next live in the header row, level with the heading, so the
+           photo itself stays clear of controls. */
+        .gallery-controls {
+            display: flex;
+            gap: 12px;
+            flex-shrink: 0;
+        }
+
+        .gallery-nav {
+            width: 46px;
+            height: 46px;
+            border: none;
+            border-radius: 50%;
+            display: grid;
+            place-items: center;
+            font-size: 18px;
+            line-height: 1;
+            cursor: pointer;
+            transition: background 0.25s ease, transform 0.25s ease;
+        }
+
+        .gallery-nav.prev {
+            background: var(--cream);
+            color: var(--stone);
+            box-shadow: 0 12px 24px -14px rgba(44, 36, 22, 0.5);
+        }
+
+        .gallery-nav.prev:hover {
+            background: #fff;
+            transform: translateY(-2px);
+        }
+
+        .gallery-nav.next {
+            background: var(--gold);
+            color: #fff;
+            box-shadow: 0 12px 24px -14px rgba(184, 148, 63, 0.9);
+        }
+
+        .gallery-nav.next:hover {
+            background: var(--gold-light);
+            transform: translateY(-2px);
+        }
+
         /* One photo at a time, auto-advancing slideshow */
         .gallery-slideshow {
             position: relative;
-            margin: 44px auto 0;
-            max-width: 820px;
             aspect-ratio: 16 / 9;
-            border-radius: 20px;
+            /* Full-width 16:9 is ~675px tall, more than a laptop screen shows
+               under the nav; cap it so photo, caption and dots fit at once. */
+            max-height: 76vh;
+            border-radius: 32px;
             overflow: hidden;
             background: var(--stone);
-            box-shadow: 0 20px 50px rgba(44, 36, 22, 0.18);
+            box-shadow: 0 30px 50px -34px rgba(44, 36, 22, 0.6);
         }
 
         .gallery-slide {
@@ -1196,8 +1240,8 @@
             inset: 0;
             opacity: 0;
             visibility: hidden;
-            cursor: pointer;
-            transition: opacity 1s ease, visibility 1s ease;
+            cursor: zoom-in;
+            transition: opacity 0.7s ease-out, visibility 0.7s ease-out;
         }
 
         .gallery-slide.active {
@@ -1206,170 +1250,132 @@
             z-index: 1;
         }
 
+        /* Each photo settles in from a slight zoom while it is on screen.
+           4.5s against the 5s interval, so it finishes before the next cut. */
         .gallery-slide img {
             width: 100%;
             height: 100%;
             object-fit: cover;
             display: block;
+            transform: scale(1.06);
+            transition: transform 4.5s ease-out;
         }
 
         .gallery-slide.active img {
-            animation: galleryKenBurns 6s ease-out forwards;
-        }
-
-        @keyframes galleryKenBurns {
-            from {
-                transform: scale(1);
-            }
-
-            to {
-                transform: scale(1.07);
-            }
+            transform: scale(1);
         }
 
         .gallery-overlay {
             position: absolute;
             inset: 0;
-            background: linear-gradient(to top, rgba(44, 36, 22, 0.72), rgba(44, 36, 22, 0.05) 55%, transparent);
-            display: flex;
-            align-items: flex-end;
-            padding: 32px 34px 46px;
             z-index: 2;
             pointer-events: none;
+            display: flex;
+            align-items: flex-end;
+            padding: 32px;
+            background: linear-gradient(to top,
+                    rgba(44, 36, 22, 0.62) 0%,
+                    rgba(44, 36, 22, 0.12) 45%,
+                    transparent 70%);
+        }
+
+        .gallery-count {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 999px;
+            background: rgba(253, 251, 247, 0.85);
+            color: var(--stone);
+            font-size: 12px;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+            font-variant-numeric: tabular-nums;
         }
 
         .gallery-caption {
-            color: #fff;
+            margin-top: 12px;
             font-family: 'Playfair Display', serif;
-            font-size: 22px;
-            font-weight: 500;
-            letter-spacing: 0.4px;
-            text-shadow: 0 2px 14px rgba(0, 0, 0, 0.35);
-        }
-
-        .gallery-nav {
-            position: absolute;
-            top: 50%;
-            transform: translateY(-50%);
-            width: 46px;
-            height: 46px;
-            border: none;
-            border-radius: 50%;
-            background: rgba(253, 251, 247, 0.86);
-            color: var(--stone);
-            font-size: 20px;
-            line-height: 1;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            cursor: pointer;
-            z-index: 3;
-            transition: background 0.3s ease, color 0.3s ease;
-        }
-
-        .gallery-nav:hover {
-            background: var(--gold);
+            font-size: clamp(22px, 2.6vw, 32px);
+            font-weight: 600;
+            line-height: 1.15;
             color: #fff;
         }
 
-        .gallery-nav.prev {
-            left: 20px;
+        .gallery-desc {
+            margin: 6px 0 0;
+            max-width: 44ch;
+            font-size: 14.5px;
+            font-weight: 300;
+            line-height: 1.55;
+            color: rgba(255, 255, 255, 0.86);
         }
 
-        .gallery-nav.next {
-            right: 20px;
-        }
-
+        /* Dots sit under the frame; the current one stretches into a pill. */
         .gallery-dots {
-            position: absolute;
-            left: 0;
-            right: 0;
-            bottom: 22px;
+            margin-top: 22px;
             display: flex;
             justify-content: center;
-            gap: 9px;
-            z-index: 3;
+            gap: 8px;
         }
 
         .gallery-dot {
-            width: 9px;
-            height: 9px;
+            width: 10px;
+            height: 10px;
             padding: 0;
             border: none;
-            border-radius: 50%;
-            background: rgba(255, 255, 255, 0.5);
+            border-radius: 999px;
+            background: rgba(44, 36, 22, 0.15);
             cursor: pointer;
-            transition: width 0.35s ease, background 0.35s ease, border-radius 0.35s ease;
+            transition: width 0.3s ease, background 0.3s ease;
+        }
+
+        .gallery-dot:hover {
+            background: rgba(44, 36, 22, 0.3);
         }
 
         .gallery-dot.active {
-            width: 26px;
-            border-radius: 6px;
+            width: 32px;
             background: var(--gold);
         }
 
-        .gallery-progress {
-            position: absolute;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            height: 3px;
-            background: rgba(255, 255, 255, 0.18);
-            z-index: 3;
+        .gallery-nav:focus-visible,
+        .gallery-dot:focus-visible {
+            outline: 2px solid var(--gold);
+            outline-offset: 3px;
         }
 
-        .gallery-progress span {
-            display: block;
-            width: 0;
-            height: 100%;
-            background: var(--gold);
-        }
+        @media (max-width: 768px) {
 
-        .gallery-progress span.run {
-            animation: galleryProgress linear forwards;
-        }
-
-        @keyframes galleryProgress {
-            from {
-                width: 0;
+            /* `#gallery .section` outranks the shared ≤768px `.section`
+               rule, so the gallery kept its 40px desktop gutter on phones
+               and the frame shrank to ~260px. */
+            #gallery .section {
+                padding: 64px 20px;
             }
 
-            to {
-                width: 100%;
-            }
-        }
-
-        @media (max-width: 900px) {
             .gallery-slideshow {
-                aspect-ratio: 3 / 2;
-            }
-        }
-
-        @media (max-width: 600px) {
-            .gallery-slideshow {
-                border-radius: 18px;
+                aspect-ratio: 16 / 10;
+                border-radius: 24px;
             }
 
             .gallery-overlay {
-                padding: 22px 22px 40px;
+                padding: 20px;
             }
 
-            .gallery-caption {
-                font-size: 17px;
+            .gallery-desc {
+                font-size: 13px;
+            }
+        }
+
+        /* 16:10 at phone width leaves ~220px of height, too little for the
+           pill, title and description together. */
+        @media (max-width: 480px) {
+            .gallery-slideshow {
+                aspect-ratio: 4 / 3;
+                border-radius: 20px;
             }
 
-            .gallery-nav {
-                width: 38px;
-                height: 38px;
-                font-size: 17px;
-            }
-
-            .gallery-nav.prev {
-                left: 10px;
-            }
-
-            .gallery-nav.next {
-                right: 10px;
+            .gallery-overlay {
+                padding: 16px;
             }
         }
 
@@ -2643,10 +2649,13 @@
             }
 
             .hero-glow,
-            .hero-scroll,
-            .gallery-slide.active img,
-            .gallery-progress span.run {
+            .hero-scroll {
                 animation: none;
+            }
+
+            .gallery-slide img,
+            .gallery-slide.active img {
+                transform: none;
             }
 
             *,
@@ -3175,48 +3184,85 @@
                     <p class="section-desc reveal reveal-delay-2">A glimpse into the beauty that awaits you at Villa Elena.
                     </p>
                 </div>
+                <div class="gallery-controls">
+                    <button type="button" class="gallery-nav prev" aria-controls="gallerySlideshow"
+                        aria-label="Previous photo"><i class="bi bi-chevron-left"></i></button>
+                    <button type="button" class="gallery-nav next" aria-controls="gallerySlideshow"
+                        aria-label="Next photo"><i class="bi bi-chevron-right"></i></button>
+                </div>
             </div>
 
             @php
                 $galleryShots = [
-                    ['src' => 'images/view-12.jpg', 'alt' => 'Night view of the villa', 'caption' => 'Night View'],
-                    ['src' => 'images/view-inside.jpg', 'alt' => 'Inside view', 'caption' => 'Inside View'],
-                    ['src' => 'images/kitchen1.png', 'alt' => 'Kitchen area', 'caption' => 'Kitchen Area'],
+                    [
+                        'src' => 'images/view-12.jpg',
+                        'alt' => 'Night view of the villa',
+                        'caption' => 'Night View',
+                        'desc' => 'The  outstanding view of resort at night .',
+                    ],
+                    [
+                        'src' => 'images/view-inside.jpg',
+                        'alt' => 'Inside view',
+                        'caption' => 'Inside View',
+                        'desc' => 'Shaded tables beside the pool, with a slide for the kids and the rooms a few steps away.',
+                    ],
+                    [
+                        'src' => 'images/kitchen1.png',
+                        'alt' => 'Kitchen area',
+                        'caption' => 'Kitchen Area',
+                        'desc' => 'A double sink, two-burner gas stove and refrigerator for cooking your own meals.',
+                    ],
                     [
                         'src' => 'images/pool2.jpg',
                         'alt' => 'Resort pool view',
                         'caption' => 'Panoramic Resort Pool View',
+                        'desc' => 'The main pool and its slide, with the raised kiddie pool at the far end.',
                     ],
-                    ['src' => 'images/terrace1.png', 'alt' => 'Terrace', 'caption' => 'Terrace'],
-                    ['src' => 'images/karaoke2.jpeg', 'alt' => 'Karaoke room', 'caption' => 'Karaoke'],
-                    ['src' => 'images/images10.jpg', 'alt' => 'Dining area', 'caption' => 'Dining Area'],
+                    [
+                        'src' => 'images/terrace1.png',
+                        'alt' => 'Terrace',
+                        'caption' => 'Terrace',
+                        'desc' => 'A covered sitting area with a wooden sofa set, out of the sun.',
+                    ],
+                    [
+                        'src' => 'images/karaoke2.jpeg',
+                        'alt' => 'Karaoke room',
+                        'caption' => 'Karaoke',
+                        'desc' => 'The in-house videoke, with speakers and a songbook ready to go.',
+                    ],
+                    [
+                        'src' => 'images/images10.jpg',
+                        'alt' => 'Dining area',
+                        'caption' => 'Dining Area',
+                        'desc' => 'One long table under the woven lamps, with seats for the whole group.',
+                    ],
                 ];
+                $galleryTotal = str_pad(count($galleryShots), 2, '0', STR_PAD_LEFT);
             @endphp
 
-            <div class="gallery-slideshow" id="gallerySlideshow" data-interval="2500">
+            <div class="gallery-slideshow" id="gallerySlideshow" data-interval="5000">
                 @foreach ($galleryShots as $i => $shot)
                     <div class="gallery-slide{{ $i === 0 ? ' active' : '' }}" onclick="openLightbox(this)">
                         <img src="{{ asset($shot['src']) }}" alt="{{ $shot['alt'] }}" loading="lazy"
                             decoding="async">
                         <div class="gallery-overlay">
-                            <div class="gallery-caption">{{ $shot['caption'] }}</div>
+                            <div>
+                                <span class="gallery-count">{{ str_pad($i + 1, 2, '0', STR_PAD_LEFT) }} /
+                                    {{ $galleryTotal }}</span>
+                                <div class="gallery-caption">{{ $shot['caption'] }}</div>
+                                <p class="gallery-desc">{{ $shot['desc'] }}</p>
+                            </div>
                         </div>
                     </div>
                 @endforeach
+            </div>
 
-                <button type="button" class="gallery-nav prev" aria-label="Previous photo"><i
-                        class="bi bi-chevron-left"></i></button>
-                <button type="button" class="gallery-nav next" aria-label="Next photo"><i
-                        class="bi bi-chevron-right"></i></button>
-
-                <div class="gallery-dots">
-                    @foreach ($galleryShots as $i => $shot)
-                        <button type="button" class="gallery-dot{{ $i === 0 ? ' active' : '' }}"
-                            aria-label="Show {{ $shot['caption'] }}"></button>
-                    @endforeach
-                </div>
-
-                <div class="gallery-progress"><span></span></div>
+            <div class="gallery-dots">
+                @foreach ($galleryShots as $i => $shot)
+                    <button type="button" class="gallery-dot{{ $i === 0 ? ' active' : '' }}"
+                        aria-controls="gallerySlideshow" aria-label="Show {{ $shot['caption'] }}"
+                        @if ($i === 0) aria-current="true" @endif></button>
+                @endforeach
             </div>
         </div>
     </section>
@@ -3650,14 +3696,16 @@
 
         document.querySelectorAll('.reveal').forEach(el => observer.observe(el));
 
-        /* ── Gallery slideshow (one photo at a time) ── */
+        /* ── Gallery slideshow (one photo at a time) ──
+           Prev/next sit in the section header and the dots under the frame,
+           so they're looked up on the section, not inside the stage. */
         const gallerySlideshow = (function() {
+            const section = document.getElementById('gallery');
             const stage = document.getElementById('gallerySlideshow');
-            if (!stage) return null;
+            if (!section || !stage) return null;
 
             const slides = Array.from(stage.querySelectorAll('.gallery-slide'));
-            const dots = Array.from(stage.querySelectorAll('.gallery-dot'));
-            const bar = stage.querySelector('.gallery-progress span');
+            const dots = Array.from(section.querySelectorAll('.gallery-dot'));
             const delay = parseInt(stage.dataset.interval, 10) || 5000;
             if (slides.length < 2) return null;
 
@@ -3665,47 +3713,33 @@
             let timer = null;
             let inView = true;
 
-            if (bar) bar.style.animationDuration = delay + 'ms';
-
             function show(index) {
                 const next = (index + slides.length) % slides.length;
                 if (next === current) return;
                 slides[current].classList.remove('active');
                 dots[current].classList.remove('active');
+                dots[current].removeAttribute('aria-current');
                 current = next;
                 slides[current].classList.add('active');
                 dots[current].classList.add('active');
+                dots[current].setAttribute('aria-current', 'true');
                 play();
             }
 
             function stop() {
                 clearTimeout(timer);
                 timer = null;
-                if (bar) bar.classList.remove('run');
             }
 
             function play() {
                 stop();
                 if (!inView) return;
-                if (bar) {
-                    void bar.offsetWidth; // reflow so the bar animation replays
-                    bar.classList.add('run');
-                }
                 timer = setTimeout(() => show(current + 1), delay);
             }
 
-            stage.querySelector('.gallery-nav.prev').addEventListener('click', e => {
-                e.stopPropagation();
-                show(current - 1);
-            });
-            stage.querySelector('.gallery-nav.next').addEventListener('click', e => {
-                e.stopPropagation();
-                show(current + 1);
-            });
-            dots.forEach((dot, i) => dot.addEventListener('click', e => {
-                e.stopPropagation();
-                show(i);
-            }));
+            section.querySelector('.gallery-nav.prev').addEventListener('click', () => show(current - 1));
+            section.querySelector('.gallery-nav.next').addEventListener('click', () => show(current + 1));
+            dots.forEach((dot, i) => dot.addEventListener('click', () => show(i)));
 
             stage.addEventListener('mouseenter', stop);
             stage.addEventListener('mouseleave', play);
