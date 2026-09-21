@@ -51,6 +51,7 @@ Route::prefix('my')
 
     Route::get('profile',          [ProfileController::class, 'edit'])->name('profile.edit');
     Route::put('profile',          [ProfileController::class, 'update'])->name('profile.update');
+    Route::delete('profile/avatar',[ProfileController::class, 'deleteAvatar'])->name('profile.avatar.destroy');
     Route::put('profile/password', [ProfileController::class, 'updatePassword'])->middleware('throttle:password-confirm')->name('profile.password');
     Route::delete('profile',       [ProfileController::class, 'deactivate'])->middleware('throttle:password-confirm')->name('profile.deactivate');
 

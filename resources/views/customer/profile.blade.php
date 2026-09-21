@@ -177,6 +177,28 @@
             color: var(--stone);
         }
 
+        .btn-delete-avatar {
+            display: inline-flex;
+            align-items: center;
+            gap: 7px;
+            border-radius: 10px;
+            padding: 9px 14px;
+            font-family: 'Jost', sans-serif;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all .2s;
+            background: #fff;
+            border: 1px solid #fecaca;
+            color: #dc2626;
+        }
+
+        .btn-delete-avatar:hover {
+            background: #fef2f2;
+            border-color: #f87171;
+            color: #b91c1c;
+        }
+
         .btn-link-cancel {
             background: none;
             border: none;
@@ -705,9 +727,13 @@
 
             {{-- ── Profile Info ─────────────────────────────────────── --}}
             <div class="settings-panel" id="panel-profile">
-        <form method="POST" action="{{ route('customer.profile.update') }}" enctype="multipart/form-data">
-            @csrf
-            @method('PUT')
+                <form id="deleteAvatarForm" method="POST" action="{{ route('customer.profile.avatar.destroy') }}" style="display:none;">
+                    @csrf
+                    @method('DELETE')
+                </form>
+                <form method="POST" action="{{ route('customer.profile.update') }}" enctype="multipart/form-data">
+                    @csrf
+                    @method('PUT')
             <div class="form-card">
                 <div class="form-card-head">
                     <i class="bi bi-person"></i>
@@ -752,6 +778,12 @@
                                     <i class="bi bi-upload"></i> Upload photo
                                 </button>
                                 <button type="button" class="btn-link-cancel" id="avatarCancelBtn" hidden>Cancel</button>
+                                @if ($user->profile_image)
+                                    <button type="submit" form="deleteAvatarForm" class="btn-delete-avatar" id="avatarDeleteBtn"
+                                        onclick="return confirm('Are you sure you want to delete your profile photo?');">
+                                        <i class="bi bi-trash3"></i> Delete photo
+                                    </button>
+                                @endif
                             </div>
 
                             <div class="avatar-chosen" id="avatarChosen" hidden></div>
@@ -1158,6 +1190,7 @@
             const chosen = document.getElementById('avatarChosen');
             const uploadBtn = document.getElementById('avatarUploadBtn');
             const cancelBtn = document.getElementById('avatarCancelBtn');
+            const deleteBtn = document.getElementById('avatarDeleteBtn');
             const originalSrc = img.dataset.original || '';
             let objectUrl = null;
 
@@ -1170,10 +1203,12 @@
                     img.src = originalSrc;
                     img.hidden = false;
                     initial.hidden = true;
+                    if (deleteBtn) deleteBtn.hidden = false;
                 } else {
                     img.removeAttribute('src');
                     img.hidden = true;
                     initial.hidden = false;
+                    if (deleteBtn) deleteBtn.hidden = true;
                 }
                 chosen.hidden = true;
                 chosen.textContent = '';
@@ -1198,6 +1233,7 @@
                 chosen.hidden = false;
                 uploadBtn.hidden = false;
                 cancelBtn.hidden = false;
+                if (deleteBtn) deleteBtn.hidden = true;
             });
 
             cancelBtn.addEventListener('click', function() {

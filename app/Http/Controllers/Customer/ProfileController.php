@@ -51,6 +51,19 @@ class ProfileController extends Controller
         return back()->with('success', 'Profile updated successfully.');
     }
 
+    // ── Delete Profile Photo ─────────────────────────────────────────
+    public function deleteAvatar()
+    {
+        $user = Auth::user();
+
+        if ($user->profile_image) {
+            Storage::disk('public')->delete($user->profile_image);
+            $user->update(['profile_image' => null]);
+        }
+
+        return back()->with('success', 'Profile photo removed successfully.');
+    }
+
     // ── Change Password ─────────────────────────────────────────────
     public function updatePassword(Request $request)
     {

@@ -1,7 +1,7 @@
 # Villa Elena Private Rental Resort
 ## Resort Management System — Project Documentation
 
-**Version:** 7.17
+**Version:** 7.18
 **Stack:** PHP 8.2 / Laravel 12 / MySQL 8 / Bootstrap 5
 **Local URL:** `http://127.0.0.1:8000` (`php artisan serve`) or `http://localhost:8000` (Docker — see v5.3)
 **Live URL:** `https://villa-elena.onrender.com` (Render, free tier — testing only, not yet handed to real guests)
@@ -9,6 +9,31 @@
 **Database (live):** Aiven MySQL free tier, database `defaultdb`
 
 ---
+
+## What Changed in v7.18 (Read This First)
+
+### The landing page now sells the villa, and the date filter finally has a UI
+
+The homepage opened with a name, a one-line description and a promo band — a visitor could not tell what the place was, what it cost, or how to book it without scrolling past all of it. The whole page (`resources/views/portal/home.blade.php`) was reworked in place; every existing section, route, variable and form is intact.
+
+- **The hero carries the booking decision.** It was a headline and a decorative hairline; it now leads with the live promo pill, a gold **Book the villa** CTA to the property page (carrying whatever `checkin`/`slot`/`guests` are in the URL), and a trust row built from real numbers — `$guestRating`, `$rooms->count()`, `$guestsServed`, plus the exclusive-use promise. The CSS for `.hero-eyebrow`, `.hero-promo` and `.hero-cta-row` had existed unused since an earlier pass; the markup was missing, not the styling.
+- **`PortalController::home()` has always filtered the listing by `checkin`/`slot`/`guests`, and nothing on the page ever submitted them.** The filter, its "Showing results for" banner and its "Clear all" link were reachable only by hand-typing a query string. The hero now has an availability bar (date, slot from `Booking::SLOTS`, guests capped at `max_capacity`) that GETs back to `route('home')`, and the page scrolls to `#properties` on arrival. No new route, no new controller logic.
+- **`$featuredVilla` is new in the controller** — the villa row *without* the date filter. The hero photo, the "Room for N" highlight and the closing CTA's price are facts about the property, not about one date's availability. Reading them off `$properties` meant that the moment a guest checked a booked date, the hero lost its photo and its Book button and the closing CTA lost its price. The showcase still reads `$properties`, because that one *is* the availability answer.
+- **Two new sections:** a four-item highlights strip under the promo band (whole villa / day-or-night slot / capacity / how to reserve, with the last item switching copy on `$allowOnlineBooking`), and a photo-backed closing CTA (`#book`) before the footer with the list price, a gold Book button and the phone number.
+- **Order now runs** hero → promos → highlights → the villa → amenities → rooms → gallery → about → testimonials → location → contact → closing CTA. Amenities and Rooms were swapped (nav, mobile menu and footer links follow), which also restores the light/dark alternation between sections.
+- **Section headings no longer land under the fixed nav.** `scroll-margin-top: calc(var(--nav-h) + 12px)` on `section[id]`/`div[id]` fixes every in-page anchor, not just the new ones — this was wrong for all of them before.
+- Also: `prefers-reduced-motion` is now honoured (reveals, hero glow, Ken Burns, progress bar), keyboard focus is visible on every guest action, the promo cards' inline `onmouseover`/`onmouseout` became CSS hover, and an empty `<p class="section-desc">` in About was removed.
+
+**Three bugs that only a real browser caught** — `Blade::compileString()` and a 200 from the kernel both passed while all three were live:
+
+1. **`.btn-check` is a Bootstrap class.** Bootstrap ships in the portal bundle and styles it `position:absolute; clip:rect(0,0,0,0); pointer-events:none` — its hidden toggle-input helper. The availability submit button rendered with correct computed colours and was completely invisible. Renamed `.btn-availability`. Check a new class name against `node_modules/bootstrap/dist/css/bootstrap.css` before using it.
+2. **A bare `fr` track keeps an `auto` minimum.** `grid-template-columns: 1.15fr 1.3fr 0.75fr auto` let the slot `<select>`'s longest option consume the row and squeeze the `auto` button track to **0.0156px**. `minmax(0, …)` on the flexible tracks is the fix; `min-width: 0` on the grid *items* does not help, because the constraint is on the track.
+3. **A smooth scroll started at `load` gets cancelled partway** by the lazy images settling — it stopped 263px down, mid-hero. The post-filter scroll is `behavior: 'auto'` inside a `requestAnimationFrame`.
+
+Verified in Chrome at 356 / 476 / 596 / 764 / 816 / 896 / 1020 / 1176 px: no horizontal overflow at any width, the booking bar steps 1 → 2 → 4 columns, highlights 1 → 2 → 4, the closing CTA 1 → 2, and the submit button is full-width once the bar stacks. The filter round-trip was exercised end to end (`2026-10-15` / Night / 12 guests → banner, villa shown, "Reserve Now"). No console errors.
+
+---
+
 
 ## What Changed in v7.17 (Read This First)
 

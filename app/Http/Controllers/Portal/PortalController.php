@@ -47,6 +47,17 @@ class PortalController extends Controller
         }
         $properties = $query->orderBy('base_price')->get();
 
+        // Ang villa row mismo, HINDI dumaan sa date/guest filter sa ibaba.
+        // Ang hero, ang highlights strip at ang closing CTA ay nagpapakita ng
+        // mga bagay na hindi nagbabago kahit puno ang petsang tiningnan —
+        // larawan, kapasidad, list price. Kung `$properties` lang ang
+        // pagbabatayan nila, mawawala ang lahat ng iyon sa sandaling
+        // maghanap ang bisita ng isang araw na booked na.
+        $featuredVilla = Property::with(['images' => fn ($q) => $q->where('is_primary', 1)])
+            ->where('type', 'villa')
+            ->orderBy('base_price')
+            ->first();
+
         // Status + larawan ng bawat kwarto (info lang) para sa "Explore the
         // Rooms" section sa homepage. Parehong pattern ng eager-load na
         // ginagamit sa Villa listing sa itaas (images na is_primary=1 lang).
@@ -102,7 +113,7 @@ class PortalController extends Controller
         $guestsServed = (int) Booking::where('status', 'checked_out')->sum('num_guests');
 
         return view('portal.home', compact(
-            'properties', 'rooms', 'resortName', 'resortDesc', 'reviews',
+            'properties', 'featuredVilla', 'rooms', 'resortName', 'resortDesc', 'reviews',
             'resortEmail', 'resortPhone', 'resortAddress', 'facebookUrl', 'tiktokUrl',
             'promos', 'allowOnlineBooking', 'guestRating', 'guestsServed'
         ));

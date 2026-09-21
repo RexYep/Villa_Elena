@@ -13,6 +13,14 @@
             scroll-behavior: smooth;
         }
 
+        /* The nav is fixed, so an anchor jump parks the section heading
+           underneath it. Every in-page link and the availability check's
+           scroll land below the bar instead. */
+        section[id],
+        div[id] {
+            scroll-margin-top: calc(var(--nav-h) + 12px);
+        }
+
         body {
             font-family: 'Inter', sans-serif;
             background: var(--cream);
@@ -1995,6 +2003,413 @@
         }
 
         /* ════════════════════════════════════════
+                                               HERO — BOOKING BAR & TRUST ROW
+                                            ════════════════════════════════════════ */
+        /* The hero now carries real content (promo, availability check, proof),
+           so it grows past one screen instead of clipping. `svh` keeps mobile
+           browsers from counting the collapsing address bar as usable height. */
+        .hero {
+            height: auto;
+            min-height: 100vh;
+            min-height: 100svh;
+            padding: calc(var(--nav-h) + 44px) 20px 92px;
+        }
+
+        /* Photo comes from the villa's own primary image when there is one
+           (--hero-photo, set inline on the section so it works with the
+           Cloudinary disk too); the packaged shot is the fallback. */
+        .hero::before {
+            background: var(--hero-photo, url('/images/images8.jpg')) center/cover no-repeat;
+            opacity: 0.42;
+        }
+
+        /* Scrim — the headline and the booking fields have to stay readable
+           over whatever photo the admin uploads, which we can't vet. */
+        .hero::after {
+            content: '';
+            position: absolute;
+            inset: 0;
+            z-index: 2;
+            pointer-events: none;
+            background: linear-gradient(180deg,
+                    rgba(20, 12, 5, 0.74) 0%,
+                    rgba(20, 12, 5, 0.34) 36%,
+                    rgba(20, 12, 5, 0.84) 100%);
+        }
+
+        .hero-content {
+            max-width: 960px;
+            width: 100%;
+        }
+
+        .hero-promo {
+            text-decoration: none;
+            transition: background 0.25s ease, border-color 0.25s ease, transform 0.25s ease;
+        }
+
+        .hero-promo:hover {
+            background: rgba(212, 170, 90, 0.24);
+            border-color: rgba(212, 170, 90, 0.75);
+            transform: translateY(-2px);
+        }
+
+        .hero-sub {
+            font-size: 19px;
+            max-width: 620px;
+            margin-bottom: 34px;
+        }
+
+        .hero-cta-row {
+            margin-bottom: 30px;
+        }
+
+        /* ── Availability check ──────────────────────────────────────
+           Submits back to the homepage route, which already filters the
+           listing by checkin/slot/guests. */
+        .book-bar {
+            display: grid;
+            /* minmax(0, …) matters: a bare `fr` track keeps an auto minimum,
+               and the slot <select>'s longest option is wide enough that the
+               three fields ate the whole row and squeezed the submit button
+               to zero width. */
+            grid-template-columns: minmax(0, 1.1fr) minmax(0, 1.3fr) minmax(0, 0.7fr) auto;
+            gap: 10px;
+            align-items: end;
+            width: 100%;
+            max-width: 880px;
+            margin: 0 auto;
+            padding: 14px;
+            border-radius: 20px;
+            text-align: left;
+            background: rgba(253, 251, 247, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.22);
+            backdrop-filter: blur(14px);
+            box-shadow: 0 18px 50px rgba(0, 0, 0, 0.28);
+        }
+
+        .book-field {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            min-width: 0;
+        }
+
+        .book-field label {
+            font-size: 12.5px;
+            font-weight: 600;
+            letter-spacing: 0.3px;
+            color: var(--gold-light);
+        }
+
+        .book-field input,
+        .book-field select {
+            width: 100%;
+            font-family: inherit;
+            font-size: 15px;
+            font-weight: 500;
+            color: #fff;
+            background: rgba(26, 16, 9, 0.55);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 12px;
+            padding: 12px 14px;
+            appearance: none;
+        }
+
+        .book-field select option {
+            color: var(--stone);
+            background: #fff;
+        }
+
+        .book-field input:focus,
+        .book-field select:focus {
+            outline: 2px solid var(--gold-light);
+            outline-offset: 1px;
+            border-color: transparent;
+        }
+
+        /* The native picker glyph renders near-black, i.e. invisible here. */
+        .book-field input[type="date"]::-webkit-calendar-picker-indicator {
+            filter: invert(1) opacity(0.75);
+            cursor: pointer;
+        }
+
+        /* Not `.btn-check` — that is Bootstrap's hidden toggle-input helper
+           (position:absolute; clip:rect(0,0,0,0)), and Bootstrap is in the
+           portal bundle, so the submit button vanished. */
+        .btn-availability {
+            border: none;
+            cursor: pointer;
+            font-family: inherit;
+            font-size: 15px;
+            font-weight: 700;
+            color: #fff;
+            background: var(--stone);
+            border-radius: 12px;
+            padding: 13px 26px;
+            white-space: nowrap;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            transition: background 0.25s ease, transform 0.25s ease;
+        }
+
+        .btn-availability:hover {
+            background: #453a24;
+            transform: translateY(-2px);
+        }
+
+        .book-bar-note {
+            grid-column: 1 / -1;
+            margin: 2px 2px 0;
+            font-size: 12.5px;
+            color: rgba(255, 255, 255, 0.62);
+        }
+
+        .hero-trust {
+            list-style: none;
+            margin: 30px 0 0;
+            padding: 0;
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 12px 34px;
+            font-size: 14px;
+            color: rgba(255, 255, 255, 0.72);
+        }
+
+        .hero-trust li {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .hero-trust i {
+            font-size: 15px;
+            color: var(--gold-light);
+        }
+
+        .hero-trust strong {
+            color: #fff;
+            font-weight: 600;
+        }
+
+        .hero-scroll {
+            position: absolute;
+            bottom: 26px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 3;
+            line-height: 1;
+            font-size: 22px;
+            text-decoration: none;
+            color: rgba(255, 255, 255, 0.5);
+            animation: heroScroll 2.4s ease-in-out infinite;
+        }
+
+        .hero-scroll:hover {
+            color: var(--gold-light);
+        }
+
+        @keyframes heroScroll {
+
+            0%,
+            100% {
+                transform: translate(-50%, 0);
+            }
+
+            50% {
+                transform: translate(-50%, 7px);
+            }
+        }
+
+        /* ════════════════════════════════════════
+                                               PROMO BAND
+                                            ════════════════════════════════════════ */
+        .promo-card {
+            text-decoration: none;
+            transition: transform 0.25s ease, box-shadow 0.25s ease, border-color 0.25s ease;
+        }
+
+        .promo-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 12px 32px rgba(0, 0, 0, 0.28);
+            border-color: rgba(212, 170, 90, 0.65);
+        }
+
+        /* ════════════════════════════════════════
+                                               HIGHLIGHTS STRIP
+                                            ════════════════════════════════════════ */
+        .highlights {
+            background: var(--cream);
+            border-bottom: 1px solid var(--border);
+        }
+
+        .highlights-inner {
+            max-width: 1280px;
+            margin: 0 auto;
+            padding: 46px 40px;
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 20px;
+        }
+
+        .highlight {
+            display: flex;
+            gap: 14px;
+            align-items: flex-start;
+            padding: 0 22px;
+        }
+
+        .highlight+.highlight {
+            border-left: 1px solid var(--border);
+        }
+
+        .highlight i {
+            font-size: 22px;
+            line-height: 1.25;
+            color: var(--gold);
+            flex-shrink: 0;
+        }
+
+        .highlight-title {
+            font-size: 15.5px;
+            font-weight: 600;
+            color: var(--stone);
+            margin-bottom: 4px;
+        }
+
+        .highlight-text {
+            font-size: 13.5px;
+            line-height: 1.6;
+            color: var(--muted);
+        }
+
+        /* ════════════════════════════════════════
+                                               CLOSING BOOKING CTA
+                                            ════════════════════════════════════════ */
+        .final-cta {
+            position: relative;
+            background: var(--stone);
+            overflow: hidden;
+        }
+
+        .final-cta::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: url('/images/night-view.jpg') center/cover no-repeat;
+            opacity: 0.32;
+        }
+
+        .final-cta::after {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(105deg,
+                    rgba(20, 12, 5, 0.92) 0%,
+                    rgba(20, 12, 5, 0.62) 58%,
+                    rgba(20, 12, 5, 0.38) 100%);
+        }
+
+        .final-cta-inner {
+            position: relative;
+            z-index: 2;
+            max-width: 1280px;
+            margin: 0 auto;
+            padding: 96px 40px;
+            display: grid;
+            grid-template-columns: 1.4fr 1fr;
+            gap: 48px;
+            align-items: center;
+        }
+
+        .final-cta-title {
+            font-family: 'Playfair Display', serif;
+            font-size: clamp(30px, 3.4vw, 44px);
+            font-weight: 600;
+            line-height: 1.15;
+            color: #fff;
+            margin-bottom: 16px;
+        }
+
+        .final-cta-text {
+            max-width: 46ch;
+            font-size: 16px;
+            font-weight: 300;
+            line-height: 1.75;
+            color: rgba(255, 255, 255, 0.72);
+        }
+
+        .final-cta-actions {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 16px;
+        }
+
+        .final-cta-price {
+            font-family: 'Playfair Display', serif;
+            font-size: 14.5px;
+            color: var(--gold-light);
+        }
+
+        .final-cta-price strong {
+            display: block;
+            font-size: 32px;
+            font-weight: 700;
+            color: #fff;
+            line-height: 1.2;
+        }
+
+        .btn-final {
+            background: var(--gold);
+            color: var(--stone);
+            padding: 17px 40px;
+            border-radius: 50px;
+            font-size: 16px;
+            font-weight: 700;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            transition: all 0.3s ease;
+        }
+
+        .btn-final:hover {
+            background: var(--gold-light);
+            transform: translateY(-3px);
+            box-shadow: 0 14px 34px rgba(184, 148, 63, 0.4);
+        }
+
+        .final-cta-call {
+            font-size: 14.5px;
+            text-decoration: none;
+            color: rgba(255, 255, 255, 0.8);
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .final-cta-call:hover {
+            color: var(--gold-light);
+        }
+
+        /* ── Keyboard focus, everywhere a guest can act ── */
+        .btn-hero-primary:focus-visible,
+        .btn-hero-ghost:focus-visible,
+        .btn-availability:focus-visible,
+        .btn-final:focus-visible,
+        .btn-book-showcase:focus-visible,
+        .btn-see-more-reviews:focus-visible,
+        .hero-promo:focus-visible,
+        .promo-card:focus-visible,
+        .hero-scroll:focus-visible,
+        .final-cta-call:focus-visible {
+            outline: 2px solid var(--gold-light);
+            outline-offset: 3px;
+        }
+
+        /* ════════════════════════════════════════
                                                RESPONSIVE
                                             ════════════════════════════════════════ */
         @media (max-width: 1024px) {
@@ -2020,6 +2435,33 @@
             .footer-top {
                 grid-template-columns: 1fr 1fr;
                 gap: 40px;
+            }
+
+            .highlights-inner {
+                grid-template-columns: repeat(2, 1fr);
+                row-gap: 30px;
+            }
+
+            /* Items 1 and 3 start a row, so they lose the divider. */
+            .highlight:nth-child(odd) {
+                border-left: none;
+            }
+
+            .final-cta-inner {
+                grid-template-columns: 1fr;
+                gap: 34px;
+                padding: 80px 32px;
+            }
+        }
+
+        @media (max-width: 900px) {
+            .book-bar {
+                grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+            }
+
+            .btn-availability {
+                grid-column: 1 / -1;
+                justify-content: center;
             }
         }
 
@@ -2119,11 +2561,98 @@
                 flex-direction: column;
                 align-items: center;
             }
+
+            .hero {
+                padding: calc(var(--nav-h) + 32px) 18px 64px;
+            }
+
+            .hero-sub {
+                font-size: 16.5px;
+                margin-bottom: 26px;
+            }
+
+            .hero-cta-row .btn-hero-primary,
+            .hero-cta-row .btn-hero-ghost {
+                width: 100%;
+                max-width: 320px;
+                text-align: center;
+            }
+
+            .hero-trust {
+                gap: 10px 20px;
+                font-size: 13px;
+            }
+
+            /* No room for it once the hero stacks, and it would sit on the
+               booking bar rather than below it. */
+            .hero-scroll {
+                display: none;
+            }
+
+            .highlights-inner {
+                grid-template-columns: 1fr;
+                padding: 34px 20px;
+                row-gap: 24px;
+            }
+
+            .highlight {
+                padding: 0;
+            }
+
+            .highlight+.highlight {
+                border-left: none;
+            }
+
+            .final-cta-inner {
+                padding: 70px 20px;
+            }
+
+            .btn-final {
+                width: 100%;
+                justify-content: center;
+            }
+
+            .final-cta-actions {
+                align-self: stretch;
+            }
+        }
+
+        @media (max-width: 560px) {
+            .book-bar {
+                grid-template-columns: minmax(0, 1fr);
+            }
         }
 
         @media (max-width: 480px) {
             .amenities-grid {
                 grid-template-columns: 1fr;
+            }
+        }
+
+        /* Motion here is decoration, never information — drop all of it when
+           the guest has asked their OS for less. */
+        @media (prefers-reduced-motion: reduce) {
+            html {
+                scroll-behavior: auto;
+            }
+
+            .reveal {
+                opacity: 1;
+                transform: none;
+                transition: none;
+            }
+
+            .hero-glow,
+            .hero-scroll,
+            .gallery-slide.active img,
+            .gallery-progress span.run {
+                animation: none;
+            }
+
+            *,
+            *::before,
+            *::after {
+                transition-duration: 0.01ms !important;
             }
         }
 
@@ -2161,6 +2690,26 @@
 
 @section('content')
 
+    @php
+        // $featuredVilla ay ang villa row na HINDI dumaan sa date filter, kaya
+        // buo pa rin ang hero, highlights at closing CTA kahit booked na ang
+        // petsang tiningnan ng bisita. Ang availability mismo ay ipinapakita
+        // ng showcase sa ibaba, na $properties ang batayan.
+        $heroPromo = $promos->first();
+        $heroSlot = in_array(request('slot'), array_keys(\App\Models\Booking::SLOTS)) ? request('slot') : 'day';
+        $heroPhoto = $featuredVilla?->primaryImage?->url;
+        $heroBookUrl =
+            $featuredVilla && $allowOnlineBooking
+                ? route('portal.property', $featuredVilla) .
+                    '?' .
+                    http_build_query(array_filter([
+                        'checkin' => request('checkin'),
+                        'slot' => $heroSlot,
+                        'guests' => request('guests'),
+                    ]))
+                : '#properties';
+    @endphp
+
     {{-- ══════════════════════════════════
      NAVIGATION
 ══════════════════════════════════ --}}
@@ -2171,8 +2720,8 @@
             <ul class="nav-links">
                 <li><a href="#hero">Home</a></li>
                 <li><a href="#properties">The Villa</a></li>
-                <li><a href="#room-tour">Rooms</a></li>
                 <li><a href="#amenities">Amenities</a></li>
+                <li><a href="#room-tour">Rooms</a></li>
                 <li><a href="#gallery">Gallery</a></li>
                 <li><a href="#about">About</a></li>
                 <li><a href="#contact">Contact</a></li>
@@ -2201,8 +2750,8 @@
     <div class="mobile-menu" id="mobileMenu">
         <a href="#hero" class="mobile-link">Home</a>
         <a href="#properties" class="mobile-link">The Villa</a>
-        <a href="#room-tour" class="mobile-link">Rooms</a>
         <a href="#amenities" class="mobile-link">Amenities</a>
+        <a href="#room-tour" class="mobile-link">Rooms</a>
         <a href="#gallery" class="mobile-link">Gallery</a>
         <a href="#about" class="mobile-link">About Us</a>
         <a href="#contact" class="mobile-link">Contact</a>
@@ -2223,24 +2772,84 @@
     {{-- ══════════════════════════════════
      HERO SECTION
 ══════════════════════════════════ --}}
-    <section class="hero" id="hero">
+    <section class="hero" id="hero" @if ($heroPhoto) style="--hero-photo:url('{{ $heroPhoto }}')" @endif>
         <div class="hero-bg-pattern"></div>
         <div class="hero-glow"></div>
 
         <div class="hero-content">
+            @if ($heroPromo)
+                <a href="#promos" class="hero-promo">
+                    <span class="promo-amount">{{ $heroPromo->value_label }}</span>
+                    <span>
+                        {{ $heroPromo->label ?: 'Seasonal offer' }}@if ($heroPromo->expiry_date)
+                            &middot; until {{ $heroPromo->expiry_date->format('M j') }}
+                        @endif
+                    </span>
+                </a>
+            @endif
 
             <h1 class="hero-title">Villa Elena<br><em>Private Pool Resort</em></h1>
             <p class="hero-sub">
-                {{ $resortDesc ?? 'The whole villa to yourselves — pool, rooms and all — in Pansol, Calamba.' }}</p>
+                {{ $resortDesc ?: 'Book the whole villa in Pansol, Calamba — pool, rooms, kitchen and grill, yours alone for a day or a night.' }}
+            </p>
 
-        </div>
-
-        <div
-            style="position:absolute;bottom:40px;left:50%;transform:translateX(-50%);color:rgba(255,255,255,0.4);font-size: 14px;letter-spacing:2px;text-align:center;z-index:3;">
-            <div
-                style="width:1px;height:50px;background:linear-gradient(transparent, rgba(255,255,255,0.6), transparent);margin:8px auto;">
+            <div class="hero-cta-row">
+                <a href="{{ $heroBookUrl }}" class="btn-hero-primary">
+                    {{ $allowOnlineBooking ? 'Book the villa' : 'See rates' }}
+                </a>
+                <a href="#room-tour" class="btn-hero-ghost">Look inside</a>
             </div>
+
+            {{-- Feeds the checkin/slot/guests filter the homepage already
+                 applies; results land in the villa showcase below. --}}
+            <form method="GET" action="{{ route('home') }}" class="book-bar" id="availabilityForm">
+                <div class="book-field">
+                    <label for="heroCheckin">Date</label>
+                    <input type="date" id="heroCheckin" name="checkin" value="{{ request('checkin') }}"
+                        min="{{ now()->toDateString() }}" required>
+                </div>
+                <div class="book-field">
+                    <label for="heroSlot">Slot</label>
+                    <select id="heroSlot" name="slot">
+                        @foreach (\App\Models\Booking::SLOTS as $key => $slotInfo)
+                            <option value="{{ $key }}" @selected($heroSlot === $key)>{{ $slotInfo['label'] }}</option>
+                        @endforeach
+                    </select>
+                </div>
+                <div class="book-field">
+                    <label for="heroGuests">Guests</label>
+                    <select id="heroGuests" name="guests">
+                        @for ($g = 1; $g <= 30; $g++)
+                            <option value="{{ $g }}" {{ (int) request('guests', 1) === $g ? 'selected' : '' }}>
+                                {{ $g }} {{ $g === 1 ? 'guest' : 'guests' }}
+                            </option>
+                        @endfor
+                    </select>
+                </div>
+                <button type="submit" class="btn-availability">
+                    <i class="bi bi-search"></i> Check the date
+                </button>
+                <p class="book-bar-note">One booking takes the whole villa, so a slot is either open or it isn't.</p>
+            </form>
+
+            <ul class="hero-trust">
+                @if ($guestRating > 0)
+                    <li><i class="bi bi-star-fill"></i> <strong>{{ number_format($guestRating, 1) }}</strong> guest
+                        rating</li>
+                @endif
+                @if ($rooms->count())
+                    <li><i class="bi bi-door-open-fill"></i> <strong>{{ $rooms->count() }}</strong> air-conditioned
+                        rooms</li>
+                @endif
+                @if ($guestsServed > 0)
+                    <li><i class="bi bi-people-fill"></i> <strong>{{ number_format($guestsServed) }}</strong> guests
+                        hosted</li>
+                @endif
+                <li><i class="bi bi-shield-check"></i> No other groups on site</li>
+            </ul>
         </div>
+
+        <a href="#properties" class="hero-scroll" aria-label="Skip to the villa"><i class="bi bi-chevron-down"></i></a>
     </section>
 
     {{-- ══════════════════════════════════
@@ -2250,10 +2859,7 @@
         <section class="promo-band" id="promos">
             <div class="promo-band-inner">
                 @foreach ($promos as $promo)
-                    <a href="#properties" class="promo-card"
-                        style="text-decoration:none;cursor:pointer;transition:transform .2s,box-shadow .2s;"
-                        onmouseover="this.style.transform='translateY(-4px)';this.style.boxShadow='0 10px 30px rgba(212,170,90,0.25)'"
-                        onmouseout="this.style.transform='';this.style.boxShadow=''">
+                    <a href="#properties" class="promo-card">
                         <div class="promo-badge">{{ $promo->value_label }}</div>
                         <div>
                             <h4>{{ $promo->label }}</h4>
@@ -2279,6 +2885,53 @@
             </div>
         </section>
     @endif
+
+    {{-- ══════════════════════════════════
+     QUICK HIGHLIGHTS
+══════════════════════════════════ --}}
+    <section class="highlights" aria-label="What a Villa Elena booking includes">
+        <div class="highlights-inner">
+            <div class="highlight">
+                <i class="bi bi-house-lock-fill"></i>
+                <div>
+                    <div class="highlight-title">The whole villa</div>
+                    <p class="highlight-text">One group at a time. The pool, rooms and kitchen are yours for the slot —
+                        nobody else is booked in.</p>
+                </div>
+            </div>
+            <div class="highlight">
+                <i class="bi bi-clock-history"></i>
+                <div>
+                    <div class="highlight-title">Day or night slot</div>
+                    {{-- Joined in PHP: a Blade loop leaves whitespace around the
+                         separators, which shows up as "5:00 PM) , or". --}}
+                    <p class="highlight-text">
+                        {{ implode(', or ', array_column(\App\Models\Booking::SLOTS, 'label')) }}.
+                    </p>
+                </div>
+            </div>
+            <div class="highlight">
+                <i class="bi bi-people-fill"></i>
+                <div>
+                    <div class="highlight-title">
+                        {{ $featuredVilla?->max_capacity ? 'Room for ' . $featuredVilla->max_capacity : 'Built for groups' }}
+                    </div>
+                    <p class="highlight-text">Family days, barkada getaways and small celebrations, with parking on
+                        site.</p>
+                </div>
+            </div>
+            <div class="highlight">
+                <i class="bi bi-{{ $allowOnlineBooking ? 'qr-code-scan' : 'chat-dots-fill' }}"></i>
+                <div>
+                    <div class="highlight-title">{{ $allowOnlineBooking ? 'Reserve online' : 'Reserve by message' }}
+                    </div>
+                    <p class="highlight-text">
+                        {{ $allowOnlineBooking ? 'Pick a date, pay the deposit by QR Ph from any bank or e-wallet app, and the slot is held.' : 'Online booking is paused right now — call or message us and we will hold your date.' }}
+                    </p>
+                </div>
+            </div>
+        </div>
+    </section>
 
     {{-- ══════════════════════════════════
      VILLA SHOWCASE SECTION
@@ -2408,50 +3061,6 @@
     </section>
 
     {{-- ══════════════════════════════════
-     ROOM TOUR SECTION
-══════════════════════════════════ --}}
-    @if ($rooms->count())
-        <section id="room-tour">
-            <div class="section">
-                <div class="section-header">
-                    <div>
-                        <div class="section-eyebrow reveal">Inside the Villa</div>
-                        <div class="section-title reveal reveal-delay-1">Explore the<br>Rooms</div>
-                        <p class="section-desc reveal reveal-delay-2">A closer look at each room inside Villa Elena — all
-                            included in your one whole-villa booking.</p>
-                    </div>
-                </div>
-
-                <div class="room-tour-grid">
-                    @foreach ($rooms as $room)
-                        @php
-                            $roomImage = $room->images->first();
-                        @endphp
-                        <div class="room-card reveal">
-                            <div class="room-card-img-wrap">
-                                @if ($roomImage)
-                                    <img src="{{ $roomImage->url }}"
-                                        alt="{{ $room->property_name ?: 'Room at Villa Elena' }}" loading="lazy"
-                                        decoding="async">
-                                @else
-                                    <div class="room-card-img-placeholder"><i class="bi bi-door-closed"></i></div>
-                                @endif
-                            </div>
-                            <div class="room-card-body">
-                                <div class="room-card-name">{{ $room->property_name }}</div>
-                                @if ($room->floor_area_sqm)
-                                    <div class="room-card-meta"><i class="bi bi-arrows-angle-expand"></i>
-                                        {{ $room->floor_area_sqm }} m²</div>
-                                @endif
-                            </div>
-                        </div>
-                    @endforeach
-                </div>
-            </div>
-        </section>
-    @endif
-
-    {{-- ══════════════════════════════════
      AMENITIES SECTION
 ══════════════════════════════════ --}}
     <section id="amenities">
@@ -2509,6 +3118,50 @@
             </div>
         </div>
     </section>
+
+    {{-- ══════════════════════════════════
+     ROOM TOUR SECTION
+══════════════════════════════════ --}}
+    @if ($rooms->count())
+        <section id="room-tour">
+            <div class="section">
+                <div class="section-header">
+                    <div>
+                        <div class="section-eyebrow reveal">Inside the Villa</div>
+                        <div class="section-title reveal reveal-delay-1">Explore the<br>Rooms</div>
+                        <p class="section-desc reveal reveal-delay-2">A closer look at each room inside Villa Elena — all
+                            included in your one whole-villa booking.</p>
+                    </div>
+                </div>
+
+                <div class="room-tour-grid">
+                    @foreach ($rooms as $room)
+                        @php
+                            $roomImage = $room->images->first();
+                        @endphp
+                        <div class="room-card reveal">
+                            <div class="room-card-img-wrap">
+                                @if ($roomImage)
+                                    <img src="{{ $roomImage->url }}"
+                                        alt="{{ $room->property_name ?: 'Room at Villa Elena' }}" loading="lazy"
+                                        decoding="async">
+                                @else
+                                    <div class="room-card-img-placeholder"><i class="bi bi-door-closed"></i></div>
+                                @endif
+                            </div>
+                            <div class="room-card-body">
+                                <div class="room-card-name">{{ $room->property_name }}</div>
+                                @if ($room->floor_area_sqm)
+                                    <div class="room-card-meta"><i class="bi bi-arrows-angle-expand"></i>
+                                        {{ $room->floor_area_sqm }} m²</div>
+                                @endif
+                            </div>
+                        </div>
+                    @endforeach
+                </div>
+            </div>
+        </section>
+    @endif
 
     {{-- ══════════════════════════════════
      GALLERY SECTION
@@ -2594,7 +3247,6 @@
                 <div class="about-text">
                     <div class="section-eyebrow reveal">Our Story</div>
                     <div class="section-title reveal reveal-delay-1">The Whole Villa,<br>Just for You</div>
-                    <p class="section-desc reveal reveal-delay-2" style="max-width:none;"></p>
                     <p class="reveal reveal-delay-2 text-muted-theme"
                         style="font-size:16px;line-height:1.8;font-weight:300;margin-bottom:18px;">
                         Villa Elena Private Pool Resort is a place in Pansol, Calamba made for families and groups of
@@ -2856,6 +3508,44 @@
     </section>
 
     {{-- ══════════════════════════════════
+     CLOSING BOOKING CTA
+══════════════════════════════════ --}}
+    <section class="final-cta" id="book">
+        <div class="final-cta-inner">
+            <div>
+                <h2 class="final-cta-title">Pick a date and the villa is yours</h2>
+                <p class="final-cta-text">
+                    One group books at a time, so the slot you take is off the calendar for everyone else. Choose a day
+                    or a night, settle the deposit, and the rest of the place comes with it.
+                </p>
+            </div>
+
+            <div class="final-cta-actions">
+                @if ($featuredVilla)
+                    <div class="final-cta-price">
+                        <strong>₱{{ number_format($featuredVilla->base_price, 0) }}</strong>
+                        per slot, Mon–Thu
+                    </div>
+                @endif
+
+                @if ($allowOnlineBooking && $featuredVilla)
+                    <a href="{{ $heroBookUrl }}" class="btn-final">
+                        <i class="bi bi-calendar-check"></i> Book the villa
+                    </a>
+                @else
+                    <a href="#contact" class="btn-final">
+                        <i class="bi bi-chat-dots"></i> Message us to book
+                    </a>
+                @endif
+
+                <a href="tel:{{ preg_replace('/[^0-9+]/', '', $resortPhone) }}" class="final-cta-call">
+                    <i class="bi bi-telephone-fill"></i> {{ $resortPhone }}
+                </a>
+            </div>
+        </div>
+    </section>
+
+    {{-- ══════════════════════════════════
      FOOTER
 ══════════════════════════════════ --}}
     <footer class="footer">
@@ -2876,8 +3566,8 @@
                     <ul class="footer-links">
                         <li><a href="#hero">Home</a></li>
                         <li><a href="#properties">The Villa</a></li>
-                        <li><a href="#room-tour">Rooms</a></li>
                         <li><a href="#amenities">Amenities</a></li>
+                        <li><a href="#room-tour">Rooms</a></li>
                         <li><a href="#gallery">Gallery</a></li>
                         <li><a href="#about">About Us</a></li>
                     </ul>
@@ -3056,11 +3746,22 @@
             if (e.key === 'Escape') closeLightbox();
         });
 
-        /* ── Contact form (optional AJAX hook) ── */
-        document.getElementById('contactForm')?.addEventListener('submit', function(e) {
-            // If you want to wire up AJAX, prevent default here
-            // e.preventDefault();
-        });
+        /* ── Availability check ──
+           The form is a plain GET back to the homepage, so the answer arrives
+           as a fresh page. Land the guest on the result instead of the hero
+           they just submitted from. A GET form drops the fragment from its
+           action, so there is no native anchor to ride; scroll-margin-top on
+           the section keeps the heading clear of the fixed nav either way.
+           Instant, not smooth: a smooth scroll started at load gets cancelled
+           by the lazy images settling and stops partway down the hero. */
+        @if (request()->filled('checkin'))
+            window.addEventListener('load', () => {
+                requestAnimationFrame(() => {
+                    document.getElementById('properties')
+                        ?.scrollIntoView({ behavior: 'auto', block: 'start' });
+                });
+            });
+        @endif
     </script>
 @endpush
 
