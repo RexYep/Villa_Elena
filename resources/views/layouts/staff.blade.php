@@ -13,7 +13,7 @@
 
 <aside class="sidebar">
     <a href="{{ route('staff.frontdesk') }}" class="sidebar-brand">
-        <div class="brand-name">Villa Elena</div>
+        <div class="brand-name"><img src="{{ asset('images/logo.png') }}" alt="" class="brand-mark"> Villa Elena</div>
         <div class="brand-role">Staff Portal</div>
     </a>
     <nav class="sidebar-nav">

@@ -1,12 +1,33 @@
 # Villa Elena Private Rental Resort
 ## Resort Management System — Project Documentation
 
-**Version:** 7.18
+**Version:** 7.19
 **Stack:** PHP 8.2 / Laravel 12 / MySQL 8 / Bootstrap 5
 **Local URL:** `http://127.0.0.1:8000` (`php artisan serve`) or `http://localhost:8000` (Docker — see v5.3)
 **Live URL:** `https://villa-elena.onrender.com` (Render, free tier — testing only, not yet handed to real guests)
 **Database (local):** `villa_elena_db` (MySQL, XAMPP or standalone MySQL — same database either way)
 **Database (live):** Aiven MySQL free tier, database `defaultdb`
+
+---
+
+## What Changed in v7.19 (Read This First)
+
+### Staff frontdesk stat cards show guests, not counts
+
+With one villa and two slots a day, "Check-ins Today" and "Check-outs Today" were almost always 0, 1 or 2, and only told staff to go open a tab. The owner asked for cards that are actually useful at the desk. All of this is computed in `Staff\FrontDeskController::index()`.
+
+- **Next Arrival** replaces Check-ins Today. It shows the earliest `confirmed` booking with `check_in_date >= today`: guest name, day, slot and time, and balance. It still includes a booking today whose check-in time has passed, because that guest is simply late.
+- **To Collect** replaces Check-outs Today. It adds up `balance_due` for the guest in the villa (`checked_in`) and today's confirmed arrivals, and lists who owes what. It shows "All paid" when nothing is owed.
+- **Awaiting Payment** replaces Pending Bookings, and the Pending tab uses the same query. Two kinds of pending booking are shown:
+  - *Active holds:* `amount_paid = 0` and newer than `pendingHoldMinutes()`, the same cutoff `hasConflict()` uses. The card shows when the next hold expires.
+  - *Paid, slot conflict:* `amount_paid > 0`, left pending by `confirmOnFirstPayment()`. This is shown in red as "admin review". Staff can't resolve it, but they shouldn't be caught out by it either.
+
+  Expired unpaid holds are no longer shown. The availability grid already treats their slot as free and the sweeper cancels them, so counting them made the card disagree with the grid. The tab also used to show at most 10 while the card counted everything; they now share one query.
+- **Housekeeping** is unchanged. `check_ins_today` and `check_outs_today` stay in `$stats` because the sidebar's Frontdesk badge still uses them.
+
+**Bug fix: day-slot guests showed "Overdue" from the moment they arrived.** The Current Guests tab decided "Overdue" by day (`check_out_date <= today`), so a Day-slot guest, who checks in and out on the same day, was flagged in red from 8 AM. It now compares against `checkOutDateTime()`: "Overdue" only once that time has passed, and "Checking out 5:00 PM" before then.
+
+Verified by rendering `/staff/frontdesk` as staff, with test rows changed inside a rolled-back transaction: a checked-in guest with a balance, an active hold, and a paid pending booking. Checked both sides of the check-out time.
 
 ---
 
@@ -213,6 +234,7 @@ Verified in a real browser as admin, on the Docker app with real Pusher: creatin
 
 **Follow-ups in the same version:**
 
+- **Total Guests now shows its registered count under the number** (`registered_guests`, the customers whose `email` is not NULL), for example "9 / 8 with an account". Every new walk-in creates a `role = customer` row, including when staff pick "no account": bookings, payments and reviews need a `user_id`. A "guest record only" walk-in is saved with `email = NULL` and a random password nobody has, so it can't log in. It still counts toward Total Guests, which is intended, but not toward the registered count. The `User` hook also fires on an `email` change, because that moves a guest between the two counts. Email changes are rare, so the hook stays narrow.
 - **Total Guests** had the same problem (cached, no live wiring) and is now the fifth live KPI (`total_guests`, same `role = customer` count as before). `User` calls `touch()` only on **create, `role` change, or delete** — deliberately narrow, because users are saved on every login, 2FA step and profile edit, and each of those would otherwise be a Pusher call that changes nothing. Verified: a login-style save dispatched 0; in the browser a temporary customer account moved Total Guests 8→9 and deleting it moved it back to 8, both with no reload.
 - **The two charts weren't live either, even though Revenue Overview carries a green "Live" badge.** Both were drawn once at page load from the 60s `admin_dashboard_stats` cache. `revenue_by_month` and `booking_sources` now come from `DashboardStats::kpis()` (same queries, unchanged), and the cached copies of every live value were **removed** from the controller's `Cache::remember`, so each number has one copy. The cache keeps only check-ins/outs, properties and current guest. The admin realtime script dispatches `admin:dashboard-stats` with each refetch, and the dashboard view redraws `revenueChart`/`sourceChart` **only when the data actually differs**, because the 60s fallback refetches regardless and an animation every minute is noise. The `Booking` hook now also watches `source`, since editing a booking's source changes the donut without any status change. Cost: 7 more queries (6 indexed SUMs + 1 GROUP BY) per refetch, and refetches only happen on the open dashboard. Verified in the browser with net-zero edits to test data: moving test payment 274 from Sep 16 to Aug 16 moved the bars Aug ₱54,086→₱56,086 and Sep ₱26,542→₱24,542 and the Revenue This Month card to ₱24,542, then all went back on restore. Switching test booking 166 from online to walk_in moved the donut Online 51→50 / Walk-in 10→11, then back. None of it needed a reload.
 - **The refund toast said "💳 Payment — ₱X" with the green income icon**, because refunds go through the same `PaymentReceived` event. It now uses the `is_refund` flag v7.7 added to that event: "↩️ Refund — ₱X" with a red `bi-arrow-counterclockwise` icon (`.rt-icon.refund`). Verified by re-broadcasting an existing refund and an existing payment, which wrote nothing: the toasts appeared as `refund / ↩️ Refund — ₱4,000.00` and `payment / 💳 Payment — ₱2,000.00`, and no KPI moved.

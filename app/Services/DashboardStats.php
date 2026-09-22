@@ -46,6 +46,10 @@ class DashboardStats
         // Iisang query sa dating `total_guests` ng dashboard: bawat
         // customer account, verified o hindi.
         $guests = User::where('role', 'customer')->count();
+        // Ang may email lang ang puwedeng mag-login. Ang walk-in na
+        // "guest record lang" ay NULL ang email (FrontDeskController::
+        // storeWalkin), kaya kasama sa Total Guests pero hindi dito.
+        $registered = User::where('role', 'customer')->whereNotNull('email')->count();
         // Badge ng Housekeeping sa sidebar — nasa bawat admin page.
         $openReports = IssueReport::open()->count();
 
@@ -99,6 +103,7 @@ class DashboardStats
             'revenue_today' => $today,
             'revenue_this_month' => $month,
             'total_guests' => $guests,
+            'registered_guests' => $registered,
             'open_reports' => $openReports,
             'revenue_by_month' => $revenueByMonth,
             'booking_sources' => $sources,
@@ -111,6 +116,7 @@ class DashboardStats
                 'revenue_today' => '₱'.number_format($today, 0),
                 'revenue_this_month' => '₱'.number_format($month, 0),
                 'total_guests' => number_format($guests),
+                'registered_guests' => number_format($registered),
                 'open_reports' => (string) $openReports,
             ],
         ];

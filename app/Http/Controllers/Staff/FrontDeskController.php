@@ -44,11 +44,40 @@ class FrontDeskController extends Controller
             ->orderBy('check_out_date')
             ->get();
 
+        // Ang "pending" lang na may saysay pa sa frontdesk: hold na hindi
+        // pa lumalagpas sa Booking Hold (kaparehong cutoff ng hasConflict()),
+        // at ang may bayad na pero naiwang pending dahil kuha na ang slot
+        // (confirmOnFirstPayment()). Ang expired na hold ay bakante na sa
+        // availability grid at kakanselahin ng sweeper, kaya hindi na
+        // ipinapakita — dati binibilang pa sa stat.
         $pendingBookings = Booking::where('status', 'pending')
+            ->where(function ($q) {
+                $q->where('amount_paid', '>', 0)
+                    ->orWhere('created_at', '>=', now()->subMinutes(Booking::pendingHoldMinutes()));
+            })
             ->with(['property', 'user'])
+            ->orderByDesc('amount_paid')
             ->latest()
-            ->take(10)
             ->get();
+        $holdMinutes = Booking::pendingHoldMinutes();
+        $paidPending = $pendingBookings->where('amount_paid', '>', 0)->values();
+        $activeHolds = $pendingBookings->where('amount_paid', '<=', 0)->values();
+
+        // Susunod na darating: pinakamaagang confirmed booking mula ngayong
+        // araw. Kasama pa rin ang booking ngayon na lumipas na ang oras ng
+        // check-in pero hindi pa naka-check-in (late na guest).
+        $nextArrival = Booking::where('status', 'confirmed')
+            ->where('check_in_date', '>=', $today)
+            ->with('user')
+            ->orderBy('check_in_date')
+            ->orderBy('check_in_time')
+            ->first();
+
+        // Babayaran pa: ang nasa villa ngayon at ang darating ngayong araw.
+        $toCollect = $currentGuests->concat($checkIns)
+            ->filter(fn ($b) => $b->balance_due > 0)
+            ->unique('id')
+            ->values();
 
         [
             'openTasks'       => $openTasks,
@@ -96,11 +125,12 @@ class FrontDeskController extends Controller
             'check_ins_today'  => $checkIns->count(),
             'check_outs_today' => $checkOuts->count(),
             'pending_tasks'    => $openTasks->count() + $openReports->count(),
-            'pending_bookings' => Booking::where('status', 'pending')->count(),
+            'to_collect'       => (float) $toCollect->sum('balance_due'),
         ];
 
         return view('staff.frontdesk', compact(
             'checkIns', 'checkOuts', 'currentGuests', 'pendingBookings',
+            'paidPending', 'activeHolds', 'holdMinutes', 'nextArrival', 'toCollect',
             'pendingTasks', 'inProgressTasks', 'openReports', 'urgentItem', 'villa',
             'availableProperties', 'stats', 'nextSlots'
         ));

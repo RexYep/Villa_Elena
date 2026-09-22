@@ -499,6 +499,56 @@
             margin-top: 3px;
         }
 
+        /* Label sa itaas ng halaga, para sa mga card na pangalan ang laman */
+        .stat-lbl-top {
+            margin: 0 0 4px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: .04em;
+            font-size: 12px;
+        }
+
+        .stat-name {
+            font-size: 16px;
+            font-weight: 700;
+            color: var(--navy);
+            line-height: 1.25;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .stat-sub {
+            font-size: 13px;
+            color: var(--muted);
+            margin-top: 3px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .stat-empty {
+            font-size: 14px;
+            font-weight: 500;
+            color: var(--muted);
+        }
+
+        .stat-ok {
+            color: #16a34a;
+            font-weight: 600;
+        }
+
+        .stat-warn {
+            color: #b45309;
+            font-weight: 600;
+        }
+
+        .stat-danger {
+            color: #dc2626;
+            font-weight: 600;
+            white-space: normal;
+        }
+
         /* ── Tabs ── */
         .tab-bar {
             display: flex;
@@ -956,25 +1006,74 @@
 
     {{-- Stats --}}
     <div class="stats-row">
+        {{-- Isang villa, dalawang slot kada araw: halos laging 0–2 ang mga
+             bilang, kaya ang ipinapakita ay ang mismong guest at ang
+             kailangang gawin, hindi ang bilang. --}}
         <div class="stat-card">
             <div class="stat-icon" style="background:#dcfce7;color:#16a34a;"><i class="bi bi-box-arrow-in-right"></i></div>
-            <div class="stat-val">{{ $stats['check_ins_today'] }}</div>
-            <div class="stat-lbl">Check-ins Today</div>
+            <div class="stat-lbl stat-lbl-top">Next Arrival</div>
+            @if ($nextArrival)
+                @php
+                    $arrivalIn = $nextArrival->checkInDateTime();
+                    $arrivalDay = $arrivalIn->isToday() ? 'Today' : ($arrivalIn->isTomorrow() ? 'Tomorrow' : $arrivalIn->format('D, M j'));
+                    $arrivalSlot = $nextArrival->slotKey();
+                @endphp
+                <div class="stat-name" title="{{ $nextArrival->user->full_name ?? 'Guest' }}">{{ $nextArrival->user->full_name ?? 'Guest' }}</div>
+                <div class="stat-sub">
+                    {{ $arrivalDay }}{{ $arrivalSlot ? ' · '.ucfirst($arrivalSlot) : '' }} · {{ $arrivalIn->format('g:i A') }}
+                </div>
+                <div class="stat-sub">
+                    @if ($nextArrival->balance_due > 0)
+                        <span class="stat-warn">₱{{ number_format($nextArrival->balance_due, 0) }} balance</span>
+                    @else
+                        <span class="stat-ok">Fully paid</span>
+                    @endif
+                </div>
+            @else
+                <div class="stat-name stat-empty">No upcoming bookings</div>
+            @endif
         </div>
         <div class="stat-card">
-            <div class="stat-icon tag-blue"><i class="bi bi-box-arrow-right"></i></div>
-            <div class="stat-val">{{ $stats['check_outs_today'] }}</div>
-            <div class="stat-lbl">Check-outs Today</div>
+            <div class="stat-icon tag-blue"><i class="bi bi-cash-coin"></i></div>
+            <div class="stat-lbl stat-lbl-top">To Collect</div>
+            @if ($toCollect->isNotEmpty())
+                <div class="stat-val">₱{{ number_format($stats['to_collect'], 0) }}</div>
+                @foreach ($toCollect as $b)
+                    <div class="stat-sub" title="{{ $b->user->full_name ?? 'Guest' }}">
+                        {{ $b->user->full_name ?? 'Guest' }}
+                        ({{ $b->status === 'checked_in' ? 'in villa' : 'arriving' }})
+                        · ₱{{ number_format($b->balance_due, 0) }}
+                    </div>
+                @endforeach
+            @else
+                <div class="stat-name stat-ok"><i class="bi bi-check-circle-fill"></i> All paid</div>
+                <div class="stat-sub">In-house and today's arrivals</div>
+            @endif
         </div>
         <div class="stat-card">
             <div class="stat-icon tag-amber"><i class="bi bi-hourglass-split"></i></div>
-            <div class="stat-val">{{ $stats['pending_bookings'] }}</div>
-            <div class="stat-lbl">Pending Bookings</div>
+            <div class="stat-lbl stat-lbl-top">Awaiting Payment</div>
+            <div class="stat-val">{{ $activeHolds->count() }}</div>
+            <div class="stat-sub">
+                @if ($activeHolds->isNotEmpty())
+                    @php $nextExpiry = $activeHolds->map(fn ($b) => $b->created_at->copy()->addMinutes($holdMinutes))->min(); @endphp
+                    hold{{ $activeHolds->count() != 1 ? 's' : '' }} · next expires in {{ max(1, (int) ceil(now()->diffInMinutes($nextExpiry))) }} min
+                @else
+                    No active holds
+                @endif
+            </div>
+            @if ($paidPending->isNotEmpty())
+                <div class="stat-sub stat-danger">
+                    <i class="bi bi-exclamation-triangle-fill"></i>
+                    {{ $paidPending->count() }} paid, slot conflict — admin review
+                </div>
+            @endif
         </div>
         <div class="stat-card">
             <div class="stat-icon tag-purple"><i class="bi bi-brush"></i></div>
+            <div class="stat-lbl stat-lbl-top">Housekeeping</div>
             <div class="stat-val" id="fdHousekeepingStat">{{ $stats['pending_tasks'] }}</div>
-            <div class="stat-lbl">Housekeeping</div>
+            <div class="stat-sub">Open tasks and reports</div>
         </div>
     </div>
 
@@ -1198,10 +1297,20 @@
                                     {{ $booking->check_in_date->format('M d') }}</span>
                                 <span><i class="bi bi-calendar3"></i> Out:
                                     {{ $booking->check_out_date->format('M d, Y') }}</span>
-                                @php $daysLeft = today()->diffInDays($booking->check_out_date, false); @endphp
-                                @if ($daysLeft <= 0)
+                                {{-- Ikinukumpara sa tunay na oras ng check-out. Dati
+                                     ay araw lang ang basehan (`daysLeft <= 0`), kaya
+                                     ang Day-slot guest (8AM–5PM, parehong araw) ay
+                                     "Overdue" na mula pa lang pagdating. --}}
+                                @php
+                                    $checkOutAt = $booking->checkOutDateTime();
+                                    $daysLeft = today()->diffInDays($booking->check_out_date, false);
+                                @endphp
+                                @if ($checkOutAt->isPast())
                                     <span style="color:#dc2626;font-weight:600;"><i
                                             class="bi bi-exclamation-triangle"></i> Overdue</span>
+                                @elseif($daysLeft <= 0)
+                                    <span style="color:#d97706;font-weight:600;"><i class="bi bi-clock"></i> Checking out
+                                        {{ $checkOutAt->format('g:i A') }}</span>
                                 @elseif($daysLeft == 1)
                                     <span style="color:#d97706;font-weight:600;"><i class="bi bi-clock"></i> Checking out
                                         tomorrow</span>
@@ -1245,7 +1354,7 @@
     <div class="tab-content" id="tab-pending">
         <div class="card">
             <div class="card-head">
-                <h3><i class="bi bi-clock me-2" style="color:#a16207;"></i>Pending Bookings</h3>
+                <h3><i class="bi bi-clock me-2" style="color:#a16207;"></i>Awaiting Payment</h3>
                 <span class="text-muted-theme" style="font-size: 14px;">Awaiting payment from guest</span>
             </div>
             <div class="card-body">
@@ -1266,8 +1375,15 @@
                                 <span>₱{{ number_format($booking->total_amount, 0) }}</span>
                             </div>
                         </div>
-                        <div class="booking-action">
-                            <span class="badge b-pending">Pending</span>
+                        <div class="booking-action" style="text-align:right;">
+                            @if ($booking->amount_paid > 0)
+                                <span class="badge b-pending" style="background:#fee2e2;color:#dc2626;">Paid · slot conflict</span>
+                                <div class="stat-sub" style="white-space:normal;">₱{{ number_format($booking->amount_paid, 0) }} paid — admin decides</div>
+                            @else
+                                @php $holdLeft = max(1, (int) ceil(now()->diffInMinutes($booking->created_at->copy()->addMinutes($holdMinutes)))); @endphp
+                                <span class="badge b-pending">Pending</span>
+                                <div class="stat-sub">Hold expires in {{ $holdLeft }} min</div>
+                            @endif
                         </div>
                     </div>
                 @empty

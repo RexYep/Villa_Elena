@@ -86,7 +86,8 @@ class User extends Authenticatable implements MustVerifyEmail
     protected static function booted(): void
     {
         static::saved(function ($user) {
-            if ($user->wasRecentlyCreated || $user->wasChanged('role')) {
+            // `email`: dito nakabatay ang registered count ng Total Guests.
+            if ($user->wasRecentlyCreated || $user->wasChanged(['role', 'email'])) {
                 \App\Services\DashboardStats::touch();
             }
         });

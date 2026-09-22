@@ -645,7 +645,7 @@
                 <div class="kpi-card sky" id="rt-guests-card">
                     <div class="kpi-label">Total Guests</div>
                     <div class="kpi-value" id="rt-total-guests" data-kpi="total_guests">{{ $stats['formatted']['total_guests'] }}</div>
-                    <div class="kpi-sub"><i class="bi bi-people"></i> Registered accounts</div>
+                    <div class="kpi-sub"><i class="bi bi-people"></i> <span data-kpi="registered_guests">{{ $stats['formatted']['registered_guests'] }}</span> with an account</div>
                     <i class="bi bi-person-hearts kpi-icon"></i>
                 </div>
 

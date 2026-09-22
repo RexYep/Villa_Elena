@@ -8,7 +8,8 @@
 <aside class="cust-sidebar" id="custSidebar">
 
     <div class="cust-sidebar-brand">
-        <a href="{{ route('customer.home') }}" class="nav-brand">Villa Elena <span>Resort</span></a>
+        <a href="{{ route('customer.home') }}" class="nav-brand"><img src="{{ asset('images/logo.png') }}" alt=""
+                class="brand-mark"> Villa Elena <span>Resort</span></a>
     </div>
 
     <nav class="cust-sidebar-nav" aria-label="Main">
@@ -74,7 +75,8 @@
         aria-controls="custSidebar">
         <i class="bi bi-list"></i>
     </button>
-    <a href="{{ route('customer.home') }}" class="nav-brand">Villa Elena <span>Resort</span></a>
+    <a href="{{ route('customer.home') }}" class="nav-brand"><img src="{{ asset('images/logo.png') }}" alt=""
+            class="brand-mark"> Villa Elena <span>Resort</span></a>
     <a href="{{ route('customer.notifications') }}" class="notif-btn" id="notifBellLink">
         <i class="bi bi-bell"></i>
         @if ($unreadCount > 0)

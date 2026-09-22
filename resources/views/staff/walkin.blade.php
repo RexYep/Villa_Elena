@@ -307,7 +307,7 @@
                         @foreach ($customers as $customer)
                             <option value="{{ $customer->id }}" {{ old('user_id') == $customer->id ? 'selected' : '' }}>
                                 {{ $customer->full_name }} —
-                                {{ $customer->email ?? ($customer->phone ?? 'walang email/phone naka-record') }}
+                                {{ $customer->email ?? ($customer->phone ?? 'No email or phone number on record.') }}
                             </option>
                         @endforeach
                     </select>
