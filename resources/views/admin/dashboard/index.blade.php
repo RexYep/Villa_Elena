@@ -655,7 +655,13 @@
                         {{ $stats['current_guest']->user->full_name ?? 'Vacant' }}
                     </div>
                     <div class="kpi-sub"><i class="bi bi-house-check"></i>
-                        {{ $stats['current_guest'] ? 'Checked in · out ' . $stats['current_guest']->check_out_date->format('M d, g:iA') : 'No guest checked in' }}
+                        {{-- checkOutDateTime(), hindi check_out_date: 'date' ang cast
+                             ng check_out_date, kaya hatinggabi ang oras nito at
+                             "12:00AM" ang laging naipapakita ng g:iA. Nasa hiwalay
+                             na check_out_time column ang tunay na oras (5PM para sa
+                             Day slot, 6AM para sa Night), at pinagsasama ng
+                             checkOutDateTime() ang dalawa. --}}
+                        {{ $stats['current_guest'] ? 'Checked in · out ' . $stats['current_guest']->checkOutDateTime()->format('M d, g:iA') : 'No guest checked in' }}
                     </div>
                     <i class="bi bi-person-check kpi-icon"></i>
                 </div>

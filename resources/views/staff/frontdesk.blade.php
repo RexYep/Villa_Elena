@@ -543,6 +543,36 @@
             font-weight: 600;
         }
 
+        /* Arrival/Departure na tatak sa Today tab — ito ang kapalit ng
+           dating dalawang hiwalay na card head. */
+        .row-tag {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            font-size: 11px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: .04em;
+            padding: 2px 8px;
+            border-radius: 999px;
+            margin-bottom: 5px;
+        }
+
+        .row-tag.arrival {
+            background: #dcfce7;
+            color: #15803d;
+        }
+
+        .row-tag.departure {
+            background: #dbeafe;
+            color: #1d4ed8;
+        }
+
+        .row-tag.inhouse {
+            background: #ede9fe;
+            color: #6d28d9;
+        }
+
         .stat-danger {
             color: #dc2626;
             font-weight: 600;
@@ -1004,77 +1034,10 @@
         <button type="button" onclick="rtFdRefresh()">Refresh</button>
     </div>
 
-    {{-- Stats --}}
-    <div class="stats-row">
-        {{-- Isang villa, dalawang slot kada araw: halos laging 0–2 ang mga
-             bilang, kaya ang ipinapakita ay ang mismong guest at ang
-             kailangang gawin, hindi ang bilang. --}}
-        <div class="stat-card">
-            <div class="stat-icon" style="background:#dcfce7;color:#16a34a;"><i class="bi bi-box-arrow-in-right"></i></div>
-            <div class="stat-lbl stat-lbl-top">Next Arrival</div>
-            @if ($nextArrival)
-                @php
-                    $arrivalIn = $nextArrival->checkInDateTime();
-                    $arrivalDay = $arrivalIn->isToday() ? 'Today' : ($arrivalIn->isTomorrow() ? 'Tomorrow' : $arrivalIn->format('D, M j'));
-                    $arrivalSlot = $nextArrival->slotKey();
-                @endphp
-                <div class="stat-name" title="{{ $nextArrival->user->full_name ?? 'Guest' }}">{{ $nextArrival->user->full_name ?? 'Guest' }}</div>
-                <div class="stat-sub">
-                    {{ $arrivalDay }}{{ $arrivalSlot ? ' · '.ucfirst($arrivalSlot) : '' }} · {{ $arrivalIn->format('g:i A') }}
-                </div>
-                <div class="stat-sub">
-                    @if ($nextArrival->balance_due > 0)
-                        <span class="stat-warn">₱{{ number_format($nextArrival->balance_due, 0) }} balance</span>
-                    @else
-                        <span class="stat-ok">Fully paid</span>
-                    @endif
-                </div>
-            @else
-                <div class="stat-name stat-empty">No upcoming bookings</div>
-            @endif
-        </div>
-        <div class="stat-card">
-            <div class="stat-icon tag-blue"><i class="bi bi-cash-coin"></i></div>
-            <div class="stat-lbl stat-lbl-top">To Collect</div>
-            @if ($toCollect->isNotEmpty())
-                <div class="stat-val">₱{{ number_format($stats['to_collect'], 0) }}</div>
-                @foreach ($toCollect as $b)
-                    <div class="stat-sub" title="{{ $b->user->full_name ?? 'Guest' }}">
-                        {{ $b->user->full_name ?? 'Guest' }}
-                        ({{ $b->status === 'checked_in' ? 'in villa' : 'arriving' }})
-                        · ₱{{ number_format($b->balance_due, 0) }}
-                    </div>
-                @endforeach
-            @else
-                <div class="stat-name stat-ok"><i class="bi bi-check-circle-fill"></i> All paid</div>
-                <div class="stat-sub">In-house and today's arrivals</div>
-            @endif
-        </div>
-        <div class="stat-card">
-            <div class="stat-icon tag-amber"><i class="bi bi-hourglass-split"></i></div>
-            <div class="stat-lbl stat-lbl-top">Awaiting Payment</div>
-            <div class="stat-val">{{ $activeHolds->count() }}</div>
-            <div class="stat-sub">
-                @if ($activeHolds->isNotEmpty())
-                    @php $nextExpiry = $activeHolds->map(fn ($b) => $b->created_at->copy()->addMinutes($holdMinutes))->min(); @endphp
-                    hold{{ $activeHolds->count() != 1 ? 's' : '' }} · next expires in {{ max(1, (int) ceil(now()->diffInMinutes($nextExpiry))) }} min
-                @else
-                    No active holds
-                @endif
-            </div>
-            @if ($paidPending->isNotEmpty())
-                <div class="stat-sub stat-danger">
-                    <i class="bi bi-exclamation-triangle-fill"></i>
-                    {{ $paidPending->count() }} paid, slot conflict — admin review
-                </div>
-            @endif
-        </div>
-        <div class="stat-card">
-            <div class="stat-icon tag-purple"><i class="bi bi-brush"></i></div>
-            <div class="stat-lbl stat-lbl-top">Housekeeping</div>
-            <div class="stat-val" id="fdHousekeepingStat">{{ $stats['pending_tasks'] }}</div>
-            <div class="stat-sub">Open tasks and reports</div>
-        </div>
+    {{-- Stats — kusang nag-a-update kasama ang Today list (v7.19). Ang
+         partial ang ini-render muli ng server; walang kopya ng lohika sa JS. --}}
+    <div class="stats-row" id="fdStatsLive">
+        @include('staff.partials._frontdesk_stats')
     </div>
 
     {{-- Villa status + next two slots --}}
@@ -1137,21 +1100,13 @@
 
     {{-- Tabs --}}
     <div class="tab-bar">
-        <button class="tab-btn active" onclick="switchTab('checkins', this)">
-            <i class="bi bi-box-arrow-in-right"></i> Check-ins
-            <span class="cnt">{{ $checkIns->count() }}</span>
-        </button>
-        <button class="tab-btn" onclick="switchTab('checkouts', this)">
-            <i class="bi bi-box-arrow-right"></i> Check-outs
-            <span class="cnt">{{ $checkOuts->count() }}</span>
-        </button>
-        <button class="tab-btn" onclick="switchTab('guests', this)">
-            <i class="bi bi-people"></i> Current Guests
-            <span class="cnt">{{ $currentGuests->count() }}</span>
+        <button class="tab-btn active" onclick="switchTab('today', this)">
+            <i class="bi bi-list-check"></i> Today
+            <span class="cnt" id="fdTodayTabCount">{{ $todayItems->count() }}</span>
         </button>
         <button class="tab-btn" onclick="switchTab('pending', this)">
-            <i class="bi bi-clock"></i> Pending
-            <span class="cnt">{{ $pendingBookings->count() }}</span>
+            <i class="bi bi-clock"></i> Awaiting Payment
+            <span class="cnt" id="fdPendingTabCount">{{ $pendingBookings->count() }}</span>
         </button>
         <button class="tab-btn" onclick="switchTab('housekeeping', this)">
             <i class="bi bi-brush"></i> Housekeeping
@@ -1162,195 +1117,29 @@
         </a>
     </div>
 
-    {{-- Tab: Check-ins --}}
-    <div class="tab-content active" id="tab-checkins">
+    {{-- Tab: Today — arrivals at departures sa IISANG listahan, sunod sa
+         oras. Dati'y hiwalay na "Check-ins" at "Check-outs" tab: dalawang
+         slot lang kada araw ang villa, kaya tig-isang row lang ang dalawa
+         at kailangan pang buksan ang pareho para makita ang buong araw.
+         Pareho pa rin ang mga id/class ng form (`checkinForm_{id}`,
+         `checkout-form-{id}`) — ito ang hinahanap ng staff realtime
+         partial para i-disable ang naunahan nang aksiyon. --}}
+    <div class="tab-content active" id="tab-today">
         <div class="card">
             <div class="card-head">
-                <h3><i class="bi bi-box-arrow-in-right me-2" style="color:#16a34a;"></i>Expected Check-ins Today</h3>
+                <h3><i class="bi bi-list-check me-2" style="color:#16a34a;"></i>Today's Arrivals &amp; Departures</h3>
                 <span class="text-muted-theme" style="font-size: 14px;">{{ today()->format('M d, Y') }}</span>
             </div>
-            <div class="card-body">
-                @forelse($checkIns as $booking)
-                    <div class="booking-row">
-                        <div class="guest-avatar">{{ strtoupper(substr($booking->user->full_name, 0, 1)) }}</div>
-                        <div class="booking-info">
-                            <div class="booking-name">{{ $booking->user->full_name }}</div>
-                            <div class="booking-ref">{{ $booking->booking_ref }}</div>
-                            <div class="booking-prop"><i
-                                    class="bi bi-house me-1"></i>{{ $booking->property->property_name }}</div>
-                            <div class="booking-meta">
-                                <span><i class="bi bi-people"></i> {{ $booking->num_guests }} guests</span>
-                                <span><i class="bi bi-moon"></i> {{ $booking->num_nights }} nights</span>
-                                <span><i class="bi bi-cash"></i> ₱{{ number_format($booking->balance_due, 0) }}
-                                    balance</span>
-                            </div>
-                        </div>
-                        <div class="booking-action"
-                            style="display:flex; gap:8px; flex-direction:column; align-items:flex-end;">
-                            {{-- Kapag may natitirang balance ang booking na ito,
-                             hindi na basta magsu-submit ang form na ito —
-                             hahadlangan muna ito ng handleCheckInSubmit()
-                             para bumukas ang Check-in Confirmation modal,
-                             na siyang mag-a-attach ng "balance_arrangement"
-                             hidden input bago ipasa ang totoong submit. --}}
-                            <form method="POST" action="{{ route('staff.checkin', $booking) }}"
-                                id="checkinForm_{{ $booking->id }}"
-                                onsubmit="return handleCheckInSubmit(event, {{ $booking->id }}, '{{ addslashes($booking->user->full_name) }}', {{ $booking->balance_due ?? 0 }})">
-                                @csrf @method('PATCH')
-                                <button type="submit" class="btn-checkin">
-                                    <i class="bi bi-box-arrow-in-right"></i> Check In
-                                </button>
-                            </form>
-                            <button type="button" class="btn-sm"
-                                style="background:#f0fdf4;color:#16a34a;border:1px solid #bbf7d0;border-radius:7px;padding:6px 11px;font-size: 13px;font-weight:600;cursor:pointer;"
-                                onclick="openPaymentModal({{ $booking->id }}, '{{ $booking->booking_ref }}', {{ $booking->balance_due ?? 0 }})">
-                                <i class="bi bi-cash"></i> Payment
-                            </button>
-                        </div>
-                    </div>
-                @empty
-                    <div class="empty">
-                        <i class="bi bi-calendar-check"></i>
-                        <p>No check-ins scheduled for today.</p>
-                    </div>
-                @endforelse
+            {{-- Kusang nag-a-update: auto check-in/out ng scheduler, bayad na
+                 dumaan sa webhook, o aksiyon ng ibang staff. Ang server ang
+                 nagre-render ng parehong partial (staff.frontdesk.today). --}}
+            <div class="card-body" id="fdTodayLive">
+                @include('staff.partials._today_list')
             </div>
         </div>
     </div>
 
-    {{-- Tab: Check-outs --}}
-    <div class="tab-content" id="tab-checkouts">
-        <div class="card">
-            <div class="card-head">
-                <h3><i class="bi bi-box-arrow-right me-2" style="color:#1d4ed8;"></i>Expected Check-outs Today</h3>
-            </div>
-            <div class="card-body">
-                @forelse($checkOuts as $booking)
-                    <div class="booking-row">
-                        <div class="guest-avatar">{{ strtoupper(substr($booking->user->full_name, 0, 1)) }}</div>
-                        <div class="booking-info">
-                            <div class="booking-name">{{ $booking->user->full_name }}</div>
-                            <div class="booking-ref">{{ $booking->booking_ref }}</div>
-                            <div class="booking-prop"><i
-                                    class="bi bi-house me-1"></i>{{ $booking->property->property_name }}</div>
-                            <div class="booking-meta">
-                                <span><i class="bi bi-calendar3"></i> Checked in
-                                    {{ $booking->check_in_date->format('M d') }}</span>
-                                <span><i class="bi bi-cash"></i>
-                                    @if ($booking->balance_due > 0)
-                                        <span style="color:#dc2626;">₱{{ number_format($booking->balance_due, 0) }}
-                                            unpaid</span>
-                                    @else
-                                        <span style="color:#16a34a;">Fully paid</span>
-                                    @endif
-                                </span>
-                            </div>
-                        </div>
-                        <div class="booking-action"
-                            style="display:flex; gap:8px; flex-direction:column; align-items:flex-end;"
-                            data-checkout-row="{{ $booking->id }}">
-                            <form method="POST" action="{{ route('staff.checkout', $booking) }}"
-                                id="checkoutForm_{{ $booking->id }}" class="checkout-form-{{ $booking->id }}">
-                                @csrf @method('PATCH')
-                                <button type="submit" class="btn-checkout"
-                                    onclick="return confirm('Check out {{ $booking->user->full_name }}?')">
-                                    <i class="bi bi-box-arrow-right"></i> Check Out
-                                </button>
-                            </form>
-                            <button type="button" class="btn-sm"
-                                style="background:#f0fdf4;color:#16a34a;border:1px solid #bbf7d0;border-radius:7px;padding:6px 11px;font-size: 13px;font-weight:600;cursor:pointer;"
-                                onclick="openPaymentModal({{ $booking->id }}, '{{ $booking->booking_ref }}', {{ $booking->balance_due ?? 0 }})">
-                                <i class="bi bi-cash"></i> Payment
-                            </button>
-                        </div>
-                    </div>
-                @empty
-                    <div class="empty">
-                        <i class="bi bi-calendar-x"></i>
-                        <p>No check-outs scheduled for today.</p>
-                    </div>
-                @endforelse
-            </div>
-        </div>
-    </div>
-
-    {{-- Tab: Current Guests --}}
-    <div class="tab-content" id="tab-guests">
-        <div class="card">
-            <div class="card-head">
-                <h3><i class="bi bi-people me-2" style="color:#7c3aed;"></i>Currently Checked In</h3>
-                <span class="text-muted-theme" style="font-size: 14px;">{{ $currentGuests->count() }}
-                    guest{{ $currentGuests->count() != 1 ? 's' : '' }}</span>
-            </div>
-            <div class="card-body">
-                @forelse($currentGuests as $booking)
-                    <div class="booking-row">
-                        <div class="guest-avatar" style="background:#ede9fe;color:#7c3aed;">
-                            {{ strtoupper(substr($booking->user->full_name, 0, 1)) }}
-                        </div>
-                        <div class="booking-info">
-                            <div class="booking-name">{{ $booking->user->full_name }}</div>
-                            <div class="booking-prop"><i
-                                    class="bi bi-house me-1"></i>{{ $booking->property->property_name }}</div>
-                            <div class="booking-meta">
-                                <span><i class="bi bi-calendar3"></i> In:
-                                    {{ $booking->check_in_date->format('M d') }}</span>
-                                <span><i class="bi bi-calendar3"></i> Out:
-                                    {{ $booking->check_out_date->format('M d, Y') }}</span>
-                                {{-- Ikinukumpara sa tunay na oras ng check-out. Dati
-                                     ay araw lang ang basehan (`daysLeft <= 0`), kaya
-                                     ang Day-slot guest (8AM–5PM, parehong araw) ay
-                                     "Overdue" na mula pa lang pagdating. --}}
-                                @php
-                                    $checkOutAt = $booking->checkOutDateTime();
-                                    $daysLeft = today()->diffInDays($booking->check_out_date, false);
-                                @endphp
-                                @if ($checkOutAt->isPast())
-                                    <span style="color:#dc2626;font-weight:600;"><i
-                                            class="bi bi-exclamation-triangle"></i> Overdue</span>
-                                @elseif($daysLeft <= 0)
-                                    <span style="color:#d97706;font-weight:600;"><i class="bi bi-clock"></i> Checking out
-                                        {{ $checkOutAt->format('g:i A') }}</span>
-                                @elseif($daysLeft == 1)
-                                    <span style="color:#d97706;font-weight:600;"><i class="bi bi-clock"></i> Checking out
-                                        tomorrow</span>
-                                @else
-                                    <span><i class="bi bi-moon"></i> {{ $daysLeft }} nights left</span>
-                                @endif
-                            </div>
-                        </div>
-                        <div class="booking-action"
-                            style="display:flex;flex-direction:column;gap:8px;align-items:flex-end;">
-                            <span class="badge b-checked_in">Checked In</span>
-                            <button type="button" class="btn-sm"
-                                style="background:#f0fdf4;color:#16a34a;border:1px solid #bbf7d0;border-radius:7px;padding:6px 11px;font-size: 13px;font-weight:600;cursor:pointer;"
-                                onclick="openPaymentModal({{ $booking->id }}, '{{ $booking->booking_ref }}', {{ $booking->balance_due ?? 0 }})">
-                                <i class="bi bi-cash"></i> Payment
-                            </button>
-                            @if ($booking->check_out_date->isToday())
-                                <form method="POST" action="{{ route('staff.checkout', $booking) }}"
-                                    id="checkoutFormGuests_{{ $booking->id }}"
-                                    class="checkout-form-{{ $booking->id }}">
-                                    @csrf @method('PATCH')
-                                    <button type="submit" class="btn-checkout" style="font-size: 13px;padding:5px 12px;"
-                                        onclick="return confirm('Check out {{ $booking->user->full_name }}?')">
-                                        Check Out Now
-                                    </button>
-                                </form>
-                            @endif
-                        </div>
-                    </div>
-                @empty
-                    <div class="empty">
-                        <i class="bi bi-moon-stars"></i>
-                        <p>No guests currently checked in.</p>
-                    </div>
-                @endforelse
-            </div>
-        </div>
-    </div>
-
-    {{-- Tab: Pending Bookings --}}
+    {{-- Tab: Awaiting Payment --}}
     <div class="tab-content" id="tab-pending">
         <div class="card">
             <div class="card-head">
@@ -1803,7 +1592,7 @@
         });
 
         // Bumalik sa Housekeeping tab pagkatapos ng Start/Done/Report —
-        // kung hindi ay itinatapon ang staff pabalik sa Check-ins tab.
+        // kung hindi ay itinatapon ang staff pabalik sa Today tab.
         @if (session('tab') === 'housekeeping' || $errors->issueReport->any())
             switchTab('housekeeping', document.querySelector('[onclick*="housekeeping"]'));
         @endif
@@ -1819,7 +1608,11 @@
             const LIVE_URL = @json(route('staff.frontdesk.housekeeping'));
             const urgentEl = document.getElementById('fdUrgentLive');
             const reportsEl = document.getElementById('fdIssueReportsLive');
-            const countEls = [document.getElementById('fdHousekeepingStat'), document.getElementById('fdHousekeepingTabCount')];
+            // Hinahanap sa bawat update, hindi iniimbak: ang stats row ay
+            // pinapalitan ng Today refetch sa ibaba, kaya ang naunang
+            // sanggunian sa `fdHousekeepingStat` ay matatanggal sa DOM at
+            // titigil na sa pag-update ang bilang.
+            const countEls = () => [document.getElementById('fdHousekeepingStat'), document.getElementById('fdHousekeepingTabCount')];
             let timer = null;
             let inFlight = false;
 
@@ -1840,7 +1633,7 @@
                         .then(data => {
                             swap(urgentEl, data.urgent_html);
                             swap(reportsEl, data.reports_html);
-                            countEls.forEach(el => { if (el) el.textContent = data.count; });
+                            countEls().forEach(el => { if (el) el.textContent = data.count; });
                         })
                         .catch(() => {})
                         .finally(() => { inFlight = false; });
@@ -1851,6 +1644,67 @@
                 if (channel && !channel.__fdIssues) {
                     channel.__fdIssues = true;
                     channel.bind('issues.changed', refresh);
+                }
+            }
+
+            listen(window.rtStaffChannel);
+            document.addEventListener('staff:realtime-ready', e => listen(e.detail.channel));
+
+            setInterval(() => { if (!document.hidden) refresh(); }, 60000);
+            document.addEventListener('visibilitychange', () => { if (!document.hidden) refresh(); });
+        })();
+
+        // ── Live Today list + stats (v7.19) ───────────────────────────
+        // Ang mga pagbabagong walang gumagawa sa page na ito ang sinasalo
+        // nito: ang `bookings:auto-checkinout` (auto check-in sa takdang
+        // oras, auto check-out sa checkout), ang bayad na dumating sa
+        // PayMongo webhook, at ang aksiyon ng ibang staff. Dati, kailangan
+        // pang i-refresh ang page bago makita ang alinman sa mga ito.
+        //
+        // Signal: `availability.changed` (ipinapadala ng Booking hooks sa
+        // bawat pagbabago ng status/petsa/oras — pati ng console command)
+        // at `frontdesk.updated`. Salo: bawat 60s, dahil ang oras mismo
+        // ang nagpapalit ng ilang row (hold na mag-e-expire, slot na
+        // lumipas) at walang event para doon.
+        (function() {
+            const LIVE_URL = @json(route('staff.frontdesk.today'));
+            const listEl = document.getElementById('fdTodayLive');
+            const statsEl = document.getElementById('fdStatsLive');
+            const todayCountEl = document.getElementById('fdTodayTabCount');
+            const pendingCountEl = document.getElementById('fdPendingTabCount');
+            let timer = null;
+            let inFlight = false;
+
+            function swap(el, html) {
+                if (el && html !== undefined && el.innerHTML.trim() !== html.trim()) el.innerHTML = html;
+            }
+
+            function refresh() {
+                clearTimeout(timer);
+                timer = setTimeout(function() {
+                    if (inFlight) return;
+                    inFlight = true;
+                    fetch(LIVE_URL, {
+                            headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+                            credentials: 'same-origin',
+                        })
+                        .then(res => { if (!res.ok) throw new Error(res.status); return res.json(); })
+                        .then(data => {
+                            swap(listEl, data.today_html);
+                            swap(statsEl, data.stats_html);
+                            if (todayCountEl) todayCountEl.textContent = data.count;
+                            if (pendingCountEl) pendingCountEl.textContent = data.pending_count;
+                        })
+                        .catch(() => {})
+                        .finally(() => { inFlight = false; });
+                }, 300);
+            }
+
+            function listen(channel) {
+                if (channel && !channel.__fdToday) {
+                    channel.__fdToday = true;
+                    channel.bind('availability.changed', refresh);
+                    channel.bind('frontdesk.updated', refresh);
                 }
             }
 

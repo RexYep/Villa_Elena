@@ -54,7 +54,7 @@
             @endif
             <div class="cust-user-text">
                 <div class="cust-user-name">{{ Auth::user()->full_name }}</div>
-                <div class="cust-user-role">Guest</div>
+                <div class="cust-user-role">Profile</div>
             </div>
         </a>
         <form method="POST" action="{{ route('logout') }}">
@@ -75,8 +75,10 @@
         aria-controls="custSidebar">
         <i class="bi bi-list"></i>
     </button>
-    <a href="{{ route('customer.home') }}" class="nav-brand"><img src="{{ asset('images/logo.png') }}" alt=""
-            class="brand-mark"> Villa Elena <span>Resort</span></a>
+    {{-- Walang logo dito, sinadya: nakikita ang bar na ito kasabay ng
+         sidebar kapag binuksan ito sa telepono, at dalawang magkaparehong
+         logo ang lumalabas nang magkatabi. Nasa sidebar ang logo. --}}
+    <a href="{{ route('customer.home') }}" class="nav-brand">Villa Elena <span>Resort</span></a>
     <a href="{{ route('customer.notifications') }}" class="notif-btn" id="notifBellLink">
         <i class="bi bi-bell"></i>
         @if ($unreadCount > 0)
@@ -86,3 +88,4 @@
 </header>
 
 <div class="cust-backdrop" id="custBackdrop"></div>
+

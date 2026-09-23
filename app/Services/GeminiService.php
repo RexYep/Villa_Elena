@@ -39,15 +39,22 @@ class GeminiService
      *
      * Same contract for every provider. Callers must never need to know which
      * one answered.
+     *
+     * `$temperature` defaults to 0.7 — the value every caller ran at before it
+     * was a parameter — so moderation, insights, forecast and the prescriptive
+     * briefing are unaffected. Lower it for factual-lookup work: the chatbot's
+     * intent extractor sends 0.0 (it emits strict JSON and creativity there is
+     * only a parse failure waiting to happen) and Elena's reply sends 0.3,
+     * because a chattier setting is what let her invent a WiFi password.
      */
-    public function ask(string $prompt, int $maxTokens = 1024): ?string
+    public function ask(string $prompt, int $maxTokens = 1024, float $temperature = 0.7): ?string
     {
         $provider = config('services.ai.provider', 'groq');
 
         try {
             return match ($provider) {
-                'groq' => $this->askGroq($prompt, $maxTokens),
-                'gemini' => $this->askGemini($prompt, $maxTokens),
+                'groq' => $this->askGroq($prompt, $maxTokens, $temperature),
+                'gemini' => $this->askGemini($prompt, $maxTokens, $temperature),
                 default => $this->unknownProvider($provider),
             };
         } catch (ConnectionException $e) {
@@ -67,7 +74,7 @@ class GeminiService
 
     // ── Groq ────────────────────────────────────────────────────────────
 
-    private function askGroq(string $prompt, int $maxTokens): ?string
+    private function askGroq(string $prompt, int $maxTokens, float $temperature): ?string
     {
         $key = config('services.groq.key');
         $model = (string) config('services.groq.model');
@@ -87,7 +94,7 @@ class GeminiService
                 ],
             ],
             'max_tokens' => $maxTokens,
-            'temperature' => 0.7,
+            'temperature' => $temperature,
         ];
 
         $effort = $this->groqReasoningEffort($model);
@@ -179,7 +186,7 @@ class GeminiService
 
     // ── Gemini ──────────────────────────────────────────────────────────
 
-    private function askGemini(string $prompt, int $maxTokens): ?string
+    private function askGemini(string $prompt, int $maxTokens, float $temperature): ?string
     {
         $key = config('services.gemini.key');
         $model = (string) config('services.gemini.model');
@@ -199,7 +206,7 @@ class GeminiService
         // cleanly 3/3 on gemini-3.6-flash without JSON mode.
         $generationConfig = [
             'maxOutputTokens' => $maxTokens,
-            'temperature' => 0.7,
+            'temperature' => $temperature,
         ];
 
         $thinkingLevel = $this->geminiThinkingLevel();

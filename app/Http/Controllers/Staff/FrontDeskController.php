@@ -4,6 +4,8 @@ namespace App\Http\Controllers\Staff;
 
 use App\Events\FrontdeskUpdated;
 use App\Events\PropertyAvailabilityChanged;
+use App\Helpers\BookingMailHelper;
+use App\Helpers\NotificationHelper;
 use App\Http\Controllers\Controller;
 use App\Models\AvailabilityBlock;
 use App\Models\Booking;
@@ -15,15 +17,85 @@ use App\Models\Property;
 use App\Models\StaffLog;
 use App\Models\User;
 use Illuminate\Http\Request;
-use App\Helpers\NotificationHelper;
-use App\Helpers\BookingMailHelper;
 use Illuminate\Support\Facades\Auth;
-
 
 class FrontDeskController extends Controller
 {
     // ── Main Frontdesk View ────────────────────────────────────────
     public function index()
+    {
+        $data = $this->todayData();
+
+        // Villa lang ang ipinapakita sa frontdesk. Ang mga `type=room`
+        // na record ay info-only na simula v4.0 (hindi na hiwalay na
+        // bookable, at wala na ngang pangalan) — lumalabas dati bilang
+        // mga blangkong card dito, at binibilang pa sa "Available" na
+        // stat, kaya mukhang may 3 pang bakanteng unit gayong isa lang
+        // talaga ang pwedeng i-book at kuha na ito.
+        $villa = Property::with(['currentBooking.user'])
+            ->where('type', 'villa')
+            ->first();
+
+        // Villa para sa walk-in form — Villa lang, hindi yung mga
+        // individual Room A-F (info-only records na sila simula v4.0,
+        // hindi na hiwalay na bookable). Bug fix: hindi dapat
+        // `status = 'available'` ang gamit dito — ang `status` column
+        // ay REAL-TIME occupancy lang (naka-flip kapag may naka-check-in
+        // NGAYON), hindi date-specific availability. Kapag may naka-
+        // check-in kahit ngayon lang, mawawala ang Villa sa buong form
+        // kahit anong PETSA/SLOT ang gustong i-book ng staff — hindi na
+        // naaabot pa ang tamang date/slot check (`Booking::hasConflict()`
+        // sa `storeWalkin()`). Ang totoong dapat i-exclude dito ay
+        // `maintenance` lang (deliberate block ng admin), hindi
+        // `occupied` (pansamantalang estado lang, hindi hadlang sa
+        // pag-book ng ibang petsa/slot).
+        $availableProperties = Property::where('status', '!=', 'maintenance')
+            ->where('type', 'villa')
+            ->orderBy('property_name')
+            ->get();
+
+        // Susunod na dalawang slot mula ngayon — ito ang pinakamadalas
+        // na tanong sa frontdesk ("libre pa ba mamaya/bukas?"), kaya
+        // nasa stats row na mismo imbes na kailangan pang pumunta sa
+        // Availability page.
+        $nextSlots = $villa ? $this->buildSlotGrid($villa, today(), 2) : [];
+
+        return view('staff.frontdesk', array_merge($data, compact(
+            'villa', 'availableProperties', 'nextSlots'
+        )));
+    }
+
+    /**
+     * GET /staff/frontdesk/today — ang stats row at ang Today list,
+     * muling ni-render ng parehong partial ng page. Tinatawag kapag may
+     * `availability.changed` o `frontdesk.updated`, at tuwing 60s.
+     *
+     * Ito ang sumasalo sa mga pagbabagong WALANG gumagawa sa page na ito:
+     * ang `bookings:auto-checkinout` na command (auto check-in/out sa
+     * takdang oras), ang bayad na dumaan sa PayMongo webhook, at ang
+     * aksiyon ng ibang staff sa ibang makina. Dati, kailangan pang
+     * i-refresh ni staff ang page bago lumitaw ang alinman sa mga ito.
+     */
+    public function todayLive()
+    {
+        $data = $this->todayData();
+
+        return response()->json([
+            'count' => $data['todayItems']->count(),
+            'today_html' => view('staff.partials._today_list', $data)->render(),
+            'stats_html' => view('staff.partials._frontdesk_stats', $data)->render(),
+            'pending_count' => $data['pendingBookings']->count(),
+        ]);
+    }
+
+    /**
+     * Lahat ng datos ng stats row at ng Today list. Iisang pinagmulan ng
+     * index() at ng todayLive(), kaya hindi puwedeng maglayo ang unang
+     * render at ang kusang pag-update.
+     *
+     * @return array<string, mixed>
+     */
+    private function todayData(): array
     {
         $today = today();
 
@@ -43,6 +115,27 @@ class FrontDeskController extends Controller
             ->with(['property', 'user'])
             ->orderBy('check_out_date')
             ->get();
+
+        // Isang listahan ng LAHAT ng nangyayari: nasa villa ngayon, aalis
+        // ngayong araw, at darating ngayong araw — sunod sa oras, nasa
+        // itaas ang nasa villa na. Isang villa lang ito, kaya ang dating
+        // hiwalay na Check-ins, Check-outs at Current Guests tab ay
+        // tig-iisang row lang — at lumalabas pa sa dalawang tab ang
+        // iisang guest (Day slot: departure ngayon AT "current guest").
+        // Ang `checked_in` na hindi ngayon ang checkout (Night slot, 6AM
+        // bukas) ang tanging dating nasa Current Guests lang.
+        $inHouse = $currentGuests->reject(fn ($b) => $b->check_out_date->isToday());
+
+        $todayItems = $inHouse
+            ->map(fn ($b) => ['action' => 'inhouse', 'at' => $b->checkOutDateTime(), 'booking' => $b])
+            ->sortBy('at')
+            ->concat(
+                $checkIns
+                    ->map(fn ($b) => ['action' => 'checkin', 'at' => $b->checkInDateTime(), 'booking' => $b])
+                    ->concat($checkOuts->map(fn ($b) => ['action' => 'checkout', 'at' => $b->checkOutDateTime(), 'booking' => $b]))
+                    ->sortBy('at')
+            )
+            ->values();
 
         // Ang "pending" lang na may saysay pa sa frontdesk: hold na hindi
         // pa lumalagpas sa Booking Hold (kaparehong cutoff ng hasConflict()),
@@ -80,60 +173,25 @@ class FrontDeskController extends Controller
             ->values();
 
         [
-            'openTasks'       => $openTasks,
+            'openTasks' => $openTasks,
             'inProgressTasks' => $inProgressTasks,
-            'pendingTasks'    => $pendingTasks,
-            'openReports'     => $openReports,
-            'urgentItem'      => $urgentItem,
+            'pendingTasks' => $pendingTasks,
+            'openReports' => $openReports,
+            'urgentItem' => $urgentItem,
         ] = $this->housekeeping();
 
-        // Villa lang ang ipinapakita sa frontdesk. Ang mga `type=room`
-        // na record ay info-only na simula v4.0 (hindi na hiwalay na
-        // bookable, at wala na ngang pangalan) — lumalabas dati bilang
-        // mga blangkong card dito, at binibilang pa sa "Available" na
-        // stat, kaya mukhang may 3 pang bakanteng unit gayong isa lang
-        // talaga ang pwedeng i-book at kuha na ito.
-        $villa = Property::with(['currentBooking.user'])
-            ->where('type', 'villa')
-            ->first();
-
-        // Villa para sa walk-in form — Villa lang, hindi yung mga
-        // individual Room A-F (info-only records na sila simula v4.0,
-        // hindi na hiwalay na bookable). Bug fix: hindi dapat
-        // `status = 'available'` ang gamit dito — ang `status` column
-        // ay REAL-TIME occupancy lang (naka-flip kapag may naka-check-in
-        // NGAYON), hindi date-specific availability. Kapag may naka-
-        // check-in kahit ngayon lang, mawawala ang Villa sa buong form
-        // kahit anong PETSA/SLOT ang gustong i-book ng staff — hindi na
-        // naaabot pa ang tamang date/slot check (`Booking::hasConflict()`
-        // sa `storeWalkin()`). Ang totoong dapat i-exclude dito ay
-        // `maintenance` lang (deliberate block ng admin), hindi
-        // `occupied` (pansamantalang estado lang, hindi hadlang sa
-        // pag-book ng ibang petsa/slot).
-        $availableProperties = Property::where('status', '!=', 'maintenance')
-            ->where('type', 'villa')
-            ->orderBy('property_name')
-            ->get();
-
-        // Susunod na dalawang slot mula ngayon — ito ang pinakamadalas
-        // na tanong sa frontdesk ("libre pa ba mamaya/bukas?"), kaya
-        // nasa stats row na mismo imbes na kailangan pang pumunta sa
-        // Availability page.
-        $nextSlots = $villa ? $this->buildSlotGrid($villa, today(), 2) : [];
-
         $stats = [
-            'check_ins_today'  => $checkIns->count(),
+            'check_ins_today' => $checkIns->count(),
             'check_outs_today' => $checkOuts->count(),
-            'pending_tasks'    => $openTasks->count() + $openReports->count(),
-            'to_collect'       => (float) $toCollect->sum('balance_due'),
+            'pending_tasks' => $openTasks->count() + $openReports->count(),
+            'to_collect' => (float) $toCollect->sum('balance_due'),
         ];
 
-        return view('staff.frontdesk', compact(
-            'checkIns', 'checkOuts', 'currentGuests', 'pendingBookings',
+        return compact(
+            'checkIns', 'checkOuts', 'todayItems', 'currentGuests', 'pendingBookings',
             'paidPending', 'activeHolds', 'holdMinutes', 'nextArrival', 'toCollect',
-            'pendingTasks', 'inProgressTasks', 'openReports', 'urgentItem', 'villa',
-            'availableProperties', 'stats', 'nextSlots'
-        ));
+            'pendingTasks', 'inProgressTasks', 'openReports', 'urgentItem', 'stats'
+        );
     }
 
     /**
@@ -155,11 +213,11 @@ class FrontDeskController extends Controller
             ->get();
 
         return [
-            'openTasks'       => $openTasks,
+            'openTasks' => $openTasks,
             'inProgressTasks' => $openTasks->where('status', 'in_progress')->values(),
-            'pendingTasks'    => $openTasks->where('status', 'pending')->values(),
-            'openReports'     => $openReports,
-            'urgentItem'      => $this->mostUrgentHousekeeping($openTasks, $openReports),
+            'pendingTasks' => $openTasks->where('status', 'pending')->values(),
+            'openReports' => $openReports,
+            'urgentItem' => $this->mostUrgentHousekeeping($openTasks, $openReports),
         ];
     }
 
@@ -173,8 +231,8 @@ class FrontDeskController extends Controller
         ['openTasks' => $openTasks, 'openReports' => $openReports, 'urgentItem' => $urgentItem] = $this->housekeeping();
 
         return response()->json([
-            'count'        => $openTasks->count() + $openReports->count(),
-            'urgent_html'  => view('staff.partials._urgent_housekeeping', compact('urgentItem'))->render(),
+            'count' => $openTasks->count() + $openReports->count(),
+            'urgent_html' => view('staff.partials._urgent_housekeeping', compact('urgentItem'))->render(),
             'reports_html' => view('staff.partials._issue_reports', compact('openReports'))->render(),
         ]);
     }
@@ -224,11 +282,11 @@ class FrontDeskController extends Controller
         $grid = $this->buildSlotGrid($villa, $start, $days);
 
         return view('staff.availability', [
-            'villa'    => $villa,
-            'grid'     => $grid,
-            'start'    => $start,
-            'end'      => $start->copy()->addDays($days - 1),
-            'days'     => $days,
+            'villa' => $villa,
+            'grid' => $grid,
+            'start' => $start,
+            'end' => $start->copy()->addDays($days - 1),
+            'days' => $days,
             'prevDate' => $start->copy()->subDays($days)->lt(today())
                 ? null
                 : $start->copy()->subDays($days)->format('Y-m-d'),
@@ -312,13 +370,12 @@ class FrontDeskController extends Controller
             foreach (array_keys(Booking::SLOTS) as $slotKey) {
                 [$checkin, $checkout] = Booking::slotDateTimes($slotKey, $date->format('Y-m-d'));
 
-                $block = $blocks->first(fn ($b) =>
-                    $date->betweenIncluded($b->start_date, $b->end_date));
+                $block = $blocks->first(fn ($b) => $date->betweenIncluded($b->start_date, $b->end_date));
 
                 if ($block) {
-                    $state  = 'blocked';
-                    $label  = ucfirst(str_replace('_', ' ', $block->reason));
-                    $guest  = null;
+                    $state = 'blocked';
+                    $label = ucfirst(str_replace('_', ' ', $block->reason));
+                    $guest = null;
                 } elseif ($checkin->isPast()) {
                     // Lumagpas na ang check-in oras ng slot — hindi na ito
                     // maibe-book pa, kahit walang kumuha.
@@ -332,8 +389,7 @@ class FrontDeskController extends Controller
                         ->where('check_in_date', '<=', $checkout->copy()->addDay())
                         ->with('user')
                         ->get()
-                        ->first(fn ($b) =>
-                            $checkin->lt($b->checkOutDateTime()) && $checkout->gt($b->checkInDateTime()));
+                        ->first(fn ($b) => $checkin->lt($b->checkOutDateTime()) && $checkout->gt($b->checkInDateTime()));
 
                     $state = 'booked';
                     $label = $taken->booking_ref ?? 'Booked';
@@ -351,20 +407,20 @@ class FrontDeskController extends Controller
                 $quote = $state === 'free' ? $villa->quoteFor($checkin, $slotKey) : null;
 
                 $slots[$slotKey] = [
-                    'state'    => $state,
-                    'label'    => $label,
-                    'guest'    => $guest,
-                    'price'    => $quote['total'] ?? null,
-                    'base'     => $quote['base'] ?? null,
-                    'promo'    => $quote['promo']->label ?? null,
+                    'state' => $state,
+                    'label' => $label,
+                    'guest' => $guest,
+                    'price' => $quote['total'] ?? null,
+                    'base' => $quote['base'] ?? null,
+                    'promo' => $quote['promo']->label ?? null,
                     'check_in' => $checkin,
                 ];
             }
 
             $grid[] = [
-                'date'     => $date,
+                'date' => $date,
                 'is_today' => $date->isToday(),
-                'slots'    => $slots,
+                'slots' => $slots,
             ];
         }
 
@@ -394,8 +450,8 @@ class FrontDeskController extends Controller
     {
         $validator = validator($request->all(), [
             'property_id' => 'required|exists:properties,id',
-            'checkin'     => 'required|date',
-            'slot'        => 'required|in:' . implode(',', array_keys(Booking::SLOTS)),
+            'checkin' => 'required|date',
+            'slot' => 'required|in:'.implode(',', array_keys(Booking::SLOTS)),
         ]);
 
         if ($validator->fails()) {
@@ -421,15 +477,15 @@ class FrontDeskController extends Controller
         }
 
         return response()->json([
-            'valid'       => true,
-            'available'   => $available,
-            'message'     => $message,
-            'is_peak'     => $isPeak,
-            'hours'       => round($checkin->diffInHours($checkout), 1),
-            'day_label'   => $checkin->format('D, M j'),
-            'base'        => $quote['base'],
-            'discount'    => $quote['discount'],
-            'total'       => $quote['total'],
+            'valid' => true,
+            'available' => $available,
+            'message' => $message,
+            'is_peak' => $isPeak,
+            'hours' => round($checkin->diffInHours($checkout), 1),
+            'day_label' => $checkin->format('D, M j'),
+            'base' => $quote['base'],
+            'discount' => $quote['discount'],
+            'total' => $quote['total'],
             'promo_label' => $quote['promo']?->label,
             'promo_value' => $quote['promo']?->value_label,
         ]);
@@ -470,9 +526,9 @@ class FrontDeskController extends Controller
     public function storeWalkin(Request $request)
     {
         $request->validate([
-            'guest_type'       => 'required|in:existing,new',
-            'user_id'          => 'required_if:guest_type,existing|nullable|exists:users,id',
-            'full_name'        => 'required_if:guest_type,new|nullable|string|max:255',
+            'guest_type' => 'required|in:existing,new',
+            'user_id' => 'required_if:guest_type,existing|nullable|exists:users,id',
+            'full_name' => 'required_if:guest_type,new|nullable|string|max:255',
             // create_account: kung gagawa ba ng totoong login account ang
             // bagong guest, o guest record lang (walang login access).
             // Email required lang kapag talagang gagawa ng account —
@@ -480,19 +536,19 @@ class FrontDeskController extends Controller
             // link. Hindi ito nakakaapekto sa online registration
             // (AuthController::register()), na hiwalay pa ring
             // nag-e-enforce ng sarili nitong `required` na rule.
-            'create_account'   => 'required_if:guest_type,new|nullable|in:yes,no',
-            'email'            => 'required_if:create_account,yes|nullable|email|unique:users,email',
-            'phone'            => 'nullable|string|max:20',
+            'create_account' => 'required_if:guest_type,new|nullable|in:yes,no',
+            'email' => 'required_if:create_account,yes|nullable|email|unique:users,email',
+            'phone' => 'nullable|string|max:20',
             // property_id: dapat Villa lang ang matatanggap, kahit
             // ma-bypass ang dropdown restriction sa frontend.
-            'property_id'      => 'required|exists:properties,id,type,villa',
-            'check_in_date'    => 'required|date|after_or_equal:today',
-            'slot'             => 'required|in:' . implode(',', array_keys(Booking::SLOTS)),
-            'num_guests'       => 'required|integer|min:1',
+            'property_id' => 'required|exists:properties,id,type,villa',
+            'check_in_date' => 'required|date|after_or_equal:today',
+            'slot' => 'required|in:'.implode(',', array_keys(Booking::SLOTS)),
+            'num_guests' => 'required|integer|min:1',
             'special_requests' => 'nullable|string|max:500',
-            'payment_amount'   => 'nullable|numeric|min:0',
-            'payment_method'   => 'nullable|in:cash,qrph',
-            'payment_type'     => 'nullable|in:partial,full_payment',
+            'payment_amount' => 'nullable|numeric|min:0',
+            'payment_method' => 'nullable|in:cash,qrph',
+            'payment_type' => 'nullable|in:partial,full_payment',
         ]);
 
         [$checkin, $checkout] = Booking::slotDateTimes($request->slot, $request->check_in_date);
@@ -506,7 +562,7 @@ class FrontDeskController extends Controller
         // ibig sabihin wala nang natitirang oras sa buong package.
         if ($checkout->isPast()) {
             return back()
-                ->withErrors(['check_in_date' => 'The entire ' . Booking::SLOTS[$request->slot]['label'] . ' slot has already passed for today (check-out time has elapsed). Please select a different date or slot.'])
+                ->withErrors(['check_in_date' => 'The entire '.Booking::SLOTS[$request->slot]['label'].' slot has already passed for today (check-out time has elapsed). Please select a different date or slot.'])
                 ->withInput();
         }
 
@@ -517,7 +573,7 @@ class FrontDeskController extends Controller
 
         // Capacity guard — dating `min:1` lang, walang upper bound.
         $request->validate([
-            'num_guests' => 'integer|max:' . $property->max_capacity,
+            'num_guests' => 'integer|max:'.$property->max_capacity,
         ], [
             'num_guests.max' => 'Villa Elena accommodates up to :max guests.',
         ]);
@@ -526,12 +582,12 @@ class FrontDeskController extends Controller
         // ito bagay na pinipili ni staff. Ang `total` ang batayan ng
         // lahat ng pagsusuri sa bayad sa ibaba; ang `base` ay itinatala
         // lang bilang listahang presyo bago ang bawas.
-        $quote          = $property->quoteFor($checkin, $request->slot);
-        $baseAmount     = $quote['base'];
+        $quote = $property->quoteFor($checkin, $request->slot);
+        $baseAmount = $quote['base'];
         $discountAmount = $quote['discount'];
-        $totalAmount    = $quote['total'];
-        $promo          = $quote['promo'];
-        $amountPaid     = (float) ($request->payment_amount ?? 0);
+        $totalAmount = $quote['total'];
+        $promo = $quote['promo'];
+        $amountPaid = (float) ($request->payment_amount ?? 0);
 
         // Overpayment guard — hindi puwedeng lumagpas sa total ang
         // ire-record na "amount received". Kung may sukli, i-record na
@@ -539,7 +595,7 @@ class FrontDeskController extends Controller
         // → i-type na lang ₱4,000), hindi ang buong ₱5,000.
         if ($amountPaid > $totalAmount) {
             return back()
-                ->withErrors(['payment_amount' => 'Ang natanggap na bayad (₱' . number_format($amountPaid, 2) . ') ay lampas sa kabuuang halaga (₱' . number_format($totalAmount, 2) . '). Kung may sukli, i-type na lang ang netong natanggap.'])
+                ->withErrors(['payment_amount' => 'Ang natanggap na bayad (₱'.number_format($amountPaid, 2).') ay lampas sa kabuuang halaga (₱'.number_format($totalAmount, 2).'). Kung may sukli, i-type na lang ang netong natanggap.'])
                 ->withInput();
         }
 
@@ -552,7 +608,7 @@ class FrontDeskController extends Controller
         // booking na ganito ang nangyari — VE-OLRWMOGX.)
         if ($amountPaid > 0 && ! $request->payment_method) {
             return back()
-                ->withErrors(['payment_method' => 'Pumili ng paraan ng bayad — kailangan ito para maitala nang maayos ang ₱' . number_format($amountPaid, 2) . ' na natanggap.'])
+                ->withErrors(['payment_method' => 'Pumili ng paraan ng bayad — kailangan ito para maitala nang maayos ang ₱'.number_format($amountPaid, 2).' na natanggap.'])
                 ->withInput();
         }
 
@@ -583,11 +639,11 @@ class FrontDeskController extends Controller
 
                 $user = User::create([
                     'full_name' => $request->full_name,
-                    'email'     => $request->create_account === 'yes' ? $request->email : null,
-                    'phone'     => $request->phone,
-                    'password'  => bcrypt($tempPassword),
-                    'role'      => 'customer',
-                    'status'    => 1,
+                    'email' => $request->create_account === 'yes' ? $request->email : null,
+                    'phone' => $request->phone,
+                    'password' => bcrypt($tempPassword),
+                    'role' => 'customer',
+                    'status' => 1,
                 ]);
 
                 // Password-reset email ipinapadala lang kung talagang
@@ -602,7 +658,7 @@ class FrontDeskController extends Controller
                     try {
                         \Illuminate\Support\Facades\Password::sendResetLink(['email' => $user->email]);
                     } catch (\Exception $e) {
-                        \Illuminate\Support\Facades\Log::error('Failed to send walk-in password reset link: ' . $e->getMessage());
+                        \Illuminate\Support\Facades\Log::error('Failed to send walk-in password reset link: '.$e->getMessage());
                     }
                 }
             } else {
@@ -614,8 +670,11 @@ class FrontDeskController extends Controller
             $balanceDue = $totalAmount - $amountPaid;
 
             $paymentStatus = 'unpaid';
-            if ($amountPaid >= $totalAmount) $paymentStatus = 'paid';
-            elseif ($amountPaid > 0)         $paymentStatus = 'partial';
+            if ($amountPaid >= $totalAmount) {
+                $paymentStatus = 'paid';
+            } elseif ($amountPaid > 0) {
+                $paymentStatus = 'partial';
+            }
 
             // Auto-determine payment type — kung binayaran nang buo,
             // "full_payment"; kung hindi, "partial". Hindi na umaasa sa
@@ -623,24 +682,24 @@ class FrontDeskController extends Controller
             $paymentType = $amountPaid >= $totalAmount ? 'full_payment' : 'partial';
 
             $booking = Booking::create([
-                'user_id'          => $user->id,
-                'property_id'      => $property->id,
-                'check_in_date'    => $checkin->format('Y-m-d'),
-                'check_in_time'    => $checkin->format('H:i:s'),
-                'check_out_date'   => $checkout->format('Y-m-d'),
-                'check_out_time'   => $checkout->format('H:i:s'),
-                'num_nights'       => $nights,
-                'num_guests'       => $request->num_guests,
-                'base_amount'      => $baseAmount,
-                'extras_amount'    => 0,
-                'discount_amount'  => $discountAmount,
-                'discount_id'      => $promo?->id,
-                'total_amount'     => $totalAmount,
-                'amount_paid'      => $amountPaid,
-                'balance_due'      => max(0, $balanceDue),
-                'status'           => 'confirmed',
-                'payment_status'   => $paymentStatus,
-                'source'           => 'walk_in',
+                'user_id' => $user->id,
+                'property_id' => $property->id,
+                'check_in_date' => $checkin->format('Y-m-d'),
+                'check_in_time' => $checkin->format('H:i:s'),
+                'check_out_date' => $checkout->format('Y-m-d'),
+                'check_out_time' => $checkout->format('H:i:s'),
+                'num_nights' => $nights,
+                'num_guests' => $request->num_guests,
+                'base_amount' => $baseAmount,
+                'extras_amount' => 0,
+                'discount_amount' => $discountAmount,
+                'discount_id' => $promo?->id,
+                'total_amount' => $totalAmount,
+                'amount_paid' => $amountPaid,
+                'balance_due' => max(0, $balanceDue),
+                'status' => 'confirmed',
+                'payment_status' => $paymentStatus,
+                'source' => 'walk_in',
                 'special_requests' => $request->special_requests,
             ]);
 
@@ -651,35 +710,35 @@ class FrontDeskController extends Controller
             // Record payment if any amount was paid
             if ($amountPaid > 0 && $request->payment_method) {
                 Payment::create([
-                    'booking_id'     => $booking->id,
-                    'amount'         => $amountPaid,
+                    'booking_id' => $booking->id,
+                    'amount' => $amountPaid,
                     'payment_method' => $request->payment_method,
-                    'payment_type'   => $paymentType,
-                    'status'         => 'success',
-                    'payment_date'   => today(),
-                    'received_by'    => Auth::id(),
-                    'notes'          => 'Walk-in payment recorded by ' . Auth::user()->full_name,
+                    'payment_type' => $paymentType,
+                    'status' => 'success',
+                    'payment_date' => today(),
+                    'received_by' => Auth::id(),
+                    'notes' => 'Walk-in payment recorded by '.Auth::user()->full_name,
                 ]);
             }
 
             Notification::create([
                 'user_id' => $user->id,
-                'type'    => 'in_app',
-                'title'   => 'Booking Confirmed!',
+                'type' => 'in_app',
+                'title' => 'Booking Confirmed!',
                 'message' => "Your walk-in booking {$booking->booking_ref} for {$property->property_name} has been confirmed. Check-in: {$checkin->format('M d, Y g:i A')}.",
-                'link'    => route('customer.bookings.show', $booking, false),
+                'link' => route('customer.bookings.show', $booking, false),
                 'is_read' => 0,
-                'status'  => 'sent',
+                'status' => 'sent',
                 'sent_at' => now(),
             ]);
 
             StaffLog::record('walkin_booking', 'bookings', $booking->id,
-                "Walk-in booking {$booking->booking_ref} created by " . Auth::user()->full_name . " for guest {$user->full_name}");
+                "Walk-in booking {$booking->booking_ref} created by ".Auth::user()->full_name." for guest {$user->full_name}");
 
             return $booking;
         });
 
-        if (!$booking) {
+        if (! $booking) {
             return back()
                 ->withErrors(['check_in_date' => Booking::unavailableMessage(
                     $request->property_id, $checkin,
@@ -702,7 +761,7 @@ class FrontDeskController extends Controller
                 actor: Auth::user()->full_name,
             ));
         } catch (\Exception $e) {
-            \Illuminate\Support\Facades\Log::error('Failed to broadcast FrontdeskUpdated (walkin): ' . $e->getMessage());
+            \Illuminate\Support\Facades\Log::error('Failed to broadcast FrontdeskUpdated (walkin): '.$e->getMessage());
         }
 
         try {
@@ -716,22 +775,22 @@ class FrontDeskController extends Controller
                 bookingId: $booking->id,
             ));
         } catch (\Exception $e) {
-            \Illuminate\Support\Facades\Log::error('Failed to broadcast PropertyAvailabilityChanged (walkin): ' . $e->getMessage());
+            \Illuminate\Support\Facades\Log::error('Failed to broadcast PropertyAvailabilityChanged (walkin): '.$e->getMessage());
         }
 
         return redirect()->route('staff.frontdesk')
-            ->with('success', "✅ Walk-in booking {$booking->booking_ref} created for {$booking->user->full_name}. " .
-                ($booking->amount_paid > 0 ? "Payment of ₱" . number_format($booking->amount_paid, 2) . " recorded." : ""));
+            ->with('success', "✅ Walk-in booking {$booking->booking_ref} created for {$booking->user->full_name}. ".
+                ($booking->amount_paid > 0 ? 'Payment of ₱'.number_format($booking->amount_paid, 2).' recorded.' : ''));
     }
 
     // ── Record Payment for Existing Booking ───────────────────────
     public function recordPayment(Request $request, Booking $booking)
     {
         $request->validate([
-            'amount'         => 'required|numeric|min:1',
+            'amount' => 'required|numeric|min:1',
             'payment_method' => 'required|in:cash,qrph',
-            'payment_type'   => 'required|in:full_payment,partial,balance',
-            'notes'          => 'nullable|string|max:300',
+            'payment_type' => 'required|in:full_payment,partial,balance',
+            'notes' => 'nullable|string|max:300',
             'confirm_duplicate' => 'nullable|boolean',
         ]);
 
@@ -752,14 +811,14 @@ class FrontDeskController extends Controller
         }
 
         Payment::create([
-            'booking_id'     => $booking->id,
-            'amount'         => $request->amount,
+            'booking_id' => $booking->id,
+            'amount' => $request->amount,
             'payment_method' => $request->payment_method,
-            'payment_type'   => $request->payment_type,
-            'status'         => 'success',
-            'payment_date'   => today(),
-            'received_by'    => Auth::id(),
-            'notes'          => $request->notes ?? 'Recorded by ' . Auth::user()->full_name,
+            'payment_type' => $request->payment_type,
+            'status' => 'success',
+            'payment_date' => today(),
+            'received_by' => Auth::id(),
+            'notes' => $request->notes ?? 'Recorded by '.Auth::user()->full_name,
         ]);
 
         $booking->recalculateFinancials();
@@ -773,20 +832,20 @@ class FrontDeskController extends Controller
         BookingMailHelper::paymentRecorded($booking, (float) $request->amount, $wasPending);
 
         StaffLog::record('payment_recorded', 'bookings', $booking->id,
-            "Payment ₱{$request->amount} recorded for booking {$booking->booking_ref} by " . Auth::user()->full_name);
+            "Payment ₱{$request->amount} recorded for booking {$booking->booking_ref} by ".Auth::user()->full_name);
 
         try {
             event(new FrontdeskUpdated(
                 'payment',
-                "₱" . number_format($request->amount, 2) . " recorded for {$booking->booking_ref} by " . Auth::user()->full_name . ".",
+                '₱'.number_format($request->amount, 2)." recorded for {$booking->booking_ref} by ".Auth::user()->full_name.'.',
                 bookingId: $booking->id,
                 actor: Auth::user()->full_name,
             ));
         } catch (\Exception $e) {
-            \Illuminate\Support\Facades\Log::error('Failed to broadcast FrontdeskUpdated (payment): ' . $e->getMessage());
+            \Illuminate\Support\Facades\Log::error('Failed to broadcast FrontdeskUpdated (payment): '.$e->getMessage());
         }
 
-        return back()->with('success', "✅ Payment of ₱" . number_format($request->amount, 2) . " recorded for {$booking->booking_ref}.");
+        return back()->with('success', '✅ Payment of ₱'.number_format($request->amount, 2)." recorded for {$booking->booking_ref}.");
     }
 
     // ── Check In ──────────────────────────────────────────────────
@@ -802,7 +861,7 @@ class FrontDeskController extends Controller
         // check-in datetime (ang automated na "bookings:auto-checkinout"
         // command na ang bahalang mag-check-in nang eksakto sa oras).
         if ($booking->checkInDateTime()->isFuture()) {
-            return back()->with('error', 'It is not yet time for check-in for this booking — it is scheduled for ' . $booking->checkInDateTime()->format('M d, Y g:i A') . '. It will be automatically checked in at the correct time.');
+            return back()->with('error', 'It is not yet time for check-in for this booking — it is scheduled for '.$booking->checkInDateTime()->format('M d, Y g:i A').'. It will be automatically checked in at the correct time.');
         }
 
         // Kung may natitirang balance (hal. 50% deposit lang ang binayad),
@@ -821,42 +880,42 @@ class FrontDeskController extends Controller
 
         $booking->update(['status' => 'checked_in', 'actual_check_in' => now()]);
         $booking->property->update(['status' => 'occupied']);
-        NotificationHelper::guestCheckedIn($booking->load(['user','property']));
+        NotificationHelper::guestCheckedIn($booking->load(['user', 'property']));
 
         Notification::create([
             'user_id' => $booking->user_id,
-            'type'    => 'in_app',
-            'title'   => 'Welcome to Villa Elena!',
+            'type' => 'in_app',
+            'title' => 'Welcome to Villa Elena!',
             'message' => "You have successfully checked in to {$booking->property->property_name}. Enjoy your stay! Check-out: {$booking->check_out_date->format('F d, Y')}.",
-            'link'    => route('customer.bookings.show', $booking, false),
+            'link' => route('customer.bookings.show', $booking, false),
             'is_read' => 0,
-            'status'  => 'sent',
+            'status' => 'sent',
             'sent_at' => now(),
         ]);
 
         // Audit trail — kung deferred ang balance, malinaw na nakalagay
         // dito kung sino sa staff ang nagkumpirma ng arrangement na ito.
         $balanceNote = $booking->balance_due > 0
-            ? " There is an outstanding balance of ₱" . number_format($booking->balance_due, 2) . " — confirmed by " . Auth::user()->full_name . " to be paid before check-out."
-            : "";
+            ? ' There is an outstanding balance of ₱'.number_format($booking->balance_due, 2).' — confirmed by '.Auth::user()->full_name.' to be paid before check-out.'
+            : '';
 
         StaffLog::record('check_in', 'bookings', $booking->id,
-            "Checked in {$booking->user->full_name} for {$booking->booking_ref}." . $balanceNote);
+            "Checked in {$booking->user->full_name} for {$booking->booking_ref}.".$balanceNote);
 
         try {
             event(new FrontdeskUpdated(
                 'checkin',
-                "{$booking->user->full_name} checked in to {$booking->property->property_name} by " . Auth::user()->full_name . ".",
+                "{$booking->user->full_name} checked in to {$booking->property->property_name} by ".Auth::user()->full_name.'.',
                 bookingId: $booking->id,
                 actor: Auth::user()->full_name,
             ));
         } catch (\Exception $e) {
-            \Illuminate\Support\Facades\Log::error('Failed to broadcast FrontdeskUpdated (checkin): ' . $e->getMessage());
+            \Illuminate\Support\Facades\Log::error('Failed to broadcast FrontdeskUpdated (checkin): '.$e->getMessage());
         }
 
         $successMsg = "✅ {$booking->user->full_name} checked in to {$booking->property->property_name}.";
         if ($booking->balance_due > 0) {
-            $successMsg .= " ⚠️ There is an outstanding balance of ₱" . number_format($booking->balance_due, 2) . " — must be paid before check-out.";
+            $successMsg .= ' ⚠️ There is an outstanding balance of ₱'.number_format($booking->balance_due, 2).' — must be paid before check-out.';
         }
 
         return back()->with('success', $successMsg);
@@ -875,21 +934,21 @@ class FrontDeskController extends Controller
         // hindi dapat ma-check-out ang isang booking bago pa man dumating
         // ang eksaktong oras nito.
         if ($booking->checkOutDateTime()->isFuture()) {
-            return back()->with('error', 'It is not yet time for check-out for this booking — it is scheduled for ' . $booking->checkOutDateTime()->format('M d, Y g:i A') . '.');
+            return back()->with('error', 'It is not yet time for check-out for this booking — it is scheduled for '.$booking->checkOutDateTime()->format('M d, Y g:i A').'.');
         }
 
         $booking->update(['status' => 'checked_out', 'actual_check_out' => now()]);
         $booking->property->update(['status' => 'available']);
-        NotificationHelper::guestCheckedOut($booking->load(['user','property']));
+        NotificationHelper::guestCheckedOut($booking->load(['user', 'property']));
 
         Notification::create([
             'user_id' => $booking->user_id,
-            'type'    => 'in_app',
-            'title'   => 'Check-out Complete',
+            'type' => 'in_app',
+            'title' => 'Check-out Complete',
             'message' => "Thank you for staying at Villa Elena! Booking {$booking->booking_ref} is now complete. We hope to see you again!",
-            'link'    => route('customer.bookings.show', $booking, false),
+            'link' => route('customer.bookings.show', $booking, false),
             'is_read' => 0,
-            'status'  => 'sent',
+            'status' => 'sent',
             'sent_at' => now(),
         ]);
 
@@ -899,12 +958,12 @@ class FrontDeskController extends Controller
         try {
             event(new FrontdeskUpdated(
                 'checkout',
-                "{$booking->user->full_name} checked out of {$booking->property->property_name} by " . Auth::user()->full_name . ".",
+                "{$booking->user->full_name} checked out of {$booking->property->property_name} by ".Auth::user()->full_name.'.',
                 bookingId: $booking->id,
                 actor: Auth::user()->full_name,
             ));
         } catch (\Exception $e) {
-            \Illuminate\Support\Facades\Log::error('Failed to broadcast FrontdeskUpdated (checkout): ' . $e->getMessage());
+            \Illuminate\Support\Facades\Log::error('Failed to broadcast FrontdeskUpdated (checkout): '.$e->getMessage());
         }
 
         // Sinasabi kailan dumarating ang susunod na guest — kadalasan
@@ -920,7 +979,7 @@ class FrontDeskController extends Controller
 
         $message = "✅ {$booking->user->full_name} checked out.";
         $message .= $nextIn
-            ? ' Next guest arrives ' . $nextIn->checkInDateTime()->format('M j, g:i A') . '.'
+            ? ' Next guest arrives '.$nextIn->checkInDateTime()->format('M j, g:i A').'.'
             : ' No booking follows yet.';
 
         return back()->with('success', $message);

@@ -91,6 +91,24 @@ Route::get('/cron/run-schedule/{token}', function (string $token) {
     return response('ok');
 })->name('cron.run-schedule');
 
+// Runs the cache measurements INSIDE the production container and returns
+// them as JSON. Render's free plan has no Shell tab, and the production
+// Redis (Render Key Value) is internal-only, so this is the only way to find
+// out whether Redis actually helps there — a developer machine measures its
+// own distance to Aiven and Docker, which answers a different question.
+// Same token gate as the cron route; returns timings only, never config
+// values or credentials. Safe to delete once the numbers are recorded.
+Route::get('/diagnostics/cache/{token}', function (string $token) {
+    abort_unless(
+        config('app.cron_secret') && hash_equals((string) config('app.cron_secret'), $token),
+        403
+    );
+
+    return response()->json(
+        \App\Services\CacheDiagnostics::measure((int) request()->integer('iterations', 50))
+    );
+})->name('diagnostics.cache');
+
 // ── Authentication Routes ──────────────────────────────────────────────────
 Route::middleware('guest')->group(function () {
     Route::get('/login', [AuthController::class, 'showLogin'])->name('login');
