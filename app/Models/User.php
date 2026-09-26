@@ -250,6 +250,45 @@ class User extends Authenticatable implements MustVerifyEmail
         return $this->role === 'customer';
     }
 
+    /**
+     * Ang sariling portal ng user na ito — ang "uwian" niya.
+     *
+     * Ang public landing page ay HINDI customer-only: nabubuksan din ito ng
+     * naka-login na admin o staff (halimbawa, para tingnan ang epekto ng isang
+     * bagong setting). Dati, isang bare `@auth` ang nag-aalok sa kanilang
+     * lahat ng "My Bookings" papuntang /my/ — na sinasagot ng RoleMiddleware
+     * ng 403, at mula v7.37 ay itinatala pa ni RecordSecurityResponses bilang
+     * security event. Sariling dashboard na ang inaalok ngayon sa bawat role.
+     *
+     * NULL kapag walang kilalang portal ang role: mas mabuting walang button
+     * kaysa sa isang button na 403.
+     *
+     * Kapareha ito ng mapa sa AuthController::redirectByRole() — kapag may
+     * idinagdag na bagong role, dalawa ang dapat baguhin.
+     */
+    public function homeRouteName(): ?string
+    {
+        return match ($this->role) {
+            'admin' => 'admin.dashboard',
+            'staff' => 'staff.frontdesk',
+            'customer' => 'customer.home',
+            default => null,
+        };
+    }
+
+    /**
+     * Ang label ng link sa itaas. Hiwalay sa homeRouteName() dahil magkaiba
+     * ang tawag ng bawat portal sa sarili nito sa loob ng app.
+     */
+    public function homeLabel(): string
+    {
+        return match ($this->role) {
+            'admin' => 'Admin Panel',
+            'staff' => 'Front Desk',
+            default => 'My Bookings',
+        };
+    }
+
     public function isActive(): bool
     {
         return (int) $this->status === 1;

@@ -13,6 +13,12 @@
 
 @php($isBare = trim($__env->yieldContent('bare')) !== '' || $__env->hasSection('bare'))
 @php($noChatbot = trim($__env->yieldContent('no-chatbot')) !== '' || $__env->hasSection('no-chatbot'))
+{{-- Tingnan ang User::homeRouteName(). Isang-linya ang anyo nito nang sadya,
+     katulad ng dalawa sa itaas: ang block form ay nilalamon ng compiler kapag
+     may isang-linyang anyo sa iisang file (CLAUDE.md). Huwag ding isulat ang
+     pangalan ng directive kahit sa loob ng komentong ito — kinukompile pa rin
+     ito, at iyon mismo ang bumasag sa file na ito habang isinusulat. --}}
+@php($portalHomeRoute = auth()->user()?->homeRouteName())
 
 @if($isBare)
     @yield('content')
@@ -24,7 +30,10 @@
             <a href="{{ route('home') }}" class="nav-brand">Villa <em>Elena</em></a>
             <div class="nav-right">
                 @auth
-                    <a href="{{ route('customer.home') }}" class="nav-btn nav-btn-ghost">My Dashboard</a>
+                    @if ($portalHomeRoute)
+                        <a href="{{ route($portalHomeRoute) }}"
+                            class="nav-btn nav-btn-ghost">{{ auth()->user()->homeLabel() }}</a>
+                    @endif
                 @else
                     <a href="{{ route('login') }}" class="nav-btn nav-btn-ghost">Sign In</a>
                     <a href="{{ route('register') }}" class="nav-btn nav-btn-gold">Register</a>

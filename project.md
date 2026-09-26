@@ -1,7 +1,7 @@
 # Villa Elena Private Rental Resort
 ## Resort Management System — Project Documentation
 
-**Version:** 7.42
+**Version:** 7.44
 **Stack:** PHP 8.2 / Laravel 12 / MySQL 8 / Bootstrap 5
 **Local URL:** `http://127.0.0.1:8000` (`php artisan serve`) or `http://localhost:8000` (Docker — see v5.3)
 **Live URL:** `https://villa-elena.onrender.com` (Render, free tier — testing only, not yet handed to real guests)
@@ -188,8 +188,170 @@ is the natural moment to remove them rather than a migration of their own.
 
 ---
 
-## What Changed in v7.42 (Read This First)
+## What Changed in v7.44 (Read This First)
 
+### `Referrer-Policy: strict-origin` sent every form in the app to the landing page
+
+Reported as "why does saving `/admin/settings` take me to the customer landing
+page?". The settings page was not special. **Every `back()` in the application
+was going to `/`** — 135 call sites across 22 controllers — and so was every
+validation failure, because the framework redirects those to `url()->previous()`
+as well.
+
+**The mechanism.** `UrlGenerator::previous()` reads the Referer FIRST and only
+falls back to the session when it is empty:
+
+```php
+$url = $referrer ? $this->to($referrer) : $this->getPreviousUrlFromSession();
+```
+
+v7.37 set `Referrer-Policy: strict-origin`, which sends scheme+host and nothing
+else **in every direction, same-origin included** — the middleware's own comment
+said so. So the browser sent `Referer: http://host/`, which is not empty, so it
+won, and `back()` resolved to `/`.
+
+Measured — two identical POSTs to `/login` with a wrong password, differing only
+in the Referer:
+
+| Referer sent | Redirect |
+|---|---|
+| `http://127.0.0.1:8000/` (strict-origin) | `302 Location: /` — the landing page |
+| `http://127.0.0.1:8000/login` (same-origin) | `302 Location: /login` — correct |
+
+**A bare-origin Referer is worse than none.** With the header absent entirely,
+`previous()` falls through to the session and is correct. `strict-origin`
+supplied just enough to be believed and not enough to be right.
+
+**The fix is `same-origin`**: full URL on our own requests, and **nothing at all**
+cross-origin — strictly less leakage to third parties than `strict-origin`, which
+still hands out the hostname.
+
+What that gives back is the case v7.37 was written for: a page whose own URL is a
+credential leaks it into our access log through its CSS/JS requests. That is now
+handled per route instead of by punishing every form in the app —
+`SecurityHeaders::carriesSecretInUrl()` sends `no-referrer` for `password.reset`
+and `verification.verify`. Only the first of those actually renders HTML, so it
+is the only one that can leak that way; the second is listed because it is the
+same class of URL and costs one line. The route name is read **after**
+`$next($request)` — this middleware is global, so on the way in
+`$request->route()` is still null.
+
+`no-referrer` does not break the reset form: its POST then carries no Referer at
+all, which sends `previous()` to the session, where `StartSession` stored the GET
+of that same page. A validation failure returns to the form.
+
+The cron secret named in the v7.37 comment is no longer in a URL at all — it
+moved to the `X-Cron-Secret` header in v7.27.
+
+### Verified
+
+- **A real browser.** `/login`, real form, wrong password → lands on `/login`
+  with "Invalid email or password" visible. The browser's own Referer is the
+  one link that could not be asserted from PHP, and this is what measures it.
+- **Real HTTP** against the running server: `curl -I` shows `same-origin` on
+  `/`, `/login`, `/admin/settings` and `no-referrer` on `/reset-password/{token}`.
+- **`XssAndHeadersTest`** — 15 passed. Two new cases: one asserts the
+  *behaviour* (a real POST to a route returning `back()`, under both Referer
+  shapes, so the bug's shape is kept as a test), one asserts the two
+  secret-carrying routes still send `no-referrer`.
+
+### A note on how this was found
+
+The first investigation answered the wrong question. The report said an admin
+"goes to the customer landing page" after saving settings, and that was read as
+the admin navigating there deliberately — so the work went into the landing
+page's nav (v7.43) and the redirect itself went unexamined for two rounds. The
+nav bug was real and the fix stands, but it was not what was being reported.
+**When a report says someone ended up somewhere, establish whether they walked
+there or were sent there before fixing anything.**
+
+---
+
+## What Changed in v7.43 (Read This First)
+### The public nav offered every signed-in user a customer link
+
+Reported from production: sign in as admin, save something in `/admin/settings`,
+open the landing page to look at the result — and the nav says **My Bookings**.
+Clicking it lands on `RoleMiddleware`'s *"Unauthorized. You do not have
+permission to access this page."*
+
+**This was not caused by the security review**, which is where it was first
+looked for. The `@auth` blocks in `portal/home.blade.php` are byte-for-byte
+identical to commit `e17e1fd`, the initial commit; `routes/customer.php` has
+carried `['auth', 'role:customer']` since that same commit; and
+`git show 91bcbc3 -- resources/views/portal/home.blade.php` touched only a CSS
+comment. No middleware has ever been deleted from this app
+(`git log --all --name-only -- app/Http/Middleware` lists five files, all
+present). The behaviour is original. What v7.37 *did* change is that the 403 is
+now recorded: `RecordSecurityResponses` watches for exactly this status, its own
+comment says "a 403 here is always exceptional", and five in an hour raises an
+alert — so an admin clicking their own broken nav link writes false positives
+into the audit trail.
+
+**`User::homeRouteName()` / `User::homeLabel()`** are the fix. The landing page
+is not customer-only — an admin opening it to check a setting is the normal
+case — so the nav now offers each role its own portal: admin → `admin.dashboard`
+(*Admin Panel*), staff → `staff.frontdesk` (*Front Desk*), customer →
+`customer.home` (*My Bookings*). `homeRouteName()` returns **NULL** for an
+unrecognised role and the link is omitted entirely: no button beats a button
+that 403s. It mirrors `AuthController::redirectByRole()` and says so in both
+places — a new role means editing two maps. `redirectByRole()` itself was left
+alone, including its `default => redirect('/')`, because changing an auth path
+was not part of this fix.
+
+Four call sites, all view-only: the desktop nav, the mobile menu and the footer
+in `portal/home.blade.php` (computed once in the existing `@php` block beside
+`$heroBookUrl`), plus the fallback nav in `layouts/portal.blade.php` that the
+reviews, privacy and terms pages use — that one said *My Dashboard* and went to
+the same place.
+
+**The footer's Guests column also listed Sign In and Create Account
+unconditionally**, to signed-in guests included. It is now `@auth` / `@else`.
+
+### The comment that broke the file it was documenting
+
+Writing this fix reproduced the v7.5 Blade trap, in a form the existing note
+doesn't cover. The new line in `layouts/portal.blade.php` carried a `{{-- --}}`
+comment explaining the one-line `@php(...)` choice — and *spelled the directive
+names out* inside that comment. `storeUncompiledBlocks()` runs a
+`/(?<!@)@php(.*?)@endphp/s` regex over the raw file **before** comments are
+stripped, so it paired the real `@php($isBare = …)` on line 14 with the
+`@endphp` inside the prose and swallowed everything between them. `$isBare` and
+`$noChatbot` stopped being assigned on every page using that layout.
+
+So the rule is wider than CLAUDE.md states: **a Blade directive name is
+dangerous anywhere in a `.blade.php` file, including inside a Blade comment.**
+Escape it (`@@php`) or reword. And as in v7.5, nothing reports it — the page
+still renders, with `Undefined variable $isBare` warnings the browser never
+shows. It was caught by a real render, not by inspection.
+
+### Verified
+
+Real renders through `PortalController`, per role, counting rendered `href`s
+rather than reading the source:
+
+| Page | guest | admin | staff | customer |
+|---|---|---|---|---|
+| Landing | `/login` ×3, `/register` ×3 | `/admin/dashboard` ×3 | `/staff/frontdesk` ×3 | `/my` ×3 |
+| Reviews (shared layout) | `/login` ×1, `/register` ×1 | `/admin/dashboard` ×1 | `/staff/frontdesk` ×1 | `/my` ×1 |
+
+×3 is nav + mobile menu + footer. No role sees a link to a portal it cannot
+enter, and the `/login` `/register` pair is gone once signed in.
+
+### Still open, deliberately not done
+
+`portal/property.blade.php` still shows **Reserve Now** to an admin or staff
+member (confirmed by render), and `POST book/{property}` is still gated by
+`auth, verified` with no `role:customer` (`routes/web.php:36`) while
+`submitBooking()` writes `'user_id' => Auth::id()`. So a signed-in admin can
+still create a real, slot-holding booking owned by the admin account — which
+`/my/` then refuses to show them. Local DB currently has **0** such bookings.
+Left alone because it changes booking behaviour and that was not authorised in
+this pass.
+
+---
+
+## What Changed in v7.42 (Read This First)
 Task 12, second half — F6, F7, F8. **This closes the security review.** Every
 finding across Tasks 1–12 is now either implemented or recorded in the standing
 **Pending Security Work** section at the top of this document.
@@ -2323,7 +2485,7 @@ It is not a hole today. A forged cross-site call can be *made*, but the Pusher c
 
 `docker/nginx.conf.template` already sent `X-Frame-Options: SAMEORIGIN` and `X-Content-Type-Options: nosniff`. Added:
 
-- **`Referrer-Policy: strict-origin`** — this app puts secrets in URLs and cannot stop: reset and verification links carry a signature in the query string (and, until v7.27, the cron pinger put `CRON_SECRET` in the path). `strict-origin` sends scheme+host and never the path, in every direction.
+- **`Referrer-Policy: strict-origin`** — this app puts secrets in URLs and cannot stop: reset and verification links carry a signature in the query string (and, until v7.27, the cron pinger put `CRON_SECRET` in the path). `strict-origin` sends scheme+host and never the path, in every direction. **Superseded in v7.44 — it broke every `back()` in the app.** Read that entry before touching this header.
 - **`Strict-Transport-Security: max-age=31536000`** — no `includeSubDomains`, because the `onrender.com` parent domain is not ours to speak for. Revisit if a custom domain is attached.
 
 ### Regression tests — `tests/Feature/CsrfCookieSecurityTest.php`, 16 tests

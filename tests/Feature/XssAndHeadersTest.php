@@ -43,7 +43,7 @@ class XssAndHeadersTest extends TestCase
         $response->assertOk();
         $response->assertHeader('X-Content-Type-Options', 'nosniff');
         $response->assertHeader('X-Frame-Options', 'SAMEORIGIN');
-        $response->assertHeader('Referrer-Policy', 'strict-origin');
+        $response->assertHeader('Referrer-Policy', 'same-origin');
     }
 
     /**
@@ -54,7 +54,7 @@ class XssAndHeadersTest extends TestCase
     {
         $path = $this->headerRoute();
 
-        $this->get($path)->assertHeader('Referrer-Policy', 'strict-origin');
+        $this->get($path)->assertHeader('Referrer-Policy', 'same-origin');
 
         // secure_url(), never a hardcoded https://localhost. TrustHosts pins
         // Symfony's trusted-host list in a STATIC on the Request class, so
@@ -67,6 +67,46 @@ class XssAndHeadersTest extends TestCase
         $this->get(secure_url($path))
             ->assertOk()
             ->assertHeader('Strict-Transport-Security', 'max-age=31536000');
+    }
+
+    /**
+     * v7.44. `strict-origin` withholds the path on SAME-ORIGIN requests too,
+     * and Laravel's url()->previous() prefers the Referer over the session —
+     * so `back()` read a bare origin and resolved to `/`. Every form in the
+     * app redirected to the landing page on save and on validation failure.
+     *
+     * This asserts the behaviour, not the header: a real POST to a route whose
+     * handler returns back(), with the Referer the policy actually produces.
+     */
+    public function test_back_returns_to_the_form_and_not_to_the_landing_page(): void
+    {
+        Route::get('/_test_back_form', fn () => 'form')->middleware('web')->name('test.back.form');
+        Route::post('/_test_back_form', fn () => back())->middleware('web');
+
+        $this->get('/_test_back_form')->assertOk();
+
+        // What a browser sends for a same-origin POST under `same-origin`.
+        $this->post('/_test_back_form', [], ['referer' => url('/_test_back_form')])
+            ->assertRedirect(url('/_test_back_form'));
+
+        // What it sent under `strict-origin` — kept as the shape of the bug.
+        $this->post('/_test_back_form', [], ['referer' => url('/')])
+            ->assertRedirect(url('/'));
+    }
+
+    /**
+     * The two routes whose own URL is the credential still withhold it. The
+     * global policy is relaxed; these are not.
+     */
+    public function test_urls_that_are_themselves_secrets_send_no_referrer(): void
+    {
+        foreach (['password.reset', 'verification.verify'] as $name) {
+            Route::get('/_test_secret_'.md5($name), fn () => 'ok')->name($name);
+
+            $this->get('/_test_secret_'.md5($name))
+                ->assertOk()
+                ->assertHeader('Referrer-Policy', 'no-referrer');
+        }
     }
 
     /**

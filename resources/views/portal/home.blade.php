@@ -2719,6 +2719,12 @@
                         ]),
                     )
                 : '#properties';
+
+        // Ang tatlong @auth na bahagi sa ibaba (desktop nav, mobile menu,
+        // footer) ay dumadaan dito. Tingnan ang User::homeRouteName() kung
+        // bakit hindi na "My Bookings" ang inaalok sa lahat ng naka-login.
+        $portalHomeRoute = auth()->user()?->homeRouteName();
+        $portalHomeLabel = auth()->user()?->homeLabel();
     @endphp
 
     {{-- ══════════════════════════════════
@@ -2740,7 +2746,10 @@
 
             <div class="nav-right">
                 @auth
-                    <a href="{{ route('customer.home') }}" class="nav-btn nav-btn-ghost">My Bookings</a>
+                    @if ($portalHomeRoute)
+                        <a href="{{ route($portalHomeRoute) }}"
+                            class="nav-btn nav-btn-ghost">{{ $portalHomeLabel }}</a>
+                    @endif
                     <form method="POST" action="{{ route('logout') }}" class="m-0">
                         @csrf
                         <button type="submit" class="nav-btn nav-btn-ghost">Sign Out</button>
@@ -2768,7 +2777,10 @@
         <a href="#contact" class="mobile-link">Contact</a>
         <div class="mobile-auth">
             @auth
-                <a href="{{ route('customer.home') }}" class="nav-btn nav-btn-ghost text-center">My Bookings</a>
+                @if ($portalHomeRoute)
+                    <a href="{{ route($portalHomeRoute) }}"
+                        class="nav-btn nav-btn-ghost text-center">{{ $portalHomeLabel }}</a>
+                @endif
                 <form method="POST" action="{{ route('logout') }}">
                     @csrf
                     <button type="submit" class="nav-btn nav-btn-ghost">Sign Out</button>
@@ -3629,10 +3641,13 @@
                 <div>
                     <div class="footer-col-title">Guests</div>
                     <ul class="footer-links">
-                        <li><a href="{{ route('login') }}">Sign In</a></li>
-                        <li><a href="{{ route('register') }}">Create Account</a></li>
                         @auth
-                            <li><a href="{{ route('customer.home') }}">My Bookings</a></li>
+                            @if ($portalHomeRoute)
+                                <li><a href="{{ route($portalHomeRoute) }}">{{ $portalHomeLabel }}</a></li>
+                            @endif
+                        @else
+                            <li><a href="{{ route('login') }}">Sign In</a></li>
+                            <li><a href="{{ route('register') }}">Create Account</a></li>
                         @endauth
                         <li><a href="#contact">Contact Us</a></li>
                         <li><a href="#location">Find Us</a></li>
