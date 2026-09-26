@@ -87,6 +87,10 @@
 
     <div class="sidebar-section">
         <div class="sidebar-section-label">System</div>
+        <a href="{{ route('admin.audit.index') }}" class="nav-item-custom {{ request()->routeIs('admin.audit.*') ? 'active' : '' }}">
+            <span class="nav-icon"><i class="bi bi-shield-check"></i></span>
+            Audit Log
+        </a>
         <a href="{{ route('admin.settings.index') }}" class="nav-item-custom {{ request()->routeIs('admin.settings.*') ? 'active' : '' }}">
             <span class="nav-icon"><i class="bi bi-gear"></i></span>
             Settings

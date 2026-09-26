@@ -8,16 +8,32 @@ use Illuminate\Support\Facades\Log;
 
 class PayMongoService
 {
+    /**
+     * Gaano katanda ang pinapayagang pirma ng webhook, sa segundo.
+     * Tingnan ang timestampWithinTolerance() kung bakit maluwag.
+     */
+    public const SIGNATURE_TOLERANCE_SECONDS = 300;
+
     private string $baseUrl = 'https://api.paymongo.com/v1';
     private string $secretKey;
     private string $publicKey;
 
     public function __construct()
     {
-      
-
-        $this->secretKey = config('services.paymongo.secret_key', env('PAYMONGO_SECRET_KEY', ''));
-        $this->publicKey = config('services.paymongo.public_key', env('PAYMONGO_PUBLIC_KEY', ''));
+        // Ang pangalawang argumento ng config() ay DEFAULT — ginagamit lang
+        // kapag WALA ang key. Ang `services.paymongo.secret_key` ay laging
+        // nakadeklara sa config/services.php bilang env('PAYMONGO_SECRET_KEY'),
+        // kaya ang dating `config(..., env('PAYMONGO_SECRET_KEY', ''))` ay
+        // pagbasa sa kaparehong variable sa pangalawang pagkakataon, sa mas
+        // masamang ruta: sa produksyon ay tumatakbo ang `config:cache`
+        // (docker/start.sh), at pagkatapos niyon ay hindi na binabasa ng
+        // Laravel ang .env — NULL na ang isinasagot ng env() para sa kahit
+        // anong nakatira lang doon. Ibig sabihin, ang "fallback" ay
+        // pinakamalamang na sumablay sa mismong sandaling kakailanganin ito.
+        //
+        // Huwag itong ibalik. Ang config() lang ang tamang pinagmumulan.
+        $this->secretKey = (string) config('services.paymongo.secret_key', '');
+        $this->publicKey = (string) config('services.paymongo.public_key', '');
     }
 
     /**
@@ -418,6 +434,27 @@ class PayMongoService
             return false;
         }
 
+        // Ang `t` ay bahagi ng pinipirmahan, kaya hindi ito mapepeke —
+        // pero dati ay hindi ito kailanman IKINUKUMPARA sa kasalukuyan,
+        // kaya walang hangganan ang replay window: tinatanggap pa rin
+        // ang isang kinopyang body+signature makalipas ang mga taon
+        // (nasukat: limang taóng gulang na timestamp, tinanggap).
+        //
+        // Ang idempotency ang humahadlang sa pinsala ngayon — ang
+        // naulit na `payment.paid` ay tumatama sa naitalang
+        // `reference_number` at walang ginagawa — pero iyon ay isang
+        // panangga sa ibang antas. Ito ang dahilan kung bakit may `t` sa
+        // header, at ang hindi paggamit nito ay pag-asa sa ibang tao.
+        if (! $this->timestampWithinTolerance($timestamp)) {
+            Log::warning('PayMongo webhook: signature timestamp outside the replay window — event ignored.', [
+                'timestamp' => $timestamp,
+                'age_seconds' => time() - (int) $timestamp,
+                'tolerance_seconds' => self::SIGNATURE_TOLERANCE_SECONDS,
+            ]);
+
+            return false;
+        }
+
         foreach ($this->webhookSecretsByMode() as $mode => $secrets) {
             if (! isset($parts[$mode])) {
                 continue;
@@ -433,6 +470,28 @@ class PayMongoService
         }
 
         return false;
+    }
+
+    /**
+     * Nasa loob ba ng tanggap na bintana ang timestamp ng pirma?
+     *
+     * Maluwag ang 5 minuto — at sinasadya iyon. Hindi naka-sync ang
+     * orasan ng Render container at ng PayMongo, may retry na dumarating
+     * makalipas ang ilang sandali, at ang masikip na bintana ay
+     * nangangahulugang tatanggihan ang mga TOTOONG bayad. Ang masikip na
+     * bintana rito ay mas mapanganib kaysa maluwag: ang tinanggihang
+     * event ay hindi na uulitin (laging-200), samantalang ang naulit na
+     * event ay wala namang ginagawa (idempotent na ang pagtatala).
+     *
+     * Pinapayagan ang kaunting nasa hinaharap para sa clock skew.
+     */
+    private function timestampWithinTolerance(string $timestamp): bool
+    {
+        if (! ctype_digit($timestamp)) {
+            return false;
+        }
+
+        return abs(time() - (int) $timestamp) <= self::SIGNATURE_TOLERANCE_SECONDS;
     }
 
     /**

@@ -55,14 +55,28 @@
 <script src="https://js.pusher.com/8.2.0/pusher.min.js"></script>
 <script>
 (function () {
-    const PUSHER_KEY     = '{{ env('PUSHER_APP_KEY') }}';
-    const PUSHER_CLUSTER = '{{ env('PUSHER_APP_CLUSTER', 'ap1') }}';
+    const PUSHER_KEY     = '{{ config('broadcasting.connections.pusher.key') }}';
+    const PUSHER_CLUSTER = '{{ config('broadcasting.connections.pusher.options.cluster', 'ap1') }}';
     const currentStaff   = @json(Auth::user()->full_name ?? '');
 
     if (!PUSHER_KEY) { console.warn('Pusher key not set'); return; }
 
-    const pusher  = new Pusher(PUSHER_KEY, { cluster: PUSHER_CLUSTER });
-    const channel = pusher.subscribe('staff-frontdesk');
+    // channelAuthorization is required now that the channel is private:
+    // Pusher POSTs here first and routes/channels.php checks this user is
+    // staff or admin. The frontdesk messages name guests and what was done
+    // for them, and as a plain `staff-frontdesk` they were readable by
+    // anyone holding the app key — a CLIENT credential that is rendered
+    // into pages, including the public property page.
+    const pusher  = new Pusher(PUSHER_KEY, {
+        cluster: PUSHER_CLUSTER,
+        channelAuthorization: {
+            endpoint: '{{ url('/broadcasting/auth') }}',
+            headers: {
+                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.content
+            },
+        },
+    });
+    const channel = pusher.subscribe('private-staff-frontdesk');
 
     // Para sa mga page na kailangang makinig sa sariling event sa iisang
     // koneksiyon (hal. ang Availability grid) — hindi nagbubukas ng ikalawa.

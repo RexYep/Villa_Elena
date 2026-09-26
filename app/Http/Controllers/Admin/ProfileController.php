@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Models\StaffLog;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
@@ -22,7 +23,18 @@ class ProfileController extends Controller
             'phone' => 'required|string|max:20',
         ]);
 
-        Auth::user()->update($request->only(['full_name', 'phone']));
+        $user = Auth::user();
+        $before = $user->only(['full_name', 'phone']);
+
+        $user->update($request->only(['full_name', 'phone']));
+
+        // The contact details on an admin account are a recovery surface —
+        // whoever owns the phone number on file is who the resort will call
+        // back. Both sides are kept so a quiet substitution is visible as a
+        // substitution rather than as "profile updated".
+        StaffLog::record('admin_profile_updated', 'users', $user->id,
+            'Admin updated their own profile details',
+            $before, $user->only(['full_name', 'phone']));
 
         return back()->with('success', 'Profile updated successfully.');
     }
@@ -48,6 +60,13 @@ class ProfileController extends Controller
             'password' => Hash::make($request->password),
             'remember_token' => Str::random(60),
         ])->save();
+
+        // Recorded AFTER the save, and never with the password in it — the
+        // audit value is "this account's credential changed, by this actor,
+        // from this address, at this moment", which is what makes a later
+        // "that wasn't me" answerable.
+        StaffLog::record('password_changed', 'users', $user->id,
+            'Admin changed their own password');
 
         return back()->with('success', 'Password changed successfully.');
     }

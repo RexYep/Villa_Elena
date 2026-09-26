@@ -732,9 +732,6 @@ class FrontDeskController extends Controller
                 'sent_at' => now(),
             ]);
 
-            StaffLog::record('walkin_booking', 'bookings', $booking->id,
-                "Walk-in booking {$booking->booking_ref} created by ".Auth::user()->full_name." for guest {$user->full_name}");
-
             return $booking;
         });
 
@@ -747,6 +744,38 @@ class FrontDeskController extends Controller
                 )])
                 ->withInput();
         }
+
+        // F9 — THIS USED TO RUN INSIDE reserveSlot()'s TRANSACTION, as the
+        // last statement of the callback, and it was the only audit write in
+        // the app placed that way.
+        //
+        // The failure mode it created: a throw from the logging rolled back
+        // the booking, the guest's User row and the cash payment, with a
+        // walk-in guest standing at the counter. v7.31's fail-open wrapper in
+        // StaffLog::record() means a failed audit write can no longer throw,
+        // so that specific danger was already gone.
+        //
+        // THE REMAINING REASON IS LOCK SCOPE, not rollback semantics. It is
+        // worth being exact, because the tempting explanation is wrong: an
+        // audit row written inside the transaction is rolled back WITH the
+        // booking, so it never outlives what it describes. Measured — a test
+        // in AuditLoggingTest pins that behaviour.
+        //
+        // What it does do is sit inside reserveSlot()'s critical section.
+        // That callback runs under `Property::whereKey(...)->lockForUpdate()`
+        // (Booking::reserveSlot), which is THE serialization point for every
+        // booking in the app — portal, admin, calendar drag, walk-in, guest
+        // reschedule all queue on that one row. Every statement inside it
+        // lengthens the wait for all of them, and an audit INSERT buys
+        // nothing by being there.
+        //
+        // It also matches the rule already stated for this callback in
+        // CLAUDE.md: keep it DB-only, with everything else after the commit.
+        // `$booking->user` is read rather than the closure's `$user` because
+        // that variable is out of scope here — the same relation the
+        // FrontdeskUpdated broadcast below already uses.
+        StaffLog::record('walkin_booking', 'bookings', $booking->id,
+            "Walk-in booking {$booking->booking_ref} created by ".Auth::user()->full_name." for guest {$booking->user->full_name}");
 
         // Realtime broadcast lang ito (admin dashboard toast) — hindi ito
         // dapat maka-block sa buong request. Nagawa na at naka-commit na
@@ -810,7 +839,7 @@ class FrontDeskController extends Controller
             return back()->withErrors($problem)->withInput();
         }
 
-        Payment::create([
+        $payment = Payment::create([
             'booking_id' => $booking->id,
             'amount' => $request->amount,
             'payment_method' => $request->payment_method,
@@ -831,8 +860,10 @@ class FrontDeskController extends Controller
         // guest na nagbayad ng balanse sa counter ay walang resibo.
         BookingMailHelper::paymentRecorded($booking, (float) $request->amount, $wasPending);
 
-        StaffLog::record('payment_recorded', 'bookings', $booking->id,
-            "Payment ₱{$request->amount} recorded for booking {$booking->booking_ref} by ".Auth::user()->full_name);
+        // F10 — see Admin\BookingController::recordPayment(). The three
+        // manual-payment sites now agree on action name and target.
+        StaffLog::record('payment_recorded', 'payments', $payment->id,
+            "Payment ₱{$request->amount} {$request->payment_method} recorded for booking {$booking->booking_ref} by ".Auth::user()->full_name);
 
         try {
             event(new FrontdeskUpdated(

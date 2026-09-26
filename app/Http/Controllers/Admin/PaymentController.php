@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Admin;
 
+use App\Exceptions\RefundNotSendable;
 use App\Http\Controllers\Controller;
 use App\Models\Booking;
 use App\Models\Payment;
@@ -258,8 +259,10 @@ class PaymentController extends Controller
         // payment path.
         BookingMailHelper::paymentRecorded($booking, (float) $request->amount, $wasPending);
 
-        StaffLog::record('payment_recorded', 'bookings', $booking->id,
-            "Manual payment ₱{$request->amount} recorded for {$booking->booking_ref}");
+        // F10 — pointed at the booking, so the audit row could not identify
+        // WHICH payment it described. A booking routinely carries several.
+        StaffLog::record('payment_recorded', 'payments', $payment->id,
+            "Manual payment ₱{$request->amount} {$request->payment_method} recorded for {$booking->booking_ref}");
 
         return back()->with('success', "✅ Payment of ₱" . number_format($request->amount, 2) . " recorded for {$booking->booking_ref}.");
     }
@@ -667,11 +670,27 @@ class PaymentController extends Controller
 
         try {
             $transfer = app(RefundTransferService::class)->send($payment, Auth::id());
-        } catch (\Throwable $e) {
+        } catch (RefundNotSendable $e) {
             // Ang mga ito ay mga hadlang bago pa gumalaw ang pera
             // (kulang na balanse, may nakaunang transfer) — ligtas
-            // itong ipakita nang buo sa admin.
+            // itong ipakita nang buo sa admin, at sadyang nagtatapos
+            // ang mga mensaheng ito sa "Mark Paid Out" na paalala.
             return back()->with('error', $e->getMessage());
+        } catch (\Throwable $e) {
+            // Ang naunang bersyon ay `catch (\Throwable)` na may
+            // getMessage() — tama ang pangangatwiran para sa mga hadlang
+            // sa itaas, mali para sa lahat ng iba pang nasasalo nito.
+            //
+            // At HINDI sana sapat ang `catch (\RuntimeException)`:
+            //   QueryException <- PDOException <- RuntimeException
+            // kaya ang isang SQL error ay dadaan pa rin, kasama ang buong
+            // query at ang mga bound value nito. Kaya may sariling uri
+            // ang mga hadlang; tingnan ang App\Exceptions\RefundNotSendable.
+            report($e);
+
+            return back()->with('error',
+                'Something went wrong while sending this refund, and no transfer was created. '
+                .'It has been logged. Send the refund by hand and record it with "Mark Paid Out".');
         }
 
         if ($transfer->isSucceeded()) {

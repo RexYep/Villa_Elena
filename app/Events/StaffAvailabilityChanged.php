@@ -2,7 +2,7 @@
 
 namespace App\Events;
 
-use Illuminate\Broadcasting\Channel;
+use Illuminate\Broadcasting\PrivateChannel;
 use Illuminate\Contracts\Broadcasting\ShouldBroadcastNow;
 use Illuminate\Foundation\Events\Dispatchable;
 
@@ -31,7 +31,7 @@ class StaffAvailabilityChanged implements ShouldBroadcastNow
 
     public function broadcastOn(): array
     {
-        return [new Channel('staff-frontdesk')];
+        return [new PrivateChannel('staff-frontdesk')];
     }
 
     public function broadcastAs(): string

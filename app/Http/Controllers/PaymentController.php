@@ -12,6 +12,8 @@ use App\Services\PayMongoService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\URL;
 use Illuminate\Support\Str;
 
 class PaymentController extends Controller
@@ -148,7 +150,19 @@ class PaymentController extends Controller
                     'booking_id' => $booking->id,
                     'payment_type' => $request->payment_type,
                     'success_url' => route('payment.success', $booking->id),
-                    'cancel_url' => route('payment.cancel', $booking->id),
+                    // PIRMADO — tingnan ang cancel() sa ibaba kung bakit.
+                    // Tayo ang gumagawa ng URL na ito at ibinibigay sa
+                    // PayMongo, kaya kaya natin itong pirmahan; ang guest
+                    // ay dinadala lang dito ng isang redirect.
+                    //
+                    // 24 oras: iyon ang buhay ng isang PayMongo checkout
+                    // session, kaya hindi kailanman mag-e-expire ang pirma
+                    // habang may mababalikang session pa.
+                    'cancel_url' => URL::temporarySignedRoute(
+                        'payment.cancel',
+                        now()->addHours(24),
+                        $booking->id
+                    ),
                 ]);
 
                 // Store session ID in booking for verification later
@@ -162,8 +176,36 @@ class PaymentController extends Controller
 
                 return redirect($checkoutUrl);
 
-            } catch (\Exception $e) {
-                return back()->with('error', 'Payment gateway error: '.$e->getMessage());
+            } catch (\Throwable $e) {
+                // THIS PUT THE GATEWAY'S RAW RESPONSE BODY IN FRONT OF THE
+                // GUEST, and APP_DEBUG=false had no say in it — the message
+                // was concatenated by our own code, not rendered by the
+                // exception handler. PayMongoService throws
+                // `new \Exception('PayMongo Error: '.$response->body())`, so a
+                // gateway rejection printed PayMongo's JSON, and the same
+                // catch also covered `$booking->update()` — a QueryException
+                // there would have printed SQL with its bound values.
+                //
+                // This is the identical mistake v7.5 fixed in GeminiService,
+                // where guests saw Groq's raw JSON in the chat bubble. Same
+                // rule applies: the detail goes to the log, and the surface
+                // picks its own wording.
+                //
+                // Nothing was logged here before either, so a failed checkout
+                // left no trace at all.
+                \Log::error('PayMongo checkout could not be created', [
+                    'booking_id' => $booking->id,
+                    'booking_ref' => $booking->booking_ref,
+                    'payment_type' => $request->payment_type,
+                    'amount' => $amount,
+                    'exception' => $e::class,
+                    'error' => $e->getMessage(),
+                ]);
+
+                return back()->with('error',
+                    'We could not start the online payment just now. Please try again in a moment — '
+                    .'if it keeps happening, contact the resort and we will take your payment directly. '
+                    .'You have not been charged.');
             }
         } finally {
             $lock->release();
@@ -309,10 +351,45 @@ class PaymentController extends Controller
 
     // ── Cancel Callback ────────────────────────────────────────────
     // GET /pay/{booking}/cancel
-    public function cancel(Booking $booking)
+    /**
+     * Ito ang `cancel_url` ng PayMongo, kaya KAILANGAN itong GET: isang
+     * redirect ng browser ang nagdadala dito, hindi isang form. Ibig sabihin,
+     * hindi ito kayang bantayan ng CSRF token — walang POST na mapaglalagyan
+     * nito — kaya ang pirma sa URL ang pumapalit doon.
+     *
+     * Bakit ito mahalaga. Ang isang linteng `<a href>` sa kahit anong ibang
+     * site ay isang top-level navigation, at pinapayagan ng SameSite=lax na
+     * sumama ang session cookie doon. Kaya kayang pilitin ng kahit sino ang
+     * isang naka-login na guest na tumama dito — at ang dating ginagawa nito
+     * ay `paymongo_session_id = NULL`.
+     *
+     * Hindi iyon walang kabuluhan. Ganito nagsisimula ang reusableCheckout():
+     *
+     *     if (! $booking->paymongo_session_id || ...) return null;
+     *
+     * NULL ang session id → walang mababalikan → GAGAWA NG BAGONG checkout
+     * session ang susunod na pagtatangka ng guest. Dalawang buhay na QR code
+     * para sa iisang booking — iyon mismo ang dobleng SINGIL na hindi kayang
+     * saluhin ng idempotency (magkaiba ang `pay_xxx`), at siyang dahilan kung
+     * bakit umiiral ang createCheckout().
+     *
+     * Hindi `signed` middleware ang ginamit at sinadya iyon: 403 error page
+     * ang ibibigay noon sa isang guest na may lumang link, samantalang wala
+     * namang masama sa pagbalik nila sa booking page. Ang pirma ang
+     * nagpapasya kung MAGBABAGO ng estado, hindi kung papasukin sila.
+     */
+    public function cancel(Request $request, Booking $booking)
     {
         abort_if($booking->user_id !== Auth::id(), 403);
-        $booking->update(['paymongo_session_id' => null]);
+
+        if ($request->hasValidSignature()) {
+            $booking->update(['paymongo_session_id' => null]);
+        } else {
+            // Nakarating dito nang walang tamang pirma — ipinilit ng ibang
+            // site, o luma na ang link. Ipakita pa rin ang booking, pero
+            // huwag galawin ang session id.
+            \Log::warning("Unsigned payment-cancel hit for booking {$booking->booking_ref} from ".$request->ip());
+        }
 
         return redirect()->route('customer.bookings.show', $booking)
             ->with('error', 'Payment was cancelled. Your booking is still reserved — you can try again anytime.');
@@ -341,14 +418,34 @@ class PaymentController extends Controller
             ?? data_get($request->all(), 'id')
             ?? $request->input('transfer_id');
 
-        $query = \App\Models\RefundTransfer::where('status', 'pending');
+        // WALANG PANGALAN, WALANG TRABAHO.
+        //
+        // Dati, ang isang callback na walang tinutukoy na transfer ay
+        // nagpapa-sync sa BAWAT pending transfer — isang papalabas na
+        // tawag sa PayMongo kada isa. Ang endpoint na ito ay walang
+        // pirma, walang auth at (tama lang naman) walang throttle, dahil
+        // ang 429 ay isang bigong delivery. Pagsamahin mo iyon at ang
+        // isang walang-laman na POST mula kahit kanino ay nagiging
+        // amplifier laban sa sarili nating API quota, paulit-ulit.
+        //
+        // Walang nawawala sa pagtanggi: ang callback na hindi nagsasabi
+        // kung aling transfer ang tinutukoy niya ay walang maibibigay na
+        // impormasyon. At may panangga na para sa mga transfer na
+        // hindi kailanman nakatanggap ng callback —
+        // AutoCheckInOutBookings::syncPendingTransfers(), na siyang
+        // umiikot sa lahat ng pending, kada minuto, mula sa loob.
+        if (! $transferId) {
+            \Log::info('PayMongo transfer callback arrived without a transfer id — ignored.', [
+                'ip' => $request->ip(),
+            ]);
 
-        // Kung tinukoy kung alin, iyon lang ang tingnan — pero
-        // hinahanap pa rin ito sa SARILING talaan natin, kaya hindi
-        // makakapagpasok ng ibang transfer ang tumatawag.
-        if ($transferId) {
-            $query->where('transfer_id', $transferId);
+            return response()->json(['received' => true, 'synced' => 0, 'failed' => 0]);
         }
+
+        // Hinahanap pa rin ito sa SARILING talaan natin, kaya hindi
+        // makakapagpasok ng ibang transfer ang tumatawag.
+        $query = \App\Models\RefundTransfer::where('status', 'pending')
+            ->where('transfer_id', $transferId);
 
         $service = app(\App\Services\RefundTransferService::class);
         $processed = 0;
@@ -468,6 +565,42 @@ class PaymentController extends Controller
                     default => 'Check that the configured secret matches the webhook registered for this mode.',
                 },
             ]);
+
+            // Task 12 F4 — the warning above is good and is kept as-is (that
+            // `hint` is the fastest route to the cause), but it was log-ONLY
+            // while the `unmatched_booking` and `processing_error` paths below
+            // both notify admins. Signature failures deserve it more, not less.
+            //
+            // The likely cause is NOT an attacker. It is a secret that no longer
+            // matches the registered webhook — and that failure is invisible by
+            // design here, because this endpoint must always answer 200 (a
+            // repeatedly-4xx webhook gets auto-disabled by PayMongo and never
+            // recovers). In v6.9 the same class of break meant every payment
+            // silently stopped being recorded and THE SYMPTOM WAS AN EMPTY LOG.
+            // Money arrives, nothing is written down, nobody is told.
+            //
+            // Threshold of 3, far lower than the others: PayMongo does not send
+            // spurious webhooks. Three rejected deliveries in an hour is not
+            // noise, it is the integration being down.
+            \App\Services\SecurityMonitor::recordAndEscalate(
+                event: \App\Services\SecurityMonitor::WEBHOOK_REJECTED,
+                bucket: 'paymongo-webhook',
+                summary: 'A PayMongo webhook was rejected for a bad signature (event '
+                    .(data_get($peek, 'data.id') ?: 'unknown').')',
+                threshold: 3,
+                title: 'Payments may not be being recorded',
+                message: 'Three or more PayMongo webhook deliveries have been rejected for an'
+                    .' invalid signature in the last hour. The usual cause is'
+                    .' PAYMONGO_WEBHOOK_SECRET not matching the registered webhook for this'
+                    .' mode, and while that is true QR Ph payments are NOT being recorded even'
+                    .' though guests are paying. Run `php artisan paymongo:webhooks` and check'
+                    .' the log for the hint line naming which variant to set.',
+                context: [
+                    'ip' => $request->ip(),
+                    'livemode' => $livemode,
+                    'has_secret' => $this->paymongo->hasWebhookSecret(),
+                ],
+            );
 
             // 200 pa rin — tingnan ang paliwanag sa webhook(). Hindi
             // pinoproseso ang event; tinatanggihan lang nang tahimik.
@@ -662,6 +795,12 @@ class PaymentController extends Controller
             ->exists();
 
         if ($alreadyRecorded) {
+            // HINDI basta pag-return ng false. Ang isang naitalang bayad ay
+            // hindi nangangahulugang naisulat na rin ang epekto nito sa
+            // booking — tingnan ang reconcileBooking(), at kung bakit ang
+            // daang ito mismo ang tanging pagkakataong maaayos iyon.
+            $this->reconcileBooking($booking, $reference);
+
             return false;
         }
 
@@ -686,32 +825,99 @@ class PaymentController extends Controller
             \Log::warning("PayMongo returned an unmapped payment method '{$method}' for booking {$booking->booking_ref}; stored as '{$stored}'.");
         }
 
+        // ── LAHAT NG PAGSUSULAT SA DATABASE, SA IISANG TRANSACTION ──
+        //
+        // Wala ito dati, at ang bunga ay nasusukat. Kapag bumagsak ang
+        // kahit ano sa pagitan ng INSERT at ng recalculateFinancials(),
+        // ang `payments` row ay nananatili habang ang booking ay
+        // nananatiling `amount_paid = 0`. Tatlong bagay ang
+        // nagpapalubha niyon nang sabay:
+        //
+        //   1. Ang TANGING panangga ng stale-pending sweeper ay
+        //      `amount_paid <= 0` — kaya kinakansela nito ang isang
+        //      booking na BAYAD NA, at sinasabihan pa ang guest na
+        //      hindi raw natapos ang downpayment niya, habang hawak ng
+        //      PayMongo ang pera niya.
+        //   2. Hindi ito naaayos ng pag-ulit: ang tseke sa itaas ay
+        //      makikita ang row at aalis agad. (Kaya may
+        //      reconcileBooking() na ngayon.)
+        //   3. Laging-200 ang webhook, kaya hindi na ito uulitin ng
+        //      PayMongo kahit gusto pa nito.
+        //
+        // Ang mga side effect — abiso, broadcast, email — ay NASA LABAS
+        // at PAGKATAPOS ng commit. Pareho ito ng tuntuning sinusunod na
+        // ng reserveSlot(): DB lang sa loob; ang isang sumablay na SMTP
+        // o Pusher ay hindi dapat magbura ng naitalang bayad.
         try {
-            $payment = Payment::create([
-                'booking_id' => $booking->id,
-                'amount' => $amount,
-                'payment_method' => $stored,
-                'payment_type' => $paymentType,
-                'status' => 'success',
-                'payment_date' => today(),
-                'reference_number' => $reference,
-                'notes' => $notes,
-            ]);
+            [$payment, $wasPending] = DB::transaction(function () use (
+                $booking, $amount, $stored, $paymentType, $reference, $notes
+            ) {
+                // Sariwang basa sa loob ng lock ng transaction. Kailangan ito
+                // dahil ang modelong ipinasa sa atin ay puwedeng luma na — may
+                // ibang delivery na maaaring nakauna, at (tingnan ang catch sa
+                // ibaba) ang isang na-rollback na pagtatangka ay nag-iiwan ng
+                // mga halagang HINDI naman nasa database.
+                $booking->refresh();
+
+                $payment = Payment::create([
+                    'booking_id' => $booking->id,
+                    'amount' => $amount,
+                    'payment_method' => $stored,
+                    'payment_type' => $paymentType,
+                    'status' => 'success',
+                    'payment_date' => today(),
+                    'reference_number' => $reference,
+                    'notes' => $notes,
+                ]);
+
+                // Dating hindi binibilang ng kopyang ito ang mga refund,
+                // kaya kung may naunang refund ang booking na ito,
+                // babalik sa dating mataas na halaga ang amount_paid
+                // pagkatapos ng susunod na online payment.
+                $booking->update(['paymongo_session_id' => null]);
+                $booking->recalculateFinancials();
+
+                // Auto-confirm pending bookings — WALANG admin approval
+                // step. Nasa loob ito ng transaction dahil ang
+                // `confirmed` na walang katumbas na naitalang bayad ay
+                // kasing-sama ng bayad na walang confirmation.
+                return [$payment, $booking->confirmOnFirstPayment()];
+            });
         } catch (\Illuminate\Database\UniqueConstraintViolationException $e) {
             // Nauna sa atin ang kabilang path sa pagitan ng SELECT sa
             // itaas at ng INSERT na ito. Naitala na ang bayad — walang
-            // nawala, at walang dapat gawin. Hindi ito error.
+            // nawala. Pero ang kabilang path ay maaaring bumagsak din sa
+            // kalagitnaan, kaya sinusuri pa rin natin ang booking bago
+            // umalis.
             \Log::info("PayMongo payment {$reference} for {$booking->booking_ref} was already recorded concurrently — duplicate insert refused by the unique index.");
 
+            $booking->refresh();
+            $this->reconcileBooking($booking, $reference);
+
             return false;
+        } catch (\Throwable $e) {
+            // ANG ROLLBACK AY HINDI NAG-AALIS NG HALAGA SA MODELO.
+            //
+            // Ang recalculateFinancials() ay nagtatakda ng `amount_paid` sa
+            // instance bago pa ito isulat; kapag na-rollback ang transaction,
+            // nanatili ang halagang iyon sa alaala samantalang zero pa rin ang
+            // nasa database. Ang susunod na pagtatangka ay titingin sa
+            // modelong iyon, hindi makakakita ng pagbabago, at LALAKTAWAN ng
+            // dirty-checking ng Eloquent ang mismong UPDATE na mag-aayos sana.
+            // Natuklasan ito ng isang test na umuulit pagkatapos ng pansamantalang
+            // pagkabigo: naitala ang bayad, `amount_paid` ay 0 pa rin.
+            //
+            // Ibalik ang modelo sa TOTOONG laman ng database bago ipasa ang
+            // exception paitaas.
+            $booking->refresh();
+
+            throw $e;
         }
 
-        // Dating hindi binibilang ng kopyang ito ang mga refund, kaya
-        // kung may naunang refund ang booking na ito, babalik sa dating
-        // mataas na halaga ang amount_paid pagkatapos ng susunod na
-        // online payment.
-        $booking->update(['paymongo_session_id' => null]);
-        $booking->recalculateFinancials();
+        // ── MULA RITO: naka-commit na ang bayad ────────────────────
+        //
+        // Wala nang maaaring mangyari sa ibaba na makakabura ng naitalang
+        // bayad. Iyon ang buong punto ng hangganang ito.
 
         // MAHALAGA ang pagkakasunod: dati, nauuna ang notification kaysa
         // sa recalculateFinancials(), kaya ang "Balance due" na iniulat
@@ -721,16 +927,6 @@ class PaymentController extends Controller
         // ₱4.00"; ang panghuling ₱2 ay nag-ulat ng "₱2.00" gayong
         // bayad na nang buo. Tumatawag pagkatapos ng recompute.
         NotificationHelper::paymentReceived($booking->fresh(), $amount, $stored);
-
-        // Auto-confirm pending bookings — WALANG admin approval step.
-        // Kapag successful ang unang bayad (deposit o full), automatic
-        // nang "confirmed" ang booking, at doon din ipapadala ang
-        // confirmation email.
-        //
-        // Iisa ang kahulugan ng "kino-confirm ng unang bayad" —
-        // pinagsasaluhan na ito ng tatlong manwal na record-payment path
-        // sa pamamagitan ng Booking::confirmOnFirstPayment().
-        $wasPending = $booking->confirmOnFirstPayment();
 
         // Notify guest (in-app)
         Notification::create([
@@ -784,6 +980,56 @@ class PaymentController extends Controller
         BookingMailHelper::paymentRecorded($booking, (float) $amount, $wasPending);
 
         return true;
+    }
+
+    /**
+     * Pinagkakasundo ang booking sa mga bayad na naitala na nito.
+     *
+     * Tinatawag ito sa DALAWANG duplicate path — ang SELECT sa umpisa at
+     * ang unique-index na sumasalo sa race. Ang dalawang iyon ang
+     * NAG-IISANG pagkakataon na maaayos ang isang bayad na naitala nang
+     * hindi natapos, dahil:
+     *
+     *   - laging 200 ang webhook, kaya hindi ito uulitin ng PayMongo;
+     *   - at kapag dumating ang susunod na delivery o ang success
+     *     callback para sa parehong `pay_xxx`, dito eksakto ito
+     *     papasok — at DATI ay `return false` agad, kaya ang sira ay
+     *     nananatiling sira habang buhay.
+     *
+     * Ligtas itong tawagin nang paulit-ulit. Ang recalculateFinancials()
+     * ay muling kinukuwenta mula sa `payments` (hindi nagdaragdag), at
+     * hindi nagpapadala ng query ang Eloquent kapag walang nagbago; ang
+     * confirmOnFirstPayment() naman ay umaalis agad maliban kung
+     * `pending` pa at may bayad na.
+     *
+     * SINASADYANG walang email, walang broadcast at walang abiso dito.
+     * Ang pagkukumpuni ay hindi bagong balita — ang guest na nakatanggap
+     * na ng resibo ay hindi dapat makatanggap ng pangalawa dahil lang
+     * dumating ang pangalawang kopya ng webhook.
+     */
+    private function reconcileBooking(Booking $booking, string $reference): void
+    {
+        $before = [
+            'amount_paid' => (float) $booking->amount_paid,
+            'status' => $booking->status,
+        ];
+
+        $booking->recalculateFinancials();
+        $booking->confirmOnFirstPayment();
+        $booking->refresh();
+
+        if ((float) $booking->amount_paid === $before['amount_paid'] && $booking->status === $before['status']) {
+            return;   // Walang naayos — ito ang normal na duplicate.
+        }
+
+        // May naayos. Ibig sabihin ay may naunang pagtatala na hindi
+        // natapos — bihira, at dapat makita.
+        \Log::warning('PayMongo payment was recorded but its booking had not caught up — reconciled on a later delivery.', [
+            'booking_ref' => $booking->booking_ref,
+            'payment_ref' => $reference,
+            'amount_paid' => $before['amount_paid'].' -> '.$booking->amount_paid,
+            'status' => $before['status'].' -> '.$booking->status,
+        ]);
     }
 
     // ── Payment status (polled ng checkout/success page) ───────────

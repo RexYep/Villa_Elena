@@ -102,9 +102,30 @@ public function primaryImage()
         ->where('is_primary', 1);
 }
  
+/**
+ * ORDER IS EXPLICIT HERE ON PURPOSE.
+ *
+ * This relation had no ordering at all, so the gallery's order was whatever
+ * MySQL happened to return — undefined by definition, and in practice
+ * primary-key order. `property_images.sort_order` was written on every upload
+ * (`$existingCount + $index`) and then read by NOTHING: not this relation, not
+ * the portal gallery, not the admin edit page.
+ *
+ * That was surfaced by the new `deleted_property_image` audit entry, which
+ * reported image #37 being promoted to primary when the image next in display
+ * order was a different one. The audit row was correct; the promotion was
+ * picking the lowest id via an unordered `first()`.
+ *
+ * So the column is given effect in the one place every caller goes through.
+ * `id` is the tiebreak because `sort_order` is not unique and has gaps — a
+ * deleted image leaves its index behind, so property #14's only image carries
+ * sort_order 1, not 0.
+ */
 public function images()
 {
-    return $this->hasMany(\App\Models\PropertyImage::class);
+    return $this->hasMany(\App\Models\PropertyImage::class)
+        ->orderBy('sort_order')
+        ->orderBy('id');
 }
  
 

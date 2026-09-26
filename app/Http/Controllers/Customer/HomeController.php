@@ -126,8 +126,22 @@ class HomeController extends Controller
             'balance_due'         => 0,
         ]);
 
-        // Free up property
-        $booking->property->update(['status' => 'available']);
+        // NOT "free up the property" — that write is removed on purpose.
+        //
+        // `properties.status` tracks OCCUPANCY, and it is moved by the pair
+        // that actually changes it: check-in sets `occupied`, check-out sets
+        // `available` (FrontDeskController, AutoCheckInOutBookings). A guest
+        // can only cancel a `pending` or `confirmed` booking — never a
+        // `checked_in` one (Booking::isCancellable()) — so a cancellation here
+        // can never be the thing that freed the villa. It had nothing to
+        // release.
+        //
+        // What it DID do was let a guest overwrite a status an admin had set.
+        // Cancel an old booking while the villa sits at `maintenance` and it
+        // silently flipped back to `available`, with the admin's setting gone
+        // and nothing in the log to say why. Real availability is derived from
+        // the bookings themselves via Booking::hasConflict(), which never
+        // consulted this column, so nothing downstream needs the write.
 
         // Realtime broadcast lang ito — hindi dapat maka-block sa
         // cancellation request (naka-commit na ito sa puntong ito) kung

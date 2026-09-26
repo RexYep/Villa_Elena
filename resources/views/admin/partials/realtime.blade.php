@@ -188,8 +188,8 @@
 
 <script>
     (function() {
-        const PUSHER_KEY = '{{ env('PUSHER_APP_KEY') }}';
-        const PUSHER_CLUSTER = '{{ env('PUSHER_APP_CLUSTER', 'ap1') }}';
+        const PUSHER_KEY = '{{ config('broadcasting.connections.pusher.key') }}';
+        const PUSHER_CLUSTER = '{{ config('broadcasting.connections.pusher.options.cluster', 'ap1') }}';
         const bookingShowUrlTemplate = '{{ route('admin.bookings.show', ['booking' => '__ID__']) }}';
         const paymentsIndexUrl = '{{ route('admin.payments.index') }}';
         const propertiesIndexUrl = '{{ route('admin.properties.index') }}';
@@ -301,7 +301,13 @@
                 },
             },
         });
-        const channel = pusher.subscribe('admin-dashboard');
+        // `private-` is not decoration: it makes Pusher POST to
+        // /broadcasting/auth first, where routes/channels.php checks that this
+        // user is actually an admin. This channel carries guest names, booking
+        // references and payment amounts, and as a plain `admin-dashboard` it
+        // was readable by anyone holding the app key — which is a CLIENT
+        // credential, rendered into pages including the public property page.
+        const channel = pusher.subscribe('private-admin-dashboard');
 
         // Exposed so other admin pages (e.g. the calendar) can bind their own
         // listeners on this same connection instead of opening a second one.

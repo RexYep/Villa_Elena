@@ -493,7 +493,10 @@
                                     class="bi bi-eye"></i></a>
                             <a href="{{ route('admin.properties.edit', $property) }}" class="btn-icon" title="Edit"><i
                                     class="bi bi-pencil"></i></a>
-                            <button onclick="confirmDelete({{ $property->id }}, '{{ $property->property_name }}')"
+                            {{-- Js::from(), never '{{ $x }}': the HTML parser decodes entities in an attribute
+                                 before the JS parser runs, so `{{ }}` does not keep a value inside a JS string.
+                                 Measured exploitable on this shape; see staff/partials/_today_list.blade.php. --}}
+                            <button onclick="confirmDelete({{ $property->id }}, {{ Illuminate\Support\Js::from($property->property_name) }})"
                                 class="btn-icon danger" title="Delete"><i class="bi bi-trash"></i></button>
                         </div>
                     </div>

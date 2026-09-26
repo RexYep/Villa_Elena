@@ -4,16 +4,85 @@ server {
     root /var/www/html/public;
     index index.php;
 
-    client_max_body_size 20M;
+    # Must stay >= PHP's post_max_size, or nginx becomes the binding limit and
+    # answers 413 before PHP or Laravel can say anything useful. Both are 32M;
+    # docker/php.ini explains where that number comes from.
+    client_max_body_size 32M;
 
-    add_header X-Frame-Options "SAMEORIGIN" always;
-    add_header X-Content-Type-Options "nosniff" always;
+    # THE RESPONSE SECURITY HEADERS LIVE IN THE APPLICATION, NOT HERE.
+    # app/Http/Middleware/SecurityHeaders.php sets X-Frame-Options,
+    # X-Content-Type-Options, Referrer-Policy and Strict-Transport-Security.
+    #
+    # They were here first, and that is precisely how two of them went missing
+    # in production without anyone noticing: a header set in this file cannot
+    # be asserted by the test suite, and `php artisan serve` never runs nginx,
+    # so local development looks identical whether the config is deployed or
+    # not. Measured against the live site, Referrer-Policy and HSTS were
+    # absent while this file said they were set — the edit adding them had
+    # never been committed.
+    #
+    # DO NOT ADD THEM BACK HERE ALONGSIDE THE MIDDLEWARE. `add_header` appends
+    # rather than replaces, and browsers treat a duplicated X-Frame-Options as
+    # a conflict and ignore it altogether.
+    #
+    # The one exception is below: files under /storage/ and the static
+    # extensions are served straight off disk and never reach PHP, so they
+    # need nosniff from nginx.
 
     location / {
         try_files $uri $uri/ /index.php?$query_string;
     }
 
+    # UPLOADED FILES ARE NEVER CODE.
+    #
+    # /storage is a symlink to storage/app/public — the one directory on this
+    # box that ordinary users can write into. The `location ~ \.php$` block
+    # below matches on path alone, so without this it would happily hand
+    # anything ending in .php under here to PHP-FPM.
+    #
+    # `^~` is doing the work: when the longest matching prefix location carries
+    # that modifier, nginx stops checking regex locations entirely for those
+    # URIs. So `\.php$` cannot match anything under /storage/, whatever it is
+    # named.
+    #
+    # Nothing can currently get a .php file in here — uploads are validated by
+    # content and stored under a random name with a content-derived extension
+    # (Task 7 measured every bypass that could be built). So this is the second
+    # lock, and it turned out to be the only one at this layer.
+    #
+    # MEASURED, against this exact config with a real php-fpm upstream:
+    #
+    #   before          /storage/evil.php        -> EXECUTED-AS-PHP
+    #                   /storage/evil.php/x.php  -> EXECUTED-AS-PHP
+    #   after           /storage/evil.php        -> served as bytes
+    #                   /storage/evil.php/x.php  -> front controller (index.php)
+    #
+    # Note the second row. The usual reassurance is that `cgi.fix_pathinfo` is
+    # off in PHP 8 so the trailing-/x.php trick cannot walk back to an earlier
+    # path segment — reading it from the CLI says exactly that. Under the FPM
+    # SAPI it still resolved and still ran. And `security.limit_extensions`
+    # does not help here either: it only refuses to run a resolved script whose
+    # extension is not .php, and this one's is. Do not remove this block on the
+    # strength of either of those defaults.
+    #
+    # The fallback is index.php rather than =404 so Laravel's own signed
+    # `storage.local` route keeps working. Reaching Laravel is harmless — it
+    # routes, it does not execute the file.
+    location ^~ /storage/ {
+        # Served off disk without touching PHP, so the middleware never runs
+        # for these. This is also the directory guests can write into, which
+        # makes it the one place nosniff matters most.
+        add_header X-Content-Type-Options "nosniff" always;
+
+        try_files $uri /index.php?$query_string;
+    }
+
     location ~ \.php$ {
+        # Only ever run a script that actually exists. Without this, a request
+        # for a missing .php falls through to PHP-FPM with a SCRIPT_FILENAME
+        # nobody checked.
+        try_files $uri =404;
+
         fastcgi_pass 127.0.0.1:9000;
         fastcgi_index index.php;
         include fastcgi_params;
@@ -27,6 +96,10 @@ server {
     }
 
     location ~* \.(jpg|jpeg|png|gif|ico|css|js|svg|woff|woff2)$ {
+        # Same reason as /storage/: nginx answers these itself, so the
+        # application middleware is not in the path.
+        add_header X-Content-Type-Options "nosniff" always;
+
         expires 7d;
         access_log off;
     }

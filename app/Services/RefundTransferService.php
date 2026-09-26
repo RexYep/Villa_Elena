@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Exceptions\RefundNotSendable;
 use App\Helpers\NotificationHelper;
 use App\Models\Payment;
 use App\Models\RefundDestination;
@@ -56,14 +57,14 @@ class RefundTransferService
     /**
      * Ipinapadala ang refund. Ibinabalik ang talaan ng pagtatangka.
      *
-     * @throws \RuntimeException kapag hindi dapat ipadala ang refund
+     * @throws RefundNotSendable kapag hindi dapat ipadala ang refund — nakasulat ang mensahe para ipakita sa admin
      */
     public function send(Payment $refund, ?int $userId = null): RefundTransfer
     {
         $destination = $refund->refundDestination;
 
         if ($destination === null) {
-            throw new \RuntimeException('There is no destination on file for this refund.');
+            throw new RefundNotSendable('There is no destination on file for this refund.');
         }
 
         // Ang hadlang ay nakatira RIN dito, hindi lang sa controller.
@@ -72,7 +73,7 @@ class RefundTransferService
         // na sigurado nang babagsak, saanman ito manggaling — sa
         // button ng admin, sa isang retry, o sa isang command.
         if (! $destination->canReceiveTransfer()) {
-            throw new \RuntimeException(
+            throw new RefundNotSendable(
                 $destination->transferBlockedReason()
                 . ' Send it by hand and record it with "Mark Paid Out".'
             );
@@ -85,7 +86,7 @@ class RefundTransferService
         // ng sarili nating ₱1 at ₱2 na dumating sa Maya. Huwag itong
         // ibalik nang walang transfer na magpapatunay.
         if ((float) $refund->amount <= RefundTransfer::MINIMUM_AMOUNT) {
-            throw new \RuntimeException(
+            throw new RefundNotSendable(
                 'PayMongo will not transfer ₱' . number_format((float) $refund->amount, 2)
                 . '. Send this one by hand and record it with "Mark Paid Out".'
             );
@@ -96,7 +97,7 @@ class RefundTransferService
         // na row at walang abiso sa admin para sa isang bagay na
         // hindi naman kailanman posible sa mode na ito.
         if ($this->paymongo->isTestMode()) {
-            throw new \RuntimeException(
+            throw new RefundNotSendable(
                 'PayMongo is in test mode, and test mode has no wallet — Send Money only works with '
                 . 'live keys. Record this refund with "Mark Paid Out" instead.'
             );
@@ -165,7 +166,7 @@ class RefundTransferService
             $locked = Payment::whereKey($refund->id)->lockForUpdate()->first();
 
             if (! $locked || ! $locked->isAwaitingPayout()) {
-                throw new \RuntimeException('This refund is not awaiting payout any more.');
+                throw new RefundNotSendable('This refund is not awaiting payout any more.');
             }
 
             $blocking = RefundTransfer::where('payment_id', $refund->id)
@@ -173,7 +174,7 @@ class RefundTransferService
                 ->first();
 
             if ($blocking) {
-                throw new \RuntimeException($blocking->isSucceeded()
+                throw new RefundNotSendable($blocking->isSucceeded()
                     ? 'This refund has already been sent.'
                     : 'A transfer for this refund is already in progress.');
             }
@@ -421,7 +422,7 @@ class RefundTransferService
         $needed = $amount + RefundTransfer::ESTIMATED_FEE;
 
         if ($available < $needed) {
-            throw new \RuntimeException(
+            throw new RefundNotSendable(
                 'The PayMongo wallet has ₱' . number_format($available, 2)
                 . ' available but ₱' . number_format($needed, 2)
                 . ' is needed (₱' . number_format($amount, 2) . ' refund + ₱'

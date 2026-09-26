@@ -21,20 +21,24 @@ Route::prefix('my')
     Route::get('/',           [HomeController::class, 'index'])->name('home');
     Route::get('bookings',    [HomeController::class, 'bookings'])->name('bookings');
     Route::get('bookings/{booking}', [HomeController::class, 'bookingDetail'])->name('bookings.show');
-    Route::patch('bookings/{booking}/cancel', [HomeController::class, 'cancelBooking'])->name('bookings.cancel');
+    Route::patch('bookings/{booking}/cancel', [HomeController::class, 'cancelBooking'])
+        ->middleware('throttle:booking-change')
+        ->name('bookings.cancel');
     // Ulat ng problema habang naka-check-in (v7.11)
     Route::post('bookings/{booking}/issues', [IssueReportController::class, 'store'])
         ->middleware('throttle:issue-report')
         ->name('bookings.issues.store');
     Route::get('bookings/{booking}/issues', [IssueReportController::class, 'index'])
-        ->middleware('throttle:60,1')
+        ->middleware('throttle:60,1,customer-issues')
         ->name('bookings.issues.index');
     Route::get('notifications', [HomeController::class, 'notifications'])->name('notifications');
     Route::get('notifications/{notification}/open', [HomeController::class, 'openNotification'])->name('notifications.open');
     Route::get('bookings/{booking}/review',        [CustomerReviewController::class, 'create'])->name('reviews.create');
     Route::post('bookings/{booking}/review',       [CustomerReviewController::class, 'store'])->middleware('throttle:review-write')->name('reviews.store');
     Route::get('bookings/{booking}/reschedule',    [BookingController::class, 'edit'])->name('bookings.reschedule');
-    Route::patch('bookings/{booking}/reschedule',  [BookingController::class, 'update'])->name('bookings.reschedule.update');
+    Route::patch('bookings/{booking}/reschedule',  [BookingController::class, 'update'])
+        ->middleware('throttle:booking-change')
+        ->name('bookings.reschedule.update');
 
     Route::get('reviews',             [CustomerReviewController::class, 'index'])->name('reviews.index');
     Route::get('reviews/{review}/edit', [CustomerReviewController::class, 'edit'])->name('reviews.edit');
@@ -47,7 +51,9 @@ Route::prefix('my')
     // notification at mula sa booking detail page — hindi ito makukuha
     // sa QR Ph payment, kaya kailangang itanong (project.md §v5.9).
     Route::get('refunds/{payment}/destination',   [RefundDestinationController::class, 'edit'])->name('refunds.destination');
-    Route::put('refunds/{payment}/destination',   [RefundDestinationController::class, 'update'])->name('refunds.destination.update');
+    Route::put('refunds/{payment}/destination',   [RefundDestinationController::class, 'update'])
+        ->middleware('throttle:refund-destination')
+        ->name('refunds.destination.update');
 
     Route::get('profile',          [ProfileController::class, 'edit'])->name('profile.edit');
     Route::put('profile',          [ProfileController::class, 'update'])->name('profile.update');

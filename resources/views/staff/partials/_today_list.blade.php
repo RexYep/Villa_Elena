@@ -58,7 +58,7 @@
                                  hidden input bago ipasa ang totoong submit. --}}
                                 <form method="POST" action="{{ route('staff.checkin', $booking) }}"
                                     id="checkinForm_{{ $booking->id }}"
-                                    onsubmit="return handleCheckInSubmit(event, {{ $booking->id }}, '{{ addslashes($booking->user->full_name) }}', {{ $booking->balance_due ?? 0 }})">
+                                    onsubmit="return handleCheckInSubmit(event, {{ $booking->id }}, {{ Illuminate\Support\Js::from($booking->user->full_name) }}, {{ $booking->balance_due ?? 0 }})">
                                     @csrf @method('PATCH')
                                     <button type="submit" class="btn-checkin">
                                         <i class="bi bi-box-arrow-in-right"></i> Check In
@@ -72,8 +72,22 @@
                                 <form method="POST" action="{{ route('staff.checkout', $booking) }}"
                                     id="checkoutForm_{{ $booking->id }}" class="checkout-form-{{ $booking->id }}">
                                     @csrf @method('PATCH')
+                                    {{-- `{{ }}` IS NOT ENOUGH INSIDE AN INLINE HANDLER.
+                                         The HTML parser decodes &#039; back to ' before the JS
+                                         parser ever sees the attribute, so a guest whose
+                                         full_name is  '+alert('XSS')+'  produced
+                                             confirm('Check out '+alert('XSS')+'?')
+                                         and it ran — measured, in the staff portal, from a
+                                         name the guest sets at registration.
+
+                                         Js::from() emits a JSON literal with quotes, slashes,
+                                         angle brackets and newlines all \u-escaped, so there is
+                                         nothing left that can end the string. Measured against
+                                         six payloads (quote-concat, statement-close, backslash,
+                                         double quote, newline, </script>): Js::from 6 safe,
+                                         addslashes 5 safe + 1 broken button, bare {{ }} 1 XSS. --}}
                                     <button type="submit" class="btn-checkout"
-                                        onclick="return confirm('Check out {{ $booking->user->full_name }}?')">
+                                        onclick="return confirm('Check out ' + {{ Illuminate\Support\Js::from($booking->user->full_name) }} + '?')">
                                         <i class="bi bi-box-arrow-right"></i> Check Out
                                     </button>
                                 </form>
@@ -89,7 +103,7 @@
                             @if ($booking->balance_due > 0)
                                 <button type="button" class="btn-sm"
                                     style="background:#f0fdf4;color:#16a34a;border:1px solid #bbf7d0;border-radius:7px;padding:6px 11px;font-size: 13px;font-weight:600;cursor:pointer;"
-                                    onclick="openPaymentModal({{ $booking->id }}, '{{ $booking->booking_ref }}', {{ $booking->balance_due ?? 0 }})">
+                                    onclick="openPaymentModal({{ $booking->id }}, {{ Illuminate\Support\Js::from($booking->booking_ref) }}, {{ $booking->balance_due ?? 0 }})">
                                     <i class="bi bi-cash"></i> Payment
                                 </button>
                             @endif

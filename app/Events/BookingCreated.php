@@ -3,7 +3,7 @@
 namespace App\Events;
 
 use App\Models\Booking;
-use Illuminate\Broadcasting\Channel;
+use Illuminate\Broadcasting\PrivateChannel;
 use Illuminate\Broadcasting\InteractsWithSockets;
 use Illuminate\Contracts\Broadcasting\ShouldBroadcast;
 use Illuminate\Foundation\Events\Dispatchable;
@@ -22,7 +22,7 @@ class BookingCreated implements ShouldBroadcast
 
     public function broadcastOn(): array
     {
-        return [new Channel('admin-dashboard')];
+        return [new PrivateChannel('admin-dashboard')];
     }
 
     public function broadcastAs(): string

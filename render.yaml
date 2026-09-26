@@ -5,6 +5,18 @@ services:
     plan: free
     region: singapore
     dockerfilePath: ./Dockerfile
+
+    # `healthCheckPath: /up` is DELIBERATELY NOT SET, even though /up exists as of
+    # v7.42. Render uses it for ongoing monitoring and restarts an instance that
+    # fails it — and /up reaches the database, so an Aiven outage would put this
+    # free-tier instance into a restart loop and take down the pages that do not
+    # need the database at all. Failing loudly to a monitor is what we want;
+    # restarting in a circle is not.
+    #
+    # Point the existing external pinger (cron-job.org, which already calls
+    # /cron/run-schedule every minute) at GET /up instead and let its own failure
+    # alerting do the telling. That is monitoring without a self-inflicted outage.
+    # See project.md §15.10.
     envVars:
       - key: APP_NAME
         value: Villa Elena Resort
@@ -18,6 +30,11 @@ services:
         value: Asia/Manila
       - key: APP_URL
         sync: false
+      # Keep this false once DB_USERNAME is the scoped `villa_app` user: that
+      # user has no CREATE/ALTER/DROP, so `migrate --force` in docker/start.sh
+      # would fail the deploy. Migrations are run from a developer machine
+      # against the `aiven` connection as avnadmin instead, which is already the
+      # documented path: php artisan migrate --force --database=aiven
       - key: RUN_MIGRATIONS
         value: false
 
@@ -26,9 +43,34 @@ services:
       # straight into that log stream instead.
       - key: LOG_CHANNEL
         value: stderr
+      # PINNED (v7.42). This was unset, so config/logging.php's own default —
+      # `debug` — applied to production.
+      #
+      # It cost nothing today: there is not a single Log::debug() call in the app
+      # and query logging is off, so `debug` and `info` currently emit the same
+      # lines. The point is what happens next. Left unset, the first person to add
+      # a Log::debug() or a DB::listen() while chasing a bug ships query text with
+      # bound values — guest names, emails, payment amounts — into Render's log
+      # stream, and nothing in a code review would flag it as a config change.
+      #
+      # `info`, not `warning`: the six Log::info() calls are all payment
+      # breadcrumbs ("payment.paid handled", "already recorded"), and QR Ph is
+      # asynchronous with the webhook as the primary recording path — those lines
+      # are how you answer "did this payment actually get recorded?".
+      - key: LOG_LEVEL
+        value: info
 
       # Aiven MySQL — fill in from the Aiven console. Add these as secrets
       # in the Render dashboard rather than committing real values here.
+      #
+      # DB_USERNAME MUST NOT BE `avnadmin`. That is Aiven's superuser: measured
+      # on the live instance, it holds `ON *.* WITH GRANT OPTION` including DROP,
+      # CREATE USER and GRANT OPTION on every schema. A SQL-injection bug or a
+      # compromised container would then own the whole database server, not just
+      # this app's data. Use the scoped `villa_app` user instead — the exact
+      # CREATE USER / GRANT statements are in project.md §15.8. That user has
+      # SELECT/INSERT/UPDATE/DELETE on this one schema and nothing else, which
+      # is all the running app needs (sessions, cache, cache_locks included).
       - key: DB_CONNECTION
         value: mysql
       - key: DB_HOST
@@ -41,6 +83,13 @@ services:
         sync: false
       - key: DB_PASSWORD
         sync: false
+      # The Aiven CA certificate, pasted as a full PEM. NOT optional: without
+      # it docker/start.sh writes no cert file, and config/database.php then
+      # refuses to build a production config rather than connecting to Aiven in
+      # cleartext (Aiven's require_secure_transport is OFF, so the server would
+      # happily accept an unencrypted connection). Take it from the CURRENT
+      # Aiven project — a CA from a different project fails verification with
+      # "self-signed certificate in certificate chain".
       - key: AIVEN_CA_CERT
         sync: false
       - key: MYSQL_ATTR_SSL_CA
@@ -131,6 +180,11 @@ services:
       - key: MAIL_FROM_NAME
         value: Villa Elena Resort
 
-      # Free-tier cron workaround — see routes/web.php /cron/run-schedule.
+      # Free-tier cron workaround — see routes/cron.php. The external pinger
+      # must send this as an `X-Cron-Secret` HEADER against
+      # GET /cron/run-schedule, not as a path segment: a path lands in access
+      # logs, in Render's own log stream and in the cron service's history.
+      # The old /cron/run-schedule/<secret> form still answers, but logs a
+      # deprecation warning on every call.
       - key: CRON_SECRET
         generateValue: true

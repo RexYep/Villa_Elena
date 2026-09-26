@@ -381,7 +381,10 @@
                                     </form>
                                     @if ($user->id !== Auth::id())
                                         <button
-                                            onclick="confirmDelete({{ $user->id }}, '{{ addslashes($user->full_name) }}')"
+                                            {{-- Js::from(), never '{{ $x }}': the HTML parser decodes entities in an attribute
+                                                 before the JS parser runs, so `{{ }}` does not keep a value inside a JS string.
+                                                 Measured exploitable on this shape; see staff/partials/_today_list.blade.php. --}}
+                                            onclick="confirmDelete({{ $user->id }}, {{ Illuminate\Support\Js::from($user->full_name) }})"
                                             class="btn-icon danger" title="Delete"><i class="bi bi-trash"></i></button>
                                     @endif
                                 </div>

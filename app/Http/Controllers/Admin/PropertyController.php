@@ -81,7 +81,13 @@ class PropertyController extends Controller
             'weekend_price' => 'nullable|numeric|min:0',
             'floor_area_sqm'=> 'nullable|numeric|min:0',
             'amenities'     => 'nullable|array',
-            'images'   => 'nullable|array|max:20',
+            // 10, not 20, and the number is not arbitrary: 10 x 3 MB is 30 MB,
+            // which fits inside PHP post_max_size (32M) and nginx
+            // client_max_body_size (32M). Past post_max_size PHP throws the
+            // WHOLE body away, `_token` included, and the admin gets a 419 that
+            // reads like a session problem. See docker/php.ini before changing
+            // this — all four numbers move together.
+            'images'   => 'nullable|array|max:10',
             'images.*' => 'nullable|image|mimes:jpg,jpeg,png,webp|max:3048',
         ]);
 
@@ -112,8 +118,14 @@ class PropertyController extends Controller
             }
         }
 
+        // The image count is part of the same event rather than a row per
+        // file: a ten-image upload is one admin action, and ten near-identical
+        // audit rows would bury it.
+        $uploaded = $property->images()->count();
+
         StaffLog::record('created_property', 'properties', $property->id,
-            "Created property: {$property->property_name}");
+            "Created property: {$property->property_name}"
+                .($uploaded ? " (with {$uploaded} image".($uploaded === 1 ? '' : 's').')' : ''));
 
         return redirect()->route('admin.properties.index')
             ->with('success', "Property \"{$property->property_name}\" created successfully.");
@@ -150,7 +162,13 @@ class PropertyController extends Controller
             'max_capacity'  => 'required|integer|min:1',
             'base_price'    => $isVilla ? 'required|numeric|min:0' : 'nullable|numeric|min:0',
             'weekend_price' => 'nullable|numeric|min:0',
-            'images'   => 'nullable|array|max:20',
+            // 10, not 20, and the number is not arbitrary: 10 x 3 MB is 30 MB,
+            // which fits inside PHP post_max_size (32M) and nginx
+            // client_max_body_size (32M). Past post_max_size PHP throws the
+            // WHOLE body away, `_token` included, and the admin gets a 419 that
+            // reads like a session problem. See docker/php.ini before changing
+            // this — all four numbers move together.
+            'images'   => 'nullable|array|max:10',
             'images.*' => 'nullable|image|mimes:jpg,jpeg,png,webp|max:3048',
         ]);
 
@@ -187,8 +205,12 @@ class PropertyController extends Controller
             }
         }
 
+        $added = $request->hasFile('images') ? count($request->file('images')) : 0;
+
         StaffLog::record('updated_property', 'properties', $property->id,
-            "Updated property: {$property->property_name}", $oldData, $property->fresh()->toArray());
+            "Updated property: {$property->property_name}"
+                .($added ? " — added {$added} image".($added === 1 ? '' : 's') : ''),
+            $oldData, $property->fresh()->toArray());
 
         return redirect()->route('admin.properties.index')
             ->with('success', "Property \"{$property->property_name}\" updated successfully.");
@@ -203,10 +225,12 @@ class PropertyController extends Controller
         }
 
         $name = $property->property_name;
+        $deletedId = $property->id;
+
         $property->delete();
 
-        StaffLog::record('deleted_property', 'properties', null,
-            "Deleted property: {$name}");
+        StaffLog::record('deleted_property', 'properties', $deletedId,
+            "Deleted property: {$name} (property #{$deletedId})");
 
         return redirect()->route('admin.properties.index')
             ->with('success', "Property \"{$name}\" has been deleted.");
@@ -222,7 +246,7 @@ class PropertyController extends Controller
             'notes'      => 'nullable|string|max:255',
         ]);
 
-        AvailabilityBlock::create([
+        $block = AvailabilityBlock::create([
             'property_id' => $property->id,
             'start_date'  => $request->start_date,
             'end_date'    => $request->end_date,
@@ -231,22 +255,68 @@ class PropertyController extends Controller
             'created_by'  => Auth::id(),
         ]);
 
+        StaffLog::record('created_availability_block', 'availability_blocks', $block->id,
+            "Blocked {$request->start_date} to {$request->end_date} on {$property->property_name} ({$request->reason})");
+
         return back()->with('success', 'Dates blocked successfully.');
     }
 
     // ── Delete Image ───────────────────────────────────────────────
     public function deleteImage(Request $request, PropertyImage $image)
     {
+        // F8 — this endpoint destroys a file in object storage AND a database
+        // row AND silently reassigns which photo represents the villa, and it
+        // recorded none of it. On production the file lives in Cloudinary, so
+        // the delete is not recoverable from a database backup: without this
+        // row there is no record that the image ever existed, let alone who
+        // removed it.
+        //
+        // Everything needed for the description is read up front. Unlike the
+        // trusted-device case (see Customer\ProfileController, where Eloquent
+        // keeps attributes in memory after a hard delete), `$promoted` below
+        // genuinely cannot be known after the fact — it is a side effect.
+        $imageId = $image->id;
+        $path = $image->image_path;
+        $wasPrimary = (bool) $image->is_primary;
+        $propertyId = $image->property_id;
+        $promoted = null;
+
         Storage::disk('public')->delete($image->image_path);
 
-        // If deleting primary, make next image primary
+        // If deleting primary, make next image primary.
+        //
+        // "Next" now means next IN DISPLAY ORDER, matching Property::images().
+        // The bare `first()` this replaces had no ORDER BY, so it promoted
+        // whatever the database returned first — the lowest id in practice,
+        // and formally undefined. Promoting an image the gallery does not
+        // show first is a silent, invisible-to-anyone choice; that it was
+        // happening at all only became apparent once the delete was logged.
         if ($image->is_primary) {
             $next = PropertyImage::where('property_id', $image->property_id)
-                ->where('id', '!=', $image->id)->first();
+                ->where('id', '!=', $image->id)
+                ->orderBy('sort_order')
+                ->orderBy('id')
+                ->first();
+
             if ($next) $next->update(['is_primary' => 1]);
+
+            $promoted = $next?->id;
         }
 
         $image->delete();
+
+        StaffLog::record('deleted_property_image', 'property_images', $imageId,
+            sprintf(
+                'Deleted %simage "%s" from property #%d%s',
+                $wasPrimary ? 'PRIMARY ' : '',
+                $path,
+                $propertyId,
+                $wasPrimary
+                    ? ($promoted
+                        ? " — image #{$promoted} promoted to primary"
+                        : ' — the property now has no primary image')
+                    : ''
+            ));
 
         // Ang delete button na ito ay AJAX-only (fetch() sa edit.blade.php)
         // — hindi ito plain form submit. Ang dating `back()` (302 redirect

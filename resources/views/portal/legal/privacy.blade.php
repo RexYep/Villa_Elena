@@ -67,11 +67,20 @@
                     <h2><span class="num">02</span>What we collect</h2>
 
                     <h3>Account details</h3>
+                    {{--
+                        This used to also claim we collect "your ID type and ID number" at
+                        check-in. We do not, and never did: the columns exist in the database
+                        but no form, controller or view has ever written or read them (v7.40).
+                        A privacy notice has to describe what actually happens with the data,
+                        so the claim was removed rather than the sentence softened. If identity
+                        capture is ever built, put it back — and say what is kept and for how
+                        long, since a government ID is sensitive personal information under
+                        RA 10173 §3(l) and needs more than a passing mention.
+                    --}}
                     <p>
-                        Your full name, email address, mobile number, address, and — where we need to
-                        verify your identity at check-in — your ID type and ID number. You may also upload
+                        Your full name, email address, mobile number, and address. You may also upload
                         a profile photo. Your password is stored only as a cryptographic hash; we cannot
-                        read it.
+                        read it. We do not ask for or store a copy of any government ID.
                     </p>
 
                     <h3>Booking details</h3>

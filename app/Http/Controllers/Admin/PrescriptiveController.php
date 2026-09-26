@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Admin;
 
+use App\Http\Controllers\Concerns\ThrottlesAiRefresh;
 use App\Http\Controllers\Controller;
 use App\Models\AvailabilityBlock;
 use App\Models\Booking;
@@ -36,6 +37,8 @@ use Illuminate\Support\Facades\DB;
  */
 class PrescriptiveController extends Controller
 {
+    use ThrottlesAiRefresh;
+
     public function index()
     {
         $open = Recommendation::open()
@@ -216,15 +219,44 @@ class PrescriptiveController extends Controller
         ]);
     }
 
-    /** Manwal na pagpapatakbo ng engine, para hindi kailangang hintayin ang cron. */
+    /**
+     * Manwal na pagpapatakbo ng engine, para hindi kailangang hintayin ang cron.
+     *
+     * Naka-cooldown tulad ng Insights at Forecast: ang `BriefingWriter::write()`
+     * ay isang tawag sa Groq, at iisa lang ang badyet na hinahati nito kasama
+     * ang chatbot ng guest at ang review moderation. Ang pindot na ito lang ang
+     * naiwan noon na walang takda.
+     */
     public function regenerate(PrescriptiveEngine $engine, BriefingWriter $briefing)
     {
+        if ($wait = $this->aiRefreshCooldown('prescriptive')) {
+            return back()->with('error', $this->aiRefreshCooldownMessage('recommendations', $wait));
+        }
+
         $stats = $engine->run();
 
         // Ang briefing ay tumutukoy sa mga partikular na card; kung hindi
         // ito muling isusulat dito, magsasalita ito tungkol sa mga
         // mungkahing kalalabas lang sa listahan.
         $briefing->write();
+
+        // F4 — this endpoint spends the shared Groq budget, rewrites the
+        // recommendation set and EXPIRES existing rows in bulk
+        // (PrescriptiveEngine::expireStale()). None of that was recorded, so
+        // a recommendation that vanished before anyone acted on it left no
+        // trace of who cleared it. The per-minute cooldown above limits
+        // abuse; this supplies the accountability.
+        StaffLog::record(
+            'regenerated_recommendations',
+            'recommendations',
+            null,
+            sprintf(
+                'Regenerated recommendations — %d new, %d updated, %d expired',
+                $stats['created'],
+                $stats['refreshed'],
+                $stats['expired']
+            )
+        );
 
         return back()->with('success', sprintf(
             'Recommendations refreshed — %d new, %d updated, %d expired.',
@@ -284,9 +316,18 @@ class PrescriptiveController extends Controller
                 return [$fresh, $record];
             });
         } catch (\Throwable $e) {
+            // Dating kasama ang `$e->getMessage()` dito. Walang mensahe sa
+            // loob ng transaksyon na nakasulat para sa admin — puro DB work
+            // ito at isang "Unknown action type" na programming error — kaya
+            // ang tanging naipapakita niyon ay panloob na detalye. Isang
+            // tunay na halimbawa mula sa Task 9: ang isang maling `applies_to`
+            // ay nagpalabas ng buong SQL INSERT, kasama ang mga bound value,
+            // sa flash message.
             report($e);
 
-            return back()->with('error', 'Could not apply that recommendation: '.$e->getMessage());
+            return back()->with('error',
+                'Could not apply that recommendation — nothing was created, and the error has been logged. '
+                .'You can create the promo, block or pricing rule by hand from its own page.');
         }
 
         if ($result === null) {
@@ -300,6 +341,29 @@ class PrescriptiveController extends Controller
             'recommendations',
             $applied->id,
             "Applied recommendation '{$applied->title}' (projected {$applied->impact_label})"
+        );
+
+        // F3 — the line above records that a recommendation was applied. It
+        // does NOT record the real promo, block or pricing rule that applying
+        // it created, and those are the rows that change what guests are
+        // charged and what dates they can book.
+        //
+        // The consequence was a hole in the audit log's own answers: filtering
+        // `action = created_promo` returned promos made on the Promotions page
+        // and silently omitted every AI-applied one. Same for
+        // `created_availability_block`, which Task 8 added specifically so that
+        // re-opening or closing dates always leaves a trace.
+        //
+        // So a second row is written, using the SAME action names the manual
+        // paths use, and naming the recommendation as the origin. Two rows for
+        // one click is correct here and not a duplicate: they answer different
+        // questions — "who applied recommendation #12" and "where did promo
+        // #34 come from".
+        StaffLog::record(
+            $this->creationAction($applied->action_type),
+            $applied->applied_record_type,
+            $record->id,
+            $this->creationDescription($applied, $record)
         );
 
         return back()->with('success', $this->successMessage($applied, $record));
@@ -419,6 +483,38 @@ class PrescriptiveController extends Controller
             'notes' => $p['notes'] ?? null,
             'created_by' => Auth::id(),
         ]);
+    }
+
+    /**
+     * The action name the MANUAL path uses for the same kind of record, so
+     * that one filter returns both. Keep these strings in step with
+     * Admin\PromotionController and Admin\CalendarController — if they drift,
+     * the audit log quietly answers "which promos exist" with only half.
+     */
+    private function creationAction(string $actionType): string
+    {
+        return match ($actionType) {
+            Recommendation::ACTION_CREATE_PROMO => 'created_promo',
+            Recommendation::ACTION_CREATE_BLOCK => 'created_availability_block',
+            Recommendation::ACTION_CREATE_PRICING_RULE => 'created_pricing_rule',
+        };
+    }
+
+    private function creationDescription(Recommendation $rec, $record): string
+    {
+        $origin = "from recommendation #{$rec->id} '{$rec->title}'";
+
+        return match ($rec->action_type) {
+            Recommendation::ACTION_CREATE_PROMO => "Created promo '{$record->label}' ({$record->value_label}, {$record->window_label}) {$origin}",
+            // `start_date`/`end_date` are DATE CASTS on AvailabilityBlock, so
+            // interpolating them directly yields Carbon's full datetime
+            // ("2027-03-01 00:00:00") rather than a date. Same trap as the
+            // deleted_availability_block entry in Admin\CalendarController.
+            Recommendation::ACTION_CREATE_BLOCK => 'Blocked '.$record->start_date->format('Y-m-d')
+                .' to '.$record->end_date->format('Y-m-d')
+                ." ({$record->reason}) {$origin}",
+            Recommendation::ACTION_CREATE_PRICING_RULE => "Created pricing rule '{$record->label}' at ₱".number_format((float) $record->price, 2)." {$origin}",
+        };
     }
 
     private function successMessage(Recommendation $rec, $record): string

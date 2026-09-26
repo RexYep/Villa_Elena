@@ -994,7 +994,10 @@
                             <div>
                                 <div class="device-name">
                                     {{ $device->device_label ?: 'Unknown device' }}
-                                    @if ($device->token === $currentDeviceToken)
+                                    {{-- The row stores a hash, so this can't be a
+                                         string comparison any more — the model
+                                         hashes the cookie value to compare. --}}
+                                    @if ($device->matchesToken($currentDeviceToken))
                                         <span class="this-device-tag">This device</span>
                                     @endif
                                 </div>

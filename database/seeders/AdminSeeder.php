@@ -8,49 +8,35 @@ use App\Models\User;
 use App\Models\Setting;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Hash;
+use RuntimeException;
 
 class AdminSeeder extends Seeder
 {
     public function run(): void
     {
         // Create Super Admin
-        User::updateOrCreate(
-            ['email' => 'admin@villaelenareosrt.com'],
-            [
-                'full_name' => 'Villa Elena Admin',
-                'email'     => 'admin@villaelenareosrt.com',
-                'password'  => Hash::make('Admin@1234'),
-                'role'      => 'admin',
-                'phone'     => '09000000000',
-                'status'    => 1,
-            ]
-        );
+        $this->seedAccount('admin', 'admin@villaelenareosrt.com', [
+            'full_name' => 'Villa Elena Admin',
+            'role'      => 'admin',
+            'phone'     => '09000000000',
+            'status'    => 1,
+        ]);
 
         // Create a sample Staff account
-        User::updateOrCreate(
-            ['email' => 'staff@villaelenareosrt.com'],
-            [
-                'full_name' => 'Front Desk Staff',
-                'email'     => 'staff@villaelenareosrt.com',
-                'password'  => Hash::make('Staff@1234'),
-                'role'      => 'staff',
-                'phone'     => '09111111111',
-                'status'    => 1,
-            ]
-        );
+        $this->seedAccount('staff', 'staff@villaelenareosrt.com', [
+            'full_name' => 'Front Desk Staff',
+            'role'      => 'staff',
+            'phone'     => '09111111111',
+            'status'    => 1,
+        ]);
 
         // Create a sample Customer account
-        User::updateOrCreate(
-            ['email' => 'guest@example.com'],
-            [
-                'full_name' => 'Sample Guest',
-                'email'     => 'guest@example.com',
-                'password'  => Hash::make('Guest@1234'),
-                'role'      => 'customer',
-                'phone'     => '09222222222',
-                'status'    => 1,
-            ]
-        );
+        $this->seedAccount('customer', 'guest@example.com', [
+            'full_name' => 'Sample Guest',
+            'role'      => 'customer',
+            'phone'     => '09222222222',
+            'status'    => 1,
+        ]);
 
         // Seed default system settings
         $settings = [
@@ -76,5 +62,62 @@ class AdminSeeder extends Seeder
         }
 
         $this->command->info('✅ Admin, Staff, Customer accounts and Settings created.');
+    }
+
+    /**
+     * Create the account if it is missing; refresh its profile fields if it is
+     * not. THE PASSWORD IS ONLY EVER SET ON CREATION.
+     *
+     * Two separate problems were fixed here, and they need different remedies.
+     *
+     * 1. THE PASSWORDS WERE LITERALS IN THIS FILE — a hashed constant for each
+     *    of the admin, staff and sample customer accounts. This file is
+     *    committed, so anyone who could read the repository held the production
+     *    admin password. They now come from config, which reads SEED_*_PASSWORD
+     *    out of the environment, so no password lives in git.
+     *
+     *    The old values are deliberately not quoted anywhere in this file, not
+     *    even to describe what was removed: a credential in a comment is just
+     *    as published as one in code. SecretsAndDatabaseTest asserts that over
+     *    the whole file, comments included.
+     *
+     * 2. `updateOrCreate()` PUT THE PASSWORD IN THE *UPDATE* ARRAY, so a
+     *    re-run silently reset a rotated password back to the value above.
+     *    That is the worse half: rotating the admin password by hand looked
+     *    like it worked, and the next `db:seed` quietly undid it with no
+     *    output saying so. Hence the split below — profile fields are still
+     *    refreshed on every run (that is what makes the seeder idempotent),
+     *    but an existing row's password is never touched.
+     *
+     * Read through config(), NOT env(): `docker/start.sh` runs
+     * `php artisan config:cache`, and once a cached config exists Laravel skips
+     * LoadEnvironmentVariables entirely, so env() returns null in the
+     * container. A guard keyed on env() would have thrown on exactly the
+     * deployment it was written to protect. See config/seeding.php.
+     */
+    private function seedAccount(string $key, string $email, array $attributes): void
+    {
+        $existing = User::where('email', $email)->first();
+
+        if ($existing) {
+            $existing->update($attributes);
+
+            return;
+        }
+
+        $password = (string) config("seeding.passwords.{$key}", '');
+
+        if ($password === '') {
+            $env = 'SEED_'.strtoupper($key).'_PASSWORD';
+
+            throw new RuntimeException(
+                "Refusing to create {$email} with no password configured. Set {$env} "
+                .'to a password you have generated, then re-run the seeder. It is '
+                .'deliberately not defaulted: a default in this file is a published '
+                .'credential, which is the bug this guard exists to prevent.'
+            );
+        }
+
+        User::create($attributes + ['email' => $email, 'password' => Hash::make($password)]);
     }
 }

@@ -612,6 +612,39 @@
         sendMessage();
     }
 
+    // Everything rendered below goes through innerHTML, and two of the three
+    // sources are not ours to trust:
+    //
+    //   * `text` for a bot turn is the model's reply. A guest can ask the
+    //     model to emit markup. That is self-XSS — only the person typing can
+    //     influence their own reply — but it is still script execution on our
+    //     origin, in a session that may be a signed-in customer's.
+    //   * the card fields (name, promo label, amenities) are admin-set, so a
+    //     value entered once in the admin panel would run in every guest's
+    //     browser.
+    //
+    // Same escaper as admin/partials/realtime.blade.php: let the browser do
+    // the encoding rather than maintain an entity list here.
+    function escapeHtml(str) {
+        const div = document.createElement('div');
+        div.textContent = str ?? '';
+        return div.innerHTML;
+    }
+
+    // escapeHtml() IS NOT ENOUGH INSIDE AN ATTRIBUTE. Serialising a text node
+    // escapes & < > and nothing else — measured against a real DOM:
+    //
+    //     '"quoted"'  ->  '"quoted"'        (unchanged)
+    //     "it's"      ->  "it's"            (unchanged)
+    //     'a<b>c'     ->  'a&lt;b&gt;c'
+    //
+    // So a value carrying a double quote closes src="…" or href="…" and the
+    // next thing it writes is a new attribute — onerror=, for instance. Three
+    // card fields sit in attribute position, so they get the quotes too.
+    function escapeAttr(str) {
+        return escapeHtml(str).replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    }
+
     // ── Add message ────────────────────────────────────────────────────
     function addMessage(role, text, cards = []) {
         const isUser = role === 'user';
@@ -623,7 +656,7 @@
         div.className = `msg ${isUser ? 'user' : 'bot'}`;
         div.innerHTML = `
         ${!isUser ? '<div class="msg-avatar">E</div>' : ''}
-        <div class="msg-bubble">${text.replace(/\n/g, '<br>')}</div>
+        <div class="msg-bubble">${escapeHtml(text).replace(/\n/g, '<br>')}</div>
     `;
         wrapper.appendChild(div);
 
@@ -645,27 +678,27 @@
                     `<strong>₱${formatPrice(p.price)}</strong>`;
 
                 const promoHtml = p.promo ?
-                    `<div class="prop-card-promo"><i class="bi bi-tag-fill"></i> ${p.promo} — applied automatically</div>` :
+                    `<div class="prop-card-promo"><i class="bi bi-tag-fill"></i> ${escapeHtml(p.promo)} — applied automatically</div>` :
                     '';
 
                 const imgHtml = p.image ?
-                    `<img src="${p.image}" class="prop-card-img" alt="${p.name}" onerror="this.parentElement.innerHTML='<div class=\\'prop-card-img-placeholder\\'><i class=\\'bi bi-house-door\\'></i></div>'">` :
+                    `<img src="${escapeAttr(p.image)}" class="prop-card-img" alt="${escapeAttr(p.name)}" onerror="this.parentElement.innerHTML='<div class=\\'prop-card-img-placeholder\\'><i class=\\'bi bi-house-door\\'></i></div>'">` :
                     `<div class="prop-card-img-placeholder"><i class="bi bi-house-door"></i></div>`;
 
                 const amenitiesHtml = p.amenities.length > 0 ?
-                    `<div class="prop-card-amenities">${p.amenities.map(a => `<span class="amenity-tag">${a}</span>`).join('')}</div>` :
+                    `<div class="prop-card-amenities">${p.amenities.map(a => `<span class="amenity-tag">${escapeHtml(a)}</span>`).join('')}</div>` :
                     '';
 
                 cardsDiv.innerHTML += `
                 <div class="prop-card">
                     ${imgHtml}
                     <div class="prop-card-body">
-                        <div class="prop-card-name">${p.name}</div>
-                        <div class="prop-card-meta">${p.type} · Up to ${p.capacity} guests</div>
-                        <div class="prop-card-price">${priceLabel} <span class="prop-card-slot">${p.slot_label}</span></div>
+                        <div class="prop-card-name">${escapeHtml(p.name)}</div>
+                        <div class="prop-card-meta">${escapeHtml(p.type)} · Up to ${escapeHtml(p.capacity)} guests</div>
+                        <div class="prop-card-price">${priceLabel} <span class="prop-card-slot">${escapeHtml(p.slot_label)}</span></div>
                         ${promoHtml}
                         ${amenitiesHtml}
-                        <a href="${p.book_url}" class="prop-card-book" target="_blank">
+                        <a href="${escapeAttr(p.book_url)}" class="prop-card-book" target="_blank">
                             <i class="bi bi-calendar-check me-1"></i> Book Now
                         </a>
                     </div>

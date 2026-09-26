@@ -7,6 +7,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Booking;
 use App\Models\Property;
 use App\Models\AvailabilityBlock;
+use App\Models\StaffLog;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 
@@ -247,13 +248,39 @@ class CalendarController extends Controller
             'created_by'  => Auth::id(),
         ]);
 
+        StaffLog::record('created_availability_block', 'availability_blocks', $block->id,
+            "Blocked {$request->start_date} to {$request->end_date} via calendar ({$request->reason})");
+
         return response()->json(['success' => true, 'block_id' => $block->id]);
     }
 
     // ── Delete Block from Calendar ─────────────────────────────────
+    /**
+     * THE ONE THAT MATTERED MOST, and it recorded nothing at all.
+     *
+     * Creating a block at least left `availability_blocks.created_by` behind.
+     * Deleting one destroys that row — so re-opening the villa for sale on
+     * dates the owner had closed for maintenance or private use was the only
+     * action in this controller with no trace of any kind, on either side.
+     * The details are read before the delete because here they genuinely do
+     * vanish with the row.
+     */
     public function deleteBlock(AvailabilityBlock $block)
     {
+        $summary = sprintf(
+            '%s to %s (%s)',
+            $block->start_date instanceof \DateTimeInterface ? $block->start_date->format('Y-m-d') : $block->start_date,
+            $block->end_date instanceof \DateTimeInterface ? $block->end_date->format('Y-m-d') : $block->end_date,
+            $block->reason ?: 'no reason given'
+        );
+        $blockId = $block->id;
+        $propertyId = $block->property_id;
+
         $block->delete();
+
+        StaffLog::record('deleted_availability_block', 'availability_blocks', $blockId,
+            "Unblocked {$summary} on property #{$propertyId} — those dates are bookable again");
+
         return response()->json(['success' => true]);
     }
 }

@@ -479,7 +479,11 @@
                                 accept="image/jpg,image/jpeg,image/png,image/webp">
                             <i class="bi bi-cloud-upload"></i>
                             <p><strong>Click to upload</strong> or drag and drop</p>
-                            <small>JPG, PNG, WEBP — Max 3MB each</small>
+                            {{-- The count is part of the contract, not a detail: past
+                                 PHP's post_max_size the whole request is discarded and
+                                 the admin sees a 419, so the form has to say the limit
+                                 rather than let them find it. See docker/php.ini. --}}
+                            <small>JPG, PNG, WEBP — max 3MB each, up to 10 at a time</small>
                         </div>
                         <div class="image-previews" id="imagePreviews"></div>
                     </div>

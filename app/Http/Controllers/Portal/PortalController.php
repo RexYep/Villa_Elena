@@ -87,8 +87,17 @@ class PortalController extends Controller
         $tiktokUrl = Setting::get('tiktok_url');
 
         // Latest approved guest reviews for the "Guest Voices" section.
+        //
+        // `user:id,full_name,profile_image` — not the whole row (v7.40). A bare
+        // `with('user')` pulled every users column into an UNAUTHENTICATED page's
+        // view data: email, phone, address, and the government-ID columns. The
+        // Blade only prints full_name and profile_image_url, so nothing leaked —
+        // but the gap between "what the page renders" and "what the page holds"
+        // is only ever closed by whoever writes the next `@json`. `id` is
+        // required for the relation to match, `profile_image` by the
+        // profile_image_url accessor.
         $reviews = Review::where('status', 'approved')
-            ->with(['user', 'property'])
+            ->with(['user:id,full_name,profile_image', 'property'])
             ->latest()
             ->take(3)
             ->get();
@@ -122,8 +131,9 @@ class PortalController extends Controller
     // ── All Approved Reviews (public) ────────────────────────────────
     public function reviews()
     {
+        // Narrowed in v7.40 — see the note on home()'s identical query.
         $reviews = Review::where('status', 'approved')
-            ->with(['user', 'property'])
+            ->with(['user:id,full_name,profile_image', 'property'])
             ->latest()
             ->paginate(9);
 
@@ -209,9 +219,39 @@ class PortalController extends Controller
         return back()->with('contact_success', 'Thank you! Your message has been sent — we\'ll get back to you shortly.');
     }
 
+    /**
+     * The gate every public `{property}` route has to pass.
+     *
+     * `properties` holds ONE bookable row (`type = villa`) plus the six
+     * `type = room` rows, which exist for status badges, images and
+     * housekeeping and are never independently bookable. The listing queries
+     * enforce that with `where('type', 'villa')` — but a `where` on a LISTING
+     * is not a gate on a ROUTE. `{property}` is bound by id with no constraint
+     * and the model has no global scope, so `/properties/7`, `/book/7` and
+     * `/properties/7/price-preview` all resolved a room perfectly happily.
+     *
+     * That was not cosmetic. The room rows carry `base_price = 0.00` and a
+     * NULL `weekend_price`, so `quoteFor()` returned a total of 0 and
+     * `POST /book/{room}` created a real, slot-holding booking for ₱0 against
+     * a row nobody can stay in — with `num_guests` validated against the
+     * room's capacity instead of the villa's.
+     *
+     * The staff walk-in form already got this right
+     * (`exists:properties,id,type,villa`, and its comment says why: the
+     * frontend dropdown can be bypassed). This is the same rule for the side
+     * of the app a stranger can reach. 404, not 403: a room is not a bookable
+     * listing at all, and saying so leaks nothing about what else exists.
+     */
+    private function assertBookableListing(Property $property): void
+    {
+        abort_unless($property->type === 'villa', 404);
+    }
+
     // ── Single Property Detail ─────────────────────────────────────
     public function propertyDetail(Property $property, Request $request)
     {
+        $this->assertBookableListing($property);
+
         $property->load('images');
 
         // Mga individual na kwarto sa loob ng Villa (display/info lang,
@@ -230,10 +270,17 @@ class PortalController extends Controller
         $guests = $request->get('guests', 1);
         $slot = in_array($request->get('slot'), array_keys(Booking::SLOTS)) ? $request->get('slot') : 'day';
 
-        // Approved guest reviews for this specific property.
+        // Approved guest reviews for this specific property. Narrowed in v7.40 —
+        // see the note on home()'s query.
+        //
+        // Noticed while doing that, NOT changed: portal/property.blade.php
+        // references none of `$reviews`, `$avgRating` or `$totalReviews`, so this
+        // query and the two aggregates below are computed and thrown away on
+        // every property-page view. Left alone because removing them is a
+        // behaviour change on a public page, not a security fix.
         $reviews = Review::where('property_id', $property->id)
             ->where('status', 'approved')
-            ->with('user')
+            ->with('user:id,full_name,profile_image')
             ->latest()
             ->get();
 
@@ -257,6 +304,8 @@ class PortalController extends Controller
     // anumang holiday/special-date override sa loob ng getPackagePrice()).
     public function pricePreview(Property $property, Request $request)
     {
+        $this->assertBookableListing($property);
+
         $validator = validator($request->all(), [
             'checkin' => 'required|date',
             'slot' => 'required|in:'.implode(',', array_keys(Booking::SLOTS)),
@@ -321,6 +370,8 @@ class PortalController extends Controller
     // ── Booking Form ───────────────────────────────────────────────
     public function bookingForm(Property $property, Request $request)
     {
+        $this->assertBookableListing($property);
+
         if (Setting::get('allow_online_booking', '1') !== '1') {
             return redirect()->route('portal.property', $property)
                 ->with('error', 'Online booking is temporarily unavailable. Please contact us directly to reserve your stay.');
@@ -397,6 +448,8 @@ class PortalController extends Controller
     // ── Submit Booking ─────────────────────────────────────────────
     public function submitBooking(Property $property, Request $request)
     {
+        $this->assertBookableListing($property);
+
         if (Setting::get('allow_online_booking', '1') !== '1') {
             return redirect()->route('portal.property', $property)
                 ->with('error', 'Online booking is temporarily unavailable. Please contact us directly to reserve your stay.');

@@ -7,6 +7,8 @@ use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 /**
  * @property int $id
@@ -103,8 +105,23 @@ class User extends Authenticatable implements MustVerifyEmail
         'role',
         'profile_image',
         'address',
-        'id_type',
-        'id_number',
+        // `id_type` / `id_number` are deliberately NOT fillable.
+        //
+        // They are government-issued identifiers — "sensitive personal
+        // information" under RA 10173 §3(l) — and as of v7.40 NOTHING in the app
+        // reads or writes them: no controller, no form, no view, no seeder. They
+        // are reserved schema, not a feature.
+        //
+        // Being in $fillable made them an unguarded write target for a value
+        // nothing validates and nothing needs. No mass-assignment call exists
+        // today (every write in this codebase passes an explicit array), so this
+        // is closing the surface before something opens it, not fixing a live
+        // hole. See also $hidden below, and StaffLog::REDACTED_KEYS.
+        //
+        // If identity capture at check-in is ever actually built: set these from
+        // a controller with explicit validation, do not re-add them here, and
+        // consider an encrypted cast — plus update the privacy policy, which was
+        // corrected in v7.40 to stop promising a collection that never happened.
         'status',
         'last_login',
         'two_factor_enabled',
@@ -114,6 +131,13 @@ class User extends Authenticatable implements MustVerifyEmail
     protected $hidden = [
         'password',
         'remember_token',
+        // Never let a government ID reach a JSON payload or a serialised model,
+        // whatever loaded the row. Three public pages eager-load whole `users`
+        // rows into view data (narrowed in v7.40, but $hidden holds even if a
+        // future query widens again), and $hidden is what makes that structural
+        // rather than a property of each individual query.
+        'id_type',
+        'id_number',
     ];
 
     protected $casts = [
@@ -160,6 +184,53 @@ class User extends Authenticatable implements MustVerifyEmail
     public function loginActivities()
     {
         return $this->hasMany(LoginActivity::class);
+    }
+
+    /**
+     * Cut every OTHER way into this account. Call it whenever the password
+     * changes — a reset or a profile change.
+     *
+     * Rotating the password and `remember_token` was not enough, and the gap
+     * defeated the whole point of the reset flow: "someone is in my account"
+     * → reset the password → **the intruder is still logged in**. Their
+     * session row in `sessions` was untouched and stayed valid for the rest of
+     * SESSION_LIFETIME, and their browser's `trusted_device` cookie kept
+     * skipping 2FA for up to TRUSTED_DEVICE_DAYS (60).
+     *
+     * Two things are revoked:
+     *
+     * 1. **Other sessions.** Only meaningful on the `database` session driver,
+     *    which is what production runs; the `file` driver used in local dev
+     *    stores no user id, so there is nothing to select on and this is a
+     *    no-op there. That asymmetry is why the guard is a config check and
+     *    not a try/catch — a silent no-op in dev must not look like success.
+     *    `$keepSessionId` spares the caller's own session, so changing your
+     *    password from the profile page doesn't log you out of it. A reset
+     *    passes NULL: there is no session to keep.
+     *
+     * 2. **Trusted devices.** All of them, including the caller's. A trusted
+     *    device is precisely a stored "skip the second factor" grant, so
+     *    leaving one alive after a password change would leave the cheapest
+     *    route in open. The cost is one emailed code at the next login on
+     *    each device, which is the correct trade.
+     *
+     * @return array{sessions: int, devices: int} how many rows each part removed
+     */
+    public function revokeOtherLogins(?string $keepSessionId = null): array
+    {
+        $sessions = 0;
+        $table = config('session.table', 'sessions');
+
+        if (config('session.driver') === 'database' && Schema::hasTable($table)) {
+            $sessions = DB::table($table)
+                ->where('user_id', $this->id)
+                ->when($keepSessionId, fn ($q) => $q->where('id', '!=', $keepSessionId))
+                ->delete();
+        }
+
+        $devices = $this->trustedDevices()->delete();
+
+        return ['sessions' => $sessions, 'devices' => $devices];
     }
 
     // ── Helper Methods ─────────────────────────────────────────────

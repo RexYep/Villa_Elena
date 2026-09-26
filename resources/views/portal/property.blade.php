@@ -1514,10 +1514,10 @@
             updatePreview();
 
             // ── Live availability sync (Pusher) ────────────────────────────
-            const PUSHER_KEY = '{{ env('PUSHER_APP_KEY') }}';
+            const PUSHER_KEY = '{{ config('broadcasting.connections.pusher.key') }}';
             if (PUSHER_KEY && window.Pusher) {
                 const pusher = new Pusher(PUSHER_KEY, {
-                    cluster: '{{ env('PUSHER_APP_CLUSTER', 'ap1') }}'
+                    cluster: '{{ config('broadcasting.connections.pusher.options.cluster', 'ap1') }}'
                 });
                 const channel = pusher.subscribe('property-availability.{{ $property->id }}');
 

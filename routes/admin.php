@@ -17,6 +17,7 @@ use App\Http\Controllers\Admin\NotificationController;
 use App\Http\Controllers\Admin\PromotionController;
 use App\Http\Controllers\Admin\ProfileController;
 use App\Http\Controllers\Admin\HousekeepingController;
+use App\Http\Controllers\Admin\AuditLogController;
 
 
 Route::prefix('admin')
@@ -26,7 +27,7 @@ Route::prefix('admin')
 
     Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
     Route::get('/dashboard/stats', [DashboardController::class, 'stats'])
-        ->middleware('throttle:60,1')
+        ->middleware('throttle:60,1,admin-stats')
         ->name('dashboard.stats');
     // Booking lookup for payment modal (AJAX)
 Route::get('bookings/lookup', function (\Illuminate\Http\Request $request) {
@@ -45,12 +46,12 @@ Route::get('bookings/lookup', function (\Illuminate\Http\Request $request) {
         // tumanggi ang server.
         'status'   => $booking->status,
     ]);
-    })->name('bookings.lookup');
+    })->middleware('throttle:60,1,admin-lookup')->name('bookings.lookup');
 
     // Bookings — `bookings/quote` must be registered before the resource,
     // or `bookings/{booking}` (show) swallows it.
     Route::get('bookings/quote', [BookingController::class, 'quote'])
-        ->middleware('throttle:60,1')
+        ->middleware('throttle:60,1,admin-quote')
         ->name('bookings.quote');
     Route::resource('bookings', BookingController::class);
     Route::patch('bookings/{booking}/status', [BookingController::class, 'updateStatus'])->name('bookings.status');
@@ -80,7 +81,7 @@ Route::get('bookings/lookup', function (\Illuminate\Http\Request $request) {
     // Housekeeping (v7.11) — admin nagpapadala ng task; nagsusubaybay ng ulat
     Route::get('housekeeping',                        [HousekeepingController::class, 'index'])->name('housekeeping.index');
     Route::get('housekeeping/live',                   [HousekeepingController::class, 'live'])
-        ->middleware('throttle:60,1')
+        ->middleware('throttle:60,1,admin-housekeeping-live')
         ->name('housekeeping.live');
     Route::post('housekeeping/tasks',                 [HousekeepingController::class, 'store'])->name('housekeeping.tasks.store');
     Route::patch('housekeeping/tasks/{task}',         [HousekeepingController::class, 'updateTask'])->name('housekeeping.tasks.update');
@@ -102,7 +103,9 @@ Route::get('bookings/lookup', function (\Illuminate\Http\Request $request) {
     // Ipinapadala ng sistema mismo ang refund sa PayMongo (v5.9 Phase 4).
     // Hindi ito kapalit ng paidOut sa itaas — nananatili iyon bilang
     // fallback para sa cash at para sa mga bigong transfer.
-    Route::post('payments/{payment}/send', [PaymentController::class, 'sendRefundTransfer'])->name('payments.send');
+    Route::post('payments/{payment}/send', [PaymentController::class, 'sendRefundTransfer'])
+        ->middleware('throttle:refund-send')
+        ->name('payments.send');
 
     // Reports
     Route::get('reports', [ReportController::class, 'index'])->name('reports.index');
@@ -116,6 +119,17 @@ Route::patch('reviews/{review}/reject',        [ReviewController::class, 'reject
 Route::post('reviews/{review}/reply',          [ReviewController::class, 'reply'])->name('reviews.reply');
 Route::delete('reviews/{review}',             [ReviewController::class, 'destroy'])->name('reviews.destroy');
  
+
+    // Audit Log — READ ONLY, and it stays that way. There is deliberately no
+    // POST/PUT/DELETE here: a log the admin panel can edit carries the
+    // authority of a record without the properties of one. Admin-only via the
+    // group's `role:admin`, because the rows name who did what from where.
+    Route::get('audit-log', [AuditLogController::class, 'index'])->name('audit.index');
+
+    // Successful sign-ins, read from `login_activities`. Separate from the
+    // action log above because it is a different table, not a different
+    // filter — see F11 in AuditLogController::signIns().
+    Route::get('audit-log/sign-ins', [AuditLogController::class, 'signIns'])->name('audit.signins');
 
     // Settings
     Route::get('settings', [SettingsController::class, 'index'])->name('settings.index');

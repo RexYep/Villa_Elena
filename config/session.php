@@ -167,9 +167,29 @@ return [
     | to the server if the browser has a HTTPS connection. This will keep
     | the cookie from being sent to you when it can't be done securely.
     |
+    | THE DEFAULT IS NOT LARAVEL'S. Stock Laravel is `env('SESSION_SECURE_COOKIE')`
+    | with no fallback, which is NULL — no Secure flag — whenever that variable
+    | is missing. render.yaml does set it, but a Render blueprint only governs a
+    | service that is blueprint-managed, and several of this deployment's
+    | resources were created by hand in the dashboard instead (see CLAUDE.md on
+    | the Key Value instance). So the one place the flag was configured was also
+    | the one place that might not be read, and nothing would have reported it:
+    | the cookie just goes out without the flag.
+    |
+    | Two cookies ride on this value. The session cookie, and — because
+    | CookieJar takes its defaults from this same config — the "Keep me signed
+    | in" recaller, which Laravel gives a 400-day lifetime. That one is a
+    | standing authentication credential and must never be transmittable over
+    | plain http.
+    |
+    | Keying the fallback off the environment makes production secure whether
+    | or not the variable survives. `local`, `testing` and the Docker parity
+    | container all run over http and are unaffected; an explicit
+    | SESSION_SECURE_COOKIE=false still wins if one is ever genuinely needed.
+    |
     */
 
-    'secure' => env('SESSION_SECURE_COOKIE'),
+    'secure' => (bool) env('SESSION_SECURE_COOKIE', env('APP_ENV') === 'production'),
 
     /*
     |--------------------------------------------------------------------------
@@ -196,6 +216,21 @@ return [
     | See: https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Set-Cookie#samesitesamesite-value
     |
     | Supported: "lax", "strict", "none", null
+    |
+    | KEEP THIS AT "lax". "strict" reads like the safer value and is not: it
+    | withholds the cookie even on a top-level navigation the guest performed
+    | themselves, and two flows here depend on exactly that.
+    |
+    |  1. PayMongo redirects the guest back to /pay/{booking}/success. Under
+    |     "strict" they arrive with no session, so the `auth` middleware bounces
+    |     them to /login instead of their receipt — right after paying.
+    |  2. The email-verification link, clicked from an open webmail tab.
+    |
+    | "lax" is also what the CSRF story here already assumes: it blocks the
+    | cross-site sub-resource requests (<img>, fetch) that make a forged GET
+    | cheap, while still allowing a link the guest clicked. The one route where
+    | that distinction matters — /pay/{booking}/cancel, which a link CAN still
+    | reach — is signed instead. See PaymentController::cancel().
     |
     */
 

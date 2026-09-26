@@ -14,8 +14,8 @@
         }
 
         /* The nav is fixed, so an anchor jump parks the section heading
-           underneath it. Every in-page link and the availability check's
-           scroll land below the bar instead. */
+               underneath it. Every in-page link and the availability check's
+               scroll land below the bar instead. */
         section[id],
         div[id] {
             scroll-margin-top: calc(var(--nav-h) + 12px);
@@ -29,14 +29,14 @@
         }
 
         /* ════════════════════════════════════════
-                                               NAVIGATION
-                                            ════════════════════════════════════════ */
+                                                   NAVIGATION
+                                                ════════════════════════════════════════ */
         /* portal.css styles a different `.nav` (the public shell) as a flex row
-           with 40px side padding. Inherited here, it made .nav-inner a
-           content-sized flex item inside a second 40px gutter: 80px lost per
-           side, so at 960px the nav was 994px wide and Sign Up / Sign Out ran
-           off the right edge. display/padding reset so .nav-inner is the only
-           layout box, as this page intends. */
+               with 40px side padding. Inherited here, it made .nav-inner a
+               content-sized flex item inside a second 40px gutter: 80px lost per
+               side, so at 960px the nav was 994px wide and Sign Up / Sign Out ran
+               off the right edge. display/padding reset so .nav-inner is the only
+               layout box, as this page intends. */
         .nav {
             position: fixed;
             top: 0;
@@ -85,9 +85,9 @@
         }
 
         /* Desktop nav links. Scoped under .nav because portal.css's ≤900px
-           rule for the customer topnav also matches .nav-links — position:fixed,
-           column, dark panel — which showed this list as a permanently open
-           dropdown between 769 and 900px. */
+               rule for the customer topnav also matches .nav-links — position:fixed,
+               column, dark panel — which showed this list as a permanently open
+               dropdown between 769 and 900px. */
         .nav .nav-links {
             display: flex;
             position: static;
@@ -261,8 +261,8 @@
         }
 
         /* ════════════════════════════════════════
-                                               HERO SECTION
-                                            ════════════════════════════════════════ */
+                                                   HERO SECTION
+                                                ════════════════════════════════════════ */
         .hero {
             height: 100vh;
             min-height: 680px;
@@ -490,8 +490,8 @@
         }
 
         /* ════════════════════════════════════════
-                                               SHARED SECTION STYLES
-                                            ════════════════════════════════════════ */
+                                                   SHARED SECTION STYLES
+                                                ════════════════════════════════════════ */
         .section {
             max-width: 1280px;
             margin: 0 auto;
@@ -539,8 +539,8 @@
         }
 
         /* ════════════════════════════════════════
-                                               PROPERTIES SECTION
-                                            ════════════════════════════════════════ */
+                                                   PROPERTIES SECTION
+                                                ════════════════════════════════════════ */
         #properties {
             background: var(--cream);
         }
@@ -947,8 +947,8 @@
         }
 
         /* ════════════════════════════════════════
-                                               AMENITIES SECTION
-                                            ════════════════════════════════════════ */
+                                                   AMENITIES SECTION
+                                                ════════════════════════════════════════ */
         #amenities {
             background: var(--stone);
             padding: 0;
@@ -1026,8 +1026,8 @@
         }
 
         /* ════════════════════════════════════════
-                                               ROOM TOUR SECTION
-                                            ════════════════════════════════════════ */
+                                                   ROOM TOUR SECTION
+                                                ════════════════════════════════════════ */
         #room-tour {
             background: var(--cream);
             padding: 0;
@@ -1168,8 +1168,8 @@
         }
 
         /* ════════════════════════════════════════
-                                               GALLERY SECTION
-                                            ════════════════════════════════════════ */
+                                                   GALLERY SECTION
+                                                ════════════════════════════════════════ */
         #gallery {
             background: var(--sand);
             padding: 0;
@@ -1180,7 +1180,7 @@
         }
 
         /* Prev/next live in the header row, level with the heading, so the
-           photo itself stays clear of controls. */
+               photo itself stays clear of controls. */
         .gallery-controls {
             display: flex;
             gap: 12px;
@@ -1227,7 +1227,7 @@
             position: relative;
             aspect-ratio: 16 / 9;
             /* Full-width 16:9 is ~675px tall, more than a laptop screen shows
-               under the nav; cap it so photo, caption and dots fit at once. */
+                   under the nav; cap it so photo, caption and dots fit at once. */
             max-height: 76vh;
             border-radius: 32px;
             overflow: hidden;
@@ -1251,7 +1251,7 @@
         }
 
         /* Each photo settles in from a slight zoom while it is on screen.
-           4.5s against the 5s interval, so it finishes before the next cut. */
+               4.5s against the 5s interval, so it finishes before the next cut. */
         .gallery-slide img {
             width: 100%;
             height: 100%;
@@ -1346,8 +1346,8 @@
         @media (max-width: 768px) {
 
             /* `#gallery .section` outranks the shared ≤768px `.section`
-               rule, so the gallery kept its 40px desktop gutter on phones
-               and the frame shrank to ~260px. */
+                   rule, so the gallery kept its 40px desktop gutter on phones
+                   and the frame shrank to ~260px. */
             #gallery .section {
                 padding: 64px 20px;
             }
@@ -1367,7 +1367,7 @@
         }
 
         /* 16:10 at phone width leaves ~220px of height, too little for the
-           pill, title and description together. */
+               pill, title and description together. */
         @media (max-width: 480px) {
             .gallery-slideshow {
                 aspect-ratio: 4 / 3;
@@ -1423,8 +1423,8 @@
         }
 
         /* ════════════════════════════════════════
-                                               ABOUT SECTION
-                                            ════════════════════════════════════════ */
+                                                   ABOUT SECTION
+                                                ════════════════════════════════════════ */
         #about {
             background: var(--cream);
             padding: 0;
@@ -1530,8 +1530,8 @@
         }
 
         /* ════════════════════════════════════════
-                                               TESTIMONIALS SECTION
-                                            ════════════════════════════════════════ */
+                                                   TESTIMONIALS SECTION
+                                                ════════════════════════════════════════ */
         #testimonials {
             background: var(--sand);
             padding: 0;
@@ -1649,8 +1649,8 @@
         }
 
         /* ════════════════════════════════════════
-                                               LOCATION SECTION
-                                            ════════════════════════════════════════ */
+                                                   LOCATION SECTION
+                                                ════════════════════════════════════════ */
         #location {
             background: var(--cream);
             padding: 0;
@@ -1735,8 +1735,8 @@
         }
 
         /* ════════════════════════════════════════
-                                               CONTACT SECTION
-                                            ════════════════════════════════════════ */
+                                                   CONTACT SECTION
+                                                ════════════════════════════════════════ */
         #contact {
             background: var(--stone);
             padding: 0;
@@ -1881,8 +1881,8 @@
         }
 
         /* ════════════════════════════════════════
-                                               FOOTER
-                                            ════════════════════════════════════════ */
+                                                   FOOTER
+                                                ════════════════════════════════════════ */
         .footer {
             background: #1a1009;
             padding: 70px 40px 40px;
@@ -1979,8 +1979,8 @@
         }
 
         /* ════════════════════════════════════════
-                                               ANIMATIONS & SCROLL REVEAL
-                                            ════════════════════════════════════════ */
+                                                   ANIMATIONS & SCROLL REVEAL
+                                                ════════════════════════════════════════ */
         .reveal {
             opacity: 0;
             transform: translateY(30px);
@@ -2009,11 +2009,11 @@
         }
 
         /* ════════════════════════════════════════
-                                               HERO — BOOKING BAR & TRUST ROW
-                                            ════════════════════════════════════════ */
+                                                   HERO — BOOKING BAR & TRUST ROW
+                                                ════════════════════════════════════════ */
         /* The hero now carries real content (promo, availability check, proof),
-           so it grows past one screen instead of clipping. `svh` keeps mobile
-           browsers from counting the collapsing address bar as usable height. */
+               so it grows past one screen instead of clipping. `svh` keeps mobile
+               browsers from counting the collapsing address bar as usable height. */
         .hero {
             height: auto;
             min-height: 100vh;
@@ -2022,15 +2022,15 @@
         }
 
         /* Photo comes from the villa's own primary image when there is one
-           (--hero-photo, set inline on the section so it works with the
-           Cloudinary disk too); the packaged shot is the fallback. */
+               (--hero-photo, set inline on the section so it works with the
+               Cloudinary disk too); the packaged shot is the fallback. */
         .hero::before {
             background: var(--hero-photo, url('/images/images8.jpg')) center/cover no-repeat;
             opacity: 0.42;
         }
 
         /* Scrim — the headline and the booking fields have to stay readable
-           over whatever photo the admin uploads, which we can't vet. */
+               over whatever photo the admin uploads, which we can't vet. */
         .hero::after {
             content: '';
             position: absolute;
@@ -2070,14 +2070,14 @@
         }
 
         /* ── Availability check ──────────────────────────────────────
-           Submits back to the homepage route, which already filters the
-           listing by checkin/slot/guests. */
+               Submits back to the homepage route, which already filters the
+               listing by checkin/slot/guests. */
         .book-bar {
             display: grid;
             /* minmax(0, …) matters: a bare `fr` track keeps an auto minimum,
-               and the slot <select>'s longest option is wide enough that the
-               three fields ate the whole row and squeezed the submit button
-               to zero width. */
+                   and the slot <select>'s longest option is wide enough that the
+                   three fields ate the whole row and squeezed the submit button
+                   to zero width. */
             grid-template-columns: minmax(0, 1.1fr) minmax(0, 1.3fr) minmax(0, 0.7fr) auto;
             gap: 10px;
             align-items: end;
@@ -2140,8 +2140,8 @@
         }
 
         /* Not `.btn-check` — that is Bootstrap's hidden toggle-input helper
-           (position:absolute; clip:rect(0,0,0,0)), and Bootstrap is in the
-           portal bundle, so the submit button vanished. */
+               (position:absolute; clip:rect(0,0,0,0)), and Bootstrap is in the
+               portal bundle, so the submit button vanished. */
         .btn-availability {
             border: none;
             cursor: pointer;
@@ -2229,8 +2229,8 @@
         }
 
         /* ════════════════════════════════════════
-                                               PROMO BAND
-                                            ════════════════════════════════════════ */
+                                                   PROMO BAND
+                                                ════════════════════════════════════════ */
         .promo-card {
             text-decoration: none;
             transition: transform 0.25s ease, box-shadow 0.25s ease, border-color 0.25s ease;
@@ -2243,8 +2243,8 @@
         }
 
         /* ════════════════════════════════════════
-                                               HIGHLIGHTS STRIP
-                                            ════════════════════════════════════════ */
+                                                   HIGHLIGHTS STRIP
+                                                ════════════════════════════════════════ */
         .highlights {
             background: var(--cream);
             border-bottom: 1px solid var(--border);
@@ -2291,8 +2291,8 @@
         }
 
         /* ════════════════════════════════════════
-                                               CLOSING BOOKING CTA
-                                            ════════════════════════════════════════ */
+                                                   CLOSING BOOKING CTA
+                                                ════════════════════════════════════════ */
         .final-cta {
             position: relative;
             background: var(--stone);
@@ -2416,8 +2416,8 @@
         }
 
         /* ════════════════════════════════════════
-                                               RESPONSIVE
-                                            ════════════════════════════════════════ */
+                                                   RESPONSIVE
+                                                ════════════════════════════════════════ */
         @media (max-width: 1024px) {
             .about-grid {
                 grid-template-columns: 1fr;
@@ -2472,9 +2472,9 @@
         }
 
         /* The full nav needs 994px as a guest and 1034px signed in (My Bookings
-           + Sign Out are wider than Sign In + Sign Up). Tighter gutters and link
-           padding bring that to ~850 / ~890px, so a 960px Surface Pro keeps the
-           full bar; below 940px it becomes the hamburger. */
+               + Sign Out are wider than Sign In + Sign Up). Tighter gutters and link
+               padding bring that to ~850 / ~890px, so a 960px Surface Pro keeps the
+               full bar; below 940px it becomes the hamburger. */
         @media (max-width: 1100px) {
             .nav-inner {
                 padding: 0 24px;
@@ -2590,7 +2590,7 @@
             }
 
             /* No room for it once the hero stacks, and it would sit on the
-               booking bar rather than below it. */
+                   booking bar rather than below it. */
             .hero-scroll {
                 display: none;
             }
@@ -2636,7 +2636,7 @@
         }
 
         /* Motion here is decoration, never information — drop all of it when
-           the guest has asked their OS for less. */
+               the guest has asked their OS for less. */
         @media (prefers-reduced-motion: reduce) {
             html {
                 scroll-behavior: auto;
@@ -2711,11 +2711,13 @@
             $featuredVilla && $allowOnlineBooking
                 ? route('portal.property', $featuredVilla) .
                     '?' .
-                    http_build_query(array_filter([
-                        'checkin' => request('checkin'),
-                        'slot' => $heroSlot,
-                        'guests' => request('guests'),
-                    ]))
+                    http_build_query(
+                        array_filter([
+                            'checkin' => request('checkin'),
+                            'slot' => $heroSlot,
+                            'guests' => request('guests'),
+                        ]),
+                    )
                 : '#properties';
     @endphp
 
@@ -2781,7 +2783,8 @@
     {{-- ══════════════════════════════════
      HERO SECTION
 ══════════════════════════════════ --}}
-    <section class="hero" id="hero" @if ($heroPhoto) style="--hero-photo:url('{{ $heroPhoto }}')" @endif>
+    <section class="hero" id="hero"
+        @if ($heroPhoto) style="--hero-photo:url('{{ $heroPhoto }}')" @endif>
         <div class="hero-bg-pattern"></div>
         <div class="hero-glow"></div>
 
@@ -2821,7 +2824,8 @@
                     <label for="heroSlot">Slot</label>
                     <select id="heroSlot" name="slot">
                         @foreach (\App\Models\Booking::SLOTS as $key => $slotInfo)
-                            <option value="{{ $key }}" @selected($heroSlot === $key)>{{ $slotInfo['label'] }}</option>
+                            <option value="{{ $key }}" @selected($heroSlot === $key)>{{ $slotInfo['label'] }}
+                            </option>
                         @endforeach
                     </select>
                 </div>
@@ -2968,7 +2972,8 @@
                         <span>· {{ request('guests') }} guests</span>
                     @endif
                     <a href="{{ route('home') }}"
-                        style="margin-left:auto;color:var(--terracotta);font-weight:500;text-decoration:none;">Clear all</a>
+                        style="margin-left:auto;color:var(--terracotta);font-weight:500;text-decoration:none;">Clear
+                        all</a>
                 </div>
             @endif
 
@@ -3204,7 +3209,8 @@
                         'src' => 'images/view-inside.jpg',
                         'alt' => 'Inside view',
                         'caption' => 'Inside View',
-                        'desc' => 'Shaded tables beside the pool, with a slide for the kids and the rooms a few steps away.',
+                        'desc' =>
+                            'Shaded tables beside the pool, with a slide for the kids and the rooms a few steps away.',
                     ],
                     [
                         'src' => 'images/kitchen1.png',
@@ -3240,7 +3246,7 @@
                 $galleryTotal = str_pad(count($galleryShots), 2, '0', STR_PAD_LEFT);
             @endphp
 
-            <div class="gallery-slideshow" id="gallerySlideshow" data-interval="5000">
+            <div class="gallery-slideshow" id="gallerySlideshow" data-interval="3000">
                 @foreach ($galleryShots as $i => $shot)
                     <div class="gallery-slide{{ $i === 0 ? ' active' : '' }}" onclick="openLightbox(this)">
                         <img src="{{ asset($shot['src']) }}" alt="{{ $shot['alt'] }}" loading="lazy"
@@ -3637,7 +3643,8 @@
                 <div>
                     <div class="footer-col-title">Contact</div>
                     <ul class="footer-links">
-                        <li><a href="tel:{{ preg_replace('/[^0-9+]/', '', $resortPhone) }}">{{ $resortPhone }}</a></li>
+                        <li><a href="tel:{{ preg_replace('/[^0-9+]/', '', $resortPhone) }}">{{ $resortPhone }}</a>
+                        </li>
                         <li><a href="mailto:{{ $resortEmail }}">{{ $resortEmail }}</a></li>
 
                     </ul>
@@ -3792,7 +3799,10 @@
             window.addEventListener('load', () => {
                 requestAnimationFrame(() => {
                     document.getElementById('properties')
-                        ?.scrollIntoView({ behavior: 'auto', block: 'start' });
+                        ?.scrollIntoView({
+                            behavior: 'auto',
+                            block: 'start'
+                        });
                 });
             });
         @endif

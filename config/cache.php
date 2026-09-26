@@ -19,6 +19,32 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Rate Limiter Store
+    |--------------------------------------------------------------------------
+    |
+    | Which store `RateLimiter` counts in — the throttle middleware, the
+    | failed-login lockout and the AI refresh cooldown all share this one
+    | instance. Left unset it follows `default`, which in production is
+    | `failover` (`['redis', 'database']`) on the free, NON-PERSISTENT Render
+    | Key Value plan. A brute-force counter there is not a counter: a Redis
+    | restart or an `allkeys-lru` eviction wipes every lockout, and during a
+    | failover the same attacker's attempts land in two different stores that
+    | never see each other's totals — so each flip hands out a fresh set of
+    | guesses against an account.
+    |
+    | This is the same rule the PayMongo checkout lock already follows
+    | (project.md v7.4): anything guarding correctness is pinned to
+    | `database`, never the default store. The cost is a few extra queries on
+    | rate-limited requests, which for one villa is not a real number.
+    |
+    | phpunit.xml sets this to `array` — the test database has no cache table.
+    |
+    */
+
+    'limiter' => env('CACHE_LIMITER', 'database'),
+
+    /*
+    |--------------------------------------------------------------------------
     | Cache Stores
     |--------------------------------------------------------------------------
     |

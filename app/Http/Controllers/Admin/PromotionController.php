@@ -5,6 +5,8 @@ namespace App\Http\Controllers\Admin;
 use App\Helpers\NotificationHelper;
 use App\Http\Controllers\Controller;
 use App\Models\Discount;
+use App\Models\PricingRule;
+use App\Models\Property;
 use App\Models\StaffLog;
 use App\Models\User;
 use Illuminate\Http\Request;
@@ -71,10 +73,17 @@ class PromotionController extends Controller
     {
         $data = $this->validated($request, $promotion);
 
+        // A promo edit moves money: `value`, `type` and the date window all
+        // change what guests are charged. Only the keys this form submits are
+        // compared, so `used_count` drifting does not register as an edit.
+        $before = collect($promotion->only(array_keys($data)))->all();
+
         $promotion->update($data);
 
-        StaffLog::record('updated_promo', 'discounts', $promotion->id,
-            "Updated promo '{$promotion->label}' ({$promotion->value_label}, {$promotion->window_label})");
+        StaffLog::recordChange('updated_promo', 'discounts', $promotion->id,
+            "Updated promo '{$promotion->label}' ({$promotion->value_label}, {$promotion->window_label})",
+            $before,
+            collect($promotion->only(array_keys($data)))->all());
 
         $notified = $this->maybeNotifyCustomers($request, $promotion);
 
@@ -105,9 +114,12 @@ class PromotionController extends Controller
         // buo pa rin ang `discount_amount`, kaya tumpak pa rin ang
         // financials. Nawawala lang ang atribusyon.
         $label = $promotion->label;
+        $deletedId = $promotion->id;
+
         $promotion->delete();
 
-        StaffLog::record('deleted_promo', 'discounts', null, "Deleted promo '{$label}'");
+        StaffLog::record('deleted_promo', 'discounts', $deletedId,
+            "Deleted promo '{$label}' (promo #{$deletedId})");
 
         return back()->with('success', "Promo '{$label}' deleted. Past bookings keep their discounted totals.");
     }
@@ -125,6 +137,33 @@ class PromotionController extends Controller
     }
 
     // ── Internals ──────────────────────────────────────────────────
+
+    /**
+     * Ang pinakamalaking `fixed` na bawas na may saysay pa.
+     *
+     * Ang batayan ay ang peak rate ng villa (`weekend_price`, o `base_price`
+     * kapag wala iyon), dahil iyon ang pinakamataas na `base_amount` na
+     * kayang ibalik ng `getPackagePrice()`. Isang `pricing_rules` na row ay
+     * puwedeng mas mataas pa — kaya kinukuha rin ang pinakamataas na aktibong
+     * override, at kung alin ang mas malaki roon ang nananaig.
+     *
+     * Ang fallback na 100000 ay para lang hindi maging `max:0` ang rule sa
+     * isang walang-laman na database (hal. bagong install bago mag-seed):
+     * ang `max:0` ay tatanggi sa BAWAT promo at magmumukhang sirang form.
+     */
+    private function maxFixedDiscount(): float
+    {
+        $villa = fn () => Property::where('type', 'villa');
+
+        $listPrice = max(
+            (float) ($villa()->max('weekend_price') ?? 0),
+            (float) ($villa()->max('base_price') ?? 0),
+        );
+
+        $rulePrice = (float) (PricingRule::where('is_active', 1)->max('price') ?? 0);
+
+        return round(max($listPrice, $rulePrice) ?: 100000, 2);
+    }
 
     private function validated(Request $request, ?Discount $existing = null): array
     {
@@ -163,6 +202,19 @@ class PromotionController extends Controller
         // tingin ang admin sa maling numero.
         if ($request->input('type') === 'percentage') {
             $rules['value'] = 'required|numeric|min:0.01|max:100';
+        }
+
+        // Ganoon din ang `fixed`, na dati ay walang anumang itaas na
+        // hangganan. Ang bawas ay kinakaltas sa `base_amount` — ang
+        // pinakamataas na posibleng halaga niyon ay ang peak rate ng villa
+        // — kaya ang anumang mas malaki pa roon ay laging typo. HINDI ito
+        // nagiging negatibong kabuuan (ini-clamp ng
+        // Discount::calculateDiscount() sa `min($off, $amount)`), pero
+        // iyon mismo ang problema: ang isang ₱400,000 na naitype bilang
+        // ₱4,000 ay tahimik na ginagawang ₱0 ang bawat stay sa buong
+        // window ng promo, at walang anumang mensahe sa admin.
+        if ($request->input('type') === 'fixed') {
+            $rules['value'] = 'required|numeric|min:0.01|max:'.$this->maxFixedDiscount();
         }
 
         $data = $request->validate($rules, [

@@ -18,6 +18,12 @@
 /public/storage
 /storage/*.key
 /storage/*.pem
+# Database dumps written by `php artisan db:backup` (v7.41). This MUST stay
+# ignored: a dump is the entire database — every guest name, email, phone,
+# address, booking and payment record — and committing one publishes all of it to
+# everyone with repository access, permanently, because git keeps every revision.
+# Copy backups somewhere off this machine instead; see project.md §15.9.
+/storage/backups
 /storage/pail
 /vendor
 Homestead.json

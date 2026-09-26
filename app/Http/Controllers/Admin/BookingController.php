@@ -273,13 +273,17 @@ class BookingController extends Controller
             'num_guests'       => 'required|integer|min:1',
         ]);
 
+        $before = $booking->only(['num_guests', 'special_requests']);
+
         $booking->update([
             'num_guests'       => $request->num_guests,
             'special_requests' => $request->special_requests,
         ]);
 
-        StaffLog::record('updated_booking', 'bookings', $booking->id,
-            "Updated booking {$booking->booking_ref}");
+        StaffLog::recordChange('updated_booking', 'bookings', $booking->id,
+            "Updated booking {$booking->booking_ref}",
+            $before,
+            $booking->only(['num_guests', 'special_requests']));
 
         return redirect()->route('admin.bookings.show', $booking)
             ->with('success', 'Booking updated successfully.');
@@ -289,9 +293,12 @@ class BookingController extends Controller
     public function destroy(Booking $booking)
     {
         $ref = $booking->booking_ref;
+        $deletedId = $booking->id;
+
         $booking->delete();
 
-        StaffLog::record('deleted_booking', 'bookings', null, "Deleted booking {$ref}");
+        StaffLog::record('deleted_booking', 'bookings', $deletedId,
+            "Deleted booking {$ref} (booking #{$deletedId})");
 
         return redirect()->route('admin.bookings.index')
             ->with('success', "Booking {$ref} has been deleted.");
@@ -647,7 +654,7 @@ class BookingController extends Controller
             return back()->withErrors($problem)->withInput();
         }
 
-        Payment::create([
+        $payment = Payment::create([
             'booking_id'     => $booking->id,
             'amount'         => $request->amount,
             'payment_method' => $request->payment_method,
@@ -657,7 +664,6 @@ class BookingController extends Controller
             'notes'          => $request->notes,
             'payment_date'   => now(),
         ]);
-
         
 
         $booking->recalculateFinancials();
@@ -671,8 +677,18 @@ class BookingController extends Controller
         // kaya laging may resibo.
         BookingMailHelper::paymentRecorded($booking, (float) $request->amount, $wasPending);
 
-        StaffLog::record('recorded_payment', 'payments', $booking->id,
-            "Recorded ₱{$request->amount} payment for {$booking->booking_ref}");
+        // F10 — this row used to say `target_table = 'payments'` with the
+        // BOOKING's id in `target_id`, so it pointed at a payments row that
+        // does not exist and, worse, at whichever payment happens to carry
+        // that id. It also called the event `recorded_payment` while the
+        // admin payments page and the front desk both called the identical
+        // event `payment_recorded`, which made the action name useless as a
+        // filter — no single query returned all manual payments.
+        //
+        // All three sites now agree: action `payment_recorded`, target the
+        // PAYMENT that was created, booking named in the description.
+        StaffLog::record('payment_recorded', 'payments', $payment->id,
+            "Recorded ₱{$request->amount} {$request->payment_method} payment for {$booking->booking_ref}");
 
         return back()->with('success', "Payment of ₱" . number_format($request->amount, 2) . " recorded successfully.");
     }

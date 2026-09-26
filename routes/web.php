@@ -50,6 +50,12 @@ Route::middleware('auth')->group(function () {
         ->middleware('throttle:payment-checkout')
         ->name('payment.checkout');
     Route::get('/pay/{booking}/success', [PaymentController::class, 'success'])->name('payment.success');
+    // Ang URL na ito ay PIRMADO kapag ginawa ito ng createCheckout()
+    // (`URL::temporarySignedRoute`). Sinusuri ang pirma sa LOOB ng
+    // controller, hindi sa pamamagitan ng `signed` middleware — kaya
+    // walang 403 na sasalubong sa isang guest na may lumang link; ang
+    // pirma lang ang nagpapasya kung babaguhin ang `paymongo_session_id`.
+    // Tingnan ang PaymentController::cancel() para sa buong dahilan.
     Route::get('/pay/{booking}/cancel', [PaymentController::class, 'cancel'])->name('payment.cancel');
 
     // Tinatanong ito ng checkout at ng "Waiting for Payment" na page
@@ -64,50 +70,17 @@ Route::middleware('auth')->group(function () {
         ->name('payment.status');
 });
 
-// PayMongo webhook — NO auth, NO CSRF
-Route::post('/webhooks/paymongo', [PaymentController::class, 'webhook'])
-    ->name('payment.webhook')
-    ->withoutMiddleware([\App\Http\Middleware\VerifyCsrfToken::class]);
-
-// Callback ng Send Money — inaabisuhan tayo nito kapag na-settle na
-// ang isang refund transfer. Hindi pinagkakatiwalaan ang laman; ang
-// tunay na estado ay kinukuha sa isang authenticated na GET (v5.9).
-Route::post('/webhooks/paymongo/transfer', [PaymentController::class, 'transferCallback'])
-    ->name('payment.webhook.transfer')
-    ->withoutMiddleware([\App\Http\Middleware\VerifyCsrfToken::class]);
-
-// Free-tier cron workaround — Render's free plan has no Cron Jobs feature,
-// so an external pinger (e.g. cron-job.org) hits this instead of a real
-// server cron, to run bookings:auto-checkinout (see routes/console.php).
-// Token-gated so randoms can't trigger it.
-Route::get('/cron/run-schedule/{token}', function (string $token) {
-    abort_unless(
-        config('app.cron_secret') && hash_equals((string) config('app.cron_secret'), $token),
-        403
-    );
-
-    \Illuminate\Support\Facades\Artisan::call('schedule:run');
-
-    return response('ok');
-})->name('cron.run-schedule');
-
-// Runs the cache measurements INSIDE the production container and returns
-// them as JSON. Render's free plan has no Shell tab, and the production
-// Redis (Render Key Value) is internal-only, so this is the only way to find
-// out whether Redis actually helps there — a developer machine measures its
-// own distance to Aiven and Docker, which answers a different question.
-// Same token gate as the cron route; returns timings only, never config
-// values or credentials. Safe to delete once the numbers are recorded.
-Route::get('/diagnostics/cache/{token}', function (string $token) {
-    abort_unless(
-        config('app.cron_secret') && hash_equals((string) config('app.cron_secret'), $token),
-        403
-    );
-
-    return response()->json(
-        \App\Services\CacheDiagnostics::measure((int) request()->integer('iterations', 50))
-    );
-})->name('diagnostics.cache');
+// The PayMongo webhooks used to live here too. They moved to routes/cron.php
+// alongside the cron endpoints, for the same reason: PayMongo is a machine, it
+// discards the cookie, and sitting in the `web` group meant a `sessions` row
+// and a Set-Cookie on every single delivery (measured).
+//
+// The cron and diagnostics routes used to live here. They moved to
+// routes/cron.php, which is registered WITHOUT the `web` group — they are
+// called by a machine, and a session row per ping was pure waste. The secret
+// also moved out of the URL path and into the `X-Cron-Secret` header, because
+// a path segment ends up in access logs, in Render's log stream and in the
+// cron service's own history. See routes/cron.php.
 
 // ── Authentication Routes ──────────────────────────────────────────────────
 Route::middleware('guest')->group(function () {
@@ -116,6 +89,14 @@ Route::middleware('guest')->group(function () {
 
     Route::get('/register', [AuthController::class, 'showRegister'])->name('register');
     Route::post('/register', [AuthController::class, 'register'])->middleware('throttle:register');
+
+    // Ang IISANG patutunguhan ng register(), bago pa man malaman kung may
+    // account na ang address o wala. Walang `auth` dito nang sadya —
+    // walang awtomatikong login na ngayon ang pagpaparehistro, dahil ang
+    // pagkakaroon ng session ang magiging sagot sa mismong tanong na
+    // itinatago natin. Tingnan ang AuthController::register().
+    Route::get('/register/check-your-email', [AuthController::class, 'registerPending'])
+        ->name('register.pending');
 
     Route::get('/forgot-password', [AuthController::class, 'showForgotPassword'])->name('password.request');
     Route::post('/forgot-password', [AuthController::class, 'sendResetLink'])->name('password.email')->middleware('throttle:password-email');
@@ -147,8 +128,16 @@ Route::middleware('auth')->group(function () {
 // The verify link itself must work WITHOUT auth middleware because the user
 // clicks it from Gmail where they may not have an active session.
 // We use the signed URL + id/hash to securely identify and verify the user.
+//
+// The third `throttle` argument is a KEY PREFIX, and leaving it off is not
+// cosmetic: a numeric throttle keys its counter by the user id alone (or
+// domain+IP for a guest) with no route in it, so every `throttle:N,1` in the
+// app shared ONE bucket — this 6/min cap was being spent by admin dashboard
+// polling, and vice versa. Same bug the named limiters fixed for the payment
+// routes; the prefix is the numeric equivalent. Every numeric throttle in
+// this project carries one, and no two may match.
 Route::get('/email/verify/{id}/{hash}', [AuthController::class, 'verifyEmail'])
-    ->middleware(['signed', 'throttle:6,1'])
+    ->middleware(['signed', 'throttle:6,1,verify-email'])
     ->name('verification.verify');
 
 Route::post('/chatbot', [ChatbotController::class, 'reply'])

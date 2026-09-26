@@ -823,7 +823,7 @@ namespace App\Models{
 /**
  * @property int $id
  * @property int $user_id
- * @property string $token
+ * @property string $token_hash
  * @property string|null $device_label
  * @property string|null $ip_address
  * @property \Illuminate\Support\Carbon|null $last_used_at
@@ -840,7 +840,7 @@ namespace App\Models{
  * @method static \Illuminate\Database\Eloquent\Builder<static>|TrustedDevice whereId($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|TrustedDevice whereIpAddress($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|TrustedDevice whereLastUsedAt($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|TrustedDevice whereToken($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|TrustedDevice whereTokenHash($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|TrustedDevice whereUpdatedAt($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|TrustedDevice whereUserId($value)
  * @mixin \Eloquent

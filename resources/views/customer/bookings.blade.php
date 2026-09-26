@@ -224,6 +224,14 @@
         <div class="alert alert-success"><i class="bi bi-check-circle me-2"></i>{{ session('success') }}</div>
     @endif
 
+    {{-- Cancel is fired from this page as well as from the booking detail
+         page, and anything that sends the guest back here with an `error`
+         flash — a rate-limited cancel, a cancel the server refused — had
+         nowhere to appear. The detail page already renders this. --}}
+    @if (session('error'))
+        <div class="alert alert-danger"><i class="bi bi-exclamation-circle me-2"></i>{{ session('error') }}</div>
+    @endif
+
     <div class="page-title">My Bookings</div>
     <div class="page-sub">All your reservations at Villa Elena Resort</div>
 

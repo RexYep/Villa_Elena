@@ -75,8 +75,8 @@
 <script src="https://js.pusher.com/8.2.0/pusher.min.js"></script>
 <script>
 (function () {
-    const PUSHER_KEY     = '{{ env('PUSHER_APP_KEY') }}';
-    const PUSHER_CLUSTER = '{{ env('PUSHER_APP_CLUSTER', 'ap1') }}';
+    const PUSHER_KEY     = '{{ config('broadcasting.connections.pusher.key') }}';
+    const PUSHER_CLUSTER = '{{ config('broadcasting.connections.pusher.options.cluster', 'ap1') }}';
     const authUserId     = {{ Auth::id() ?? 'null' }};
 
     if (!PUSHER_KEY || !authUserId) return;

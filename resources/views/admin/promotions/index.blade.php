@@ -190,7 +190,10 @@
                                     @endif
 
                                     <button type="button" class="btn-icon danger" title="Delete"
-                                        onclick="confirmPromoDelete({{ $promo->id }}, '{{ addslashes($promo->label) }}')">
+                                        {{-- Js::from(), never '{{ $x }}': the HTML parser decodes entities in an attribute
+                                             before the JS parser runs, so `{{ }}` does not keep a value inside a JS string.
+                                             Measured exploitable on this shape; see staff/partials/_today_list.blade.php. --}}
+                                        onclick="confirmPromoDelete({{ $promo->id }}, {{ Illuminate\Support\Js::from($promo->label) }})">
                                         <i class="bi bi-trash"></i>
                                     </button>
                                 </div>

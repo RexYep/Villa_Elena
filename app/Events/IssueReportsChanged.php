@@ -2,7 +2,7 @@
 
 namespace App\Events;
 
-use Illuminate\Broadcasting\Channel;
+use Illuminate\Broadcasting\PrivateChannel;
 use Illuminate\Contracts\Broadcasting\ShouldBroadcastNow;
 use Illuminate\Foundation\Events\Dispatchable;
 
@@ -25,7 +25,7 @@ class IssueReportsChanged implements ShouldBroadcastNow
 
     public function broadcastOn(): array
     {
-        return [new Channel('staff-frontdesk'), new Channel('admin-dashboard')];
+        return [new PrivateChannel('staff-frontdesk'), new PrivateChannel('admin-dashboard')];
     }
 
     public function broadcastAs(): string

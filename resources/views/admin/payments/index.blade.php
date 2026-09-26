@@ -594,7 +594,10 @@
                                     class="view-link me-2">View</a>
                                 @if ($payment->payment_type !== 'refund')
                                     <a href="#" class="refund-link"
-                                        onclick="openRefundModal({{ $payment->id }}, {{ $payment->amount }}, '{{ $payment->booking->booking_ref ?? '' }}')">
+                                        {{-- Js::from(), never '{{ $x }}': the HTML parser decodes entities in an attribute
+                                             before the JS parser runs, so `{{ }}` does not keep a value inside a JS string.
+                                             Measured exploitable on this shape; see staff/partials/_today_list.blade.php. --}}
+                                        onclick="openRefundModal({{ $payment->id }}, {{ $payment->amount }}, {{ Illuminate\Support\Js::from($payment->booking->booking_ref ?? '') }})">
                                         Refund
                                     </a>
                                 @elseif($payment->isAwaitingPayout())

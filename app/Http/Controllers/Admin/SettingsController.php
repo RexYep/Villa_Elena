@@ -57,6 +57,12 @@ class SettingsController extends Controller
             'prescriptive_max_increase' => 'required|numeric|min:1|max:100',
         ]);
 
+        // Taken before anything is written; compared against a fresh read at
+        // the end of the method. Reading the whole table is fine here —
+        // Setting::get() caches, but pluck() goes to the database, which is
+        // what we want for a before/after pair.
+        $settingsBefore = Setting::pluck('setting_value', 'setting_key')->all();
+
         $keys = [
             'resort_name', 'resort_email', 'resort_phone', 'resort_address',
             'resort_description', 'currency', 'deposit_percentage',
@@ -107,7 +113,18 @@ class SettingsController extends Controller
             });
         }
 
-        StaffLog::record('updated_settings', 'settings', null, 'Resort settings updated');
+        // Every one of the 44 `updated_settings` rows in the live table reads
+        // "Resort settings updated", with no target and no values. Deposit
+        // percentage, cancellation window, booking hold minutes and the
+        // maintenance-mode switch all live behind this one form, and none of
+        // them left a fingerprint.
+        //
+        // `$settingsBefore` is captured at the top of this method, before the
+        // Setting::set() loop — by here every value has already been written.
+        StaffLog::recordChange('updated_settings', 'settings', null,
+            'Resort settings updated',
+            $settingsBefore,
+            Setting::pluck('setting_value', 'setting_key')->all());
 
         return back()->with('success', 'Settings saved successfully.');
     }

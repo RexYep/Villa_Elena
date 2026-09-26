@@ -40,7 +40,7 @@ class PaymentReceived implements ShouldBroadcast
      */
     public function broadcastOn(): array
     {
-        $channels = [new Channel('admin-dashboard')];
+        $channels = [new PrivateChannel('admin-dashboard')];
 
         if ($this->payment->booking_id) {
             $channels[] = new PrivateChannel('booking-payment.'.$this->payment->booking_id);

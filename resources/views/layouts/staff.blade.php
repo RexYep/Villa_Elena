@@ -3,6 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    {{-- Required by the frontdesk realtime partial: `private-staff-frontdesk`
+         is authorised by a POST to /broadcasting/auth, which is in the `web`
+         group and so needs the token. Without this tag the header is
+         `undefined`, the POST is 419, and the subscription fails silently. --}}
+    <meta name="csrf-token" content="{{ csrf_token() }}">
     <title>@yield('title', 'Villa Elena Staff')</title>
     @include('partials.favicon')
     <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">

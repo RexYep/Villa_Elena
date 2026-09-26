@@ -548,6 +548,24 @@
         }, 350);
     }
 
+    // STORED XSS, GUEST -> ADMIN. Every value below arrives from the search
+    // endpoint and went into a template literal assigned to innerHTML. A
+    // customer sets their own full_name at registration, where the rule is
+    // `required|string|max:150` — measured, `<img src=x onerror=...>` passes
+    // it — so any admin pressing Ctrl+K and typing part of that name ran the
+    // guest's script in the admin session.
+    //
+    // This is the same escaper admin/partials/realtime.blade.php already
+    // defines and uses on every interpolation; the search was simply the one
+    // renderer built without it. Assigning to textContent and reading back
+    // innerHTML lets the browser do the encoding — there is no entity list
+    // here to fall behind.
+    function escapeHtml(str) {
+        const div = document.createElement('div');
+        div.textContent = str ?? '';
+        return div.innerHTML;
+    }
+
     function renderResults(data, query) {
         const baseUrl = '{{ url('') }}';
         const results = document.getElementById('searchResults');
@@ -564,13 +582,13 @@
                     cancelled: '#fee2e2;color:#dc2626'
                 };
                 const sc = statusColors[b.status] || '#f1f5f9;color:#475569';
-                html += `<a href="${baseUrl}/admin/bookings/${b.id}" class="search-result-item">
+                html += `<a href="${baseUrl}/admin/bookings/${encodeURIComponent(b.id)}" class="search-result-item">
                 <div class="result-icon" style="background:#f0f4ff;color:#4f46e5;"><i class="bi bi-calendar3"></i></div>
                 <div class="result-main">
-                    <div class="result-title">${b.booking_ref}</div>
-                    <div class="result-sub">${b.guest} · ${b.property}</div>
+                    <div class="result-title">${escapeHtml(b.booking_ref)}</div>
+                    <div class="result-sub">${escapeHtml(b.guest)} · ${escapeHtml(b.property)}</div>
                 </div>
-                <span class="result-badge" style="background:${sc};">${b.status.replace('_',' ')}</span>
+                <span class="result-badge" style="background:${sc};">${escapeHtml(b.status.replace('_',' '))}</span>
             </a>`;
             });
         }
@@ -578,13 +596,13 @@
         if (data.guests?.length) {
             html += `<div class="search-section-label">👤 Guests</div>`;
             data.guests.forEach(g => {
-                html += `<a href="${baseUrl}/admin/users/${g.id}" class="search-result-item">
+                html += `<a href="${baseUrl}/admin/users/${encodeURIComponent(g.id)}" class="search-result-item">
                 <div class="result-icon tag-amber"><i class="bi bi-person"></i></div>
                 <div class="result-main">
-                    <div class="result-title">${g.name}</div>
-                    <div class="result-sub">${g.email}</div>
+                    <div class="result-title">${escapeHtml(g.name)}</div>
+                    <div class="result-sub">${escapeHtml(g.email)}</div>
                 </div>
-                <span class="result-badge" style="background:#f1f5f9;color:#475569;">${g.bookings} booking${g.bookings!=1?'s':''}</span>
+                <span class="result-badge" style="background:#f1f5f9;color:#475569;">${escapeHtml(g.bookings)} booking${g.bookings!=1?'s':''}</span>
             </a>`;
             });
         }
@@ -593,19 +611,19 @@
             html += `<div class="search-section-label">🏠 Properties</div>`;
             data.properties.forEach(p => {
                 const sc = p.status === 'available' ? '#dcfce7;color:#15803d' : '#fee2e2;color:#dc2626';
-                html += `<a href="${baseUrl}/admin/properties/${p.id}/edit"class="search-result-item">
+                html += `<a href="${baseUrl}/admin/properties/${encodeURIComponent(p.id)}/edit" class="search-result-item">
                 <div class="result-icon" style="background:#f0fdf4;color:#16a34a;"><i class="bi bi-house"></i></div>
                 <div class="result-main">
-                    <div class="result-title">${p.name}</div>
-                    <div class="result-sub">${p.type} · Max ${p.capacity} guests</div>
+                    <div class="result-title">${escapeHtml(p.name)}</div>
+                    <div class="result-sub">${escapeHtml(p.type)} · Max ${escapeHtml(p.capacity)} guests</div>
                 </div>
-                <span class="result-badge" style="background:${sc};">${p.status}</span>
+                <span class="result-badge" style="background:${sc};">${escapeHtml(p.status)}</span>
             </a>`;
             });
         }
 
         if (!html) {
-            html = `<div class="search-empty">No results found for "<strong>${query}</strong>"</div>`;
+            html = `<div class="search-empty">No results found for "<strong>${escapeHtml(query)}</strong>"</div>`;
         }
 
         results.innerHTML = html;

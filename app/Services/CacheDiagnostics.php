@@ -44,9 +44,26 @@ class CacheDiagnostics
     /** Keys written during measurement, namespaced so they can't collide. */
     private const PROBE_PREFIX = 'cache_diagnostics_probe_';
 
+    /**
+     * Upper bound on the measurement loop.
+     *
+     * `?iterations=` comes straight off the query string, and each iteration is
+     * a real round trip to Redis, MySQL and disk — three stores, twice over. A
+     * floor alone left the ceiling at PHP_INT_MAX, so one request could pin the
+     * production container until it timed out. 500 is already far more samples
+     * than the timings need to stop moving.
+     */
+    public const MAX_ITERATIONS = 500;
+
+    /** Clamps `?iterations=` into the range the loop is allowed to run. */
+    public static function clampIterations(int $iterations): int
+    {
+        return max(1, min($iterations, self::MAX_ITERATIONS));
+    }
+
     public static function measure(int $iterations = 100): array
     {
-        $iterations = max(1, $iterations);
+        $iterations = self::clampIterations($iterations);
 
         return [
             'environment' => self::environment(),
@@ -58,13 +75,26 @@ class CacheDiagnostics
         ];
     }
 
+    /**
+     * Which configuration this measurement was taken under — NOT where anything
+     * lives. `db_host` used to be here and was removed in v7.40: this report is
+     * served over HTTP by /diagnostics/cache, whose own comment promised
+     * "timings only, never config values or credentials", and the production
+     * database hostname is not a timing. It also added nothing — you already
+     * know which deployment you queried, because you had to hold its
+     * CRON_SECRET to ask.
+     *
+     * Everything kept here is a value the caller chose, not infrastructure they
+     * could not otherwise name: the environment, which cache store is in front,
+     * and which Redis client is compiled in. All three change what the numbers
+     * below mean, which is the only reason this block exists.
+     */
     private static function environment(): array
     {
         return [
             'app_env' => config('app.env'),
             'cache_store' => config('cache.default'),
             'redis_client' => config('database.redis.client'),
-            'db_host' => config('database.connections.'.config('database.default').'.host'),
         ];
     }
 
@@ -80,7 +110,22 @@ class CacheDiagnostics
                 'version' => $info['redis_version'] ?? $info['Server']['redis_version'] ?? 'unknown',
             ];
         } catch (\Throwable $e) {
-            return ['reachable' => false, 'error' => $e->getMessage()];
+            // The CLASS, not the message. Measured: a predis failure message is
+            // "…failed … [tcp://127.0.0.1:6399]" — it carries the host and port
+            // of whatever this deployment connects to, and this array is
+            // returned over HTTP. (It does NOT carry the password even when the
+            // URL has one, which was also measured — but the host is enough to
+            // break the "never config values" promise.)
+            //
+            // Same rule GeminiService already follows for ConnectionException,
+            // and for the same reason: an exception message is written for a
+            // developer reading a log, not for an HTTP response body.
+            //
+            // The cost is that `cache:benchmark` now prints a class name instead
+            // of a description. Acceptable: the actionable half of that output is
+            // the "docker compose up -d redis" hint on the next line, and the
+            // full exception is still in the log.
+            return ['reachable' => false, 'error' => class_basename($e)];
         }
     }
 

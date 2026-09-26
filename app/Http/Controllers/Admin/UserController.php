@@ -128,10 +128,26 @@ class UserController extends Controller
             $data['password'] = Hash::make($request->password);
         }
 
+        // Snapshot the fields this form can move, BEFORE the write. Only the
+        // ones the form owns — a whole-row toArray() would drag in
+        // last_login and friends and report them as edits.
+        $before = $user->only(['full_name', 'email', 'phone', 'role', 'address', 'password']);
+
         $user->update($data);
 
-        StaffLog::record('updated_user', 'users', $user->id,
-            "Updated user account: {$user->full_name}");
+        // THE ROLE IS THE POINT. This endpoint accepts `role` and `password`
+        // together, so the two most consequential things an admin can do to
+        // another account — hand it admin, or take over its credentials —
+        // were both recorded as "Updated user account: Nick Salvador", with
+        // old_values and new_values NULL. Two such rows are in the live
+        // table right now and nothing can say what either one did.
+        //
+        // recordChange() names the changed fields in the description and
+        // redacts the password's VALUE while still recording THAT it moved.
+        StaffLog::recordChange('updated_user', 'users', $user->id,
+            "Updated user account: {$user->full_name}",
+            $before,
+            $user->only(['full_name', 'email', 'phone', 'role', 'address', 'password']));
 
         return redirect()->route('admin.users.show', $user)
             ->with('success', "Profile updated successfully.");
@@ -145,10 +161,18 @@ class UserController extends Controller
             return back()->with('error', 'You cannot delete your own account.');
         }
 
+        // F6: the id, captured before the delete. It used to pass NULL, so
+        // the only handle on the deleted account was a display name — which
+        // is not unique, not stable, and not a key. 72 rows in the live
+        // table identify their target that way.
         $name = $user->full_name;
+        $deletedId = $user->id;
+        $role = $user->role;
+
         $user->delete();
 
-        StaffLog::record('deleted_user', 'users', null, "Deleted user: {$name}");
+        StaffLog::record('deleted_user', 'users', $deletedId,
+            "Deleted {$role} account: {$name} (user #{$deletedId})");
 
         return redirect()->route('admin.users.index')
             ->with('success', "User \"{$name}\" has been deleted.");

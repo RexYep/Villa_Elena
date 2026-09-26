@@ -499,10 +499,15 @@
                         </p>
 
                         <div class="upload-zone" id="uploadZone">
-                            <input type="file" name="images[]" id="imageInput" multiple accept="image/*">
+                            {{-- `accept` was image/* here and the specific list on the
+                                 create form. The server takes only these four, so the
+                                 wildcard just let the picker offer files (gif, svg,
+                                 heic) that were always going to be rejected. --}}
+                            <input type="file" name="images[]" id="imageInput" multiple
+                                accept="image/jpg,image/jpeg,image/png,image/webp">
                             <i class="bi bi-cloud-upload"></i>
                             <p><strong>Click to upload</strong> or drag &amp; drop images</p>
-                            <small>JPG, PNG, WEBP • Maximum 3MB per image</small>
+                            <small>JPG, PNG, WEBP • max 3MB each, up to 10 at a time</small>
                         </div>
 
                         <div class="image-previews" id="imagePreviews"></div>

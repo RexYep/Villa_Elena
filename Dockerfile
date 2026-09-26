@@ -37,6 +37,9 @@ COPY --from=assets /app/public/build /var/www/html/public/build
 
 COPY docker/nginx.conf.template /etc/nginx/http.d/default.conf.template
 COPY docker/supervisord.conf /etc/supervisord.conf
+# conf.d IS scanned even though the image activates no main php.ini — which is
+# why this is the place to put the upload limits. See docker/php.ini.
+COPY docker/php.ini /usr/local/etc/php/conf.d/99-villa-elena.ini
 COPY docker/start.sh /usr/local/bin/start.sh
 RUN chmod +x /usr/local/bin/start.sh
 
