@@ -2,7 +2,7 @@
 
 @section('title', 'Properties — Villa Elena Admin')
 @section('page-title', 'Properties')
-@section('page-subtitle', 'Manage all resort rooms, villas, cottages, and halls')
+@section('page-subtitle', 'Manage the villa and its rooms')
 
 @push('styles')
     <style>

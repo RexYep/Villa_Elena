@@ -1403,6 +1403,8 @@
 
         .lightbox-close {
             position: absolute;
+            border: none;
+            padding: 0;
             top: 24px;
             right: 24px;
             color: #fff;
@@ -2782,7 +2784,8 @@
         <a href="#amenities" class="mobile-link">Amenities</a>
         <a href="#room-tour" class="mobile-link">Rooms</a>
         <a href="#gallery" class="mobile-link">Gallery</a>
-        <a href="#about" class="mobile-link">About Us</a>
+        <a href="#testimonials" class="mobile-link">Reviews</a>
+        <a href="#about" class="mobile-link">About</a>
         <a href="#contact" class="mobile-link">Contact</a>
         <div class="mobile-auth">
             @auth
@@ -2839,7 +2842,8 @@
                 <div class="book-field">
                     <label for="heroCheckin">Date</label>
                     <input type="date" id="heroCheckin" name="checkin" value="{{ request('checkin') }}"
-                        min="{{ now()->toDateString() }}" required>
+                        min="{{ now()->toDateString() }}"
+                        max="{{ \App\Models\Booking::latestBookableDate()->toDateString() }}" required>
                 </div>
                 <div class="book-field">
                     <label for="heroSlot">Slot</label>
@@ -2858,7 +2862,9 @@
                 <div class="book-field">
                     <label for="heroGuests">Guests</label>
                     <select id="heroGuests" name="guests">
-                        @for ($g = 1; $g <= 30; $g++)
+                        {{-- Hanggang sa kapasidad ng villa, hindi nakapirming 30:
+                             tinatanggihan ng booking form ang lampas doon. --}}
+                        @for ($g = 1; $g <= ($featuredVilla?->max_capacity ?: 30); $g++)
                             <option value="{{ $g }}" {{ (int) request('guests', 1) === $g ? 'selected' : '' }}>
                                 {{ $g }} {{ $g === 1 ? 'guest' : 'guests' }}
                             </option>
@@ -3076,15 +3082,14 @@
                 <div
                     style="background:rgba(184,148,63,0.08);border:1px solid rgba(184,148,63,0.2);border-radius:16px;padding:14px 20px;margin-bottom:40px;display:flex;align-items:center;gap:12px;font-size:14px;flex-wrap:wrap;">
                     <i class="bi bi-funnel-fill" style="color:var(--gold);"></i>
-                    <span>Showing results for</span>
+                    <span>Availability for</span>
                     <strong>{{ \Carbon\Carbon::parse(request('checkin'))->format('M j, Y') }} ·
-                        {{ request('slot') === 'night' ? 'Night (7PM–6AM)' : 'Day (8AM–5PM)' }}</strong>
+                        {{ $heroSlot ? $bookableSlotDefs[$heroSlot]['label'] : '' }}</strong>
                     @if (request('guests'))
                         <span>· {{ request('guests') }} guests</span>
                     @endif
                     <a href="{{ route('home') }}"
-                        style="margin-left:auto;color:var(--terracotta);font-weight:500;text-decoration:none;">Clear
-                        all</a>
+                        style="margin-left:auto;color:var(--terracotta);font-weight:500;text-decoration:none;">Clear date</a>
                 </div>
             @endif
 
@@ -3359,7 +3364,9 @@
 
             <div class="gallery-slideshow" id="gallerySlideshow" data-interval="3000">
                 @foreach ($galleryShots as $i => $shot)
-                    <div class="gallery-slide{{ $i === 0 ? ' active' : '' }}" onclick="openLightbox(this)">
+                    <div class="gallery-slide{{ $i === 0 ? ' active' : '' }}" onclick="openLightbox(this)" role="button" tabindex="0"
+                                aria-label="View photo larger"
+                                onkeydown="if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); openLightbox(this); }">
                         <img src="{{ asset($shot['src']) }}" alt="{{ $shot['alt'] }}" loading="lazy"
                             decoding="async">
                         <div class="gallery-overlay">
@@ -3386,7 +3393,7 @@
 
     {{-- Lightbox --}}
     <div class="lightbox" id="lightbox" onclick="closeLightbox()">
-        <span class="lightbox-close" onclick="closeLightbox()"><i class="bi bi-x"></i></span>
+        <button type="button" class="lightbox-close" onclick="closeLightbox()" aria-label="Close photo"><i class="bi bi-x" aria-hidden="true"></i></button>
         <img src="" alt="" class="lightbox-img" id="lightboxImg">
     </div>
 
@@ -3641,24 +3648,24 @@
                         @csrf
                         <div class="form-row">
                             <div class="form-group">
-                                <label class="form-label">Your Name</label>
-                                <input type="text" name="name" class="form-input" value="{{ old('name') }}"
+                                <label for="f_name" class="form-label">Your Name</label>
+                                <input id="f_name" type="text" name="name" class="form-input" value="{{ old('name') }}"
                                     placeholder="Juan dela Cruz" required>
                             </div>
                             <div class="form-group">
-                                <label class="form-label">Email Address</label>
-                                <input type="email" name="email" class="form-input" value="{{ old('email') }}"
+                                <label for="f_email" class="form-label">Email Address</label>
+                                <input id="f_email" type="email" name="email" class="form-input" value="{{ old('email') }}"
                                     placeholder="juan@example.com" required>
                             </div>
                         </div>
                         <div class="form-group">
-                            <label class="form-label">Subject</label>
-                            <input type="text" name="subject" class="form-input" value="{{ old('subject') }}"
+                            <label for="f_subject" class="form-label">Subject</label>
+                            <input id="f_subject" type="text" name="subject" class="form-input" value="{{ old('subject') }}"
                                 placeholder="Booking inquiry, special request...">
                         </div>
                         <div class="form-group">
-                            <label class="form-label">Message</label>
-                            <textarea name="message" class="form-input" rows="5"
+                            <label for="f_message" class="form-label">Message</label>
+                            <textarea id="f_message" name="message" class="form-input" rows="5"
                                 placeholder="Tell us how we can help you plan the perfect getaway..." required minlength="10">{{ old('message') }}</textarea>
                         </div>
                         <button type="submit" class="btn-send">
@@ -3732,7 +3739,8 @@
                         <li><a href="#amenities">Amenities</a></li>
                         <li><a href="#room-tour">Rooms</a></li>
                         <li><a href="#gallery">Gallery</a></li>
-                        <li><a href="#about">About Us</a></li>
+                        <li><a href="#testimonials">Reviews</a></li>
+                        <li><a href="#about">About</a></li>
                     </ul>
                 </div>
 

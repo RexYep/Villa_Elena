@@ -436,9 +436,11 @@ class PortalController extends Controller
         }
 
         $request->validate([
-            'checkin' => 'required|date|after_or_equal:today',
+            'checkin' => 'required|date|after_or_equal:today|'.Booking::advanceLimitRule(),
             'slot' => ['required', new SlotOfferedOnDate('checkin', $property)],
             'guests' => 'required|integer|min:1|max:'.$property->max_capacity,
+        ], [
+            'checkin.before_or_equal' => Booking::advanceLimitMessage(),
         ]);
 
         [$checkin, $checkout] = Booking::slotDateTimes($request->slot, $request->checkin);
@@ -539,7 +541,7 @@ class PortalController extends Controller
         }
 
         $request->validate([
-            'checkin' => 'required|date|after_or_equal:today',
+            'checkin' => 'required|date|after_or_equal:today|'.Booking::advanceLimitRule(),
             'slot' => ['required', new SlotOfferedOnDate('checkin', $property)],
             'guests' => 'required|integer|min:1|max:'.$property->max_capacity,
             'special_requests' => 'nullable|string|max:500',
@@ -551,6 +553,7 @@ class PortalController extends Controller
             // ang JS pero hindi ang server.
             'policies_accepted' => 'accepted',
         ], [
+            'checkin.before_or_equal' => Booking::advanceLimitMessage(),
             'policies_accepted.accepted' => 'Please confirm that you have read the booking policies before continuing.',
         ]);
 
@@ -665,14 +668,5 @@ class PortalController extends Controller
         // Diretso na sa Pay page — mandatory na ang bayad, walang
         // "pay later" o admin approval na hihintayin pa.
         return redirect()->route('payment.page', $booking);
-    }
-
-    // ── Booking Confirmation ───────────────────────────────────────
-    public function confirmation(Booking $booking)
-    {
-        abort_if($booking->user_id !== Auth::id(), 403);
-        $booking->load('property');
-
-        return view('portal.confirmation', compact('booking'));
     }
 }

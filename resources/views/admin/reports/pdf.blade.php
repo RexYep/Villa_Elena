@@ -116,7 +116,7 @@
         </tbody>
     </table>
 
-    <h2>Top Properties by Revenue</h2>
+    <h2>Revenue by Property</h2>
     @if ($topProperties->isEmpty())
         <p>No booking data for this period.</p>
     @else

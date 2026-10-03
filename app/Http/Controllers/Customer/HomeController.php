@@ -27,7 +27,10 @@ class HomeController extends Controller
             ->take(3)
             ->get();
 
+        // Hindi kasama ang mga nasa "Upcoming Stays" na — dati ay
+        // parehong booking ang lumalabas sa dalawang card.
         $recentBookings = Booking::where('user_id', $user->id)
+            ->whereNotIn('id', $upcomingBookings->pluck('id'))
             ->with('property')
             ->latest()
             ->take(5)

@@ -9,9 +9,6 @@
         style="display:flex;align-items:center;gap:6px;text-decoration:none;font-size:13px;border:1px solid var(--border);padding:7px 14px;border-radius:9px;background:#fff;">
         <i class="bi bi-arrow-left"></i> Back
     </a>
-    <form method="POST" action="{{ route('logout') }}" class="m-0">
-        @csrf <button type="submit" class="logout-btn"><i class="bi bi-box-arrow-right"></i> Logout</button>
-    </form>
 @endsection
 
 @push('styles')
@@ -597,9 +594,10 @@
             </div>
         </div>
         <div class="bh-cell bh-duration">
-            <div class="bh-duration-label">Duration</div>
-            <div class="bh-duration-value">{{ $booking->num_nights }}</div>
-            <div class="bh-duration-label">night{{ $booking->num_nights != 1 ? 's' : '' }}</div>
+            {{-- Ang slot, hindi "N nights" — "1 night" ang Day slot dati. --}}
+            <div class="bh-duration-label">Slot</div>
+            <div class="bh-duration-value">{{ $booking->slot_name ?? '—' }}</div>
+            <div class="bh-duration-label">{{ $booking->stay_hours }}</div>
         </div>
         <div class="bh-status">
             <span
@@ -698,13 +696,13 @@
                             @csrf @method('PATCH')
                             <div class="mb-12 field-pair">
                                 <div>
-                                    <label class="form-label-sm">New Check-out Date *</label>
-                                    <input type="date" name="new_check_out_date" class="form-control-sm-custom"
+                                    <label for="f_new_check_out_date" class="form-label-sm">New Check-out Date *</label>
+                                    <input id="f_new_check_out_date" type="date" name="new_check_out_date" class="form-control-sm-custom"
                                         min="{{ $booking->check_out_date->format('Y-m-d') }}" required>
                                 </div>
                                 <div>
-                                    <label class="form-label-sm">New Check-out Time *</label>
-                                    <input type="time" name="new_check_out_time" class="form-control-sm-custom"
+                                    <label for="f_new_check_out_time" class="form-label-sm">New Check-out Time *</label>
+                                    <input id="f_new_check_out_time" type="time" name="new_check_out_time" class="form-control-sm-custom"
                                         value="{{ $booking->check_out_time ? \Carbon\Carbon::parse($booking->check_out_time)->format('H:i') : '' }}"
                                         required>
                                 </div>
@@ -722,10 +720,6 @@
             <div class="card-panel">
                 <div class="card-header-custom">
                     <h3>Booking Information</h3>
-                    <a href="{{ route('admin.bookings.edit', $booking) }}"
-                        style="font-size: 14px;color:#2e5fa3;text-decoration:none;font-weight:500;">
-                        <i class="bi bi-pencil"></i> Edit
-                    </a>
                 </div>
                 <div class="card-body-custom">
                     <div class="info-grid">
@@ -779,6 +773,36 @@
                             </span>
                         </div>
                     @endif
+
+                    {{-- Dating hiwalay na "Edit Booking" na pahina para sa
+                         dalawang field na ito lang. Bukas na agad kapag
+                         bumalik mula sa validation error. --}}
+                    <details style="margin-top:16px;" @if ($errors->has('num_guests')) open @endif>
+                        <summary style="cursor:pointer;font-size:14px;color:#2e5fa3;font-weight:500;">
+                            <i class="bi bi-pencil"></i> Edit guests &amp; special requests
+                        </summary>
+                        <form method="POST" action="{{ route('admin.bookings.update', $booking) }}"
+                            style="margin-top:12px;">
+                            @csrf @method('PUT')
+                            <div class="mb-3">
+                                <label class="form-label" for="editNumGuests">Number of Guests</label>
+                                <input type="number" name="num_guests" id="editNumGuests"
+                                    class="form-control @error('num_guests') is-invalid @enderror"
+                                    value="{{ old('num_guests', $booking->num_guests) }}" min="1" required>
+                                @error('num_guests')
+                                    <span class="invalid-feedback">{{ $message }}</span>
+                                @enderror
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label" for="editSpecialRequests">Special Requests</label>
+                                <textarea name="special_requests" id="editSpecialRequests" class="form-control" rows="3"
+                                    placeholder="Any special requests or notes for this booking…">{{ old('special_requests', $booking->special_requests) }}</textarea>
+                            </div>
+                            <button type="submit" class="btn btn-primary btn-sm">
+                                <i class="bi bi-check-lg me-1"></i> Save Changes
+                            </button>
+                        </form>
+                    </details>
                 </div>
             </div>
 
@@ -902,7 +926,7 @@
                                         <td class="text-end">
                                             <form method="POST"
                                                 action="{{ route('admin.bookings.extras.destroy', [$booking, $extra]) }}"
-                                                onsubmit="return confirm('Remove this extra charge?');"
+                                                data-confirm="Remove this extra charge?" data-confirm-label="Remove"
                                                 style="display:inline;">
                                                 @csrf @method('DELETE')
                                                 <button type="submit"
@@ -923,25 +947,25 @@
                         @csrf
                         <div class="field-pair" style="margin-bottom:10px;">
                             <div>
-                                <label class="form-label-sm">Item / Amenity Name *</label>
-                                <input type="text" name="item_name" class="form-control-sm-custom"
+                                <label for="f_item_name" class="form-label-sm">Item / Amenity Name *</label>
+                                <input id="f_item_name" type="text" name="item_name" class="form-control-sm-custom"
                                     placeholder="hal. Extra Grill Set, Karaoke Rental" required>
                             </div>
                             <div>
-                                <label class="form-label-sm">Description (optional)</label>
-                                <input type="text" name="description" class="form-control-sm-custom"
+                                <label for="f_description" class="form-label-sm">Description (optional)</label>
+                                <input id="f_description" type="text" name="description" class="form-control-sm-custom"
                                     placeholder="Detalye (opsyonal)">
                             </div>
                         </div>
                         <div class="field-pair" style="margin-bottom:10px;">
                             <div>
-                                <label class="form-label-sm">Quantity *</label>
-                                <input type="number" name="quantity" class="form-control-sm-custom" value="1"
+                                <label for="f_quantity" class="form-label-sm">Quantity *</label>
+                                <input id="f_quantity" type="number" name="quantity" class="form-control-sm-custom" value="1"
                                     min="1" required>
                             </div>
                             <div>
-                                <label class="form-label-sm">Unit Price (₱) *</label>
-                                <input type="number" name="unit_price" class="form-control-sm-custom" step="0.01"
+                                <label for="f_unit_price" class="form-label-sm">Unit Price (₱) *</label>
+                                <input id="f_unit_price" type="number" name="unit_price" class="form-control-sm-custom" step="0.01"
                                     min="0" placeholder="0.00" required>
                             </div>
                         </div>
@@ -965,7 +989,7 @@
                 </div>
                 <div class="card-body-custom">
                     <div class="pay-row">
-                        <span class="text-muted-theme">Base Amount ({{ $booking->num_nights }} nights)</span>
+                        <span class="text-muted-theme">{{ $booking->slot_name ? $booking->slot_name . " rate" : "Base amount" }}</span>
                         <span>₱{{ number_format($booking->base_amount, 2) }}</span>
                     </div>
                     @if ($booking->extras_amount > 0)
@@ -1010,20 +1034,20 @@
                         <form method="POST" action="{{ route('admin.bookings.payment', $booking) }}">
                             @csrf
                             <div class="mb-12">
-                                <label class="form-label-sm">Amount (₱) *</label>
-                                <input type="number" name="amount" class="form-control-sm-custom" placeholder="0.00"
+                                <label for="f_amount" class="form-label-sm">Amount (₱) *</label>
+                                <input id="f_amount" type="number" name="amount" class="form-control-sm-custom" placeholder="0.00"
                                     min="1" step="0.01" value="{{ $booking->balance_due }}" required>
                             </div>
                             <div class="mb-12">
-                                <label class="form-label-sm">Payment Method *</label>
-                                <select name="payment_method" class="form-control-sm-custom" required>
+                                <label for="f_payment_method" class="form-label-sm">Payment Method *</label>
+                                <select id="f_payment_method" name="payment_method" class="form-control-sm-custom" required>
                                     <option value="cash">💵 Cash</option>
                                     <option value="qrph">📱 QR Ph (GCash / Maya / bank app)</option>
                                 </select>
                             </div>
                             <div class="mb-12">
-                                <label class="form-label-sm">Payment Type *</label>
-                                <select name="payment_type" class="form-control-sm-custom" required>
+                                <label for="f_payment_type" class="form-label-sm">Payment Type *</label>
+                                <select id="f_payment_type" name="payment_type" class="form-control-sm-custom" required>
                                     <option value="partial">Partial Payment</option>
                                     <option value="full_payment">Full Payment</option>
                                 </select>
@@ -1033,8 +1057,8 @@
                                 </div>
                             </div>
                             <div style="margin-bottom:14px;">
-                                <label class="form-label-sm">Notes (optional)</label>
-                                <input type="text" name="notes" class="form-control-sm-custom"
+                                <label for="f_notes" class="form-label-sm">Notes (optional)</label>
+                                <input id="f_notes" type="text" name="notes" class="form-control-sm-custom"
                                     placeholder="e.g. QR Ph ref #123456">
                             </div>
                             {{-- Kailangan lang kapag may kamukhang bayad na
@@ -1069,7 +1093,7 @@
                     <div class="text-muted-theme" style="font-size: 14px;margin-top:3px;">
                         {{ ucfirst($booking->property->type) }} ·
                         Max {{ $booking->property->max_capacity }} guests ·
-                        ₱{{ number_format($booking->property->base_price, 2) }}/night
+                        ₱{{ number_format($booking->property->base_price, 2) }} regular rate
                     </div>
                 </div>
             </div>
@@ -1094,9 +1118,9 @@
                         @csrf @method('PATCH')
                         <input type="hidden" name="status" value="cancelled">
                         <div style="margin-bottom:14px;">
-                            <label style="font-size:13px;font-weight:600;display:block;margin-bottom:6px;">Reason for
+                            <label for="f_cancellation_reason" style="font-size:13px;font-weight:600;display:block;margin-bottom:6px;">Reason for
                                 cancellation *</label>
-                            <textarea name="cancellation_reason" rows="3"
+                            <textarea id="f_cancellation_reason" name="cancellation_reason" rows="3"
                                 style="width:100%;border:1.5px solid var(--border);border-radius:8px;padding:10px;font-size:13px;font-family:'DM Sans',sans-serif;resize:none;"
                                 placeholder="Enter reason..." required></textarea>
                         </div>

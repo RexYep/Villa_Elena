@@ -304,8 +304,8 @@
         <form method="GET" action="{{ route('admin.audit.signins') }}">
             <div class="row g-2 align-items-end">
                 <div class="col-auto" style="min-width:210px;">
-                    <label class="form-label-sm">Account</label>
-                    <select name="user_id" class="form-select-sm">
+                    <label for="f_user_id" class="form-label-sm">Account</label>
+                    <select id="f_user_id" name="user_id" class="form-select-sm">
                         <option value="">Anyone</option>
                         @foreach ($actors as $actor)
                             <option value="{{ $actor->id }}" @selected(request('user_id') == $actor->id)>
@@ -316,13 +316,13 @@
                 </div>
 
                 <div class="col-auto" style="min-width:150px;">
-                    <label class="form-label-sm">From</label>
-                    <input type="date" name="from" value="{{ request('from') }}" class="form-control-sm">
+                    <label for="f_from" class="form-label-sm">From</label>
+                    <input id="f_from" type="date" name="from" value="{{ request('from') }}" class="form-control-sm">
                 </div>
 
                 <div class="col-auto" style="min-width:150px;">
-                    <label class="form-label-sm">To</label>
-                    <input type="date" name="to" value="{{ request('to') }}" class="form-control-sm">
+                    <label for="f_to" class="form-label-sm">To</label>
+                    <input id="f_to" type="date" name="to" value="{{ request('to') }}" class="form-control-sm">
                 </div>
 
                 @if (request('otp'))<input type="hidden" name="otp" value="1">@endif

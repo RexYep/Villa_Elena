@@ -258,16 +258,16 @@
 
     <form method="GET" action="{{ route('admin.prescriptive.simulate') }}" class="sim-form">
         <div>
-            <label>From</label>
-            <input type="date" name="start" class="form-control" value="{{ $start->toDateString() }}">
+            <label for="f_start">From</label>
+            <input id="f_start" type="date" name="start" class="form-control" value="{{ $start->toDateString() }}">
         </div>
         <div>
-            <label>To</label>
-            <input type="date" name="end" class="form-control" value="{{ $end->toDateString() }}">
+            <label for="f_end">To</label>
+            <input id="f_end" type="date" name="end" class="form-control" value="{{ $end->toDateString() }}">
         </div>
         <div>
-            <label>Slot</label>
-            <select name="slot" class="form-control">
+            <label for="f_slot">Slot</label>
+            <select id="f_slot" name="slot" class="form-control">
                 {{-- Bookable-slots lang: ang simulator ay nagpepresyo sa
                      pamamagitan ng quoteFor(), na tumatanggi sa slot na wala
                      pang presyo. --}}
@@ -278,8 +278,8 @@
             </select>
         </div>
         <div>
-            <label>Price change (%)</label>
-            <input type="number" name="change" class="form-control" value="{{ $change }}" min="-50" max="50"
+            <label for="f_change">Price change (%)</label>
+            <input id="f_change" type="number" name="change" class="form-control" value="{{ $change }}" min="-50" max="50"
                 step="1">
         </div>
         <button type="submit" class="btn-run">Simulate</button>

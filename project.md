@@ -1,7 +1,7 @@
 # Villa Elena Private Rental Resort
 ## Resort Management System — Project Documentation
 
-**Version:** 7.52
+**Version:** 7.53
 **Stack:** PHP 8.2 / Laravel 12 / MySQL 8 / Bootstrap 5
 **Local URL:** `http://127.0.0.1:8000` (`php artisan serve`) or `http://localhost:8000` (Docker — see v5.3)
 **Live URL:** `https://villa-elena.onrender.com` (Render, free tier — testing only, not yet handed to real guests)
@@ -76,9 +76,9 @@ Use a `*.pusher.com` wildcard rather than a cluster hostname:
 default `ap1`), so a hardcoded `ws-ap1.pusher.com` would break the moment that
 setting changes.
 
-`https://fonts.bunny.net` appears in `resources/views/welcome.blade.php` **and
-nowhere else**. No route renders that file — it is the Laravel starter-kit
-leftover. It does not belong in the policy; if anything it should be deleted.
+`https://fonts.bunny.net` appeared only in `resources/views/welcome.blade.php`,
+the Laravel starter-kit leftover that no route rendered. That file was deleted
+in v7.53, so the host does not belong in the policy.
 
 **A starting point, to be tuned from real violation reports, not shipped blind:**
 
@@ -188,7 +188,168 @@ is the natural moment to remove them rather than a migration of their own.
 
 ---
 
-## What Changed in v7.52 (Read This First)
+## What Changed in v7.53 (Read This First)
+
+### Guest pages say which slot was booked, and when to arrive
+
+A UX review found that the guest's own pages never stated the slot or the
+check-in time. They showed two dates and `{num_nights} night(s)` — and
+`num_nights` is written as `max(1, …)`, so a Day slot (8:00 AM – 5:00 PM) read
+as "1 night" and its price line as "Base (1n)". Only the booking form, the
+reschedule form and the confirmation email carried times.
+
+- **`Booking` has four display accessors:** `slot_name` ("Day" / "Night" /
+  "22 Hours", from `slotKey()`, NULL for a legacy row), `check_in_time_label`,
+  `check_out_time_label` and `stay_hours`. **The times come from the stored
+  columns, not `SLOTS[...]['times']`**, so a stay lengthened by `extendStay()`
+  still shows its real checkout while keeping the `Night` name.
+- Used on the customer booking detail (hero, Booking Details, price summary),
+  My Bookings, the customer dashboard, the review form and the checkout page.
+  **Don't show `num_nights` to a guest** — it stays in the admin views and in
+  `ReportController`'s occupancy sum, where it is a count, not a description.
+- The landing page's "Showing results for" banner used a
+  `=== 'night' ? 'Night' : 'Day'` ternary and labelled a 22-hour search as
+  "Day (8AM–5PM)". It now prints the `SLOTS` label.
+- **`portal.confirmation` is deleted** (route, `PortalController::confirmation()`
+  and the view). Nothing linked to it since `submitBooking()` began redirecting
+  straight to `payment.page`, and its text — "our team will contact you within
+  24 hours to arrange your deposit" — described a flow that no longer exists.
+
+### Settings that did nothing are gone, and one that did nothing now works
+
+- **Removed from Admin → Settings:** Check-in Time, Check-out Time, Minimum Stay,
+  Currency and Tax Percentage. All five were validated and saved, and nothing
+  read them — times come from `Booking::SLOTS`, PayMongo charges PHP only, and no
+  calculation applies a tax. The rows are left in the `settings` table (harmless);
+  only the form fields, the validation rules and the `$keys` entries went.
+  **Don't add a setting to this form without a reader.**
+- **`max_advance_days` is now enforced.** Only the chatbot read it, so Elena
+  quoted a limit no validator applied. `Booking::latestBookableDate()` is the
+  single definition; `advanceLimitRule()` / `advanceLimitMessage()` put it on
+  the three **guest** validators (`PortalController::bookingForm()`,
+  `submitBooking()`, `Customer\BookingController::update()`), and the three guest
+  date inputs carry it as `max`. Staff walk-in, admin create and the calendar are
+  deliberately not limited.
+- **"Last saved" on the Settings page was `now()`** — the time the page was
+  opened. It is now `Setting::max('updated_at')`, labelled "Last changed":
+  `updateOrCreate()` leaves `updated_at` alone on a row whose value didn't
+  change, so this is the last time something actually changed.
+
+### Multi-property and per-night wording removed
+
+Text only — no behaviour changed. The system is one villa sold by slot, and
+these still read like a multi-unit hotel:
+
+- **Guest side:** "Browse Properties" / "Browse our properties" → "Book the
+  villa"; the villa page's breadcrumb "Properties" → "The Villa", "About This
+  Property" → "About the Villa", and the maintenance banner's "View other
+  properties" (there are none) → "Back to home"; the chatbot's "Available
+  properties" quick reply → "Check availability"; the landing filter banner's
+  "Showing results for … Clear all" → "Availability for … Clear date".
+- **Booking form:** the one-row "night breakdown" and the "1 night" price line
+  are a single "{Slot} rate" line (with "· peak" on a peak date), and the
+  read-only "Duration" field is "Slot".
+- **Admin side:** Properties subtitle → "Manage the villa and its rooms"; the
+  dashboard quick action "Add Property" → "Add Room" (`store()` already refuses
+  a second villa); "Top Properties by Revenue" → "Revenue by Property" on the
+  report page and PDF; the booking detail header and the guest profile's
+  booking table show the slot instead of a night count, and "₱…/night" is
+  "regular rate".
+- **Insights subtitle** said "Powered by Google Gemini" while the default
+  provider is Groq (`AI_PROVIDER`). It now says "AI-generated summary" and names
+  no provider, so it can't go stale when the switch changes.
+
+### Duplicates and dead files removed
+
+- **Admin Logout lives in the layout, once.** `@yield('topbar-right')` used to
+  *replace* the default Logout, so six pages re-pasted the form and five
+  (Insights, Forecast, Recommendations, Simulator, Accuracy) had no Logout at
+  all. **`topbar-right` is for page actions only — never put Logout in it.**
+- **Admin "Edit Booking" page is gone.** It was a full page for two fields
+  (`num_guests`, `special_requests`). They are now a collapsible form in the
+  Booking Information card on the detail page, posting to the same
+  `admin.bookings.update`; the resource route is `->except(['edit'])`.
+- **Customer booking detail** no longer repeats itself: the hero carries the
+  villa name, dates (now with weekday), times and slot; the Booking Details
+  card keeps only what the hero doesn't have (guests, booked on, special
+  requests); "Booking Source" is not shown to guests; the side card is the photo
+  alone.
+- **Customer dashboard:** "Recent Bookings" is "Booking History" and excludes
+  whatever "Upcoming Stays" already shows (`HomeController::index()`), and the
+  hero's "My Bookings" button — a third link to the same page — is removed.
+- **Customer sidebar:** the user card is no longer a second link to Settings.
+- **Booking form:** the summary card's date line duplicated Stay Details.
+- **Staff frontdesk:** the "Availability" tab was a link that left the page,
+  duplicating the sidebar item.
+- **Admin search hints** are written once in the markup; the script reuses it.
+- **Deleted:** `admin/bookings/edit`, the empty `admin/reports/revenue`,
+  `admin/reports/occupancy` and `customer/home/index` views, the starter-kit
+  `welcome.blade.php`, the duplicate `users/create` route (the resource already
+  registers it) and the stale commented routes at the end of
+  `routes/customer.php`.
+- **Still to do:** the flash-alert markup is still copied into ~25 views and most
+  views still carry their own `<style>` block. That is a refactor with no
+  visible effect and a real risk of visual regressions; it wants its own pass.
+
+### Missing pieces filled in
+
+- **`partials/confirm_dialog.blade.php` replaces native `confirm()`** in the
+  admin and customer layouts. Two forms: `<form data-confirm="…"
+  data-confirm-label="Delete">` (the submit is intercepted in the capture phase
+  and re-issued with `requestSubmit()` once accepted, so the form's own
+  listeners and the browser's validation still run), and
+  `await confirmDialog('…')` from script. It is a native `<dialog>` opened with
+  `showModal()`, **not** a Bootstrap modal: the top layer puts it above the
+  pages' own hand-rolled modals whatever their `z-index`. Focus starts on
+  Cancel. Converted: extra-charge removal, housekeeping task cancel and report
+  close, review delete (admin and customer), calendar drag-move and block
+  removal, property and photo delete, account deactivation, trusted-device
+  removal, avatar delete. **The staff frontdesk's check-in / check-out prompts
+  are still native `confirm()`** — they sit in the `Js::from()`-hardened markup
+  and the balance-handling submit handler, and were left for a separate pass.
+- **Staff "My Account"** (`/staff/profile`, `Staff\ProfileController`,
+  `staff/profile.blade.php`): name, phone and password, same rules as the admin
+  page; the password route is `throttle:6,1,staff-password`. Staff previously
+  could not change their own password at all. **No notification bell was
+  added:** `NotificationHelper` has no staff recipient — staff are reached
+  through `staff-frontdesk` broadcasts — so a bell would always be empty.
+- **Error pages:** `errors/403`, `404`, `419` and `500` join `429`, on the same
+  `layouts.auth` shell. 419 says nothing was submitted and to go back and
+  refresh.
+- **Admin search button is in the layout**, on every page (it was only on the
+  dashboard; elsewhere it was Ctrl+K or `/`). It is a real `<button>`.
+- **Admin sidebar:** Calendar moved from "People" to "Main", after Bookings.
+- **Landing page:** the hero guest dropdown stops at the villa's
+  `max_capacity` instead of a fixed 30; "About Us" → "About" everywhere; a
+  "Reviews" link is in the mobile menu and the footer (not the desktop bar —
+  an eighth item there was not checked for overflow).
+- **Keyboard and screen-reader pass:**
+  - `base.css` has a zero-specificity `:focus-visible` fallback for every link
+    and button (gold on the dark admin/staff sidebars) and a global
+    `prefers-reduced-motion` block. Both reach all five bundles through
+    `base.css`, so they need `npm run build`.
+  - Clickable `<div>`/`<span>` became real controls: the admin notification
+    bell and search hints are `<button>`s, the lightbox close is a `<button>`,
+    gallery slides take Enter/Space, and "Sign In to Book" is a link instead of
+    a button with `onclick` navigation.
+  - The checkout's Deposit / Full Payment cards only reacted to a click on the
+    `<label>`; the hidden radios now call `selectOption()` on `change` and the
+    card shows a focus ring, so the choice works from the keyboard.
+  - 154 `<label>`s were paired with the control that follows them (`for` +
+    `id="f_{name}"`). Labels inside a Blade loop and labels wrapping their
+    control were left alone — a generated id would repeat per iteration.
+  - "Pay Now" on the customer booking page lost its inline
+    `onmouseover`/`onmouseout` for a `.btn-pay-now` class with a focus state.
+  - **Not changed:** the 80 `transition: all` declarations. Listing explicit
+    properties is a performance nicety, and a wrong list silently drops an
+    animation; the reduced-motion block covers the accessibility half.
+- **Not changed — fonts.** Admin uses Cormorant Garamond + DM Sans, staff
+  Playfair Display + DM Sans, customer/public Playfair Display + Jost. Unifying
+  them is a brand decision and touches inline `font-family` in most views.
+
+---
+
+## What Changed in v7.52
 
 ### All payments are non-refundable when the guest cancels
 
@@ -7739,7 +7900,6 @@ Verified against live bookings: those 14–27 days out are reschedulable; past-d
 | Property Detail | `portal.property` | Gallery, amenities, **"Mga Kwarto sa Villa" room-status section**, pricing, **FullCalendar availability calendar** (month/list view, booked ranges shown as red events with hover tooltips showing exact times) plus a text list of booked ranges, and the date/time/guest booking form |
 | Booking Form | `portal.book` | Shows the flat package rate applied (based on check-in day/time segment), special requests field, deposit info |
 | Submit Booking | `portal.book.submit` | Validates the 2-hour buffer + 24-hour policy, creates booking, notifies admin + guest |
-| Confirmation | `portal.confirmation` | Booking ref, what happens next |
 
 **Guest Booking Flow:**
 ```
@@ -8491,8 +8651,7 @@ resources/views/
 ├── portal/
 │   ├── home.blade.php          ← REDESIGNED v4.0 — single-villa "big showcase" + room-status strip
 │   ├── property.blade.php      ← REDESIGNED v4.0 — room-status section, FullCalendar availability calendar, free time inputs
-│   ├── booking_form.blade.php  ← UPDATED v4.0 — flat package rate display, time fields
-│   └── confirmation.blade.php
+│   └── booking_form.blade.php  ← UPDATED v4.0 — flat package rate display, time fields
 ├── partials/
 │   └── chatbot.blade.php
 └── staff/
@@ -8615,7 +8774,6 @@ GET  /terms-of-service              portal.terms              ← NEW v6.1
 POST /contact                       portal.contact.send       ← NEW v5.0 (throttle:contact — v7.8)
 GET  /book/{property}               portal.book
 POST /book/{property}               portal.book.submit        (throttle:booking-submit — v7.8)
-GET  /booking/confirmed/{booking}   portal.confirmation
 POST /chatbot                       chatbot.reply             (throttle:chatbot — v7.8)
 GET  /pay/{booking}                 payment.page
 POST /pay/{booking}/checkout        payment.checkout

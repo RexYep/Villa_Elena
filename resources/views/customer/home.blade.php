@@ -595,10 +595,7 @@
         </div>
         <div class="welcome-cta">
             <a href="{{ route('home') }}" class="btn-primary">
-                <i class="bi bi-search"></i> Browse Properties
-            </a>
-            <a href="{{ route('customer.bookings') }}" class="btn-outline">
-                <i class="bi bi-calendar3"></i> My Bookings
+                <i class="bi bi-calendar-plus"></i> Book the Villa
             </a>
         </div>
     </div>
@@ -656,11 +653,11 @@
 
     <div class="content-grid">
 
-        {{-- Left: Recent Bookings --}}
+        {{-- Left: Booking History (hindi kasama ang upcoming) --}}
         <div>
             <div class="card">
                 <div class="card-head">
-                    <h3>Recent Bookings</h3>
+                    <h3>Booking History</h3>
                     <a href="{{ route('customer.bookings') }}">View all →</a>
                 </div>
                 <div class="card-body">
@@ -678,7 +675,9 @@
                                 <div class="booking-dates">
                                     {{ $booking->check_in_date->format('M d') }} —
                                     {{ $booking->check_out_date->format('M d, Y') }}
-                                    · {{ $booking->num_nights }} night{{ $booking->num_nights != 1 ? 's' : '' }}
+                                    @if ($booking->slot_name)
+                                        · {{ $booking->slot_name }}
+                                    @endif
                                 </div>
                             </div>
                             <div class="booking-right">
@@ -695,10 +694,10 @@
                         <div class="text-muted-theme" style="text-align:center;padding:40px;">
                             <i class="bi bi-calendar-x"
                                 style="font-size:36px;display:block;margin-bottom:8px;opacity:.4;"></i>
-                            No bookings yet.
+                            {{ $upcomingBookings->isEmpty() ? 'No bookings yet.' : 'No earlier bookings.' }}
                             <a href="{{ route('home') }}"
                                 style="color:var(--gold);display:block;margin-top:8px;font-size:13px;">
-                                Browse our properties →
+                                Book the villa →
                             </a>
                         </div>
                     @endforelse
@@ -727,8 +726,11 @@
                                     {{ $booking->check_in_date->format('M d') }} →
                                     {{ $booking->check_out_date->format('M d, Y') }}
                                 </div>
-                                <div class="upcoming-nights">{{ $booking->num_nights }}
-                                    night{{ $booking->num_nights != 1 ? 's' : '' }} · {{ $booking->num_guests }}
+                                <div class="upcoming-nights">
+                                    @if ($booking->slot_name)
+                                        {{ $booking->slot_name }} ·
+                                    @endif
+                                    {{ $booking->stay_hours }} · {{ $booking->num_guests }}
                                     guest{{ $booking->num_guests != 1 ? 's' : '' }}</div>
                                 <span class="upcoming-badge">{{ ucfirst(str_replace('_', ' ', $booking->status)) }}</span>
                             </div>

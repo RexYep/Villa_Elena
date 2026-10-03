@@ -14,7 +14,13 @@ class SettingsController extends Controller
     {
         $settings = Setting::pluck('setting_value', 'setting_key');
 
-        return view('admin.settings.index', compact('settings'));
+        // Ang totoong huling pagbabago. Dating `now()` ang ipinapakita ng
+        // "Last saved" — ang oras ng pagbukas ng pahina. Hindi ginagalaw ng
+        // updateOrCreate() ang `updated_at` ng row na walang nagbago, kaya
+        // ito ang huling pagkakataong may value na talagang nabago.
+        $lastSavedAt = Setting::max('updated_at');
+
+        return view('admin.settings.index', compact('settings', 'lastSavedAt'));
     }
 
     public function update(Request $request)
@@ -25,17 +31,12 @@ class SettingsController extends Controller
             'resort_phone' => 'required|string|max:30',
             'resort_address' => 'nullable|string',
             'resort_description' => 'nullable|string',
-            'currency' => 'required|string|max:10',
             'deposit_percentage' => 'required|numeric|min:0|max:100',
             'booking_hold_minutes' => 'required|integer|min:1',
             'booking_cooldown_threshold' => 'required|integer|min:1',
             'booking_cooldown_window_days' => 'required|integer|min:1',
             'booking_cooldown_hours' => 'required|integer|min:1',
-            'check_in_time' => 'required|string',
-            'check_out_time' => 'required|string',
             'max_advance_days' => 'required|integer|min:1',
-            'min_stay_nights' => 'required|integer|min:1',
-            'tax_percentage' => 'nullable|numeric|min:0|max:100',
             'facebook_url' => 'nullable|url',
             'tiktok_url' => 'nullable|url',
             'google_maps_url' => 'nullable|url',
@@ -62,13 +63,18 @@ class SettingsController extends Controller
         // what we want for a before/after pair.
         $settingsBefore = Setting::pluck('setting_value', 'setting_key')->all();
 
+        // Wala na rito ang `check_in_time`, `check_out_time`,
+        // `min_stay_nights`, `currency` at `tax_percentage`: naisusulat
+        // sila pero walang bumabasa. Ang oras ay galing sa Booking::SLOTS,
+        // at PHP lang ang sinisingil ng PayMongo. Huwag silang ibalik
+        // hangga't walang code na gumagamit.
         $keys = [
             'resort_name', 'resort_email', 'resort_phone', 'resort_address',
-            'resort_description', 'currency', 'deposit_percentage',
-            'booking_hold_minutes', 'check_in_time',
+            'resort_description', 'deposit_percentage',
+            'booking_hold_minutes',
             'booking_cooldown_threshold', 'booking_cooldown_window_days', 'booking_cooldown_hours',
-            'check_out_time', 'max_advance_days', 'min_stay_nights',
-            'tax_percentage', 'facebook_url', 'tiktok_url', 'google_maps_url',
+            'max_advance_days',
+            'facebook_url', 'tiktok_url', 'google_maps_url',
             'prescriptive_lookback_days', 'prescriptive_lookahead_days',
             'prescriptive_idle_threshold', 'prescriptive_elasticity',
             'prescriptive_max_discount', 'prescriptive_min_impact',

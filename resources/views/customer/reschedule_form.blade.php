@@ -367,10 +367,11 @@
             </div>
             <div class="form-card-body">
                 <div class="mb-16">
-                    <label class="form-label">Check-in Date</label>
+                    <label for="checkinDate" class="form-label">Check-in Date</label>
                     <input type="date" name="checkin" id="checkinDate" class="form-control @error('checkin') is-invalid @enderror"
                         value="{{ old('checkin', $booking->check_in_date->format('Y-m-d')) }}"
-                        min="{{ today()->format('Y-m-d') }}" required>
+                        min="{{ today()->format('Y-m-d') }}"
+                        max="{{ \App\Models\Booking::latestBookableDate()->toDateString() }}" required>
                 </div>
                 {{-- Dalawang hubad na radio ang mga ito dati: 16px na target
                      sa telepono, at ibang-iba sa mga card na nakita ng bisita

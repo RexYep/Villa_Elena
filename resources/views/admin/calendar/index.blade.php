@@ -16,10 +16,6 @@
             <i class="bi bi-house-door"></i> 22-Hour Date
         </button>
     @endif
-    <form method="POST" action="{{ route('logout') }}" class="m-0">
-        @csrf
-        <button type="submit" class="logout-btn"><i class="bi bi-box-arrow-right"></i> Logout</button>
-    </form>
 @endsection
 
 @push('styles')
@@ -554,7 +550,7 @@
          pababa sa isang room na permanenteng walang laman. --}}
     <div class="filter-bar">
         <div>
-            <label>Status</label>
+            <label for="filterStatus">Status</label>
             <select id="filterStatus" onchange="refreshCalendar()">
                 <option value="">All Statuses</option>
                 <option value="pending">Pending</option>
@@ -648,16 +644,16 @@
                 </div>
                 <div class="date-pair mb-12">
                     <div>
-                        <label class="form-label-sm">Start Date</label>
+                        <label for="blockStart" class="form-label-sm">Start Date</label>
                         <input type="date" id="blockStart" class="form-control-sm2" required>
                     </div>
                     <div>
-                        <label class="form-label-sm">End Date</label>
+                        <label for="blockEnd" class="form-label-sm">End Date</label>
                         <input type="date" id="blockEnd" class="form-control-sm2" required>
                     </div>
                 </div>
                 <div class="mb-12">
-                    <label class="form-label-sm">Reason</label>
+                    <label for="blockReason" class="form-label-sm">Reason</label>
                     <select id="blockReason" class="form-control-sm2" required>
                         <option value="maintenance">Maintenance</option>
                         <option value="owner_use">Owner Use</option>
@@ -666,7 +662,7 @@
                     </select>
                 </div>
                 <div class="mb-12">
-                    <label class="form-label-sm">Notes <span class="text-muted-theme"
+                    <label for="blockNotes" class="form-label-sm">Notes <span class="text-muted-theme"
                             style="font-weight:400; text-transform:none;">(optional)</span></label>
                     <input type="text" id="blockNotes" class="form-control-sm2"
                         placeholder="e.g. Annual maintenance">
@@ -696,14 +692,14 @@
                     Every other date keeps the regular slots.
                 </p>
                 <div class="mb-12">
-                    <label class="form-label-sm">Check-in Date</label>
+                    <label for="swDate" class="form-label-sm">Check-in Date</label>
                     <input type="date" id="swDate" class="form-control-sm2"
                         min="{{ now()->format('Y-m-d') }}" required>
                     <div id="swSpan" class="text-muted-theme"
                         style="font-size:12.5px; margin-top:6px; min-height:18px;"></div>
                 </div>
                 <div class="mb-12">
-                    <label class="form-label-sm">Notes <span class="text-muted-theme"
+                    <label for="swNotes" class="form-label-sm">Notes <span class="text-muted-theme"
                             style="font-weight:400; text-transform:none;">(optional)</span></label>
                     <input type="text" id="swNotes" class="form-control-sm2"
                         placeholder="e.g. Reunion package">
@@ -907,7 +903,7 @@
                 },
 
                 // ── Drag & Drop ────────────────────────────────────────
-                eventDrop: function(info) {
+                eventDrop: async function(info) {
                     const p = info.event.extendedProps;
                     if (p.type !== 'booking') {
                         info.revert();
@@ -920,7 +916,9 @@
                     endDate.setDate(endDate.getDate() - 1);
                     const newEnd = localDateStr(endDate);
 
-                    if (!confirm(`Move ${p.booking_ref} to ${newStart} – ${newEnd}?`)) {
+                    if (!await confirmDialog(`Move ${p.booking_ref} to ${newStart} – ${newEnd}?`, {
+                            confirmLabel: 'Move Booking'
+                        })) {
                         info.revert();
                         return;
                     }
@@ -1250,8 +1248,11 @@
                 .catch(() => showToast('Error blocking dates', true));
         }
 
-        function deleteBlock() {
-            if (!activeBlockId || !confirm('Remove this blocked period?')) return;
+        async function deleteBlock() {
+            if (!activeBlockId) return;
+            if (!await confirmDialog('Remove this blocked period?', {
+                    confirmLabel: 'Remove'
+                })) return;
             fetch(`{{ url('admin/calendar/blocks') }}/${activeBlockId}`, {
                     method: 'DELETE',
                     headers: {

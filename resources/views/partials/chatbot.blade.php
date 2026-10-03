@@ -530,9 +530,9 @@
 
     {{-- Quick Reply Suggestions --}}
     <div class="quick-replies" id="quick-replies">
-        <button class="qr-btn" onclick="quickSend('What properties are available?')">
+        <button class="qr-btn" onclick="quickSend('Is the villa available?')">
             <i class="bi bi-house-door me-1"></i>
-            Available properties
+            Check availability
         </button>
 
         <button class="qr-btn" onclick="quickSend('Book a villa for 2 people this weekend')">
@@ -556,7 +556,7 @@
             <div class="msg-avatar">E</div>
             <div class="msg-bubble">
                 Mabuhay! 👋 I'm <strong>Elena</strong>, your Villa Elena booking assistant!<br><br>
-                I can help you <strong>find available properties</strong>, check prices, and book your stay. Just tell
+                I can help you <strong>check if the villa is available</strong>, check prices, and book your stay. Just tell
                 me your dates and how many guests!
             </div>
         </div>

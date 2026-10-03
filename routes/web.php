@@ -35,7 +35,6 @@ Route::middleware('maintenance.check')->group(function () {
     Route::post('book/{property}', [PortalController::class, 'submitBooking'])
         ->middleware(['auth', 'verified', 'throttle:booking-submit'])
         ->name('portal.book.submit');
-    Route::get('booking/confirmed/{booking}', [PortalController::class, 'confirmation'])->name('portal.confirmation');
 });
 
 // PayMongo payment routes (auth required)

@@ -495,8 +495,8 @@
         <form method="GET" action="{{ route('admin.reviews.index') }}">
             <div class="row g-2 align-items-end">
                 <div class="col-auto" style="min-width:140px;">
-                    <label class="form-label-sm">Status</label>
-                    <select name="status" class="form-select-sm form-select">
+                    <label for="f_status" class="form-label-sm">Status</label>
+                    <select id="f_status" name="status" class="form-select-sm form-select">
                         <option value="">All Status</option>
                         <option value="pending" {{ request('status') == 'pending' ? 'selected' : '' }}>Pending</option>
                         <option value="approved" {{ request('status') == 'approved' ? 'selected' : '' }}>Approved</option>
@@ -504,8 +504,8 @@
                     </select>
                 </div>
                 <div class="col-auto" style="min-width:120px;">
-                    <label class="form-label-sm">Rating</label>
-                    <select name="rating" class="form-select-sm form-select">
+                    <label for="f_rating" class="form-label-sm">Rating</label>
+                    <select id="f_rating" name="rating" class="form-select-sm form-select">
                         <option value="">All Ratings</option>
                         @for ($i = 5; $i >= 1; $i--)
                             <option value="{{ $i }}" {{ request('rating') == $i ? 'selected' : '' }}>
@@ -597,7 +597,7 @@
                             @endif
 
                             <form method="POST" action="{{ route('admin.reviews.destroy', $review) }}"
-                                style="display:inline;" onsubmit="return confirm('Delete this review?')">
+                                style="display:inline;" data-confirm="Delete this review?" data-confirm-label="Delete">
                                 @csrf @method('DELETE')
                                 <button type="submit" class="btn-delete" title="Delete">
                                     <i class="bi bi-trash"></i>
@@ -638,9 +638,9 @@
             <form id="rejectForm" method="POST" class="modal-body">
                 @csrf @method('PATCH')
                 <div style="margin-bottom:14px;">
-                    <label class="form-label">Reason for Rejection <span class="text-muted-theme"
+                    <label for="f_reject_reason" class="form-label">Reason for Rejection <span class="text-muted-theme"
                             style="font-weight:400;">(optional)</span></label>
-                    <textarea name="reject_reason" class="form-control" rows="3"
+                    <textarea id="f_reject_reason" name="reject_reason" class="form-control" rows="3"
                         placeholder="e.g. Contains inappropriate language, false information..."></textarea>
                 </div>
                 <button type="submit" class="btn-submit">

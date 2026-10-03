@@ -6,18 +6,6 @@
             " ​·​
             Here's what's happening at the resort today")
 
-        @section('topbar-right')
-            <div class="topbar-btn" onclick="openSearch()" style="cursor:pointer;">
-                <i class="bi bi-search"></i>
-            </div>
-            <form method="POST" action="{{ route('logout') }}" class="m-0">
-                @csrf
-                <button type="submit" class="logout-btn">
-                    <i class="bi bi-box-arrow-right"></i> Logout
-                </button>
-            </form>
-        @endsection
-
         @push('styles')
             @vite(['resources/js/admin-charts.js'])
             <style>
@@ -897,7 +885,7 @@
                                     <div class="qa-icon" style="background:#dcfce7; color:#15803d;">
                                         <i class="bi bi-house-add"></i>
                                     </div>
-                                    Add Property
+                                    Add Room
                                 </a>
                                 <a href="{{ route('admin.reports.index') }}" class="quick-action-btn">
                                     <div class="qa-icon" style="background:#fef9c3; color:#a16207;">

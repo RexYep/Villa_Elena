@@ -111,7 +111,6 @@ body {
     text-decoration: none;
     min-width: 0;
 }
-.cust-user-card:hover { background: rgba(255,255,255,.1); }
 .cust-user-card .user-avatar { width: 34px; height: 34px; font-size: 13px; }
 .cust-user-text { min-width: 0; }
 .cust-user-name {

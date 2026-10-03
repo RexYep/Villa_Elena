@@ -322,8 +322,8 @@
                 {{-- New Guest --}}
                 <div id="newGuestFields" style="display:none;">
                     <div class="mb-14">
-                        <label class="form-label">Full Name</label>
-                        <input type="text" name="full_name"
+                        <label for="f_full_name" class="form-label">Full Name</label>
+                        <input id="f_full_name" type="text" name="full_name"
                             class="form-control {{ $errors->has('full_name') ? 'is-invalid' : '' }}"
                             value="{{ old('full_name') }}" placeholder="Juan Dela Cruz">
                         @error('full_name')
@@ -349,7 +349,7 @@
 
                     <div class="two-col mb-14">
                         <div>
-                            <label class="form-label">Email <span class="optional-tag"
+                            <label for="newGuestEmail" class="form-label">Email <span class="optional-tag"
                                     id="emailOptionalTag">(optional)</span></label>
                             <input type="email" name="email" id="newGuestEmail"
                                 class="form-control {{ $errors->has('email') ? 'is-invalid' : '' }}"
@@ -359,8 +359,8 @@
                             @enderror
                         </div>
                         <div>
-                            <label class="form-label">Phone <span class="optional-tag">(optional)</span></label>
-                            <input type="text" name="phone" class="form-control" value="{{ old('phone') }}"
+                            <label for="f_phone" class="form-label">Phone <span class="optional-tag">(optional)</span></label>
+                            <input id="f_phone" type="text" name="phone" class="form-control" value="{{ old('phone') }}"
                                 placeholder="09XX XXX XXXX">
                         </div>
                     </div>
@@ -410,7 +410,7 @@
                     @enderror
                 </div>
                 <div class="mb-14">
-                    <label class="form-label">Check-in Date</label>
+                    <label for="checkinDate" class="form-label">Check-in Date</label>
                     <input type="date" name="check_in_date" id="checkinDate"
                         class="form-control {{ $errors->has('check_in_date') ? 'is-invalid' : '' }}"
                         value="{{ old('check_in_date', $prefill['date'] ?? date('Y-m-d')) }}" min="{{ date('Y-m-d') }}">
@@ -465,7 +465,7 @@
                 </div>
                 <div class="two-col mb-14">
                     <div>
-                        <label class="form-label">Number of Guests</label>
+                        <label for="numGuests" class="form-label">Number of Guests</label>
                         <select name="num_guests" id="numGuests"
                             class="form-select {{ $errors->has('num_guests') ? 'is-invalid' : '' }}" required>
                             @for ($g = 1; $g <= ($availableProperties->first()->max_capacity ?? 1); $g++)
@@ -480,8 +480,8 @@
                         @enderror
                     </div>
                     <div>
-                        <label class="form-label">Special Requests <span class="optional-tag">(optional)</span></label>
-                        <input type="text" name="special_requests" class="form-control"
+                        <label for="f_special_requests" class="form-label">Special Requests <span class="optional-tag">(optional)</span></label>
+                        <input id="f_special_requests" type="text" name="special_requests" class="form-control"
                             value="{{ old('special_requests') }}" placeholder="Early check-in, extra bed, etc.">
                     </div>
                 </div>
@@ -510,7 +510,7 @@
             <div class="section-body">
                 <div class="two-col mb-14">
                     <div>
-                        <label class="form-label">Amount Received</label>
+                        <label for="paymentAmount" class="form-label">Amount Received</label>
                         <input type="number" name="payment_amount" id="paymentAmount"
                             class="form-control {{ $errors->has('payment_amount') ? 'is-invalid' : '' }}"
                             value="{{ old('payment_amount', 0) }}" min="0" step="0.01" placeholder="0.00"
@@ -520,8 +520,8 @@
                         @enderror
                     </div>
                     <div>
-                        <label class="form-label">Payment Method</label>
-                        <select name="payment_method"
+                        <label for="f_payment_method" class="form-label">Payment Method</label>
+                        <select id="f_payment_method" name="payment_method"
                             class="form-select {{ $errors->has('payment_method') ? 'is-invalid' : '' }}">
                             <option value="">Select</option>
                             <option value="cash" {{ old('payment_method') == 'cash' ? 'selected' : '' }}>Cash</option>

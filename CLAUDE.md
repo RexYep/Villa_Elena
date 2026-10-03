@@ -190,6 +190,15 @@ Check-in **no longer creates a `checkout_clean` task**. The owner decided the ad
 
 **Blade:** never use the one-line `@php($x = …)` in a view that has a `@php … @endphp` block later on. The compiler pairs them and swallows everything in between (`unexpected token "endforeach"`). Use `@php $x = …; @endphp`.
 
+### UI conventions (v7.53)
+
+- **Describe a booking to a guest by slot and time, never by `num_nights`.** It is written as `max(1, …)`, so a Day slot reads "1 night". Use `$booking->slot_name`, `->check_in_time_label`, `->check_out_time_label`, `->stay_hours`; the times come from the stored columns so an `extendStay()` booking shows its real checkout.
+- **`max_advance_days` is enforced for guests only**, through `Booking::latestBookableDate()` / `advanceLimitRule()` / `advanceLimitMessage()` on the portal booking and customer reschedule validators and as `max` on their date inputs. Staff and admin are not limited. Don't add a field to Admin → Settings that nothing reads — five such fields were removed.
+- **Admin `topbar-right` is for page actions only.** Logout and the search button live in `layouts/admin.blade.php`; a page that re-adds either gets two.
+- **No native `confirm()` in admin or customer views.** Use `<form data-confirm="…" data-confirm-label="…">` or `await confirmDialog('…')` from `partials/confirm_dialog.blade.php` (a `<dialog>`, deliberately not a Bootstrap modal, so it sits above the pages' own modals). The staff frontdesk's check-in/out prompts are the remaining native ones.
+- This is one villa: say "the villa", not "properties".
+- **Actions are `<button>`, navigation is `<a>` — never a `<div onclick>`**, and a `<label>` gets `for` pointing at its control's `id`. The focus ring and the `prefers-reduced-motion` rule are global in `base.css`; don't add `outline: none` without a replacement.
+
 ### Mail / broadcast failure handling
 
 Outbound mail (registration, 2FA send/resend, verification, forgot-password, walk-in guest creation) and Pusher broadcasts (`NotificationHelper::create()`'s `event(new NotificationCreated(...))`) are wrapped in try/catch + `Log::error()` rather than left to bubble up — a transport hiccup must degrade gracefully (request still succeeds) rather than 500 the whole flow. Follow this pattern for any new mail/broadcast call site, especially inside a DB transaction (a failed non-critical email must not roll back the primary action). Several other `event(new BookingUpdated/FrontdeskUpdated/PropertyAvailabilityChanged(...))` call sites in bookings/calendar/frontdesk still have the old unprotected shape — treat them the same way if you touch them.

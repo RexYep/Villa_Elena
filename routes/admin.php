@@ -53,13 +53,14 @@ Route::get('bookings/lookup', function (\Illuminate\Http\Request $request) {
     Route::get('bookings/quote', [BookingController::class, 'quote'])
         ->middleware('throttle:60,1,admin-quote')
         ->name('bookings.quote');
-    Route::resource('bookings', BookingController::class);
+    // Walang `edit`: ang dalawang nae-edit na field (guests, special
+    // requests) ay nasa booking detail page na mismo.
+    Route::resource('bookings', BookingController::class)->except(['edit']);
     Route::patch('bookings/{booking}/status', [BookingController::class, 'updateStatus'])->name('bookings.status');
     Route::patch('bookings/{booking}/extend', [BookingController::class, 'extendStay'])->name('bookings.extend');
     Route::post('bookings/{booking}/payment', [BookingController::class, 'recordPayment'])->name('bookings.payment');
     Route::post('bookings/{booking}/extras', [BookingController::class, 'storeExtra'])->name('bookings.extras.store');
     Route::delete('bookings/{booking}/extras/{extra}', [BookingController::class, 'destroyExtra'])->name('bookings.extras.destroy');
-    Route::get('users/create', [UserController::class, 'create'])->name('users.create');
 
     // Properties
     Route::resource('properties', PropertyController::class);

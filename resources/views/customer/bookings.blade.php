@@ -268,7 +268,10 @@
                         <i class="bi bi-calendar3" style="font-size: 13px;"></i>
                         {{ $booking->check_in_date->format('M d, Y') }} &rarr;
                         {{ $booking->check_out_date->format('M d, Y') }}
-                        &nbsp;·&nbsp; {{ $booking->num_nights }} night{{ $booking->num_nights != 1 ? 's' : '' }}
+                        @if ($booking->slot_name)
+                            &nbsp;·&nbsp; {{ $booking->slot_name }}
+                        @endif
+                        &nbsp;·&nbsp; {{ $booking->stay_hours }}
                         &nbsp;·&nbsp; {{ $booking->num_guests }} guest{{ $booking->num_guests != 1 ? 's' : '' }}
                     </div>
                 </div>
@@ -286,7 +289,7 @@
         <div class="empty-state">
             <i class="bi bi-calendar-x"></i>
             <p style="font-size:15px;margin-bottom:6px;">No bookings found</p>
-            <a href="{{ route('home') }}" style="color:var(--gold);font-size:13px;">Browse our properties →</a>
+            <a href="{{ route('home') }}" style="color:var(--gold);font-size:13px;">Book the villa →</a>
         </div>
     @endforelse
 

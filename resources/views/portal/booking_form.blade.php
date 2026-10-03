@@ -689,9 +689,9 @@
                         </div>
                         <div class="two-col mb-14">
                             <div>
-                                <label class="form-label">Duration</label>
+                                <label class="form-label">Slot</label>
                                 <input type="text" class="form-control field-readonly"
-                                    value="{{ $nights }} night{{ $nights != 1 ? 's' : '' }}" readonly>
+                                    value="{{ \App\Models\Booking::SLOTS[$slot]['name'] }}" readonly>
                             </div>
                             <div>
                                 <label class="form-label">Guests</label>
@@ -700,9 +700,9 @@
                             </div>
                         </div>
                         <div>
-                            <label class="form-label">Special Requests <span class="text-muted-theme"
+                            <label for="f_special_requests" class="form-label">Special Requests <span class="text-muted-theme"
                                     style="font-weight:400;">(optional)</span></label>
-                            <textarea name="special_requests" class="form-control" rows="3"
+                            <textarea id="f_special_requests" name="special_requests" class="form-control" rows="3"
                                 placeholder="Early check-in, dietary requirements, celebrations, etc.">{{ old('special_requests') }}</textarea>
                         </div>
                     </div>
@@ -720,25 +720,19 @@
                     @endif
                     <div class="summary-body">
                         <div class="summary-name">{{ $property->property_name }}</div>
-                        <div class="summary-dates">
-                            <i class="bi bi-calendar3" style="font-size: 13px;"></i>
-                            {{ $checkin->format('M d') }} → {{ $checkout->format('M d, Y') }}
-                        </div>
-
-                        {{-- Night Breakdown --}}
-                        <div class="night-breakdown">
-                            @foreach ($nightBreakdown as $night)
-                                <div class="night-row {{ $night['weekend'] ? 'weekend' : '' }}">
-                                    <span>{{ $night['date'] }} {{ $night['weekend'] ? '★' : '' }}</span>
-                                    <span>₱{{ number_format($night['price'], 0) }}</span>
-                                </div>
-                            @endforeach
-                        </div>
 
                         <div style="height:1px;background:var(--border);margin:12px 0;"></div>
 
+                        {{-- Isang slot = isang presyo. Dating may "night
+                             breakdown" na iisang hilera lang, na sinusundan
+                             ng parehong halaga bilang "1 night". --}}
                         <div class="price-row">
-                            <span class="text-muted-theme">{{ $nights }} night{{ $nights != 1 ? 's' : '' }}</span>
+                            <span class="text-muted-theme">
+                                {{ \App\Models\Booking::SLOTS[$slot]['name'] }} rate
+                                @if ($nightBreakdown[0]['weekend'] ?? false)
+                                    · peak
+                                @endif
+                            </span>
                             <span>₱{{ number_format($baseAmount, 2) }}</span>
                         </div>
                         @if ($discountAmount > 0)

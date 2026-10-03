@@ -727,7 +727,7 @@
 
             {{-- ── Profile Info ─────────────────────────────────────── --}}
             <div class="settings-panel" id="panel-profile">
-                <form id="deleteAvatarForm" method="POST" action="{{ route('customer.profile.avatar.destroy') }}" style="display:none;">
+                <form id="deleteAvatarForm" method="POST" data-confirm="Delete your profile photo?" data-confirm-label="Delete" action="{{ route('customer.profile.avatar.destroy') }}" style="display:none;">
                     @csrf
                     @method('DELETE')
                 </form>
@@ -779,8 +779,7 @@
                                 </button>
                                 <button type="button" class="btn-link-cancel" id="avatarCancelBtn" hidden>Cancel</button>
                                 @if ($user->profile_image)
-                                    <button type="submit" form="deleteAvatarForm" class="btn-delete-avatar" id="avatarDeleteBtn"
-                                        onclick="return confirm('Are you sure you want to delete your profile photo?');">
+                                    <button type="submit" form="deleteAvatarForm" class="btn-delete-avatar" id="avatarDeleteBtn">
                                         <i class="bi bi-trash3"></i> Delete photo
                                     </button>
                                 @endif
@@ -794,8 +793,8 @@
                     </div>
 
                     <div class="mb-16">
-                        <label class="form-label">Full Name</label>
-                        <input type="text" name="full_name" class="form-control @error('full_name') is-invalid @enderror"
+                        <label for="f_full_name" class="form-label">Full Name</label>
+                        <input id="f_full_name" type="text" name="full_name" class="form-control @error('full_name') is-invalid @enderror"
                             value="{{ old('full_name', $user->full_name) }}" required>
                         @error('full_name')
                             <div class="field-error">{{ $message }}</div>
@@ -809,8 +808,8 @@
                     </div>
 
                     <div class="mb-16">
-                        <label class="form-label">Phone Number</label>
-                        <input type="text" name="phone" class="form-control @error('phone') is-invalid @enderror"
+                        <label for="f_phone" class="form-label">Phone Number</label>
+                        <input id="f_phone" type="text" name="phone" class="form-control @error('phone') is-invalid @enderror"
                             value="{{ old('phone', $user->phone) }}" placeholder="09XX-XXX-XXXX" required>
                         @error('phone')
                             <div class="field-error">{{ $message }}</div>
@@ -818,8 +817,8 @@
                     </div>
 
                     <div class="mb-16">
-                        <label class="form-label">Home Address</label>
-                        <textarea name="address" class="form-control" rows="2">{{ old('address', $user->address) }}</textarea>
+                        <label for="f_address" class="form-label">Home Address</label>
+                        <textarea id="f_address" name="address" class="form-control" rows="2">{{ old('address', $user->address) }}</textarea>
                     </div>
 
                     <button type="submit" class="btn-submit"><i class="bi bi-check-circle"></i> Save Changes</button>
@@ -840,8 +839,8 @@
                 </div>
                 <div class="form-card-body">
                     <div class="mb-16">
-                        <label class="form-label">Current Password</label>
-                        <input type="password" name="current_password"
+                        <label for="f_current_password" class="form-label">Current Password</label>
+                        <input id="f_current_password" type="password" name="current_password"
                             class="form-control @error('current_password', 'updatePassword') is-invalid @enderror">
                         @error('current_password', 'updatePassword')
                             <div class="field-error">{{ $message }}</div>
@@ -849,8 +848,8 @@
                     </div>
                     <div class="two-col mb-16">
                         <div>
-                            <label class="form-label">New Password</label>
-                            <input type="password" name="password"
+                            <label for="f_password" class="form-label">New Password</label>
+                            <input id="f_password" type="password" name="password"
                                 class="form-control @error('password', 'updatePassword') is-invalid @enderror"
                                 placeholder="Min. 8 characters">
                             @error('password', 'updatePassword')
@@ -858,8 +857,8 @@
                             @enderror
                         </div>
                         <div>
-                            <label class="form-label">Confirm New Password</label>
-                            <input type="password" name="password_confirmation" class="form-control"
+                            <label for="f_password_confirmation" class="form-label">Confirm New Password</label>
+                            <input id="f_password_confirmation" type="password" name="password_confirmation" class="form-control"
                                 placeholder="Repeat password">
                         </div>
                     </div>
@@ -872,7 +871,7 @@
             {{-- ── Deactivate Account ───────────────────────────────── --}}
             <div class="settings-panel" id="panel-deactivate">
                 <form method="POST" action="{{ route('customer.profile.deactivate') }}"
-            onsubmit="return confirm('Are you sure you want to deactivate your account? You will be logged out and unable to log back in until an admin reactivates it.');">
+            data-confirm="Deactivate your account? You will be logged out and can't log back in until an admin reactivates it." data-confirm-label="Deactivate">
             @csrf
             @method('DELETE')
             <div class="danger-card">
@@ -886,8 +885,8 @@
                         payments, and reviews are kept — contact the resort to reactivate your account.
                     </p>
                     <div class="mb-16">
-                        <label class="form-label">Confirm Password</label>
-                        <input type="password" name="password"
+                        <label for="f_password_2" class="form-label">Confirm Password</label>
+                        <input id="f_password_2" type="password" name="password"
                             class="form-control @error('password', 'deactivate') is-invalid @enderror">
                         @error('password', 'deactivate')
                             <div class="field-error">{{ $message }}</div>
@@ -965,8 +964,8 @@
                     <form method="POST" action="{{ route('customer.profile.2fa.toggle') }}" id="disable2faForm"
                         style="{{ $errors->twoFactor->any() ? '' : 'display:none;' }}background:#f9f5ee;border-radius:10px;padding:14px;">
                         @csrf @method('PUT')
-                        <label class="form-label">Enter your password to turn this off</label>
-                        <input type="password" name="password"
+                        <label for="f_password_3" class="form-label">Enter your password to turn this off</label>
+                        <input id="f_password_3" type="password" name="password"
                             class="form-control @error('password', 'twoFactor') is-invalid @enderror"
                             style="margin-bottom:10px;">
                         @error('password', 'twoFactor')
@@ -1006,7 +1005,7 @@
                                 </div>
                             </div>
                             <form method="POST" action="{{ route('customer.profile.devices.destroy', $device) }}"
-                                onsubmit="return confirm('Remove this device? It will need to verify again next time it logs in.');">
+                                data-confirm="Remove this device? It will need to verify again next time it logs in." data-confirm-label="Remove">
                                 @csrf @method('DELETE')
                                 <button type="submit" class="btn-remove-device"><i class="bi bi-trash"></i>
                                     Remove</button>

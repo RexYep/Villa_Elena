@@ -46,7 +46,7 @@
     </nav>
 
     <div class="cust-sidebar-footer">
-        <a href="{{ route('customer.profile.edit') }}" class="cust-user-card">
+        <div class="cust-user-card">
             @if (Auth::user()->profile_image)
                 <img src="{{ Auth::user()->profile_image_url }}" alt="" class="user-avatar">
             @else
@@ -54,9 +54,9 @@
             @endif
             <div class="cust-user-text">
                 <div class="cust-user-name">{{ Auth::user()->full_name }}</div>
-                <div class="cust-user-role">Profile</div>
+                <div class="cust-user-role">Guest</div>
             </div>
-        </a>
+        </div>
         <form method="POST" action="{{ route('logout') }}">
             @csrf
             <button type="submit" class="cust-signout">

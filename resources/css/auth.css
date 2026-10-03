@@ -158,6 +158,32 @@ body {
     margin-bottom: 6px;
 }
 
+
+.forgot-link {
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--terracotta);
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    padding: 3px 8px;
+    border-radius: 20px;
+    transition: background .2s ease, color .2s ease, transform .15s ease;
+}
+
+.forgot-link:hover {
+    background: rgba(196, 103, 58, 0.10);
+    color: var(--terracotta);
+    transform: translateX(2px);
+    text-decoration: none;
+}
+
+.forgot-link i {
+    font-size: 11px;
+}
+
+
 .form-control {
     border: 1.5px solid var(--border);
     border-radius: 10px;

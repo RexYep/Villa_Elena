@@ -237,7 +237,7 @@ td{padding:13px 20px;}
     {{-- Top Properties Table --}}
     <div class="table-card">
         <div class="table-header">
-            <h3>Top Properties by Revenue</h3>
+            <h3>Revenue by Property</h3>
             <span class="text-muted-theme" style="font-size: 14px;">Selected period</span>
         </div>
         @if($topProperties->isEmpty())

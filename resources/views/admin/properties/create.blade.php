@@ -340,11 +340,11 @@
                         @php $initialIsVilla = !$existingVilla; @endphp
 
                         <div class="mb-3">
-                            <label class="form-label">Property Name
+                            <label for="f_property_name" class="form-label">Property Name
                                 <span class="req" id="nameRequiredMark"
                                     style="display:{{ $initialIsVilla ? 'inline' : 'none' }};">*</span>
                             </label>
-                            <input type="text" name="property_name"
+                            <input id="f_property_name" type="text" name="property_name"
                                 class="form-control @error('property_name') is-invalid @enderror"
                                 value="{{ old('property_name') }}" placeholder="e.g. Villa Elena Suite A">
                             @error('property_name')
@@ -362,7 +362,7 @@
                             </div>
                         @else
                             <div class="mb-3">
-                                <label class="form-label">Property Type <span class="req">*</span></label>
+                                <label for="typeSelect" class="form-label">Property Type <span class="req">*</span></label>
                                 <select name="type" id="typeSelect"
                                     class="form-select @error('type') is-invalid @enderror" required>
                                     <option value="villa" selected>🏡 Villa</option>
@@ -376,8 +376,8 @@
 
                         <div class="two-col mb-3">
                             <div>
-                                <label class="form-label">Max Guests <span class="req">*</span></label>
-                                <input type="number" name="max_capacity"
+                                <label for="f_max_capacity" class="form-label">Max Guests <span class="req">*</span></label>
+                                <input id="f_max_capacity" type="number" name="max_capacity"
                                     class="form-control @error('max_capacity') is-invalid @enderror"
                                     value="{{ old('max_capacity') }}" min="1" placeholder="0" required>
                                 @error('max_capacity')
@@ -385,15 +385,15 @@
                                 @enderror
                             </div>
                             <div>
-                                <label class="form-label">Floor Area (sqm)</label>
-                                <input type="number" name="floor_area_sqm" class="form-control"
+                                <label for="f_floor_area_sqm" class="form-label">Floor Area (sqm)</label>
+                                <input id="f_floor_area_sqm" type="number" name="floor_area_sqm" class="form-control"
                                     value="{{ old('floor_area_sqm') }}" min="0" step="0.1" placeholder="0">
                             </div>
                         </div>
 
                         <div id="villaOnlyDescription" style="display:{{ $initialIsVilla ? 'block' : 'none' }};">
-                            <label class="form-label">Description</label>
-                            <textarea name="description" class="form-control" placeholder="Describe this property...">{{ old('description') }}</textarea>
+                            <label for="f_description" class="form-label">Description</label>
+                            <textarea id="f_description" name="description" class="form-control" placeholder="Describe this property...">{{ old('description') }}</textarea>
                         </div>
 
                     </div>

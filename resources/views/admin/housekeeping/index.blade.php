@@ -399,7 +399,7 @@
                                     <button type="submit" class="hk-btn done"><i class="bi bi-check-lg"></i> Mark done</button>
                                 </form>
                                 <form method="POST" action="{{ route('admin.housekeeping.tasks.update', $task) }}"
-                                    onsubmit="return confirm('Cancel this task? The staff frontdesk will stop showing it.')">
+                                    data-confirm="Cancel this task? The staff frontdesk will stop showing it." data-confirm-label="Cancel Task">
                                     @csrf @method('PATCH')
                                     <input type="hidden" name="status" value="cancelled">
                                     <button type="submit" class="hk-btn cancel">Cancel task</button>

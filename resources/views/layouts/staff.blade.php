@@ -34,6 +34,10 @@
             <i class="bi bi-person-plus"></i> Walk-in Booking
         </a>
         @yield('sidebar-extra')
+        <div class="nav-label">Account</div>
+        <a href="{{ route('staff.profile.edit') }}" class="nav-item {{ request()->routeIs('staff.profile.*') ? 'active' : '' }}">
+            <i class="bi bi-person-gear"></i> My Account
+        </a>
     </nav>
     <div class="sidebar-footer">
         <div class="staff-info">

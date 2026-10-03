@@ -28,12 +28,13 @@
     </div>
     <div class="topbar-right">
         <div style="position:relative;display:inline-block;" id="notifWrapper">
-            <div class="topbar-btn" id="notifBtn" onclick="toggleNotif()" style="position:relative;cursor:pointer;">
-                <i class="bi bi-bell"></i>
+            <button type="button" class="topbar-btn" id="notifBtn" onclick="toggleNotif()" aria-label="Notifications"
+                aria-haspopup="true" aria-controls="notifDropdown">
+                <i class="bi bi-bell" aria-hidden="true"></i>
                 @if(($unreadCount ?? 0) > 0)
                     <span class="badge-dot" id="notifDot"></span>
                 @endif
-            </div>
+            </button>
             <div class="notif-dropdown" id="notifDropdown">
                 <div class="notif-header">
                     <div class="notif-header-title">Notifications</div>
@@ -76,14 +77,21 @@
                 </div>
             </div>
         </div>
-        @hasSection('topbar-right')
-            @yield('topbar-right')
-        @else
-            <form method="POST" action="{{ route('logout') }}" class="m-0">
-                @csrf
-                <button type="submit" class="logout-btn"><i class="bi bi-box-arrow-right"></i> Logout</button>
-            </form>
-        @endif
+        {{-- Ang `topbar-right` ay para sa mga aksyon ng pahina LANG. Laging
+             narito ang Logout: dati ay pinapalitan ito ng section, kaya
+             kinokopya ito ng bawat pahina — at ang mga nakalimot (Insights,
+             Forecast, Recommendations) ay walang Logout. --}}
+        @yield('topbar-right')
+        {{-- Sa bawat pahina, hindi lang sa dashboard: dati ay Ctrl+K o "/"
+             lang ang daan papunta sa search sa ibang pahina. --}}
+        <button type="button" class="topbar-btn" onclick="openSearch()" aria-label="Search (Ctrl+K)"
+            title="Search (Ctrl+K)">
+            <i class="bi bi-search" aria-hidden="true"></i>
+        </button>
+        <form method="POST" action="{{ route('logout') }}" class="m-0">
+            @csrf
+            <button type="submit" class="logout-btn"><i class="bi bi-box-arrow-right"></i> Logout</button>
+        </form>
     </div>
 </header>
 
@@ -93,6 +101,7 @@
 
 @yield('modals')
 
+@include('partials.confirm_dialog')
 @stack('scripts')
 @include('admin.partials.realtime')
 @include('admin.partials.topbar_features')

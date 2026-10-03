@@ -473,8 +473,6 @@
                                 <div class="action-btns">
                                     <a href="{{ route('admin.bookings.show', $booking) }}" class="btn-icon"
                                         title="View"><i class="bi bi-eye"></i></a>
-                                    <a href="{{ route('admin.bookings.edit', $booking) }}" class="btn-icon"
-                                        title="Edit"><i class="bi bi-pencil"></i></a>
                                     {{-- Js::from(), never '{{ $x }}': the HTML parser decodes entities in an attribute
                                          before the JS parser runs, so `{{ }}` does not keep a value inside a JS string.
                                          Measured exploitable on this shape; see staff/partials/_today_list.blade.php. --}}

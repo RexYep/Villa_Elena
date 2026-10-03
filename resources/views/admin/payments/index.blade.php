@@ -8,12 +8,6 @@
     <button class="btn-navy" onclick="openRecordModal()">
         <i class="bi bi-plus-lg"></i> Record Payment
     </button>
-    <form method="POST" action="{{ route('logout') }}" class="m-0">
-        @csrf
-        <button type="submit" class="logout-btn">
-            <i class="bi bi-box-arrow-right"></i> Logout
-        </button>
-    </form>
 @endsection
 
 @push('styles')
@@ -454,21 +448,21 @@
         <form method="GET" action="{{ route('admin.payments.index') }}">
             <div class="payments-filter-grid">
                 <div>
-                    <label class="form-label-sm">Search</label>
-                    <input type="text" name="search" class="form-control form-control-sm"
+                    <label for="f_search" class="form-label-sm">Search</label>
+                    <input id="f_search" type="text" name="search" class="form-control form-control-sm"
                         placeholder="Booking ref or guest name" value="{{ request('search') }}">
                 </div>
                 <div>
-                    <label class="form-label-sm">Method</label>
-                    <select name="method" class="form-select form-select-sm">
+                    <label for="f_method" class="form-label-sm">Method</label>
+                    <select id="f_method" name="method" class="form-select form-select-sm">
                         <option value="">All Methods</option>
                         <option value="cash" {{ request('method') == 'cash' ? 'selected' : '' }}>Cash</option>
                         <option value="qrph" {{ request('method') == 'qrph' ? 'selected' : '' }}>QR Ph</option>
                     </select>
                 </div>
                 <div>
-                    <label class="form-label-sm">Type</label>
-                    <select name="type" class="form-select form-select-sm">
+                    <label for="f_type" class="form-label-sm">Type</label>
+                    <select id="f_type" name="type" class="form-select form-select-sm">
                         <option value="">All Types</option>
                         <option value="full_payment" {{ request('type') == 'full_payment' ? 'selected' : '' }}>Full Payment
                         </option>
@@ -478,13 +472,13 @@
                     </select>
                 </div>
                 <div>
-                    <label class="form-label-sm">From</label>
-                    <input type="date" name="from" class="form-control form-control-sm"
+                    <label for="f_from" class="form-label-sm">From</label>
+                    <input id="f_from" type="date" name="from" class="form-control form-control-sm"
                         value="{{ request('from') }}">
                 </div>
                 <div>
-                    <label class="form-label-sm">To</label>
-                    <input type="date" name="to" class="form-control form-control-sm" value="{{ request('to') }}">
+                    <label for="f_to" class="form-label-sm">To</label>
+                    <input id="f_to" type="date" name="to" class="form-control form-control-sm" value="{{ request('to') }}">
                 </div>
                 <div style="padding-top:18px;">
                     <button type="submit" class="btn-navy" style="padding:8px 16px; font-size: 14px;">
@@ -692,7 +686,7 @@
                     </div>
                 @endif
                 <div class="mb-12">
-                    <label class="form-label">Booking Reference</label>
+                    <label for="bookingRefInput" class="form-label">Booking Reference</label>
                     <input type="text" name="booking_ref" id="bookingRefInput" class="form-control"
                         placeholder="e.g. VE-XXXXXXXX" autocomplete="off" required maxlength="32"
                         oninput="lookupBooking(this.value)">
@@ -706,27 +700,27 @@
                 </div>
                 <div class="two-col mb-12">
                     <div>
-                        <label class="form-label">Amount (₱)</label>
-                        <input type="number" name="amount" class="form-control" min="1" step="0.01"
+                        <label for="f_amount" class="form-label">Amount (₱)</label>
+                        <input id="f_amount" type="number" name="amount" class="form-control" min="1" step="0.01"
                             required placeholder="0.00">
                     </div>
                     <div>
-                        <label class="form-label">Payment Date</label>
-                        <input type="date" name="payment_date" class="form-control" value="{{ date('Y-m-d') }}"
+                        <label for="f_payment_date" class="form-label">Payment Date</label>
+                        <input id="f_payment_date" type="date" name="payment_date" class="form-control" value="{{ date('Y-m-d') }}"
                             required>
                     </div>
                 </div>
                 <div class="two-col mb-12">
                     <div>
-                        <label class="form-label">Method</label>
-                        <select name="payment_method" class="form-select" required>
+                        <label for="f_payment_method" class="form-label">Method</label>
+                        <select id="f_payment_method" name="payment_method" class="form-select" required>
                             <option value="cash">Cash</option>
                             <option value="qrph">QR Ph (GCash / Maya / bank app)</option>
                         </select>
                     </div>
                     <div>
-                        <label class="form-label">Type</label>
-                        <select name="payment_type" class="form-select" required>
+                        <label for="f_payment_type" class="form-label">Type</label>
+                        <select id="f_payment_type" name="payment_type" class="form-select" required>
                             <option value="full_payment">Full Payment</option>
                             <option value="partial">Partial</option>
                             <option value="balance">Balance</option>
@@ -734,9 +728,9 @@
                     </div>
                 </div>
                 <div class="mb-12">
-                    <label class="form-label">Notes <span class="text-muted-theme"
+                    <label for="f_notes" class="form-label">Notes <span class="text-muted-theme"
                             style="font-weight:400;">(optional)</span></label>
-                    <input type="text" name="notes" class="form-control"
+                    <input id="f_notes" type="text" name="notes" class="form-control"
                         placeholder="e.g. Cash received at frontdesk">
                 </div>
                 {{-- Kailangan lang ito kapag may kamukhang bayad na naitala
@@ -769,15 +763,15 @@
                     Refund for booking <strong id="refundBookingRef"></strong>
                 </div>
                 <div class="mb-12">
-                    <label class="form-label">Refund Amount (₱)</label>
+                    <label for="refundAmountInput" class="form-label">Refund Amount (₱)</label>
                     <input type="number" name="refund_amount" id="refundAmountInput" class="form-control"
                         min="1" step="0.01" required>
                     <div class="text-muted-theme" style="font-size: 13px; margin-top:4px;">Max: ₱<span
                             id="refundMax"></span></div>
                 </div>
                 <div class="mb-12">
-                    <label class="form-label">Reason for Refund</label>
-                    <textarea name="refund_reason" class="form-control" rows="2" required minlength="5"
+                    <label for="f_refund_reason" class="form-label">Reason for Refund</label>
+                    <textarea id="f_refund_reason" name="refund_reason" class="form-control" rows="2" required minlength="5"
                         placeholder="e.g. Guest cancelled 48 hours before check-in"></textarea>
                 </div>
                 <button type="submit"
@@ -824,7 +818,7 @@
                 @include('admin.payments._confirm_booking_ref', ['bookingRef' => null, 'inputId' => 'payoutBookingRef'])
 
                 <div class="mb-12">
-                    <label class="form-label">Transfer Reference Number</label>
+                    <label for="payoutRef" class="form-label">Transfer Reference Number</label>
                     <input type="text" name="transfer_reference" id="payoutRef" class="form-control"
                         minlength="4" maxlength="100" placeholder="e.g. 1029384756123" required>
                     <div class="text-muted-theme" style="font-size: 13px; margin-top:4px;">

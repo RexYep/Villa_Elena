@@ -158,8 +158,8 @@
                 </div>
                 <div class="settings-card-body">
                     <div class="mb-16">
-                        <label class="form-label">Full Name <span class="req">*</span></label>
-                        <input type="text" name="full_name"
+                        <label for="f_full_name" class="form-label">Full Name <span class="req">*</span></label>
+                        <input id="f_full_name" type="text" name="full_name"
                             class="form-control @error('full_name') is-invalid @enderror"
                             value="{{ old('full_name', $user->full_name) }}" required>
                         @error('full_name')
@@ -167,8 +167,8 @@
                         @enderror
                     </div>
                     <div class="mb-16">
-                        <label class="form-label">Phone Number <span class="req">*</span></label>
-                        <input type="text" name="phone"
+                        <label for="f_phone" class="form-label">Phone Number <span class="req">*</span></label>
+                        <input id="f_phone" type="text" name="phone"
                             class="form-control @error('phone') is-invalid @enderror"
                             value="{{ old('phone', $user->phone) }}" required>
                         @error('phone')
@@ -198,16 +198,16 @@
                 </div>
                 <div class="settings-card-body">
                     <div class="mb-16">
-                        <label class="form-label">Current Password <span class="req">*</span></label>
-                        <input type="password" name="current_password"
+                        <label for="f_current_password" class="form-label">Current Password <span class="req">*</span></label>
+                        <input id="f_current_password" type="password" name="current_password"
                             class="form-control @error('current_password') is-invalid @enderror" required>
                         @error('current_password')
                             <span class="invalid-feedback">{{ $message }}</span>
                         @enderror
                     </div>
                     <div class="mb-16">
-                        <label class="form-label">New Password <span class="req">*</span></label>
-                        <input type="password" name="password"
+                        <label for="f_password" class="form-label">New Password <span class="req">*</span></label>
+                        <input id="f_password" type="password" name="password"
                             class="form-control @error('password') is-invalid @enderror" required>
                         @error('password')
                             <span class="invalid-feedback">{{ $message }}</span>
@@ -215,8 +215,8 @@
                         <span class="hint">At least 8 characters.</span>
                     </div>
                     <div>
-                        <label class="form-label">Confirm New Password <span class="req">*</span></label>
-                        <input type="password" name="password_confirmation" class="form-control" required>
+                        <label for="f_password_confirmation" class="form-label">Confirm New Password <span class="req">*</span></label>
+                        <input id="f_password_confirmation" type="password" name="password_confirmation" class="form-control" required>
                     </div>
                 </div>
             </div>

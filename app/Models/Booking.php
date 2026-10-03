@@ -514,6 +514,32 @@ class Booking extends Model
     ];
 
     /**
+     * Ang pinakamalayong petsang maaaring i-book ng BISITA — ang
+     * `max_advance_days` sa Admin → Settings. Dating ang chatbot lang ang
+     * bumabasa nito: sinasabi ni Elena ang limit pero walang validator na
+     * nagpapatupad. Para sa portal booking at sa reschedule ng bisita
+     * lang ito; hindi nililimitahan ang staff at admin.
+     */
+    public static function latestBookableDate(): \Carbon\Carbon
+    {
+        return today()->addDays(max(1, (int) Setting::get('max_advance_days', 365)));
+    }
+
+    /**
+     * Ang validation rule + mensahe para sa itaas, para iisa ang
+     * pananalita sa lahat ng guest-facing na validator.
+     */
+    public static function advanceLimitRule(): string
+    {
+        return 'before_or_equal:' . static::latestBookableDate()->toDateString();
+    }
+
+    public static function advanceLimitMessage(): string
+    {
+        return 'Bookings can only be made up to ' . static::latestBookableDate()->format('F j, Y') . '.';
+    }
+
+    /**
      * Kailangan ba ng slot na ito ng `slot_windows` na row bago maalok?
      */
     public static function slotRequiresWindow(string $slot): bool
@@ -922,6 +948,42 @@ class Booking extends Model
         }
 
         return $this->exactSlotKey();
+    }
+
+    /**
+     * "Day" / "Night" / "22 Hours" — ang ipinapakita sa bisita bilang
+     * kung ano ang binook niya. Null para sa legacy row na walang slot.
+     *
+     * Ito ang kapalit ng "{num_nights} night(s)" sa mga pahina ng bisita:
+     * `max(1, …)` ang num_nights, kaya "1 night" ang lumalabas kahit sa
+     * Day slot na 8AM–5PM.
+     */
+    public function getSlotNameAttribute(): ?string
+    {
+        $key = $this->slotKey();
+
+        return $key ? static::SLOTS[$key]['name'] : null;
+    }
+
+    /**
+     * "8:00 AM – 5:00 PM" mula sa NAKAIMBAK na oras, hindi sa
+     * SLOTS[...]['times'] — para tama pa rin ito sa isang stay na
+     * pinahaba ng extendStay(), na Night pa rin ang slot pero iba na
+     * ang checkout.
+     */
+    public function getStayHoursAttribute(): string
+    {
+        return $this->check_in_time_label . ' – ' . $this->check_out_time_label;
+    }
+
+    public function getCheckInTimeLabelAttribute(): string
+    {
+        return $this->checkInDateTime()->format('g:i A');
+    }
+
+    public function getCheckOutTimeLabelAttribute(): string
+    {
+        return $this->checkOutDateTime()->format('g:i A');
     }
 
     public function checkInDateTime(): \Carbon\Carbon

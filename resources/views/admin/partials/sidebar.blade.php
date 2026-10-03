@@ -24,6 +24,10 @@
                   title="Pending bookings awaiting action"
                   @if (! $pendingBookings) hidden @endif>{{ $pendingBookings }}</span>
         </a>
+        <a href="{{ route('admin.calendar.index') }}" class="nav-item-custom {{ request()->routeIs('admin.calendar.*') ? 'active' : '' }}">
+        <span class="nav-icon"><i class="bi bi-calendar3"></i></span>
+            Calendar
+        </a>
         <a href="{{ route('admin.properties.index') }}" class="nav-item-custom {{ request()->routeIs('admin.properties.*') ? 'active' : '' }}">
             <span class="nav-icon"><i class="bi bi-house-door"></i></span>
             Properties
@@ -58,10 +62,6 @@
         <a href="{{ route('admin.reviews.index') }}" class="nav-item-custom {{ request()->routeIs('admin.reviews.*') ? 'active' : '' }}">
             <span class="nav-icon"><i class="bi bi-star"></i></span>
             Reviews
-        </a>
-        <a href="{{ route('admin.calendar.index') }}" class="nav-item-custom {{ request()->routeIs('admin.calendar.*') ? 'active' : '' }}">
-        <span class="nav-icon"><i class="bi bi-calendar3"></i></span>
-            Calendar
         </a>
     </div>
 

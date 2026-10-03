@@ -205,7 +205,7 @@
                     <i class="bi bi-pencil"></i> Edit
                 </a>
                 <form method="POST" action="{{ route('customer.reviews.destroy', $review) }}"
-                    onsubmit="return confirm('Delete this review? This cannot be undone.');">
+                    data-confirm="Delete this review? This can't be undone." data-confirm-label="Delete">
                     @csrf
                     @method('DELETE')
                     <button type="submit" class="btn-delete"><i class="bi bi-trash"></i> Delete</button>

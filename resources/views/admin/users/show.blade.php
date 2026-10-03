@@ -9,9 +9,6 @@
         style="display:flex;align-items:center;gap:6px;text-decoration:none;font-size:13px;border:1px solid var(--border);padding:7px 14px;border-radius:9px;background:#fff;">
         <i class="bi bi-arrow-left"></i> Back
     </a>
-    <form method="POST" action="{{ route('logout') }}" class="m-0">
-        @csrf <button type="submit" class="logout-btn"><i class="bi bi-box-arrow-right"></i> Logout</button>
-    </form>
 @endsection
 
 @push('styles')
@@ -463,7 +460,7 @@
                                     <th>Booking Ref</th>
                                     <th>Property</th>
                                     <th>Check-in</th>
-                                    <th>Nights</th>
+                                    <th>Slot</th>
                                     <th>Total</th>
                                     <th>Status</th>
                                     <th>Payment</th>
@@ -482,7 +479,7 @@
                                         <td class="text-muted-theme" style="font-size: 14px;">
                                             {{ $booking->check_in_date->format('M d, Y') }}
                                         </td>
-                                        <td class="text-center">{{ $booking->num_nights }}</td>
+                                        <td class="text-center">{{ $booking->slot_name ?? '—' }}</td>
                                         <td class="fw-medium">₱{{ number_format($booking->total_amount, 2) }}</td>
                                         <td><span
                                                 class="status-badge s-{{ $booking->status }}">{{ ucfirst(str_replace('_', ' ', $booking->status)) }}</span>

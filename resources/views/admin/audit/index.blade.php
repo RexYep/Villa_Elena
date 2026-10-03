@@ -352,8 +352,8 @@
         <form method="GET" action="{{ route('admin.audit.index') }}">
             <div class="row g-2 align-items-end">
                 <div class="col-auto" style="min-width:210px;">
-                    <label class="form-label-sm">Action</label>
-                    <select name="action" class="form-select-sm">
+                    <label for="f_action" class="form-label-sm">Action</label>
+                    <select id="f_action" name="action" class="form-select-sm">
                         <option value="">All actions</option>
                         @foreach ($actions as $act)
                             <option value="{{ $act }}" @selected(request('action') === $act)>
@@ -364,8 +364,8 @@
                 </div>
 
                 <div class="col-auto" style="min-width:190px;">
-                    <label class="form-label-sm">Performed by</label>
-                    <select name="user_id" class="form-select-sm">
+                    <label for="f_user_id" class="form-label-sm">Performed by</label>
+                    <select id="f_user_id" name="user_id" class="form-select-sm">
                         <option value="">Anyone</option>
                         {{-- `0` is the sentinel for a NULL user_id; an empty
                              string already means "no filter". --}}
@@ -379,8 +379,8 @@
                 </div>
 
                 <div class="col-auto" style="min-width:150px;">
-                    <label class="form-label-sm">Record type</label>
-                    <select name="target_table" class="form-select-sm">
+                    <label for="f_target_table" class="form-label-sm">Record type</label>
+                    <select id="f_target_table" name="target_table" class="form-select-sm">
                         <option value="">Any record</option>
                         @foreach ($tables as $t)
                             <option value="{{ $t }}" @selected(request('target_table') === $t)>{{ $t }}</option>
@@ -389,24 +389,24 @@
                 </div>
 
                 <div class="col-auto" style="min-width:110px;">
-                    <label class="form-label-sm">Record ID</label>
-                    <input type="number" name="target_id" value="{{ request('target_id') }}"
+                    <label for="f_target_id" class="form-label-sm">Record ID</label>
+                    <input id="f_target_id" type="number" name="target_id" value="{{ request('target_id') }}"
                            class="form-control-sm" placeholder="e.g. 42">
                 </div>
 
                 <div class="col-auto" style="min-width:150px;">
-                    <label class="form-label-sm">From</label>
-                    <input type="date" name="from" value="{{ request('from') }}" class="form-control-sm">
+                    <label for="f_from" class="form-label-sm">From</label>
+                    <input id="f_from" type="date" name="from" value="{{ request('from') }}" class="form-control-sm">
                 </div>
 
                 <div class="col-auto" style="min-width:150px;">
-                    <label class="form-label-sm">To</label>
-                    <input type="date" name="to" value="{{ request('to') }}" class="form-control-sm">
+                    <label for="f_to" class="form-label-sm">To</label>
+                    <input id="f_to" type="date" name="to" value="{{ request('to') }}" class="form-control-sm">
                 </div>
 
                 <div class="col-auto" style="min-width:200px;">
-                    <label class="form-label-sm">Search description</label>
-                    <input type="text" name="q" value="{{ request('q') }}"
+                    <label for="f_q" class="form-label-sm">Search description</label>
+                    <input id="f_q" type="text" name="q" value="{{ request('q') }}"
                            class="form-control-sm" placeholder="booking ref, email…">
                 </div>
 

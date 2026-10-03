@@ -51,6 +51,12 @@
             font-weight: 600;
         }
 
+        .hero-date-time {
+            color: rgba(255, 255, 255, .75);
+            font-size: 14px;
+            margin-top: 2px;
+        }
+
         .hero-arrow {
             color: rgba(255, 255, 255, .3);
             font-size: 20px;
@@ -115,8 +121,9 @@
 
         .hero-nights-val {
             font-family: 'Playfair Display', serif;
-            font-size: 32px;
+            font-size: 26px;
             font-weight: 700;
+            white-space: nowrap;
         }
 
         .hero-nights-label {
@@ -437,7 +444,28 @@
             height: 160px;
             object-fit: cover;
             border-radius: 10px;
-            margin-bottom: 12px;
+            margin-bottom: 0;
+            display: block;
+        }
+
+        .btn-pay-now {
+            display: block;
+            background: #2c2416;
+            color: #fff;
+            border-radius: 10px;
+            padding: 13px;
+            text-align: center;
+            font-size: 14px;
+            font-weight: 600;
+            text-decoration: none;
+            margin-top: 14px;
+            transition: background-color .2s, color .2s;
+        }
+
+        .btn-pay-now:hover,
+        .btn-pay-now:focus-visible {
+            background: #b8943f;
+            color: #2c2416;
         }
 
         .cancelled-banner {
@@ -634,23 +662,28 @@
     <div class="booking-hero">
         <div class="hero-id">
             <div class="hero-ref">{{ $booking->booking_ref }}</div>
-            <div class="hero-sub">{{ $booking->property->property_name ?? '' }} ·
-                {{ ucfirst(str_replace('_', ' ', $booking->source)) }}</div>
+            <div class="hero-sub">{{ $booking->property->property_name ?? '' }}</div>
         </div>
         <div class="hero-stay">
             <div class="hero-dates">
                 <div class="hero-date-label">Check-in</div>
-                <div class="hero-date-val">{{ $booking->check_in_date->format('M d, Y') }}</div>
+                <div class="hero-date-val">{{ $booking->check_in_date->format('D, M d, Y') }}</div>
+                <div class="hero-date-time">{{ $booking->check_in_time_label }}</div>
             </div>
             <div class="hero-arrow">→</div>
             <div class="hero-dates">
                 <div class="hero-date-label">Check-out</div>
-                <div class="hero-date-val">{{ $booking->check_out_date->format('M d, Y') }}</div>
+                <div class="hero-date-val">{{ $booking->check_out_date->format('D, M d, Y') }}</div>
+                <div class="hero-date-time">{{ $booking->check_out_time_label }}</div>
             </div>
-            <div class="hero-nights">
-                <div class="hero-nights-val">{{ $booking->num_nights }}</div>
-                <div class="hero-nights-label">night{{ $booking->num_nights != 1 ? 's' : '' }}</div>
-            </div>
+            {{-- Ang slot, hindi "N nights": ang Day slot ay 8AM–5PM at
+                 "1 night" ang lumalabas dati. --}}
+            @if ($booking->slot_name)
+                <div class="hero-nights">
+                    <div class="hero-nights-val">{{ $booking->slot_name }}</div>
+                    <div class="hero-nights-label">slot</div>
+                </div>
+            @endif
         </div>
         <div class="hero-badges">
             <span class="badge b-{{ $booking->status }}">{{ ucfirst(str_replace('_', ' ', $booking->status)) }}</span>
@@ -713,19 +746,8 @@
                     <h3>Booking Details</h3>
                 </div>
                 <div class="card-body">
-                    <div class="info-row"><span class="lbl">Property</span><span
-                            class="val">{{ $booking->property->property_name ?? 'N/A' }}</span></div>
-                    <div class="info-row"><span class="lbl">Check-in</span><span
-                            class="val">{{ $booking->check_in_date->format('l, F j, Y') }}</span></div>
-                    <div class="info-row"><span class="lbl">Check-out</span><span
-                            class="val">{{ $booking->check_out_date->format('l, F j, Y') }}</span></div>
-                    <div class="info-row"><span class="lbl">Duration</span><span
-                            class="val">{{ $booking->num_nights }} night{{ $booking->num_nights != 1 ? 's' : '' }}</span>
-                    </div>
                     <div class="info-row"><span class="lbl">Guests</span><span class="val">{{ $booking->num_guests }}
                             guest{{ $booking->num_guests != 1 ? 's' : '' }}</span></div>
-                    <div class="info-row"><span class="lbl">Booking Source</span><span
-                            class="val">{{ ucfirst(str_replace('_', ' ', $booking->source)) }}</span></div>
                     <div class="info-row"><span class="lbl">Booked On</span><span
                             class="val">{{ $booking->created_at->format('M d, Y h:i A') }}</span></div>
                     @if ($booking->special_requests)
@@ -781,22 +803,14 @@
 
         {{-- Right --}}
         <div>
-            {{-- Property Image & Info --}}
-            <div class="card">
-                <div class="card-body">
-                    @if ($booking->property?->primaryImage)
+            {{-- Larawan ng villa. Ang pangalan ay nasa hero na sa itaas. --}}
+            @if ($booking->property?->primaryImage)
+                <div class="card">
+                    <div class="card-body">
                         <img src="{{ $booking->property->primaryImage->url }}" class="property-img" alt="">
-                    @endif
-                    <div style="font-weight:600;font-size:15px;font-family:'Playfair Display',serif;">
-                        {{ $booking->property->property_name ?? 'N/A' }}</div>
-                    @if ($booking->property)
-                        <div class="text-muted-theme" style="font-size: 14px;margin-top:4px;">
-                            {{ ucfirst($booking->property->type) }} ·
-                            Max {{ $booking->property->max_capacity }} guests
-                        </div>
-                    @endif
+                    </div>
                 </div>
-            </div>
+            @endif
 
             {{-- Price Summary --}}
             <div class="card">
@@ -804,8 +818,7 @@
                     <h3>Price Summary</h3>
                 </div>
                 <div class="card-body">
-                    <div class="price-row"><span class="text-muted-theme">Base
-                            ({{ $booking->num_nights }}n)</span><span>₱{{ number_format($booking->base_amount, 2) }}</span>
+                    <div class="price-row"><span class="text-muted-theme">{{ $booking->slot_name ? $booking->slot_name . ' rate' : 'Base rate' }}</span><span>₱{{ number_format($booking->base_amount, 2) }}</span>
                     </div>
                     @if ($booking->extras_amount > 0)
                         <div class="price-row"><span
@@ -826,12 +839,7 @@
                     @endif
 
                     @if ($booking->balance_due > 0 && !in_array($booking->status, ['cancelled', 'checked_out']))
-                        <a href="{{ route('payment.page', $booking) }}"
-                            style="display:block;background:#2c2416;color:#fff;border-radius:10px;padding:13px;
-                            text-align:center;font-size:14px;font-weight:600;text-decoration:none;
-                            margin-top:14px;transition:all .2s;"
-                            onmouseover="this.style.background='#b8943f';this.style.color='#2c2416'"
-                            onmouseout="this.style.background='#2c2416';this.style.color='#fff'">
+                        <a href="{{ route('payment.page', $booking) }}" class="btn-pay-now">
                             💳 Pay Now — ₱{{ number_format($booking->balance_due, 2) }}
                         </a>
                     @endif

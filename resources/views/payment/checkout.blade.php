@@ -107,6 +107,11 @@
             background: rgba(44, 36, 22, .04);
         }
 
+        .pay-option:focus-within {
+            outline: 2px solid #1d4ed8;
+            outline-offset: 2px;
+        }
+
         .pay-option input[type=radio] {
             position: absolute;
             opacity: 0;
@@ -359,11 +364,15 @@
             {{-- Booking Summary --}}
             <div style="margin-bottom:20px;">
                 <div class="summary-row"><span class="lbl">Check-in</span><span
-                        class="val">{{ $booking->check_in_date->format('M d, Y') }}</span></div>
+                        class="val">{{ $booking->check_in_date->format('M d, Y') }} ·
+                        {{ $booking->check_in_time_label }}</span></div>
                 <div class="summary-row"><span class="lbl">Check-out</span><span
-                        class="val">{{ $booking->check_out_date->format('M d, Y') }}</span></div>
-                <div class="summary-row"><span class="lbl">Duration</span><span class="val">{{ $booking->num_nights }}
-                        night{{ $booking->num_nights != 1 ? 's' : '' }}</span></div>
+                        class="val">{{ $booking->check_out_date->format('M d, Y') }} ·
+                        {{ $booking->check_out_time_label }}</span></div>
+                @if ($booking->slot_name)
+                    <div class="summary-row"><span class="lbl">Slot</span><span
+                            class="val">{{ $booking->slot_name }}</span></div>
+                @endif
                 <div class="summary-row total">
                     <span>Total</span><span>₱{{ number_format($booking->total_amount, 2) }}</span>
                 </div>
@@ -410,14 +419,16 @@
                     @else
                         <div class="payment-options">
                             <label class="pay-option selected" onclick="selectOption(this, 'deposit')">
-                                <input type="radio" name="_pay_opt" value="deposit" checked>
+                                <input type="radio" name="_pay_opt" value="deposit" checked
+                                    onchange="selectOption(this.closest('.pay-option'), 'deposit')">
                                 <div class="check-icon"><i class="bi bi-check"></i></div>
                                 <div class="pay-option-amount">₱{{ number_format($depositAmount, 2) }}</div>
                                 <div class="pay-option-label">Deposit</div>
                                 <div class="pay-option-badge">{{ $depositPct }}% of total</div>
                             </label>
                             <label class="pay-option" onclick="selectOption(this, 'full_payment')">
-                                <input type="radio" name="_pay_opt" value="full_payment">
+                                <input type="radio" name="_pay_opt" value="full_payment"
+                                    onchange="selectOption(this.closest('.pay-option'), 'full_payment')">
                                 <div class="check-icon"><i class="bi bi-check"></i></div>
                                 <div class="pay-option-amount">₱{{ number_format($booking->total_amount, 2) }}</div>
                                 <div class="pay-option-label">Full Payment</div>

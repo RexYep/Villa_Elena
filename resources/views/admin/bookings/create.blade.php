@@ -223,7 +223,7 @@
                             @enderror
                         </div>
                         <div class="mb-3">
-                            <label class="form-label">Check-in Date <span class="req">*</span></label>
+                            <label for="checkIn" class="form-label">Check-in Date <span class="req">*</span></label>
                             <input type="date" name="check_in_date" id="checkIn"
                                 class="form-control @error('check_in_date') is-invalid @enderror"
                                 value="{{ old('check_in_date') }}" min="{{ date('Y-m-d') }}" required>
@@ -261,8 +261,8 @@
                         </div>
                         <div class="two-col">
                             <div>
-                                <label class="form-label">Number of Guests <span class="req">*</span></label>
-                                <select name="num_guests"
+                                <label for="f_num_guests" class="form-label">Number of Guests <span class="req">*</span></label>
+                                <select id="f_num_guests" name="num_guests"
                                     class="form-select @error('num_guests') is-invalid @enderror" required>
                                     @for ($g = 1; $g <= ($villa->max_capacity ?? 1); $g++)
                                         <option value="{{ $g }}" {{ (int) old('num_guests', 1) === $g ? 'selected' : '' }}>
@@ -275,8 +275,8 @@
                                 @enderror
                             </div>
                             <div>
-                                <label class="form-label">Booking Source <span class="req">*</span></label>
-                                <select name="source" class="form-select" required>
+                                <label for="f_source" class="form-label">Booking Source <span class="req">*</span></label>
+                                <select id="f_source" name="source" class="form-select" required>
                                     <option value="walk_in" {{ old('source') == 'walk_in' ? 'selected' : '' }}>🚶 Walk-in
                                     </option>
                                     <option value="phone" {{ old('source') == 'phone' ? 'selected' : '' }}>📞 Phone</option>

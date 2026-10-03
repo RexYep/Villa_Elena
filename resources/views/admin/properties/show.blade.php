@@ -11,10 +11,6 @@
     <a href="{{ route('admin.properties.edit', $property) }}" class="btn-navy">
         <i class="bi bi-pencil"></i> Edit Property
     </a>
-    <form method="POST" action="{{ route('logout') }}" class="m-0">
-        @csrf
-        <button type="submit" class="logout-btn"><i class="bi bi-box-arrow-right"></i> Logout</button>
-    </form>
 @endsection
 
 @push('styles')
@@ -745,23 +741,23 @@
                         <form method="POST" action="{{ route('admin.properties.block', $property) }}">
                             @csrf
                             <div class="mb-12">
-                                <label
+                                <label for="f_start_date"
                                     style="font-size: 13px; font-weight:600; color:#374151; display:block; margin-bottom:5px;">Start
                                     Date</label>
-                                <input type="date" name="start_date" required min="{{ date('Y-m-d') }}"
+                                <input id="f_start_date" type="date" name="start_date" required min="{{ date('Y-m-d') }}"
                                     style="width:100%; border:1.5px solid var(--border); border-radius:8px; padding:9px 12px; font-size:13px; font-family:'DM Sans',sans-serif;">
                             </div>
                             <div class="mb-12">
-                                <label
+                                <label for="f_end_date"
                                     style="font-size: 13px; font-weight:600; color:#374151; display:block; margin-bottom:5px;">End
                                     Date</label>
-                                <input type="date" name="end_date" required min="{{ date('Y-m-d') }}"
+                                <input id="f_end_date" type="date" name="end_date" required min="{{ date('Y-m-d') }}"
                                     style="width:100%; border:1.5px solid var(--border); border-radius:8px; padding:9px 12px; font-size:13px; font-family:'DM Sans',sans-serif;">
                             </div>
                             <div class="mb-12">
-                                <label
+                                <label for="f_reason"
                                     style="font-size: 13px; font-weight:600; color:#374151; display:block; margin-bottom:5px;">Reason</label>
-                                <select name="reason" required
+                                <select id="f_reason" name="reason" required
                                     style="width:100%; border:1.5px solid var(--border); border-radius:8px; padding:9px 12px; font-size:13px; font-family:'DM Sans',sans-serif; background:#fff;">
                                     <option value="maintenance">Maintenance</option>
                                     <option value="owner_use">Owner Use</option>
@@ -770,10 +766,10 @@
                                 </select>
                             </div>
                             <div style="margin-bottom:14px;">
-                                <label
+                                <label for="f_notes"
                                     style="font-size: 13px; font-weight:600; color:#374151; display:block; margin-bottom:5px;">Notes
                                     <span class="text-muted-theme" style="font-weight:400;">(optional)</span></label>
-                                <input type="text" name="notes" placeholder="e.g. Repainting the walls"
+                                <input id="f_notes" type="text" name="notes" placeholder="e.g. Repainting the walls"
                                     style="width:100%; border:1.5px solid var(--border); border-radius:8px; padding:9px 12px; font-size:13px; font-family:'DM Sans',sans-serif;">
                             </div>
                             <button type="submit" class="btn-navy" style="width:100%; justify-content:center;">
@@ -877,10 +873,12 @@
         // hugis na may babala na sa index.blade.php ng pahinang ito.
         // Kasama rin ang fallback sa pangalan: NULL ang property_name ng bawat
         // room row, at ang room lang naman ang nabubura ngayon.
-        function confirmDelete() {
+        async function confirmDelete() {
             const name = {{ Illuminate\Support\Js::from($property->property_name ?: 'Untitled ' . $property->type) }};
 
-            if (confirm(`Are you sure you want to delete "${name}"? This cannot be undone.`)) {
+            if (await confirmDialog(`Delete "${name}"? This can't be undone.`, {
+                    confirmLabel: 'Delete'
+                })) {
                 document.getElementById('deleteForm').submit();
             }
         }

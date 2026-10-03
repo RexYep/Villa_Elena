@@ -558,6 +558,12 @@
             margin-top: 8px;
         }
 
+        a.btn-book-link {
+            display: block;
+            text-align: center;
+            text-decoration: none;
+        }
+
         .btn-book-now:hover {
             background: var(--gold);
             color: var(--stone);
@@ -843,7 +849,7 @@
     <div class="breadcrumb-row">
         <a href="{{ route('home') }}">Home</a>
         <span>›</span>
-        <a href="{{ route('home') }}#properties">Properties</a>
+        <a href="{{ route('home') }}#properties">The Villa</a>
         <span>›</span>
         <span style="color:var(--stone);font-weight:500;">{{ $property->property_name }}</span>
     </div>
@@ -893,7 +899,7 @@
         {{-- Left: Property Info --}}
         <div>
             @if ($property->description)
-                <div class="section-title">About This Property</div>
+                <div class="section-title">About the Villa</div>
                 <p class="description">{{ $property->description }}</p>
             @endif
 
@@ -991,9 +997,10 @@
 
                     <form method="GET" action="{{ route('portal.book', $property) }}" id="bookingForm">
                         <div class="mb-12">
-                            <label class="form-label">Check-in Date</label>
+                            <label for="checkin" class="form-label">Check-in Date</label>
                             <input type="date" name="checkin" id="checkin" class="form-control"
-                                value="{{ $checkin }}" min="{{ date('Y-m-d') }}" required>
+                                value="{{ $checkin }}" min="{{ date('Y-m-d') }}"
+                                max="{{ \App\Models\Booking::latestBookableDate()->toDateString() }}" required>
                         </div>
                         <div class="mb-12">
                             <label class="form-label">Choose Your Slot</label>
@@ -1032,8 +1039,8 @@
                             <div id="durationNote" class="duration-note"></div>
                         </div>
                         <div class="mb-3">
-                            <label class="form-label">Guests</label>
-                            <select name="guests" class="form-select">
+                            <label for="f_guests" class="form-label">Guests</label>
+                            <select id="f_guests" name="guests" class="form-select">
                                 @for ($g = 1; $g <= $property->max_capacity; $g++)
                                     <option value="{{ $g }}" {{ (int) $guests === $g ? 'selected' : '' }}>
                                         {{ $g }} guest{{ $g > 1 ? 's' : '' }}
@@ -1067,9 +1074,9 @@
                                 Reserve Now →
                             </button>
                         @else
-                            <button type="button" class="btn-book-now" onclick="window.location='{{ route('login') }}'">
+                            <a href="{{ route('login') }}" class="btn-book-now btn-book-link">
                                 Sign In to Book
-                            </button>
+                            </a>
                             <div class="login-prompt">
                                 Don't have an account?
                                 <a href="{{ route('register') }}">Create one free →</a>
@@ -1079,8 +1086,8 @@
                 @elseif ($property->status === 'maintenance')
                     <div class="unavail-banner">
                         <i class="bi bi-x-circle me-2"></i>
-                        This property is currently unavailable.<br>
-                        <a href="{{ route('home') }}" style="color:#dc2626;font-weight:600;">View other properties →</a>
+                        The villa is currently unavailable.<br>
+                        <a href="{{ route('home') }}" style="color:#dc2626;font-weight:600;">Back to home →</a>
                     </div>
                 @else
                     <div class="unavail-banner">

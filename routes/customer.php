@@ -67,14 +67,3 @@ Route::prefix('my')
     Route::put('profile/email-notifications', [ProfileController::class, 'toggleEmailNotifications'])->name('profile.email-notifications');
 
 });
-
-// ════════════════════════════════════════════════════════════════
-//  routes/web.php  — ADD these public routes (no auth needed)
-//  Paste BEFORE the auth routes section
-// ════════════════════════════════════════════════════════════════
-
-// Route::get('/',                [App\Http\Controllers\Portal\PortalController::class, 'home'])->name('home');
-// Route::get('properties',       [App\Http\Controllers\Portal\PortalController::class, 'properties'])->name('portal.properties');
-// Route::get('properties/{property}', [App\Http\Controllers\Portal\PortalController::class, 'propertyDetail'])->name('portal.property');
-// Route::get('book/{property}',  [App\Http\Controllers\Portal\PortalController::class, 'bookingForm'])->name('portal.book');
-// Route::post('book/{property}', [App\Http\Controllers\Portal\PortalController::class, 'submitBooking'])->name('portal.book.submit');

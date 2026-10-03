@@ -277,12 +277,6 @@ class BookingController extends Controller
         return view('admin.bookings.show', compact('booking'));
     }
 
-    // ── Show Edit Form ─────────────────────────────────────────────
-    public function edit(Booking $booking)
-    {
-        return view('admin.bookings.edit', compact('booking'));
-    }
-
     // ── Update Booking ─────────────────────────────────────────────
     public function update(Request $request, Booking $booking)
     {

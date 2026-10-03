@@ -6,6 +6,7 @@
 
 use App\Http\Controllers\Staff\FrontDeskController;
 use App\Http\Controllers\Staff\HousekeepingController;
+use App\Http\Controllers\Staff\ProfileController;
 use Illuminate\Support\Facades\Route;
 
 Route::prefix('staff')
@@ -54,5 +55,12 @@ Route::prefix('staff')
             ->name('reports.store');
         Route::patch('/reports/{report}/start', [HousekeepingController::class, 'startReport'])->name('reports.start');
         Route::patch('/reports/{report}/complete', [HousekeepingController::class, 'completeReport'])->name('reports.complete');
+
+        // My Account — sariling pangalan, numero at password ng staff.
+        Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
+        Route::put('/profile', [ProfileController::class, 'update'])->name('profile.update');
+        Route::put('/profile/password', [ProfileController::class, 'updatePassword'])
+            ->middleware('throttle:6,1,staff-password')
+            ->name('profile.password');
 
     });

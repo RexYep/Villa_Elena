@@ -95,8 +95,8 @@
                 </div>
                 <div class="form-card-body">
                     <div class="mb-3">
-                        <label class="form-label">Full Name <span class="req">*</span></label>
-                        <input type="text" name="full_name" class="form-control @error('full_name') is-invalid @enderror"
+                        <label for="f_full_name" class="form-label">Full Name <span class="req">*</span></label>
+                        <input id="f_full_name" type="text" name="full_name" class="form-control @error('full_name') is-invalid @enderror"
                             value="{{ old('full_name', $user->full_name ?? '') }}" placeholder="Juan dela Cruz" required>
                         @error('full_name')
                             <span class="invalid-feedback">{{ $message }}</span>
@@ -104,16 +104,16 @@
                     </div>
                     <div class="two-col mb-3">
                         <div>
-                            <label class="form-label">Email Address <span class="req">*</span></label>
-                            <input type="email" name="email" class="form-control @error('email') is-invalid @enderror"
+                            <label for="f_email" class="form-label">Email Address <span class="req">*</span></label>
+                            <input id="f_email" type="email" name="email" class="form-control @error('email') is-invalid @enderror"
                                 value="{{ old('email', $user->email ?? '') }}" placeholder="guest@example.com" required>
                             @error('email')
                                 <span class="invalid-feedback">{{ $message }}</span>
                             @enderror
                         </div>
                         <div>
-                            <label class="form-label">Phone Number <span class="req">*</span></label>
-                            <input type="text" name="phone" class="form-control @error('phone') is-invalid @enderror"
+                            <label for="f_phone" class="form-label">Phone Number <span class="req">*</span></label>
+                            <input id="f_phone" type="text" name="phone" class="form-control @error('phone') is-invalid @enderror"
                                 value="{{ old('phone', $user->phone ?? '') }}" placeholder="09XX-XXX-XXXX" required>
                             @error('phone')
                                 <span class="invalid-feedback">{{ $message }}</span>
@@ -121,8 +121,8 @@
                         </div>
                     </div>
                     <div>
-                        <label class="form-label">Role <span class="req">*</span></label>
-                        <select name="role" class="form-select @error('role') is-invalid @enderror" required>
+                        <label for="f_role" class="form-label">Role <span class="req">*</span></label>
+                        <select id="f_role" name="role" class="form-select @error('role') is-invalid @enderror" required>
                             <option value="customer"
                                 {{ old('role', $user->role ?? 'customer') == 'customer' ? 'selected' : '' }}>👤 Guest
                                 (Customer)</option>
@@ -146,8 +146,8 @@
                 </div>
                 <div class="form-card-body">
                     <div>
-                        <label class="form-label">Home Address</label>
-                        <textarea name="address" class="form-control" rows="2" placeholder="Full home address">{{ old('address', $user->address ?? '') }}</textarea>
+                        <label for="f_address" class="form-label">Home Address</label>
+                        <textarea id="f_address" name="address" class="form-control" rows="2" placeholder="Full home address">{{ old('address', $user->address ?? '') }}</textarea>
                     </div>
                 </div>
             </div>

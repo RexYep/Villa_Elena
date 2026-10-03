@@ -69,3 +69,27 @@
     width: auto;
     vertical-align: -0.22em;
 }
+
+/* Keyboard focus — a fallback for every link and button that has no focus
+ * style of its own. `:where()` keeps specificity at zero, so any section or
+ * page rule still wins. Dark sidebars (admin, staff) switch the colour:
+ * blue on --stone is about 2:1. */
+:where(a, button, summary, [role="button"]):focus-visible {
+    outline: 2px solid #1d4ed8;
+    outline-offset: 2px;
+}
+.sidebar :where(a, button):focus-visible {
+    outline-color: var(--gold-light);
+}
+
+/* Guests who ask their system for less motion get none of the decorative
+ * kind. Durations are shortened rather than removed so `transitionend` /
+ * `animationend` listeners still fire. */
+@media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+        animation-duration: .01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: .01ms !important;
+        scroll-behavior: auto !important;
+    }
+}

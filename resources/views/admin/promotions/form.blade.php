@@ -158,8 +158,8 @@
                 </div>
                 <div class="form-card-body">
                     <div class="mb-3">
-                        <label class="form-label">Promo name <span class="req">*</span></label>
-                        <input type="text" name="label" class="form-control @error('label') is-invalid @enderror"
+                        <label for="f_label" class="form-label">Promo name <span class="req">*</span></label>
+                        <input id="f_label" type="text" name="label" class="form-control @error('label') is-invalid @enderror"
                             value="{{ old('label', $promo->label) }}" placeholder="e.g. Rainy Season Special" required>
                         <span class="hint">This is the headline guests see on the landing page and in their notification.</span>
                         @error('label') <div class="invalid-feedback">{{ $message }}</div> @enderror
@@ -183,8 +183,8 @@
                     </div>
 
                     <div class="mb-3">
-                        <label class="form-label">Short description</label>
-                        <input type="text" name="description" class="form-control @error('description') is-invalid @enderror"
+                        <label for="f_description" class="form-label">Short description</label>
+                        <input id="f_description" type="text" name="description" class="form-control @error('description') is-invalid @enderror"
                             value="{{ old('description', $promo->description) }}"
                             placeholder="e.g. Book any weekday night this August and save.">
                         <span class="hint">One line, shown under the promo name. Optional.</span>
@@ -202,7 +202,7 @@
                 <div class="form-card-body">
                     <div class="two-col mb-3">
                         <div>
-                            <label class="form-label">Type <span class="req">*</span></label>
+                            <label for="promoType" class="form-label">Type <span class="req">*</span></label>
                             <select name="type" id="promoType" class="form-select @error('type') is-invalid @enderror" required>
                                 <option value="percentage" {{ old('type', $promo->type) === 'percentage' ? 'selected' : '' }}>Percentage off</option>
                                 <option value="fixed" {{ old('type', $promo->type) === 'fixed' ? 'selected' : '' }}>Fixed peso amount off</option>
@@ -210,7 +210,7 @@
                             @error('type') <div class="invalid-feedback">{{ $message }}</div> @enderror
                         </div>
                         <div>
-                            <label class="form-label">Value <span class="req">*</span></label>
+                            <label for="promoValue" class="form-label">Value <span class="req">*</span></label>
                             <input type="number" step="0.01" min="0.01" name="value" id="promoValue"
                                 class="form-control @error('value') is-invalid @enderror"
                                 value="{{ old('value', $promo->value ?? \App\Models\Discount::DEFAULT_PERCENTAGE) }}" required>
@@ -259,16 +259,16 @@
                                 : $today;
                         @endphp
                         <div>
-                            <label class="form-label">Starts</label>
-                            <input type="date" name="start_date" min="{{ $startMin }}"
+                            <label for="f_start_date" class="form-label">Starts</label>
+                            <input id="f_start_date" type="date" name="start_date" min="{{ $startMin }}"
                                 class="form-control @error('start_date') is-invalid @enderror"
                                 value="{{ old('start_date', $promo->start_date?->format('Y-m-d')) }}">
                             <span class="hint">Leave blank to start immediately. Can't be set to a past date.</span>
                             @error('start_date') <div class="invalid-feedback">{{ $message }}</div> @enderror
                         </div>
                         <div>
-                            <label class="form-label">Ends</label>
-                            <input type="date" name="expiry_date" min="{{ $today }}"
+                            <label for="f_expiry_date" class="form-label">Ends</label>
+                            <input id="f_expiry_date" type="date" name="expiry_date" min="{{ $today }}"
                                 class="form-control @error('expiry_date') is-invalid @enderror"
                                 value="{{ old('expiry_date', $promo->expiry_date?->format('Y-m-d')) }}">
                             <span class="hint">Inclusive — a promo ending Aug 31 still covers an Aug 31 check-in. Blank = no end date.</span>
@@ -278,8 +278,8 @@
 
                     <div class="two-col">
                         <div>
-                            <label class="form-label">Slot <span class="req">*</span></label>
-                            <select name="applies_to" class="form-select @error('applies_to') is-invalid @enderror" required>
+                            <label for="f_applies_to" class="form-label">Slot <span class="req">*</span></label>
+                            <select id="f_applies_to" name="applies_to" class="form-select @error('applies_to') is-invalid @enderror" required>
                                 {{-- Hinahango sa Booking::SLOTS: ang isang bagong slot ay lumilitaw
                                      dito nang mag-isa. Kasama ang mga slot na wala pang presyo —
                                      ang isang promo ay maaaring ihanda nang mas maaga pa sa
@@ -293,8 +293,8 @@
                             @error('applies_to') <div class="invalid-feedback">{{ $message }}</div> @enderror
                         </div>
                         <div>
-                            <label class="form-label">Booking limit</label>
-                            <input type="number" min="1" name="usage_limit"
+                            <label for="f_usage_limit" class="form-label">Booking limit</label>
+                            <input id="f_usage_limit" type="number" min="1" name="usage_limit"
                                 class="form-control @error('usage_limit') is-invalid @enderror"
                                 value="{{ old('usage_limit', $promo->usage_limit) }}" placeholder="Unlimited">
                             <span class="hint">
@@ -311,7 +311,7 @@
                          REGULAR na customer. --}}
                     <div class="two-col" style="margin-top:14px;">
                         <div>
-                            <label class="form-label">Who gets this <span class="req">*</span></label>
+                            <label for="guestScope" class="form-label">Who gets this <span class="req">*</span></label>
                             <select name="guest_scope" id="guestScope"
                                 class="form-select @error('guest_scope') is-invalid @enderror" required>
                                 <option value="all"
@@ -324,7 +324,7 @@
                             @error('guest_scope') <div class="invalid-feedback">{{ $message }}</div> @enderror
                         </div>
                         <div id="minStaysWrap">
-                            <label class="form-label">Completed stays needed</label>
+                            <label for="minStays" class="form-label">Completed stays needed</label>
                             <input type="number" min="1" max="50" name="min_completed_bookings" id="minStays"
                                 class="form-control @error('min_completed_bookings') is-invalid @enderror"
                                 value="{{ old('min_completed_bookings', $promo->min_completed_bookings ?? 1) }}">

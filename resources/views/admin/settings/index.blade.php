@@ -420,31 +420,31 @@
                         </div>
                         <div class="settings-card-body">
                             <div class="mb-16">
-                                <label class="form-label">Resort Name <span class="req">*</span></label>
-                                <input type="text" name="resort_name" class="form-control"
+                                <label for="f_resort_name" class="form-label">Resort Name <span class="req">*</span></label>
+                                <input id="f_resort_name" type="text" name="resort_name" class="form-control"
                                     value="{{ $settings['resort_name'] ?? 'Villa Elena Private Rental Resort' }}" required>
                             </div>
                             <div class="two-col mb-16">
                                 <div>
-                                    <label class="form-label">Email Address <span class="req">*</span></label>
-                                    <input type="email" name="resort_email" class="form-control"
+                                    <label for="f_resort_email" class="form-label">Email Address <span class="req">*</span></label>
+                                    <input id="f_resort_email" type="email" name="resort_email" class="form-control"
                                         value="{{ $settings['resort_email'] ?? '' }}" required>
                                 </div>
                                 <div>
-                                    <label class="form-label">Phone Number <span class="req">*</span></label>
-                                    <input type="text" name="resort_phone" class="form-control"
+                                    <label for="f_resort_phone" class="form-label">Phone Number <span class="req">*</span></label>
+                                    <input id="f_resort_phone" type="text" name="resort_phone" class="form-control"
                                         value="{{ $settings['resort_phone'] ?? '' }}" required>
                                 </div>
                             </div>
                             <div class="mb-16">
-                                <label class="form-label">Full Address</label>
-                                <input type="text" name="resort_address" class="form-control"
+                                <label for="f_resort_address" class="form-label">Full Address</label>
+                                <input id="f_resort_address" type="text" name="resort_address" class="form-control"
                                     value="{{ $settings['resort_address'] ?? '' }}"
                                     placeholder="e.g. Calamba, Laguna, Philippines">
                             </div>
                             <div>
-                                <label class="form-label">Resort Description</label>
-                                <textarea name="resort_description" class="form-control" rows="4"
+                                <label for="f_resort_description" class="form-label">Resort Description</label>
+                                <textarea id="f_resort_description" name="resort_description" class="form-control" rows="4"
                                     placeholder="Brief description shown on the booking portal...">{{ $settings['resort_description'] ?? '' }}</textarea>
                                 <span class="hint">Shown on the guest-facing booking page.</span>
                             </div>
@@ -460,44 +460,31 @@
                                     class="bi bi-calendar-check"></i></div>
                             <div>
                                 <h3>Booking Rules</h3>
-                                <p>Check-in/out times, stay limits, and hold settings</p>
+                                <p>Advance-booking limit, hold time, and cooldown settings</p>
                             </div>
                         </div>
                         <div class="settings-card-body">
+                            {{-- Walang Check-in/Check-out Time o Minimum Stay
+                                 dito: ang oras ay nakapirmi sa mga slot
+                                 (Booking::SLOTS), at walang bumabasa sa mga
+                                 dating field na iyon. --}}
                             <div class="two-col mb-16">
                                 <div>
-                                    <label class="form-label">Check-in Time</label>
-                                    <input type="time" name="check_in_time" class="form-control"
-                                        value="{{ $settings['check_in_time'] ?? '14:00' }}">
-                                </div>
-                                <div>
-                                    <label class="form-label">Check-out Time</label>
-                                    <input type="time" name="check_out_time" class="form-control"
-                                        value="{{ $settings['check_out_time'] ?? '12:00' }}">
-                                </div>
-                            </div>
-                            <div class="two-col mb-16">
-                                <div>
-                                    <label class="form-label">Minimum Stay (nights)</label>
-                                    <input type="number" name="min_stay_nights" class="form-control"
-                                        value="{{ $settings['min_stay_nights'] ?? '1' }}" min="1">
-                                    <span class="hint">Guests cannot book fewer nights than this.</span>
-                                </div>
-                                <div>
-                                    <label class="form-label">Max Advance Booking (days)</label>
-                                    <input type="number" name="max_advance_days" class="form-control"
+                                    <label for="f_max_advance_days" class="form-label">Max Advance Booking (days)</label>
+                                    <input id="f_max_advance_days" type="number" name="max_advance_days" class="form-control"
                                         value="{{ $settings['max_advance_days'] ?? '365' }}" min="1">
-                                    <span class="hint">How far ahead guests can make reservations.</span>
+                                    <span class="hint">How far ahead guests can book or reschedule online. Staff
+                                        and admin bookings are not limited.</span>
                                 </div>
-                            </div>
-                            <div class="two-col mb-16">
                                 <div>
-                                    <label class="form-label">Booking Hold (minutes)</label>
-                                    <input type="number" name="booking_hold_minutes" class="form-control"
+                                    <label for="f_booking_hold_minutes" class="form-label">Booking Hold (minutes)</label>
+                                    <input id="f_booking_hold_minutes" type="number" name="booking_hold_minutes" class="form-control"
                                         value="{{ $settings['booking_hold_minutes'] ?? '15' }}" min="1">
                                     <span class="hint">Time a pending booking reserves the property before
                                         expiring.</span>
                                 </div>
+                            </div>
+                            <div class="two-col mb-16">
                                 <div>
                                     {{-- Dating may "Cancellation Window (hours)" na
                                          field dito. Walang ipinapatupad ang
@@ -515,23 +502,23 @@
                             </div>
                             <div class="two-col mb-16">
                                 <div>
-                                    <label class="form-label">Auto-Cancel Threshold</label>
-                                    <input type="number" name="booking_cooldown_threshold" class="form-control"
+                                    <label for="f_booking_cooldown_threshold" class="form-label">Auto-Cancel Threshold</label>
+                                    <input id="f_booking_cooldown_threshold" type="number" name="booking_cooldown_threshold" class="form-control"
                                         value="{{ $settings['booking_cooldown_threshold'] ?? '3' }}" min="1">
                                     <span class="hint">Unpaid auto-cancelled bookings within the window below that
                                         trigger a booking cooldown.</span>
                                 </div>
                                 <div>
-                                    <label class="form-label">Auto-Cancel Lookback (days)</label>
-                                    <input type="number" name="booking_cooldown_window_days" class="form-control"
+                                    <label for="f_booking_cooldown_window_days" class="form-label">Auto-Cancel Lookback (days)</label>
+                                    <input id="f_booking_cooldown_window_days" type="number" name="booking_cooldown_window_days" class="form-control"
                                         value="{{ $settings['booking_cooldown_window_days'] ?? '30' }}" min="1">
                                     <span class="hint">How far back to count auto-cancelled bookings.</span>
                                 </div>
                             </div>
                             <div class="two-col mb-16">
                                 <div>
-                                    <label class="form-label">Booking Cooldown (hours)</label>
-                                    <input type="number" name="booking_cooldown_hours" class="form-control"
+                                    <label for="f_booking_cooldown_hours" class="form-label">Booking Cooldown (hours)</label>
+                                    <input id="f_booking_cooldown_hours" type="number" name="booking_cooldown_hours" class="form-control"
                                         value="{{ $settings['booking_cooldown_hours'] ?? '24' }}" min="1">
                                     <span class="hint">How long a guest is blocked from booking again after hitting
                                         the threshold.</span>
@@ -553,16 +540,16 @@
                         <div class="settings-card-body">
                             <div class="two-col mb-16">
                                 <div>
-                                    <label class="form-label">History Window (days)</label>
-                                    <input type="number" name="prescriptive_lookback_days" class="form-control"
+                                    <label for="f_prescriptive_lookback_days" class="form-label">History Window (days)</label>
+                                    <input id="f_prescriptive_lookback_days" type="number" name="prescriptive_lookback_days" class="form-control"
                                         value="{{ $settings['prescriptive_lookback_days'] ?? '180' }}" min="30"
                                         max="730">
                                     <span class="hint">How far back fill rates are measured. Longer is steadier but
                                         slower to notice a change in demand.</span>
                                 </div>
                                 <div>
-                                    <label class="form-label">Planning Horizon (days)</label>
-                                    <input type="number" name="prescriptive_lookahead_days" class="form-control"
+                                    <label for="f_prescriptive_lookahead_days" class="form-label">Planning Horizon (days)</label>
+                                    <input id="f_prescriptive_lookahead_days" type="number" name="prescriptive_lookahead_days" class="form-control"
                                         value="{{ $settings['prescriptive_lookahead_days'] ?? '45' }}" min="7"
                                         max="180">
                                     <span class="hint">How far ahead promo recommendations look.</span>
@@ -570,16 +557,16 @@
                             </div>
                             <div class="two-col mb-16">
                                 <div>
-                                    <label class="form-label">Idle Threshold (%)</label>
-                                    <input type="number" name="prescriptive_idle_threshold" class="form-control"
+                                    <label for="f_prescriptive_idle_threshold" class="form-label">Idle Threshold (%)</label>
+                                    <input id="f_prescriptive_idle_threshold" type="number" name="prescriptive_idle_threshold" class="form-control"
                                         value="{{ $settings['prescriptive_idle_threshold'] ?? '35' }}" min="1"
                                         max="99" step="1">
                                     <span class="hint">A date is only considered weak — and worth discounting — if its
                                         historical fill rate is below this.</span>
                                 </div>
                                 <div>
-                                    <label class="form-label">Discount Response</label>
-                                    <input type="number" name="prescriptive_elasticity" class="form-control"
+                                    <label for="f_prescriptive_elasticity" class="form-label">Discount Response</label>
+                                    <input id="f_prescriptive_elasticity" type="number" name="prescriptive_elasticity" class="form-control"
                                         value="{{ $settings['prescriptive_elasticity'] ?? '1.5' }}" min="0"
                                         max="10" step="0.1">
                                     <span class="hint"><strong>This is an assumption, not a measurement.</strong>
@@ -590,15 +577,15 @@
                             </div>
                             <div class="two-col mb-16">
                                 <div>
-                                    <label class="form-label">Maximum Discount (%)</label>
-                                    <input type="number" name="prescriptive_max_discount" class="form-control"
+                                    <label for="f_prescriptive_max_discount" class="form-label">Maximum Discount (%)</label>
+                                    <input id="f_prescriptive_max_discount" type="number" name="prescriptive_max_discount" class="form-control"
                                         value="{{ $settings['prescriptive_max_discount'] ?? '20' }}" min="1"
                                         max="50" step="1">
                                     <span class="hint">The engine will never recommend a promo deeper than this.</span>
                                 </div>
                                 <div>
-                                    <label class="form-label">Minimum Worth (₱)</label>
-                                    <input type="number" name="prescriptive_min_impact" class="form-control"
+                                    <label for="f_prescriptive_min_impact" class="form-label">Minimum Worth (₱)</label>
+                                    <input id="f_prescriptive_min_impact" type="number" name="prescriptive_min_impact" class="form-control"
                                         value="{{ $settings['prescriptive_min_impact'] ?? '500' }}" min="0"
                                         step="100">
                                     <span class="hint">Recommendations projected to be worth less than this are not
@@ -607,16 +594,16 @@
                             </div>
                             <div class="two-col mb-16">
                                 <div>
-                                    <label class="form-label">Maintenance Window (days)</label>
-                                    <input type="number" name="prescriptive_maintenance_days" class="form-control"
+                                    <label for="f_prescriptive_maintenance_days" class="form-label">Maintenance Window (days)</label>
+                                    <input id="f_prescriptive_maintenance_days" type="number" name="prescriptive_maintenance_days" class="form-control"
                                         value="{{ $settings['prescriptive_maintenance_days'] ?? '2' }}" min="1"
                                         max="14">
                                     <span class="hint">How many consecutive days the villa needs when it closes for
                                         maintenance.</span>
                                 </div>
                                 <div>
-                                    <label class="form-label">Peak Threshold (%)</label>
-                                    <input type="number" name="prescriptive_peak_threshold" class="form-control"
+                                    <label for="f_prescriptive_peak_threshold" class="form-label">Peak Threshold (%)</label>
+                                    <input id="f_prescriptive_peak_threshold" type="number" name="prescriptive_peak_threshold" class="form-control"
                                         value="{{ $settings['prescriptive_peak_threshold'] ?? '60' }}" min="1"
                                         max="100" step="1">
                                     <span class="hint">A date is only considered strong enough to charge more for if
@@ -625,8 +612,8 @@
                             </div>
                             <div class="two-col mb-16">
                                 <div>
-                                    <label class="form-label">Peak Discount Response</label>
-                                    <input type="number" name="prescriptive_peak_elasticity" class="form-control"
+                                    <label for="f_prescriptive_peak_elasticity" class="form-label">Peak Discount Response</label>
+                                    <input id="f_prescriptive_peak_elasticity" type="number" name="prescriptive_peak_elasticity" class="form-control"
                                         value="{{ $settings['prescriptive_peak_elasticity'] ?? '0.6' }}" min="0"
                                         max="10" step="0.1">
                                     <span class="hint">Elasticity for <strong>busy</strong> dates, kept separate on
@@ -635,8 +622,8 @@
                                         above, no price increase is ever recommended.</span>
                                 </div>
                                 <div>
-                                    <label class="form-label">Maximum Increase (%)</label>
-                                    <input type="number" name="prescriptive_max_increase" class="form-control"
+                                    <label for="f_prescriptive_max_increase" class="form-label">Maximum Increase (%)</label>
+                                    <input id="f_prescriptive_max_increase" type="number" name="prescriptive_max_increase" class="form-control"
                                         value="{{ $settings['prescriptive_max_increase'] ?? '20' }}" min="1"
                                         max="100" step="1">
                                     <span class="hint">The engine will never recommend raising a rate by more than
@@ -677,41 +664,20 @@
                             <div class="icon tag-amber"><i class="bi bi-credit-card"></i></div>
                             <div>
                                 <h3>Payment Settings</h3>
-                                <p>Currency, deposit, and tax configuration</p>
+                                <p>Deposit required to confirm a booking</p>
                             </div>
                         </div>
                         <div class="settings-card-body">
-                            <div class="three-col mb-16">
+                            {{-- Walang Currency o Tax dito: PHP lang ang
+                                 sinisingil ng PayMongo, at walang kuwentang
+                                 gumagamit ng tax. --}}
+                            <div class="two-col mb-16">
                                 <div>
-                                    <label class="form-label">Currency</label>
-                                    <select name="currency" class="form-select">
-                                        <option value="PHP"
-                                            {{ ($settings['currency'] ?? 'PHP') === 'PHP' ? 'selected' : '' }}>PHP —
-                                            Philippine Peso</option>
-                                        <option value="USD"
-                                            {{ ($settings['currency'] ?? '') === 'USD' ? 'selected' : '' }}>USD — US Dollar
-                                        </option>
-                                        <option value="EUR"
-                                            {{ ($settings['currency'] ?? '') === 'EUR' ? 'selected' : '' }}>EUR — Euro
-                                        </option>
-                                        <option value="SGD"
-                                            {{ ($settings['currency'] ?? '') === 'SGD' ? 'selected' : '' }}>SGD — Singapore
-                                            Dollar</option>
-                                    </select>
-                                </div>
-                                <div>
-                                    <label class="form-label">Deposit Percentage (%)</label>
-                                    <input type="number" name="deposit_percentage" class="form-control"
+                                    <label for="f_deposit_percentage" class="form-label">Deposit Percentage (%)</label>
+                                    <input id="f_deposit_percentage" type="number" name="deposit_percentage" class="form-control"
                                         value="{{ $settings['deposit_percentage'] ?? '50' }}" min="0"
                                         max="100" step="1">
                                     <span class="hint">% of total required to confirm booking.</span>
-                                </div>
-                                <div>
-                                    <label class="form-label">Tax Percentage (%)</label>
-                                    <input type="number" name="tax_percentage" class="form-control"
-                                        value="{{ $settings['tax_percentage'] ?? '0' }}" min="0" max="100"
-                                        step="0.01">
-                                    <span class="hint">Leave at 0 if tax is already included.</span>
                                 </div>
                             </div>
                         </div>
@@ -777,22 +743,22 @@
                         </div>
                         <div class="settings-card-body">
                             <div class="mb-16">
-                                <label class="form-label"><i class="bi bi-facebook text-primary me-1"></i> Facebook
+                                <label for="f_facebook_url" class="form-label"><i class="bi bi-facebook text-primary me-1"></i> Facebook
                                     Page</label>
-                                <input type="url" name="facebook_url" class="form-control"
+                                <input id="f_facebook_url" type="url" name="facebook_url" class="form-control"
                                     value="{{ $settings['facebook_url'] ?? '' }}"
                                     placeholder="https://facebook.com/villaelenaresort">
                             </div>
                             <div class="mb-16">
-                                <label class="form-label"><i class="bi bi-tiktok me-1"></i> TikTok</label>
-                                <input type="url" name="tiktok_url" class="form-control"
+                                <label for="f_tiktok_url" class="form-label"><i class="bi bi-tiktok me-1"></i> TikTok</label>
+                                <input id="f_tiktok_url" type="url" name="tiktok_url" class="form-control"
                                     value="{{ $settings['tiktok_url'] ?? '' }}"
                                     placeholder="https://tiktok.com/@villaelenaresort">
                             </div>
                             <div>
-                                <label class="form-label"><i class="bi bi-geo-alt text-success me-1"></i> Google Maps
+                                <label for="f_google_maps_url" class="form-label"><i class="bi bi-geo-alt text-success me-1"></i> Google Maps
                                     Link</label>
-                                <input type="url" name="google_maps_url" class="form-control"
+                                <input id="f_google_maps_url" type="url" name="google_maps_url" class="form-control"
                                     value="{{ $settings['google_maps_url'] ?? '' }}"
                                     placeholder="https://maps.google.com/?q=...">
                             </div>
@@ -866,7 +832,8 @@
                 <div class="submit-bar">
                     <div class="submit-info">
                         <i class="bi bi-clock me-1"></i>
-                        Last saved: {{ now()->format('M d, Y h:i A') }}
+                        Last changed:
+                        {{ $lastSavedAt ? \Carbon\Carbon::parse($lastSavedAt)->format('M d, Y h:i A') : 'never' }}
                     </div>
                     <button type="submit" class="btn-save">
                         <i class="bi bi-check-circle"></i> Save Settings

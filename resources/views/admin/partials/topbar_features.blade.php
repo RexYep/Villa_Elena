@@ -396,6 +396,7 @@
 
     .search-hint {
         background: #f8fafc;
+        font-family: inherit;
         border: 1px solid #E2E8F0;
         border-radius: 7px;
         padding: 5px 12px;
@@ -440,9 +441,9 @@
         </div>
         <div class="search-results" id="searchResults">
             <div class="search-hints">
-                <span class="search-hint" onclick="quickSearch('pending')">⏳ Pending bookings</span>
-                <span class="search-hint" onclick="quickSearch('checked_in')">🏠 Checked in</span>
-                <span class="search-hint" onclick="quickSearch('VE-')">🔖 Booking ref</span>
+                <button type="button" class="search-hint" onclick="quickSearch('pending')">⏳ Pending bookings</button>
+                <button type="button" class="search-hint" onclick="quickSearch('checked_in')">🏠 Checked in</button>
+                <button type="button" class="search-hint" onclick="quickSearch('VE-')">🔖 Booking ref</button>
             </div>
         </div>
     </div>
@@ -494,6 +495,10 @@
     });
 
     // ── SEARCH ─────────────────────────────────────────────────────
+    // Ang mga hint ay nasa markup sa itaas — doon lang sila binabago. Dating
+    // nakakopya ang parehong tatlong linya sa dalawang template string dito.
+    const SEARCH_HINTS_HTML = document.getElementById('searchResults').innerHTML;
+
     function openSearch() {
         document.getElementById('searchOverlay').classList.add('open');
         setTimeout(() => document.getElementById('searchInput').focus(), 100);
@@ -502,12 +507,7 @@
     function closeSearch() {
         document.getElementById('searchOverlay').classList.remove('open');
         document.getElementById('searchInput').value = '';
-        document.getElementById('searchResults').innerHTML = `
-        <div class="search-hints">
-            <span class="search-hint" onclick="quickSearch('pending')">⏳ Pending bookings</span>
-            <span class="search-hint" onclick="quickSearch('checked_in')">🏠 Checked in</span>
-            <span class="search-hint" onclick="quickSearch('VE-')">🔖 Booking ref</span>
-        </div>`;
+        document.getElementById('searchResults').innerHTML = SEARCH_HINTS_HTML;
     }
 
     function handleOverlayClick(e) {
@@ -525,11 +525,7 @@
         clearTimeout(searchTimer);
         const results = document.getElementById('searchResults');
         if (!query || query.length < 2) {
-            results.innerHTML = `<div class="search-hints">
-            <span class="search-hint" onclick="quickSearch('pending')">⏳ Pending bookings</span>
-            <span class="search-hint" onclick="quickSearch('checked_in')">🏠 Checked in</span>
-            <span class="search-hint" onclick="quickSearch('VE-')">🔖 Booking ref</span>
-        </div>`;
+            results.innerHTML = SEARCH_HINTS_HTML;
             return;
         }
         results.innerHTML = `<div class="search-spinner">⏳ Searching...</div>`;

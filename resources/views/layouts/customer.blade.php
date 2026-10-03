@@ -68,6 +68,7 @@
 @yield('content')
 </main>
 
+@include('partials.confirm_dialog')
 @stack('scripts')
 
 {{-- Live notification bell: lights up the moment a new Notification row

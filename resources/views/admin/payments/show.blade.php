@@ -544,8 +544,8 @@
 
                                     @include('admin.payments._confirm_booking_ref', ['bookingRef' => $payment->booking->booking_ref])
 
-                                    <label class="field-lbl">Transfer Reference Number</label>
-                                    <input type="text" name="transfer_reference" class="form-control"
+                                    <label for="f_transfer_reference" class="field-lbl">Transfer Reference Number</label>
+                                    <input id="f_transfer_reference" type="text" name="transfer_reference" class="form-control"
                                         minlength="4" maxlength="100" placeholder="e.g. 1029384756123" required
                                         value="{{ old('transfer_reference') }}">
                                     <div style="font-size: 13px;color:var(--muted);margin:4px 0 14px;">
@@ -592,8 +592,8 @@
                                 @method('PUT')
 
                                 <div style="margin-bottom:12px;">
-                                    <label class="field-lbl">Bank / E-Wallet</label>
-                                    <select name="institution_bic" class="form-control" required>
+                                    <label for="f_institution_bic" class="field-lbl">Bank / E-Wallet</label>
+                                    <select id="f_institution_bic" name="institution_bic" class="form-control" required>
                                         <option value="">Select…</option>
                                         @foreach ($institutions as $institution)
                                             <option value="{{ $institution['bic'] }}"
@@ -608,15 +608,15 @@
                                 </div>
 
                                 <div style="margin-bottom:12px;">
-                                    <label class="field-lbl">Account / Mobile Number</label>
-                                    <input type="text" name="account_number" class="form-control" inputmode="numeric"
+                                    <label for="f_account_number" class="field-lbl">Account / Mobile Number</label>
+                                    <input id="f_account_number" type="text" name="account_number" class="form-control" inputmode="numeric"
                                         placeholder="09171234567" required
                                         value="{{ old('account_number', $payment->refundDestination->account_number ?? '') }}">
                                 </div>
 
                                 <div style="margin-bottom:14px;">
-                                    <label class="field-lbl">Account Name</label>
-                                    <input type="text" name="account_name" class="form-control"
+                                    <label for="f_account_name" class="field-lbl">Account Name</label>
+                                    <input id="f_account_name" type="text" name="account_name" class="form-control"
                                         placeholder="Juan Dela Cruz" required
                                         value="{{ old('account_name', $payment->refundDestination->account_name ?? $payment->booking->user->full_name ?? '') }}">
                                     <div style="font-size: 13px;color:var(--muted);margin-top:4px;">
@@ -658,8 +658,8 @@
                                     </div>
 
                                     <div style="margin-bottom:12px;">
-                                        <label class="field-lbl">Sent to (Bank / E-Wallet)</label>
-                                        <select name="institution_bic" class="form-control" required>
+                                        <label for="f_institution_bic_2" class="field-lbl">Sent to (Bank / E-Wallet)</label>
+                                        <select id="f_institution_bic_2" name="institution_bic" class="form-control" required>
                                             <option value="">Select…</option>
                                             @foreach ($institutions as $institution)
                                                 <option value="{{ $institution['bic'] }}"
@@ -674,22 +674,22 @@
                                     </div>
 
                                     <div style="margin-bottom:12px;">
-                                        <label class="field-lbl">Account / Mobile Number</label>
-                                        <input type="text" name="account_number" class="form-control" inputmode="numeric"
+                                        <label for="f_account_number_2" class="field-lbl">Account / Mobile Number</label>
+                                        <input id="f_account_number_2" type="text" name="account_number" class="form-control" inputmode="numeric"
                                             placeholder="09171234567" required value="{{ old('account_number') }}">
                                     </div>
 
                                     <div style="margin-bottom:12px;">
-                                        <label class="field-lbl">Account Name</label>
-                                        <input type="text" name="account_name" class="form-control"
+                                        <label for="f_account_name_2" class="field-lbl">Account Name</label>
+                                        <input id="f_account_name_2" type="text" name="account_name" class="form-control"
                                             placeholder="Juan Dela Cruz" required
                                             value="{{ old('account_name', $payment->booking->user->full_name ?? '') }}">
                                     </div>
 
                                     @include('admin.payments._confirm_booking_ref', ['bookingRef' => $payment->booking->booking_ref])
 
-                                    <label class="field-lbl">Transfer Reference Number</label>
-                                    <input type="text" name="transfer_reference" class="form-control"
+                                    <label for="f_transfer_reference_2" class="field-lbl">Transfer Reference Number</label>
+                                    <input id="f_transfer_reference_2" type="text" name="transfer_reference" class="form-control"
                                         minlength="4" maxlength="100" placeholder="e.g. 1029384756123" required
                                         value="{{ old('transfer_reference') }}">
                                     <div style="font-size: 13px;color:var(--muted);margin:4px 0 14px;">
@@ -735,8 +735,8 @@
 
                     @include('admin.payments._confirm_booking_ref', ['bookingRef' => $payment->booking->booking_ref])
 
-                    <label class="field-lbl">Receipt / OR Number <span style="font-weight:400;">(optional)</span></label>
-                    <input type="text" name="transfer_reference" class="form-control" minlength="4" maxlength="100"
+                    <label for="f_transfer_reference_3" class="field-lbl">Receipt / OR Number <span style="font-weight:400;">(optional)</span></label>
+                    <input id="f_transfer_reference_3" type="text" name="transfer_reference" class="form-control" minlength="4" maxlength="100"
                         value="{{ old('transfer_reference') }}">
 
                     <button type="submit" class="btn-submit" style="padding:10px 22px;font-size:13px;margin-top:14px;">

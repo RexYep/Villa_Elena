@@ -34,12 +34,7 @@
 
         {{-- Password --}}
         <div class="mb-3">
-            <label for="password" class="form-label">
-                Password
-                <a href="{{ route('password.request') }}" class="float-end fw-normal" style="color:#2e5fa3; font-size:12px;">
-                    Forgot password?
-                </a>
-            </label>
+            <label for="password" class="form-label">Password</label>
             <div class="input-group">
                 <input
                     type="password"
@@ -55,6 +50,11 @@
                 @error('password')
                     <div class="invalid-feedback">{{ $message }}</div>
                 @enderror
+            </div>
+            <div class="text-end mt-1">
+                <a href="{{ route('password.request') }}" class="forgot-link">
+                    Forgot password?
+                </a>
             </div>
         </div>
 

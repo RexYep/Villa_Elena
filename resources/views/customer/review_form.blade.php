@@ -208,7 +208,9 @@
             <div class="summary-name">{{ $booking->property->property_name }}</div>
             <div class="summary-dates">
                 {{ $booking->check_in_date->format('M d') }} — {{ $booking->check_out_date->format('M d, Y') }}
-                · {{ $booking->num_nights }} night{{ $booking->num_nights != 1 ? 's' : '' }}
+                @if ($booking->slot_name)
+                    · {{ $booking->slot_name }}
+                @endif
                 · {{ $booking->booking_ref }}
             </div>
         </div>
@@ -250,8 +252,8 @@
 
                 {{-- Title --}}
                 <div class="mb-16">
-                    <label class="form-label">Review Title</label>
-                    <input type="text" name="title"
+                    <label for="f_title" class="form-label">Review Title</label>
+                    <input id="f_title" type="text" name="title"
                         class="form-control {{ $errors->has('title') ? 'is-invalid' : '' }}"
                         value="{{ old('title', $review->title ?? '') }}"
                         placeholder="Summarize your experience (e.g. Amazing stay, beautiful property!)" maxlength="100">
@@ -262,7 +264,7 @@
 
                 {{-- Content --}}
                 <div class="mb-16">
-                    <label class="form-label">Your Review</label>
+                    <label for="reviewContent" class="form-label">Your Review</label>
                     <textarea name="content" id="reviewContent" class="form-control {{ $errors->has('content') ? 'is-invalid' : '' }}"
                         rows="5" maxlength="1000" minlength="20"
                         placeholder="Tell other guests about your experience — the property, amenities, staff, and overall stay..."

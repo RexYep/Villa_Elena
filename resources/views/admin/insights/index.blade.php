@@ -2,7 +2,7 @@
 
 @section('title', 'Insights — Villa Elena Resort')
 @section('page-title', 'Insights')
-@section('page-subtitle', 'Powered by Google Gemini — ' . now()->format('F d, Y'))
+@section('page-subtitle', 'AI-generated summary — ' . now()->format('F d, Y'))
 
 @section('topbar-right')
     {{-- POST, hindi <a href>. Ang GET ay bumabasa lang ng naitabing report;

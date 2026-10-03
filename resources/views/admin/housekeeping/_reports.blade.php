@@ -37,7 +37,8 @@
                                     <button type="submit" class="hk-btn done"><i class="bi bi-check-lg"></i> Mark fixed</button>
                                 </form>
                                 <form method="POST" action="{{ route('admin.housekeeping.reports.update', $report) }}"
-                                    onsubmit="return confirm('Close this report without fixing it? Use this when it wasn\'t a real problem.')">
+                                    data-confirm="Close this report without fixing it? Use this when it wasn't a real problem."
+                                    data-confirm-label="Close Report">
                                     @csrf @method('PATCH')
                                     <input type="hidden" name="status" value="cancelled">
                                     <button type="submit" class="hk-btn cancel">Close</button>

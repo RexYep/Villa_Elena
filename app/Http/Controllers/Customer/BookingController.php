@@ -48,10 +48,12 @@ class BookingController extends Controller
         }
 
         $request->validate([
-            'checkin' => 'required|date|after_or_equal:today',
+            'checkin' => 'required|date|after_or_equal:today|'.Booking::advanceLimitRule(),
             // Hindi isang nakapirming listahan: ang mga inaalok na slot ay
             // nakadepende sa piniling petsa (tingnan ang SlotOfferedOnDate).
             'slot'    => ['required', new SlotOfferedOnDate('checkin', $booking->property)],
+        ], [
+            'checkin.before_or_equal' => Booking::advanceLimitMessage(),
         ]);
 
         [$checkin, $checkout] = Booking::slotDateTimes($request->slot, $request->checkin);

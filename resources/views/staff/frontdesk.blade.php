@@ -1112,9 +1112,6 @@
             <i class="bi bi-brush"></i> Housekeeping
             <span class="cnt" id="fdHousekeepingTabCount">{{ $stats['pending_tasks'] }}</span>
         </button>
-        <a href="{{ route('staff.availability') }}" class="tab-btn" style="text-decoration:none;">
-            <i class="bi bi-calendar3"></i> Availability
-        </a>
     </div>
 
     {{-- Tab: Today — arrivals at departures sa IISANG listahan, sunod sa
@@ -1330,7 +1327,7 @@
                     </div>
                     <!-- Amount -->
                     <div style="margin-bottom:14px;">
-                        <label
+                        <label for="modalAmount"
                             style="font-size: 14px;font-weight:600;color:#374151;display:block;margin-bottom:6px;">Amount</label>
                         <input type="number" name="amount" id="modalAmount" required min="1" step="0.01"
                             style="border:1.5px solid #e4ddd0;border-radius:8px;padding:10px 14px;font-size:14px;font-family:'DM Sans',sans-serif;width:100%;transition:border-color .2s;"
@@ -1340,18 +1337,18 @@
                     <!-- Method + Type -->
                     <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px;">
                         <div>
-                            <label
+                            <label for="f_payment_method"
                                 style="font-size: 14px;font-weight:600;color:#374151;display:block;margin-bottom:6px;">Method</label>
-                            <select name="payment_method" required
+                            <select id="f_payment_method" name="payment_method" required
                                 style="border:1.5px solid #e4ddd0;border-radius:8px;padding:10px 14px;font-size:13px;font-family:'DM Sans',sans-serif;width:100%;background:#fff;">
                                 <option value="cash">Cash</option>
                                 <option value="qrph">QR Ph (GCash / Maya / bank app)</option>
                             </select>
                         </div>
                         <div>
-                            <label
+                            <label for="f_payment_type"
                                 style="font-size: 14px;font-weight:600;color:#374151;display:block;margin-bottom:6px;">Type</label>
-                            <select name="payment_type" required
+                            <select id="f_payment_type" name="payment_type" required
                                 style="border:1.5px solid #e4ddd0;border-radius:8px;padding:10px 14px;font-size:13px;font-family:'DM Sans',sans-serif;width:100%;background:#fff;">
                                 <option value="balance">Balance Payment</option>
                                 <option value="full_payment">Full Payment</option>
@@ -1361,9 +1358,9 @@
                     </div>
                     <!-- Notes -->
                     <div style="margin-bottom:18px;">
-                        <label style="font-size: 14px;font-weight:600;color:#374151;display:block;margin-bottom:6px;">Notes
+                        <label for="f_notes" style="font-size: 14px;font-weight:600;color:#374151;display:block;margin-bottom:6px;">Notes
                             <span style="color:#6B7A8D;font-weight:400;">(optional)</span></label>
-                        <input type="text" name="notes"
+                        <input id="f_notes" type="text" name="notes"
                             style="border:1.5px solid #e4ddd0;border-radius:8px;padding:10px 14px;font-size:13px;font-family:'DM Sans',sans-serif;width:100%;"
                             placeholder="e.g. Cash received at frontdesk">
                     </div>
