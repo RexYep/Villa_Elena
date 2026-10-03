@@ -931,12 +931,20 @@
             @endif
 
             {{-- Availability --}}
+            @php
+                // Iisang listahan para sa pabalat na teksto, sa legend at sa
+                // calendar JS sa ibaba — kung tatlo ang pinagkukunan, may isa
+                // sa kanilang magsisinungaling. Ang mga slot na wala pang
+                // presyo ay wala rito (Property::isSlotPriced()).
+                $calSlots = \App\Models\Booking::bookableSlotKeys($property);
+                $calSlotCount = ['', 'one slot', 'two slots', 'three slots'][count($calSlots)] ?? count($calSlots).' slots';
+            @endphp
             <div class="section-title">Availability</div>
             <p class="section-sub">
                 @if ($canBookOnline)
-                    Every date has two slots. Pick an open one and it fills in your booking.
+                    Every date has {{ $calSlotCount }}. Pick an open one and it fills in your booking.
                 @else
-                    Every date has two slots. Open slots are shown below.
+                    Every date has {{ $calSlotCount }}. Open slots are shown below.
                 @endif
             </p>
             <div class="fc-wrap">
@@ -946,7 +954,9 @@
                 // Ang mga oras ay galing sa Booking::SLOTS, hindi nakasulat
                 // nang paulit-ulit sa view: kung magbago ang slot, hindi
                 // puwedeng magsinungaling ang legend tungkol dito.
-                $legendSlots = \App\Models\Booking::SLOTS;
+                $legendSlots = collect($calSlots)
+                    ->mapWithKeys(fn ($k) => [$k => \App\Models\Booking::SLOTS[$k]])
+                    ->all();
                 $slotTime = fn($t) => \Carbon\Carbon::parse($t)->format('g:i A');
             @endphp
             <div class="cal-legend">
@@ -954,8 +964,10 @@
                     <span class="legend-group-label">Slots</span>
                     @foreach ($legendSlots as $key => $def)
                         <span class="legend-slot">
-                            <i class="bi {{ $key === 'night' ? 'bi-moon-stars' : 'bi-sun' }}"></i>
-                            <b>{{ ucfirst($key) }}</b>
+                            {{-- Buwan para sa anumang tumatawid ng hatinggabi, hindi
+                                 `$key === 'night'` — dalawa na ang overnight na slot. --}}
+                            <i class="bi {{ $def['overnight'] ? 'bi-moon-stars' : 'bi-sun' }}"></i>
+                            <b>{{ $def['name'] }}</b>
                             {{ $slotTime($def['check_in']) }} – {{ $slotTime($def['check_out']) }}{{ $def['overnight'] ? ' next day' : '' }}
                         </span>
                     @endforeach
@@ -985,24 +997,38 @@
                         </div>
                         <div class="mb-12">
                             <label class="form-label">Choose Your Slot</label>
+                            {{-- Iginuguhit ang LAHAT ng slot na may presyo, at ang JS
+                                 ang nagtatago ng hindi inaalok sa piniling PETSA
+                                 (`refreshSlotOptions()` sa ibaba). Hindi per-date ang
+                                 markup dahil nagbabago ang petsa nang walang reload —
+                                 pero ang naunang pagpili sa server ang nagtatakda ng
+                                 unang estado, kaya tama na ito kahit patay ang JS. --}}
+                            @php
+                                $bookableSlots = \App\Models\Booking::bookableSlotKeys($property);
+                                $offeredNow    = $checkin
+                                    ? \App\Models\Booking::slotsOfferedOn($checkin, $property)
+                                    : $bookableSlots;
+                                $selectedSlot  = in_array($slot ?? null, $offeredNow, true)
+                                    ? $slot
+                                    : ($offeredNow[0] ?? null);
+                            @endphp
                             <div class="slot-options">
-                                <label class="slot-option">
-                                    <input type="radio" name="slot" value="day" id="slot_day"
-                                        {{ ($slot ?? 'day') === 'day' ? 'checked' : '' }}>
-                                    <span class="slot-option-label">
-                                        <strong>Day</strong>
-                                        <small>8:00 AM – 5:00 PM</small>
-                                    </span>
-                                </label>
-                                <label class="slot-option">
-                                    <input type="radio" name="slot" value="night" id="slot_night"
-                                        {{ ($slot ?? 'day') === 'night' ? 'checked' : '' }}>
-                                    <span class="slot-option-label">
-                                        <strong>Night</strong>
-                                        <small>7:00 PM – 6:00 AM</small>
-                                    </span>
-                                </label>
+                                @foreach ($bookableSlots as $slotKey)
+                                    @php $def = \App\Models\Booking::SLOTS[$slotKey]; @endphp
+                                    <label class="slot-option" data-slot-option="{{ $slotKey }}"
+                                        @if (! in_array($slotKey, $offeredNow, true)) hidden @endif>
+                                        <input type="radio" name="slot" value="{{ $slotKey }}" id="slot_{{ $slotKey }}"
+                                            {{ $selectedSlot === $slotKey ? 'checked' : '' }}>
+                                        <span class="slot-option-label">
+                                            <strong>{{ $def['name'] }}</strong>
+                                            <small>{{ $def['times'] }}</small>
+                                        </span>
+                                    </label>
+                                @endforeach
                             </div>
+                            {{-- Ipinapaliwanag kung bakit nawala ang Day/Night sa isang
+                                 22-oras na petsa. Kung wala ito, mukhang sira ang form. --}}
+                            <div id="slotOnlyNote" class="duration-note" hidden></div>
                             <div id="durationNote" class="duration-note"></div>
                         </div>
                         <div class="mb-3">
@@ -1074,18 +1100,79 @@
     <script>
         const PRICE_PREVIEW_URL = "{{ route('portal.price-preview', $property) }}";
         const TODAY_STR = @json(now()->format('Y-m-d'));
-        const SLOT_DEFS = @json(\App\Models\Booking::SLOTS);
+        // Ang mga BOOKABLE na slot lang — kapareho ng listahang pinagbatayan
+        // ng legend at ng radio cards sa itaas. Ang isang slot na wala pang
+        // presyo ay nasa Booking::SLOTS pero hindi dapat mag-anyong pill na
+        // mapipindot dito.
+        const SLOT_DEFS = @json($legendSlots);
         const SLOT_KEYS = Object.keys(SLOT_DEFS);
-        const SLOT_SHORT = {
-            day: 'Day',
-            night: 'Night'
-        };
+        const SLOT_SHORT = Object.fromEntries(
+            SLOT_KEYS.map(k => [k, SLOT_DEFS[k].name])
+        );
         // Kaparehong icon ng nasa legend — sa telepono, ito ang kumakapit
         // sa mata bago pa mabasa ang 10px na label.
-        const SLOT_ICONS = {
-            day: 'bi-sun',
-            night: 'bi-moon-stars'
-        };
+        const SLOT_ICONS = Object.fromEntries(
+            SLOT_KEYS.map(k => [k, SLOT_DEFS[k].overnight ? 'bi-moon-stars' : 'bi-sun'])
+        );
+
+        // ── Aling slot ang inaalok sa isang PETSA ─────────────────────────
+        //
+        // Ito ang katumbas sa kliyente ng Booking::slotsOfferedOn(), at
+        // kailangang manatiling EKSAKTONG pareho ang panuntunan: window muna
+        // at EKSKLUSIBO, at kung wala, ang mga hindi-windowed na slot. Kapag
+        // naghiwalay sila, may mapipiling slot sa form na tatanggihan ng
+        // server (o mas masahol: may nakatagong slot na bukas naman).
+        //
+        // Walang presyo = wala sa listahan: pareho nang nasala ng server ang
+        // dalawang payload na ito bago ipadala.
+        const WINDOWED_SLOTS = @json(\App\Models\Booking::windowedSlotKeys());
+        const SLOT_WINDOW_DATES = @json(\App\Models\Booking::slotWindowDates($property));
+
+        function slotsOfferedOn(dateStr) {
+            for (const s of WINDOWED_SLOTS) {
+                if ((SLOT_WINDOW_DATES[s] || []).includes(dateStr)) return [s];
+            }
+            return SLOT_KEYS.filter(k => !WINDOWED_SLOTS.includes(k));
+        }
+
+        // Itinatago ang mga radio na hindi inaalok sa piniling petsa, at
+        // inililipat ang pinili kung ito ang nawala.
+        function refreshSlotOptions() {
+            const dateStr = document.getElementById('checkin')?.value;
+            if (!dateStr) return;
+
+            const offered = slotsOfferedOn(dateStr);
+            let checkedStillOffered = false;
+
+            document.querySelectorAll('[data-slot-option]').forEach(label => {
+                const key = label.dataset.slotOption;
+                const on = offered.includes(key);
+                label.hidden = !on;
+                const input = label.querySelector('input[name="slot"]');
+                if (input) {
+                    input.disabled = !on;
+                    if (input.checked && on) checkedStillOffered = true;
+                    if (input.checked && !on) input.checked = false;
+                }
+            });
+
+            if (!checkedStillOffered && offered.length) {
+                const first = document.getElementById('slot_' + offered[0]);
+                if (first) first.checked = true;
+            }
+
+            // Sabihin kung bakit iisa lang ang pagpipilian.
+            const note = document.getElementById('slotOnlyNote');
+            if (note) {
+                const only = offered.length === 1 && WINDOWED_SLOTS.includes(offered[0]);
+                note.hidden = !only;
+                if (only) {
+                    note.textContent = 'This date is offered as the ' +
+                        (SLOT_DEFS[offered[0]]?.name || offered[0]) +
+                        ' stay only — the Day and Night slots are not available on it.';
+                }
+            }
+        }
         // Petsa → { slot: booking_id } ng mga SARADONG slot. Ito lang ang
         // state ng calendar; pinapatch ito ng Pusher updates sa ibaba.
         const bookedSlots = @json($slotAvailability);
@@ -1288,7 +1375,8 @@
         }
 
         function openSlots(dateStr) {
-            return SLOT_KEYS.filter(k => !isTaken(dateStr, k));
+            // Ang inaalok sa petsang iyon, bawas ang mga nakuha na.
+            return slotsOfferedOn(dateStr).filter(k => !isTaken(dateStr, k));
         }
 
         function paintDay(dateStr, frame) {
@@ -1299,7 +1387,10 @@
             const wrap = document.createElement('div');
             wrap.className = 'slot-pills';
 
-            SLOT_KEYS.forEach(key => {
+            // Ang mga slot na INAALOK sa petsang ito, hindi lahat ng slot: sa
+            // isang 22-oras na petsa ay isang pill lang, at sa ordinaryong
+            // petsa ay hindi lumilitaw ang 22-oras.
+            slotsOfferedOn(dateStr).forEach(key => {
                 const taken = isTaken(dateStr, key);
                 const canPick = !taken && BOOKING_ENABLED;
                 const pill = document.createElement(canPick ? 'button' : 'span');
@@ -1382,6 +1473,13 @@
             if (!checkinEl) return;
 
             checkinEl.value = dateStr;
+
+            // Ipinapakita muna ang tamang mga radio para sa bagong petsa —
+            // kung hindi, ang pagpindot sa 22-oras na pill ay nagtatakda ng
+            // radio na nakatago pa (o naka-disable) at bumabalik ang form sa
+            // Day sa sandaling tumakbo ang refresh.
+            refreshSlotOptions();
+
             const radio = document.getElementById('slot_' + slotKey);
             if (radio) radio.checked = true;
 
@@ -1500,6 +1598,10 @@
             // Manu-manong pagbabago sa form ay dapat ding masalamin sa
             // calendar — dalawang view lang sila ng iisang pinili.
             document.getElementById('checkin')?.addEventListener('change', function() {
+                // Muna ang mga pagpipilian: baka hindi na inaalok ang naka-check
+                // na slot sa bagong petsa, at ang setSelection() ay dapat makita
+                // ang pinili PAGKATAPOS ilipat.
+                refreshSlotOptions();
                 setSelection(this.value || null, getSelectedSlot());
                 updatePreview();
             });
@@ -1511,6 +1613,7 @@
             });
 
             // Run on load if dates pre-filled
+            refreshSlotOptions();
             updatePreview();
 
             // ── Live availability sync (Pusher) ────────────────────────────

@@ -851,11 +851,7 @@
                         <div class="icon tag-red"><i class="bi bi-x-circle"></i></div>
                         <div>
                             <h4>Cancellation</h4>
-                            <p>
-                                <strong>Full refund</strong> if cancelled at least 7 days before check-in, or within
-                                24 hours of booking. <strong>50% refund</strong> if cancelled 3–6 days before.
-                                <strong>No refund</strong> within 3 days of check-in.
-                            </p>
+                            <p><strong>{{ \App\Models\Booking::CANCELLATION_POLICY }}</strong></p>
                         </div>
                     </div>
 
@@ -866,7 +862,8 @@
                             <p>
                                 You may reschedule up to <strong>{{ \App\Models\Booking::MAX_RESCHEDULES }} times</strong>,
                                 and only up to <strong>{{ \App\Models\Booking::RESCHEDULE_CUTOFF_DAYS }} days before
-                                    check-in</strong>. Price differences are billed or refunded automatically.
+                                    check-in</strong>. A higher price is added to your balance; a lower one is
+                                not refunded.
                             </p>
                         </div>
                     </div>

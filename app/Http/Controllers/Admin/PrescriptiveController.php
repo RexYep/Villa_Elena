@@ -87,7 +87,10 @@ class PrescriptiveController extends Controller
         $data = $request->validate([
             'start' => 'nullable|date',
             'end' => 'nullable|date|after_or_equal:start',
-            'slot' => 'nullable|in:both,day,night',
+            // 'both' = lahat ng slot. Ang listahan ng slot ay hinahango sa
+            // Booking::SLOTS para hindi tanggihan ng validator ang isang
+            // slot na inaalok naman ng form.
+            'slot' => 'nullable|in:both,'.implode(',', Booking::bookableSlotKeys()),
             'change' => 'nullable|numeric|min:-50|max:50',
         ]);
 
@@ -104,7 +107,10 @@ class PrescriptiveController extends Controller
         }
 
         $demand = new DemandModel;
-        $slots = $slotChoice === 'both' ? array_keys(Booking::SLOTS) : [$slotChoice];
+        // Ang mga bookable lang: ang simulator ay nagpepresyo sa
+        // pamamagitan ng quoteFor(), at tumatanggi iyon sa isang slot na
+        // wala pang presyo.
+        $slots = $slotChoice === 'both' ? $demand->bookableSlots() : [$slotChoice];
 
         $elasticity = $change < 0
             ? DemandModel::setting('prescriptive_elasticity', 1.5)
@@ -118,6 +124,14 @@ class PrescriptiveController extends Controller
 
         for ($date = $start->copy(); $date->lte($end); $date->addDay()) {
             foreach ($slots as $slot) {
+                // Hindi rin ipinapasok ang slot na hindi inaalok sa petsang
+                // ito (hal. 22-Hours sa isang ordinaryong petsa): walang
+                // ipinagbibili doon, at ang `price()` ay dumadaan sa
+                // `quoteFor()`, na tumatanggi.
+                if (! in_array($slot, $demand->slotsOfferedOn($date), true)) {
+                    continue;
+                }
+
                 // Hindi ipinapasok ang mga petsang nabenta na o sarado —
                 // walang maisisimula ang isang pagbabago sa presyo doon, at
                 // ang pagsasama sa kanila ay magpapalobo sa kabuuan.

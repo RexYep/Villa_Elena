@@ -385,6 +385,21 @@
             margin-top: 4px;
         }
 
+        .cancel-ack {
+            display: flex;
+            align-items: flex-start;
+            gap: 8px;
+            font-size: 13px;
+            line-height: 1.5;
+            margin: 12px 0 4px;
+            cursor: pointer;
+        }
+
+        .cancel-ack input {
+            margin-top: 3px;
+            flex-shrink: 0;
+        }
+
         .cancel-final {
             font-size: 12px;
             color: var(--muted);
@@ -851,35 +866,32 @@
 
                         {{-- Bukas na kung bumalik mula sa validation error,
                              para hindi mawala sa guest ang mensahe. --}}
-                        <details class="cancel-toggle" @if ($errors->has('cancellation_reason')) open @endif>
+                        <details class="cancel-toggle" @if ($errors->hasAny(['cancellation_reason', 'accept_no_refund'])) open @endif>
                             <summary>Cancel this booking</summary>
 
                             <div class="cancel-panel">
-                                {{-- Estimate ayon sa oras na ito — nagbabago
-                                     habang lumalapit ang check-in. Ang
-                                     parehong kalkulasyon ang ginagamit ng
-                                     cancelBooking(). --}}
-                                <div class="refund-estimate refund-{{ $refundPreviewPct === 100 ? 'full' : ($refundPreviewPct > 0 ? 'partial' : 'none') }}">
-                                    @if ($booking->amount_paid <= 0)
-                                        <strong>No payment to refund</strong>
-                                        You haven't paid anything for this booking yet.
-                                    @elseif ($refundPreviewAmount > 0)
-                                        <strong>
-                                            Estimated refund: ₱{{ number_format($refundPreviewAmount, 2) }}
-                                        </strong>
-                                        {{ $refundPreviewPct }}% of the ₱{{ number_format($booking->amount_paid, 2) }}
-                                        you've paid, if you cancel now. We'll ask where to send it.
-                                    @else
-                                        <strong>No refund</strong>
-                                        Check-in is less than 3 days away, so the
-                                        ₱{{ number_format($booking->amount_paid, 2) }} you've paid is non-refundable.
-                                    @endif
-                                </div>
+                                {{-- Walang refund ang pag-cancel ng guest
+                                     (Booking::CANCELLATION_POLICY). Ang
+                                     halagang mawawala ang ipinapakita, hindi
+                                     isang estimate — at ang reschedule ang
+                                     itinuturo bilang alternatibo habang
+                                     bukas pa ito. --}}
+                                @if ($booking->amount_paid > 0)
+                                    <div class="refund-estimate refund-none">
+                                        <strong>You will not get ₱{{ number_format($booking->amount_paid, 2) }} back</strong>
+                                        That is what you've paid for this booking, and it is non-refundable.
+                                        @if ($booking->isReschedulable())
+                                            You can move the booking to another date instead and keep your payment.
+                                        @endif
+                                    </div>
+                                @else
+                                    <div class="refund-estimate refund-full">
+                                        <strong>Nothing has been paid yet</strong>
+                                        Cancelling this booking costs you nothing.
+                                    </div>
+                                @endif
 
-                                <div class="cancel-policy">
-                                    Full refund within 24 hours of booking or 7+ days before check-in ·
-                                    50% at 3–6 days · none under 3 days.
-                                </div>
+                                <div class="cancel-policy">{{ \App\Models\Booking::CANCELLATION_POLICY }}</div>
 
                                 <form method="POST" action="{{ route('customer.bookings.cancel', $booking) }}"
                                     id="cancelForm">
@@ -890,6 +902,19 @@
                                     @error('cancellation_reason')
                                         <div class="cancel-error">{{ $message }}</div>
                                     @enderror
+                                    {{-- Ang server ang nagpapatupad nito
+                                         (cancelBooking()); ang `required`
+                                         ay pampadali lang. --}}
+                                    @if ($booking->amount_paid > 0)
+                                        <label class="cancel-ack">
+                                            <input type="checkbox" name="accept_no_refund" value="1" required>
+                                            <span>I understand the ₱{{ number_format($booking->amount_paid, 2) }}
+                                                I paid will not be refunded.</span>
+                                        </label>
+                                        @error('accept_no_refund')
+                                            <div class="cancel-error">{{ $message }}</div>
+                                        @enderror
+                                    @endif
                                     <button type="submit" class="btn-cancel-booking">
                                         Confirm Cancellation
                                     </button>

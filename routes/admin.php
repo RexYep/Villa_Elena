@@ -178,4 +178,8 @@ Route::get('calendar/events',                   [CalendarController::class, 'eve
 Route::patch('calendar/bookings/{booking}/move',[CalendarController::class, 'moveBooking'])->name('calendar.move');
 Route::post('calendar/block',                   [CalendarController::class, 'quickBlock'])->name('calendar.block');
 Route::delete('calendar/blocks/{block}',        [CalendarController::class, 'deleteBlock'])->name('calendar.deleteBlock');
+    // Ang kabaligtaran ng block: BINUBUKSAN ang 22-oras na slot sa isang
+    // petsa. Tingnan ang CalendarController::addSlotWindow().
+    Route::post('calendar/slot-windows',            [CalendarController::class, 'addSlotWindow'])->name('calendar.addSlotWindow');
+    Route::delete('calendar/slot-windows/{slotWindow}', [CalendarController::class, 'deleteSlotWindow'])->name('calendar.deleteSlotWindow');
 });

@@ -399,6 +399,15 @@
         </div>
     @endif
 
+    {{-- Wala nito noon — `session('success')` lang ang inilalabas ng pahinang
+         ito, kaya tahimik na nawawala ang anumang `error` flash. --}}
+    @if (session('error'))
+        <div
+            style="background:#fee2e2; color:#b91c1c; border-radius:10px; padding:12px 16px; margin-bottom:18px; font-size:13px;">
+            <i class="bi bi-exclamation-triangle me-2"></i>{{ session('error') }}
+        </div>
+    @endif
+
     @if ($property->type === 'villa')
         <div class="tag-green" style="border-radius:10px;padding:12px 16px;margin-bottom:18px;font-size:13px;">
             <i class="bi bi-shield-check me-2"></i>
@@ -419,8 +428,12 @@
     <div class="mini-stats">
         <div class="mini-card">
             <div class="mini-icon" style="background:#dcfce7; color:#15803d;"><i class="bi bi-cash-stack"></i></div>
+            {{-- "Regular rate", hindi "Base Price / Night". Walang gabi ang
+                 sistemang ito — dalawang nakapirming slot na binabayaran bilang
+                 flat package. Ito ang mismong bokabularyo ng
+                 admin/promotions/form.blade.php at ng terms page. --}}
             <div class="val">₱{{ number_format($property->base_price, 0) }}</div>
-            <div class="lbl">Base Price / Night</div>
+            <div class="lbl">Regular Rate</div>
         </div>
         <div class="mini-card">
             <div class="mini-icon" style="background:#dbeafe; color:#1d4ed8;"><i class="bi bi-people"></i></div>
@@ -461,13 +474,15 @@
                             <div class="val">{{ ucfirst($property->type) }}</div>
                         </div>
                         <div class="info-item">
-                            <label>Base Price</label>
+                            <label>Regular Rate</label>
                             <div class="val">₱{{ number_format($property->base_price, 2) }}</div>
+                            <div class="text-muted-theme" style="font-size:12px;">Mon–Thu, Sun after 6PM</div>
                         </div>
                         <div class="info-item">
-                            <label>Weekend Price</label>
+                            <label>Peak Rate</label>
                             <div class="val">
                                 {{ $property->weekend_price ? '₱' . number_format($property->weekend_price, 2) : '—' }}</div>
+                            <div class="text-muted-theme" style="font-size:12px;">Fri/Sat, Sun before 6PM</div>
                         </div>
                         <div class="info-item">
                             <label>Floor Area</label>
@@ -660,10 +675,15 @@
                         style="justify-content:center;">
                         <i class="bi bi-plus-circle"></i> New Booking
                     </a>
-                    <button class="btn-outline" style="justify-content:center; width:100%;"
-                        onclick="document.getElementById('blockDatesPanel').scrollIntoView({behavior:'smooth'})">
-                        <i class="bi bi-calendar-x"></i> Block Dates
-                    </button>
+                    {{-- Sa villa lang. Sa isang room ay wala nang form na
+                         mapupuntahan ang pag-scroll — paunawa na lang ang
+                         nasa panel na iyon. --}}
+                    @if ($property->type === 'villa')
+                        <button class="btn-outline" style="justify-content:center; width:100%;"
+                            onclick="document.getElementById('blockDatesPanel').scrollIntoView({behavior:'smooth'})">
+                            <i class="bi bi-calendar-x"></i> Block Dates
+                        </button>
+                    @endif
                 </div>
             </div>
 
@@ -697,6 +717,15 @@
             </div>
 
             {{-- AVAILABILITY BLOCKS --}}
+            {{-- Ang FORM ay para sa villa LAMANG.
+                 Isa lang ang property na tinitingnan ng availability: ang
+                 villa. Ang isang block sa isang room ay isang row na walang
+                 ginagawa — nakaka-book pa rin ang portal sa mga petsang iyon.
+                 May maliit na paunawa dati sa ilalim ng form ng room, pero
+                 form pa rin iyon na nag-aanyayang pindutin, at ang dulo nito
+                 ay isang berdeng "Dates blocked successfully."
+                 Ang mga umiiral nang block ng room ay nananatiling nakikita
+                 sa ibaba — hindi binubura, para hindi maglaho ang kasaysayan. --}}
             <div class="panel" id="blockDatesPanel">
                 <div class="panel-head">
                     <h3>Block Dates</h3>
@@ -707,89 +736,133 @@
                             Blocking dates here will directly affect the availability visible to customers (since this is
                             the master, bookable Villa).
                         </p>
-                    @else
-                        <p class="text-muted-theme mb-12" style="font-size: 14px;">
-                            <i class="bi bi-info-circle"></i> Note: this is for internal tracking/reference only for this
-                            room. It does not directly affect the whole Villa's availability on the customer-facing site —
-                            to block actual booking dates, block them on the master Villa record.
-                        </p>
-                    @endif
-                    <form method="POST" action="{{ route('admin.properties.block', $property) }}" @csrf <div
-                        class="mb-12">
-                        <label
-                            style="font-size: 13px; font-weight:600; color:#374151; display:block; margin-bottom:5px;">Start
-                            Date</label>
-                        <input type="date" name="start_date" required min="{{ date('Y-m-d') }}"
-                            style="width:100%; border:1.5px solid var(--border); border-radius:8px; padding:9px 12px; font-size:13px; font-family:'DM Sans',sans-serif;">
-                </div>
-                <div class="mb-12">
-                    <label style="font-size: 13px; font-weight:600; color:#374151; display:block; margin-bottom:5px;">End
-                        Date</label>
-                    <input type="date" name="end_date" required min="{{ date('Y-m-d') }}"
-                        style="width:100%; border:1.5px solid var(--border); border-radius:8px; padding:9px 12px; font-size:13px; font-family:'DM Sans',sans-serif;">
-                </div>
-                <div class="mb-12">
-                    <label
-                        style="font-size: 13px; font-weight:600; color:#374151; display:block; margin-bottom:5px;">Reason</label>
-                    <select name="reason" required
-                        style="width:100%; border:1.5px solid var(--border); border-radius:8px; padding:9px 12px; font-size:13px; font-family:'DM Sans',sans-serif; background:#fff;">
-                        <option value="maintenance">Maintenance</option>
-                        <option value="owner_use">Owner Use</option>
-                        <option value="private_event">Private Event</option>
-                        <option value="other">Other</option>
-                    </select>
-                </div>
-                <div style="margin-bottom:14px;">
-                    <label style="font-size: 13px; font-weight:600; color:#374151; display:block; margin-bottom:5px;">Notes
-                        <span class="text-muted-theme" style="font-weight:400;">(optional)</span></label>
-                    <input type="text" name="notes" placeholder="e.g. Repainting the walls"
-                        style="width:100%; border:1.5px solid var(--border); border-radius:8px; padding:9px 12px; font-size:13px; font-family:'DM Sans',sans-serif;">
-                </div>
-                <button type="submit" class="btn-navy" style="width:100%; justify-content:center;">
-                    <i class="bi bi-calendar-x"></i> Block These Dates
-                </button>
-                </form>
 
-                {{-- Existing blocks --}}
-                @if ($property->availabilityBlocks->count() > 0)
-                    <div style="margin-top:18px; padding-top:18px; border-top:1px solid var(--border);">
-                        <div class="text-muted-theme section-label" style="font-size: 13px; margin-bottom:10px;">Blocked
-                            Periods</div>
-                        @foreach ($property->availabilityBlocks->sortByDesc('start_date')->take(5) as $block)
-                            <div
-                                style="background:#fff5f5; border-radius:8px; padding:9px 12px; margin-bottom:6px; border:1px solid #fecaca; font-size: 14px;">
-                                <div style="font-weight:600; color:#dc2626;">
-                                    {{ \Carbon\Carbon::parse($block->start_date)->format('M d') }} –
-                                    {{ \Carbon\Carbon::parse($block->end_date)->format('M d, Y') }}
-                                </div>
-                                <div style="color:#6b7a8d; margin-top:2px;">
-                                    {{ ucfirst(str_replace('_', ' ', $block->reason)) }}{{ $block->notes ? ' · ' . $block->notes : '' }}
-                                </div>
+                        {{-- Ang `>` na ito ang nawawala noon. Nasisipsip ng
+                             hindi nakasarang tag ang @@csrf input bilang mga
+                             ATTRIBUTE ng form, kaya walang _token field na
+                             naipapadala at 419 ang bawat submit — kahit dito
+                             sa villa. --}}
+                        <form method="POST" action="{{ route('admin.properties.block', $property) }}">
+                            @csrf
+                            <div class="mb-12">
+                                <label
+                                    style="font-size: 13px; font-weight:600; color:#374151; display:block; margin-bottom:5px;">Start
+                                    Date</label>
+                                <input type="date" name="start_date" required min="{{ date('Y-m-d') }}"
+                                    style="width:100%; border:1.5px solid var(--border); border-radius:8px; padding:9px 12px; font-size:13px; font-family:'DM Sans',sans-serif;">
                             </div>
-                        @endforeach
-                    </div>
-                @endif
+                            <div class="mb-12">
+                                <label
+                                    style="font-size: 13px; font-weight:600; color:#374151; display:block; margin-bottom:5px;">End
+                                    Date</label>
+                                <input type="date" name="end_date" required min="{{ date('Y-m-d') }}"
+                                    style="width:100%; border:1.5px solid var(--border); border-radius:8px; padding:9px 12px; font-size:13px; font-family:'DM Sans',sans-serif;">
+                            </div>
+                            <div class="mb-12">
+                                <label
+                                    style="font-size: 13px; font-weight:600; color:#374151; display:block; margin-bottom:5px;">Reason</label>
+                                <select name="reason" required
+                                    style="width:100%; border:1.5px solid var(--border); border-radius:8px; padding:9px 12px; font-size:13px; font-family:'DM Sans',sans-serif; background:#fff;">
+                                    <option value="maintenance">Maintenance</option>
+                                    <option value="owner_use">Owner Use</option>
+                                    <option value="private_event">Private Event</option>
+                                    <option value="other">Other</option>
+                                </select>
+                            </div>
+                            <div style="margin-bottom:14px;">
+                                <label
+                                    style="font-size: 13px; font-weight:600; color:#374151; display:block; margin-bottom:5px;">Notes
+                                    <span class="text-muted-theme" style="font-weight:400;">(optional)</span></label>
+                                <input type="text" name="notes" placeholder="e.g. Repainting the walls"
+                                    style="width:100%; border:1.5px solid var(--border); border-radius:8px; padding:9px 12px; font-size:13px; font-family:'DM Sans',sans-serif;">
+                            </div>
+                            <button type="submit" class="btn-navy" style="width:100%; justify-content:center;">
+                                <i class="bi bi-calendar-x"></i> Block These Dates
+                            </button>
+                        </form>
+                    @else
+                        <p class="text-muted-theme" style="font-size: 14px; margin:0;">
+                            <i class="bi bi-info-circle"></i> Dates are blocked on the <strong>master Villa
+                                record</strong>, not per room — the villa is rented as a whole, so its availability is
+                            the only one customers ever see. Blocking here would have no effect, so there is no form.
+                        </p>
+                        @if ($villaId)
+                            <a href="{{ route('admin.properties.show', $villaId) }}#blockDatesPanel" class="btn-outline"
+                                style="justify-content:center; width:100%; margin-top:12px;">
+                                <i class="bi bi-calendar-x"></i> Block dates on the Villa
+                            </a>
+                        @endif
+                    @endif
+
+                    {{-- Existing blocks --}}
+                    @if ($property->availabilityBlocks->count() > 0)
+                        <div style="margin-top:18px; padding-top:18px; border-top:1px solid var(--border);">
+                            <div class="text-muted-theme section-label" style="font-size: 13px; margin-bottom:10px;">
+                                Blocked Periods{{ $property->type === 'villa' ? '' : ' (no effect on availability)' }}
+                            </div>
+                            @foreach ($property->availabilityBlocks->sortByDesc('start_date')->take(5) as $block)
+                                <div
+                                    style="background:#fff5f5; border-radius:8px; padding:9px 12px; margin-bottom:6px; border:1px solid #fecaca; font-size: 14px;">
+                                    <div style="font-weight:600; color:#dc2626;">
+                                        {{ \Carbon\Carbon::parse($block->start_date)->format('M d') }} –
+                                        {{ \Carbon\Carbon::parse($block->end_date)->format('M d, Y') }}
+                                    </div>
+                                    <div style="color:#6b7a8d; margin-top:2px;">
+                                        {{ ucfirst(str_replace('_', ' ', $block->reason)) }}{{ $block->notes ? ' · ' . $block->notes : '' }}
+                                    </div>
+                                </div>
+                            @endforeach
+                        </div>
+                    @endif
+                </div>
             </div>
         </div>
 
         {{-- DANGER ZONE --}}
-        <div class="danger-zone">
-            <div>
-                <div style="font-weight:600; color:#dc2626; font-size:14px;"><i
-                        class="bi bi-exclamation-triangle me-2"></i>Delete Property</div>
-                <div style="font-size: 14px; color:#6b7a8d; margin-top:2px;">This will permanently delete this property and
-                    all its data.</div>
+        {{-- Tinatanggihan na ng server ang pagbura ng villa at ng anumang
+             property na may booking. Ipinapakita rito kung bakit, imbes na
+             mag-alok ng pindutang tiyak na mabibigo. --}}
+        @if ($property->type === 'villa')
+            <div class="danger-zone">
+                <div>
+                    <div style="font-weight:600; color:#dc2626; font-size:14px;"><i
+                            class="bi bi-shield-lock me-2"></i>This property cannot be deleted</div>
+                    <div style="font-size: 14px; color:#6b7a8d; margin-top:2px;">
+                        Villa Elena is the only bookable listing. Every booking, payment and review in the system is
+                        attached to it.
+                    </div>
+                </div>
             </div>
-            <button class="btn-danger" onclick="confirmDelete()">
-                <i class="bi bi-trash"></i> Delete
-            </button>
-        </div>
+        @elseif ($property->bookings->count() > 0)
+            <div class="danger-zone">
+                <div>
+                    <div style="font-weight:600; color:#dc2626; font-size:14px;"><i
+                            class="bi bi-shield-lock me-2"></i>This property cannot be deleted</div>
+                    <div style="font-size: 14px; color:#6b7a8d; margin-top:2px;">
+                        {{ $property->bookings->count() }} booking(s) are attached to it. Deleting it would delete them
+                        and their payments too.
+                    </div>
+                </div>
+            </div>
+        @else
+            <div class="danger-zone">
+                <div>
+                    <div style="font-weight:600; color:#dc2626; font-size:14px;"><i
+                            class="bi bi-exclamation-triangle me-2"></i>Delete Property</div>
+                    <div style="font-size: 14px; color:#6b7a8d; margin-top:2px;">This will permanently delete this
+                        property and its images. This cannot be undone.</div>
+                </div>
+                <button class="btn-danger" onclick="confirmDelete()">
+                    <i class="bi bi-trash"></i> Delete
+                </button>
+            </div>
 
-        <form id="deleteForm" method="POST" action="{{ route('admin.properties.destroy', $property) }}"
-            style="display:none;">
-            @csrf
-            @method('DELETE')
-        </form>
+            <form id="deleteForm" method="POST" action="{{ route('admin.properties.destroy', $property) }}"
+                style="display:none;">
+                @csrf
+                @method('DELETE')
+            </form>
+        @endif
 
     </div>
     </div>
@@ -798,10 +871,16 @@
 
 @push('scripts')
     <script>
+        // Js::from(), hindi addslashes(): dinedecode ng HTML parser ang mga
+        // entity bago pa tumakbo ang JS parser, kaya hindi nakukulong ng
+        // addslashes ang isang halaga sa loob ng JS string — ito ang mismong
+        // hugis na may babala na sa index.blade.php ng pahinang ito.
+        // Kasama rin ang fallback sa pangalan: NULL ang property_name ng bawat
+        // room row, at ang room lang naman ang nabubura ngayon.
         function confirmDelete() {
-            if (confirm(
-                    'Are you sure you want to delete "{{ addslashes($property->property_name) }}"? This cannot be undone.'
-                    )) {
+            const name = {{ Illuminate\Support\Js::from($property->property_name ?: 'Untitled ' . $property->type) }};
+
+            if (confirm(`Are you sure you want to delete "${name}"? This cannot be undone.`)) {
                 document.getElementById('deleteForm').submit();
             }
         }

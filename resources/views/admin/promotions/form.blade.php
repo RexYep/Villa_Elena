@@ -143,7 +143,8 @@
     @endif
 
     <div class="form-wrapper">
-        <form method="POST" action="{{ $isEdit ? route('admin.promotions.update', $promo) : route('admin.promotions.store') }}">
+        <form method="POST" id="promoForm"
+            action="{{ $isEdit ? route('admin.promotions.update', $promo) : route('admin.promotions.store') }}">
             @csrf
             @if ($isEdit)
                 @method('PUT')
@@ -162,6 +163,23 @@
                             value="{{ old('label', $promo->label) }}" placeholder="e.g. Rainy Season Special" required>
                         <span class="hint">This is the headline guests see on the landing page and in their notification.</span>
                         @error('label') <div class="invalid-feedback">{{ $message }}</div> @enderror
+
+                        {{-- Lumalabas lang ito kapag naharang ng
+                             Discount::duplicateProblem(). Hindi ito laging
+                             nakikita: ang isang nakatikang kahon ay walang
+                             pinipigilan, at dahil `old()` ang pinagmumulan,
+                             nalilimas ito sa bawat bagong form. --}}
+                        @if (! $isEdit && $errors->has('label'))
+                            <div class="check-row" style="margin-top:10px;">
+                                <input type="checkbox" name="confirm_duplicate" id="confirmDuplicate" value="1">
+                                <div>
+                                    <label class="check-label" for="confirmDuplicate">Create it anyway</label>
+                                    <div class="check-hint">
+                                        Only tick this if you really do want a second promo with the same name and value.
+                                    </div>
+                                </div>
+                            </div>
+                        @endif
                     </div>
 
                     <div class="mb-3">
@@ -262,9 +280,15 @@
                         <div>
                             <label class="form-label">Slot <span class="req">*</span></label>
                             <select name="applies_to" class="form-select @error('applies_to') is-invalid @enderror" required>
-                                <option value="all" {{ old('applies_to', $promo->applies_to) === 'all' ? 'selected' : '' }}>Both slots</option>
-                                <option value="day" {{ old('applies_to', $promo->applies_to) === 'day' ? 'selected' : '' }}>{{ \App\Models\Booking::SLOTS['day']['label'] }} only</option>
-                                <option value="night" {{ old('applies_to', $promo->applies_to) === 'night' ? 'selected' : '' }}>{{ \App\Models\Booking::SLOTS['night']['label'] }} only</option>
+                                {{-- Hinahango sa Booking::SLOTS: ang isang bagong slot ay lumilitaw
+                                     dito nang mag-isa. Kasama ang mga slot na wala pang presyo —
+                                     ang isang promo ay maaaring ihanda nang mas maaga pa sa
+                                     paglulunsad ng slot, at ang applies_to ay walang kinalaman sa
+                                     kung ano ang bookable ngayon. --}}
+                                <option value="all" {{ old('applies_to', $promo->applies_to) === 'all' ? 'selected' : '' }}>All slots</option>
+                                @foreach (\App\Models\Booking::SLOTS as $slotKey => $slotDef)
+                                    <option value="{{ $slotKey }}" {{ old('applies_to', $promo->applies_to) === $slotKey ? 'selected' : '' }}>{{ $slotDef['label'] }} only</option>
+                                @endforeach
                             </select>
                             @error('applies_to') <div class="invalid-feedback">{{ $message }}</div> @enderror
                         </div>
@@ -280,6 +304,45 @@
                             @error('usage_limit') <div class="invalid-feedback">{{ $message }}</div> @enderror
                         </div>
                     </div>
+
+                    {{-- ── Sino ang makakakuha ──────────────────────────
+                         Pangalawang aksis ng pagiging karapat-dapat, hiwalay
+                         sa petsa at sa slot: ang diskuwento ng may-ari sa mga
+                         REGULAR na customer. --}}
+                    <div class="two-col" style="margin-top:14px;">
+                        <div>
+                            <label class="form-label">Who gets this <span class="req">*</span></label>
+                            <select name="guest_scope" id="guestScope"
+                                class="form-select @error('guest_scope') is-invalid @enderror" required>
+                                <option value="all"
+                                    {{ old('guest_scope', $promo->guest_scope ?? 'all') === 'all' ? 'selected' : '' }}>
+                                    All guests</option>
+                                <option value="returning"
+                                    {{ old('guest_scope', $promo->guest_scope ?? 'all') === 'returning' ? 'selected' : '' }}>
+                                    Returning guests only</option>
+                            </select>
+                            @error('guest_scope') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                        </div>
+                        <div id="minStaysWrap">
+                            <label class="form-label">Completed stays needed</label>
+                            <input type="number" min="1" max="50" name="min_completed_bookings" id="minStays"
+                                class="form-control @error('min_completed_bookings') is-invalid @enderror"
+                                value="{{ old('min_completed_bookings', $promo->min_completed_bookings ?? 1) }}">
+                            <span class="hint">
+                                1 = anyone who has stayed here before. Only <strong>checked-out</strong> stays count.
+                            </span>
+                            @error('min_completed_bookings') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                        </div>
+                    </div>
+
+                    <span class="hint" style="margin-top:12px;">
+                        A <strong>Returning guests only</strong> promo is matched against the guest's completed stays —
+                        bookings that reached <strong>checked out</strong>. Pending, confirmed, cancelled and
+                        no-show bookings never count, so nobody can qualify by booking dates they don't pay for.
+                        It is only applied once the guest is <strong>signed in</strong>; the landing page shows a
+                        sign-in prompt instead of the amount, and walk-ins get it when the front desk picks the
+                        existing guest rather than creating a new one.
+                    </span>
 
                     <span class="hint" style="margin-top:12px;">
                         The window is matched against the guest's <strong>check-in date</strong>, not the date they book —
@@ -326,8 +389,11 @@
                             <div>
                                 <span class="check-label">Already announced</span>
                                 <div class="check-hint">
-                                    Sent to customers {{ $promo->notified_at->diffForHumans() }}. Each promo is announced
-                                    once — editing it won't send another round of notifications.
+                                    Sent to customers {{ $promo->notified_at->diffForHumans() }}. Fixing the name or the
+                                    description won't notify anyone again. But if you change <strong>the discount, the
+                                    dates, the slot, or who gets it</strong> — or switch the promo off — the guests who
+                                    were told are sent a short update automatically, because the notification they
+                                    already have would otherwise be promising the old terms.
                                 </div>
                             </div>
                         </div>
@@ -336,12 +402,19 @@
                             <input type="checkbox" name="notify_customers" id="notifyCustomers" value="1"
                                 {{ old('notify_customers') ? 'checked' : '' }}>
                             <div>
+                                {{-- Ang bilang ay ina-update ng JS habang nagbabago ang
+                                     "Who gets this" at ang threshold, dahil IYON ang
+                                     nagtatakda ng audience. Ang dating label ("all N
+                                     customers") ay nananatiling tama lang para sa isang
+                                     promong para sa lahat. --}}
                                 <label class="check-label" for="notifyCustomers">
-                                    Announce to all {{ $customerCount }} customer{{ $customerCount === 1 ? '' : 's' }}
+                                    Announce to <span id="notifyAudience">all {{ $customerCount }}
+                                        customer{{ $customerCount === 1 ? '' : 's' }}</span>
                                 </label>
                                 <div class="check-hint">
-                                    Sends a one-time in-app notification to every active guest account. No email is sent —
+                                    Sends a one-time in-app notification. No email is sent —
                                     the mail quota is reserved for 2FA codes, booking confirmations and password resets.
+                                    <span id="notifyScopeHint"></span>
                                 </div>
                             </div>
                         </div>
@@ -350,7 +423,7 @@
             </div>
 
             <div style="display:flex;align-items:center;">
-                <button type="submit" class="btn-submit">
+                <button type="submit" class="btn-submit" id="promoSubmit">
                     <i class="bi bi-check-lg me-1"></i> {{ $isEdit ? 'Save Promo' : 'Create Promo' }}
                 </button>
                 <a href="{{ route('admin.promotions.index') }}" class="btn-cancel-link">Cancel</a>
@@ -406,6 +479,86 @@
             typeEl.addEventListener('change', render);
             valueEl.addEventListener('input', render);
             render();
+
+            // Ang bilang ng natapos nang stay ay walang kahulugan sa isang
+            // promong para sa lahat, kaya itinatago ito doon. Hindi ito
+            // ini-disable: kailangang maipasa pa rin ang halaga kapag
+            // "returning" ang napili, at ang nakatagong field ay nagbabalik
+            // pa rin ng value sa submit.
+            const scopeEl = document.getElementById('guestScope');
+            const minWrap = document.getElementById('minStaysWrap');
+            const minEl = document.getElementById('minStays');
+
+            // Ang audience ng anunsyo ay PAREHO sa audience ng presyo
+            // (tingnan ang PromotionController::announcementAudience()).
+            // Ang bilang kada threshold ay galing sa server, kaya ang
+            // label ay hindi puwedeng mag-iba sa aktwal na padadalhan.
+            const ALL_CUSTOMERS = @json($customerCount);
+            const RETURNING_COUNTS = @json($returningCounts);
+            const audienceEl = document.getElementById('notifyAudience');
+            const scopeHintEl = document.getElementById('notifyScopeHint');
+
+            const plural = (n, word) => n + ' ' + word + (n === 1 ? '' : 's');
+
+            function renderAudience() {
+                if (! audienceEl) return;
+
+                if (scopeEl.value !== 'returning') {
+                    audienceEl.textContent = 'all ' + plural(ALL_CUSTOMERS, 'customer');
+                    scopeHintEl.textContent = '';
+
+                    return;
+                }
+
+                const min = Math.max(1, parseInt(minEl.value, 10) || 1);
+                const n = RETURNING_COUNTS[min] ?? 0;
+
+                audienceEl.textContent = n === 0
+                    ? 'nobody yet'
+                    : 'the ' + plural(n, 'guest') + ' who qualify';
+
+                scopeHintEl.textContent = n === 0
+                    ? ' No guest has ' + min + ' completed stay' + (min === 1 ? '' : 's') +
+                      ' yet, so nobody would be notified — lower the requirement, or announce it later.'
+                    : ' Only guests with ' + min + '+ completed stays are notified, because they are the only ones' +
+                      ' this promo would actually discount.';
+            }
+
+            function renderScope() {
+                const returning = scopeEl.value === 'returning';
+                minWrap.style.display = returning ? '' : 'none';
+                renderAudience();
+            }
+
+            scopeEl.addEventListener('change', renderScope);
+            minEl.addEventListener('input', renderAudience);
+            renderScope();
+
+            // ── Isang pindot lang ───────────────────────────────────
+            //
+            // Ang pag-save ng promo ay maaaring magtagal (nagtatala ito
+            // ng abiso kada guest), kaya mukhang nag-hang ang page at
+            // napipindot muli — na gumagawa ng DALAWANG promo at
+            // dalawang blast sa parehong mga guest (nangyari na ito:
+            // promo #28 at #29).
+            //
+            // Affordance lang ito. Ang tunay na hadlang ay nasa server
+            // (Discount::duplicateProblem()), dahil kayang laktawan ang
+            // JS pero hindi ang controller — kaparehong dahilan kung
+            // bakit ipinapatupad ng server ang `policies_accepted`.
+            const formEl = document.getElementById('promoForm');
+            const submitEl = document.getElementById('promoSubmit');
+
+            formEl.addEventListener('submit', function () {
+                // Nasa timeout dahil ang isang naka-disable na button ay
+                // hindi naisasama sa pag-submit sa ilang browser; ipinapa-
+                // dala muna ang form, saka isinasara ang pinto.
+                window.setTimeout(function () {
+                    submitEl.disabled = true;
+                    submitEl.innerHTML =
+                        '<i class="bi bi-hourglass-split me-1"></i> Saving — notifying guests…';
+                }, 0);
+            });
         })();
     </script>
 @endsection

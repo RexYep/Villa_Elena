@@ -16,6 +16,7 @@ use App\Models\Payment;
 use App\Models\Property;
 use App\Models\StaffLog;
 use App\Models\User;
+use App\Rules\SlotOfferedOnDate;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 
@@ -284,6 +285,11 @@ class FrontDeskController extends Controller
         return view('staff.availability', [
             'villa' => $villa,
             'grid' => $grid,
+            // Ang mga column ng grid. Ipinapasa ng DALAWANG render path
+            // (ito at availabilityGrid()) dahil ang partial ang gumuguhit
+            // ng header at nagtatakda ng bilang ng column — kung isa lang
+            // ang magpapasa, iba ang hitsura ng refetch sa reload.
+            'slotDefs' => $this->gridSlotDefs($villa),
             'start' => $start,
             'end' => $start->copy()->addDays($days - 1),
             'days' => $days,
@@ -310,7 +316,32 @@ class FrontDeskController extends Controller
 
         return view('staff._availability_grid', [
             'grid' => $this->buildSlotGrid($villa, $start, $days),
+            'slotDefs' => $this->gridSlotDefs($villa),
         ]);
+    }
+
+    /**
+     * Ang mga COLUMN ng grid — bawat slot na may presyo, kahit hindi ito
+     * inaalok sa bawat petsa.
+     *
+     * Sinasadyang `bookableSlotKeys()` at hindi `slotsOfferedOn()`: kung
+     * kada petsa magbabago ang column, hindi na parisukat ang talahanayan.
+     * Nananatili ang tatlong column, at ang mga cell na hindi inaalok sa
+     * petsang iyon ay minamarkahang `unoffered` ng buildSlotGrid(). Iyon
+     * din ang nagpapakita kay staff — sa isang sulyap — kung aling petsa
+     * ang may 22-oras na alok.
+     *
+     * @return array<string, array<string, mixed>>
+     */
+    private function gridSlotDefs(Property $villa): array
+    {
+        $defs = [];
+
+        foreach (Booking::bookableSlotKeys($villa) as $slotKey) {
+            $defs[$slotKey] = Booking::SLOTS[$slotKey];
+        }
+
+        return $defs;
     }
 
     /**
@@ -361,18 +392,36 @@ class FrontDeskController extends Controller
             ->where('end_date', '>=', $start)
             ->get();
 
+        // Ang column set ng talahanayan — pareho para sa bawat hilera,
+        // kaya parisukat ang grid. Tingnan ang gridSlotDefs().
+        $slotColumns = $this->gridSlotDefs($villa);
+
         $grid = [];
 
         for ($i = 0; $i < $days; $i++) {
             $date = $start->copy()->addDays($i);
             $slots = [];
 
-            foreach (array_keys(Booking::SLOTS) as $slotKey) {
+            // Ang mga slot na inaalok SA PETSANG ITO. Ang 22-Hours ay
+            // inaalok lang sa mga petsang pinili ng may-ari, at sa mga
+            // petsang iyon ay ito lang ang inaalok — kaya nagbabago ang
+            // sagot kada hilera.
+            $offered = Booking::slotsOfferedOn($date, $villa);
+
+            foreach (array_keys($slotColumns) as $slotKey) {
                 [$checkin, $checkout] = Booking::slotDateTimes($slotKey, $date->format('Y-m-d'));
 
                 $block = $blocks->first(fn ($b) => $date->betweenIncluded($b->start_date, $b->end_date));
 
-                if ($block) {
+                if (! in_array($slotKey, $offered, true)) {
+                    // Hindi inaalok ang slot sa petsang ito. Nananatili ang
+                    // cell para parisukat ang talahanayan, pero hindi ito
+                    // "bakante" — walang mabubook dito, kaya hindi rin ito
+                    // dapat mapindot.
+                    $state = 'unoffered';
+                    $label = 'Not offered';
+                    $guest = null;
+                } elseif ($block) {
                     $state = 'blocked';
                     $label = ucfirst(str_replace('_', ' ', $block->reason));
                     $guest = null;
@@ -404,6 +453,17 @@ class FrontDeskController extends Controller
                 // na kung may tumatamang promo), hindi ang list price —
                 // ito ang sinasabi ni staff sa guest sa telepono/counter,
                 // kaya dapat tugma ito sa lalabas sa walk-in form.
+                //
+                // WALANG guest na ipinapasa dito, at sinasadya iyon: ito
+                // ay isang talahanayang petsa×slot — walang partikular na
+                // taong binibigyan ng presyo. Kaya ang isang promong para
+                // lang sa mga regular na customer ay HINDI lalabas dito.
+                // Kapalit nito: kapag may kinakausap na regular sa
+                // telepono, ang grid ay magsasabi ng list price. Ang
+                // walk-in form — kung saan may TUNAY na piniling guest —
+                // ang nagpapakita ng aktwal na bawas (tingnan ang
+                // priceQuote()). Mas mabuti ito kaysa sa isang grid na
+                // nangangakong bawas para sa taong hindi pa pinili.
                 $quote = $state === 'free' ? $villa->quoteFor($checkin, $slotKey) : null;
 
                 $slots[$slotKey] = [
@@ -451,7 +511,13 @@ class FrontDeskController extends Controller
         $validator = validator($request->all(), [
             'property_id' => 'required|exists:properties,id',
             'checkin' => 'required|date',
-            'slot' => 'required|in:'.implode(',', array_keys(Booking::SLOTS)),
+            // Nakadepende sa petsa — tingnan ang SlotOfferedOnDate.
+            'slot' => ['required', new SlotOfferedOnDate('checkin')],
+            // Kung sino ang guest ay nakakaapekto sa presyo: may mga
+            // promong para lang sa mga regular na customer. NULL ito
+            // para sa bagong guest — likas namang hindi pa siya
+            // returning — at para sa panahong hindi pa pumili si staff.
+            'user_id' => 'nullable|exists:users,id',
         ]);
 
         if ($validator->fails()) {
@@ -461,7 +527,8 @@ class FrontDeskController extends Controller
         $property = Property::findOrFail($request->property_id);
         [$checkin, $checkout] = Booking::slotDateTimes($request->slot, $request->checkin);
 
-        $quote = $property->quoteFor($checkin, $request->slot);
+        $guest = $request->user_id ? User::find($request->user_id) : null;
+        $quote = $property->quoteFor($checkin, $request->slot, $guest);
         $isPeak = in_array($checkin->dayOfWeek, [5, 6]) || ($checkin->dayOfWeek === 0 && $checkin->format('H:i') < '18:00');
 
         // Live availability para sa walk-in form — parehong mga kondisyong
@@ -488,6 +555,12 @@ class FrontDeskController extends Controller
             'total' => $quote['total'],
             'promo_label' => $quote['promo']?->label,
             'promo_value' => $quote['promo']?->value_label,
+            // Para masabi ni staff sa guest ang TAMANG dahilan ng bawas:
+            // "regular customer discount" at hindi "promo".
+            'promo_scope' => $quote['promo']?->isReturningOnly()
+                ? $quote['promo']->guest_scope_label
+                : null,
+            'guest_stays' => $guest?->completedStayCount(),
         ]);
     }
 
@@ -514,7 +587,11 @@ class FrontDeskController extends Controller
             'date' => $request->filled('date')
                 ? \Carbon\Carbon::parse($request->date)->format('Y-m-d')
                 : null,
-            'slot' => in_array($request->slot, array_keys(Booking::SLOTS))
+            // Ang prefill na galing sa availability grid. Tinatanggap lang
+            // ang slot na tunay na inaalok sa petsang iyon — kung hindi,
+            // pre-selected ang form sa isang bagay na tatanggihan agad.
+            'slot' => ($request->filled('date') && $request->filled('slot')
+                && in_array($request->slot, Booking::slotsOfferedOn($request->date), true))
                 ? $request->slot
                 : null,
         ];
@@ -543,7 +620,7 @@ class FrontDeskController extends Controller
             // ma-bypass ang dropdown restriction sa frontend.
             'property_id' => 'required|exists:properties,id,type,villa',
             'check_in_date' => 'required|date|after_or_equal:today',
-            'slot' => 'required|in:'.implode(',', array_keys(Booking::SLOTS)),
+            'slot' => ['required', new SlotOfferedOnDate('check_in_date')],
             'num_guests' => 'required|integer|min:1',
             'special_requests' => 'nullable|string|max:500',
             'payment_amount' => 'nullable|numeric|min:0',
@@ -582,7 +659,17 @@ class FrontDeskController extends Controller
         // ito bagay na pinipili ni staff. Ang `total` ang batayan ng
         // lahat ng pagsusuri sa bayad sa ibaba; ang `base` ay itinatala
         // lang bilang listahang presyo bago ang bawas.
-        $quote = $property->quoteFor($checkin, $request->slot);
+        //
+        // Ang bawas sa regular na customer ay nasusukat lang kung may
+        // umiiral nang guest. Para sa `guest_type = 'new'`, ang User row
+        // ay ginagawa pa lang sa loob ng reserveSlot() sa ibaba — pero
+        // wala ring dapat masukat: ang isang bagong guest ay walang
+        // natapos pang stay, kaya list price talaga ang tama.
+        $existingGuest = $request->guest_type === 'existing'
+            ? User::find($request->user_id)
+            : null;
+
+        $quote = $property->quoteFor($checkin, $request->slot, $existingGuest);
         $baseAmount = $quote['base'];
         $discountAmount = $quote['discount'];
         $totalAmount = $quote['total'];

@@ -62,6 +62,51 @@ class DemandModel
         return $this->villa;
     }
 
+    /**
+     * Ang mga slot na dapat isaalang-alang ng mga advisor.
+     *
+     * Ang mga BOOKABLE lang, hindi lahat ng nasa Booking::SLOTS. Hindi ito
+     * kagustuhan lang: ang mga advisor ay nagpepresyo sa pamamagitan ng
+     * `quoteFor()`, at TUMATANGGI iyon (422) sa isang slot na wala pang
+     * presyo. Kung Booking::SLOTS ang ini-loop, ang buong
+     * `prescriptive:generate` ay babagsak sa sandaling madagdag ang isang
+     * slot na hindi pa ipinepresyo.
+     *
+     * @return array<int, string>
+     */
+    public function bookableSlots(): array
+    {
+        return Booking::bookableSlotKeys($this->villa);
+    }
+
+    /**
+     * Ang mga slot na inaalok sa ISANG petsa.
+     *
+     * Kailangan ito ng mga advisor dahil hindi na pareho ang sagot kada
+     * petsa: ang 22-Hours ay inaalok lang sa mga petsang pinili ng may-ari,
+     * at sa mga petsang iyon ay ito lang ang inaalok. Kung
+     * `bookableSlots()` lang ang pagbabatayan, dalawang mali ang
+     * mangyayari — mag-aalok ng promo sa Day sa isang petsang 22-oras
+     * lamang, at magpepresyo ng 22-oras sa mga petsang hindi ito inaalok
+     * (na tinatanggihan naman ng `quoteFor()` at magpapabagsak sa
+     * `prescriptive:generate`).
+     *
+     * Naka-cache kada petsa: ini-loop ito ng bawat advisor sa parehong
+     * saklaw ng petsa, kaya walang saysay na tanungin ito nang paulit-ulit.
+     *
+     * @return array<int, string>
+     */
+    public function slotsOfferedOn(Carbon $date): array
+    {
+        $key = $date->format('Y-m-d');
+
+        return $this->offeredCache[$key]
+            ??= Booking::slotsOfferedOn($date, $this->villa);
+    }
+
+    /** @var array<string, array<int, string>> */
+    private array $offeredCache = [];
+
     // ── Mga pagpapalagay na kayang baguhin ng admin ────────────────
 
     public static function setting(string $key, float $default): float
@@ -174,7 +219,17 @@ class DemandModel
 
     // ── Presyo at inaasahang kita ──────────────────────────────────
 
-    /** @return array{base: float, discount: float, total: float, promo: ?\App\Models\Discount} */
+    /**
+     * WALANG guest na ipinapasa sa quoteFor(), at sinasadya iyon: ang
+     * forecasting ay tungkol sa isang petsa, hindi sa isang tao. Kaya
+     * ang mga promong para lang sa mga regular na customer ay hindi
+     * nakakaapekto sa hinuhang kita — tama iyon, dahil hindi natin
+     * alam kung sino ang bibili ng petsang iyon. Ito rin ang nagpapanatiling
+     * tumpak ng `$quoteCache`: kung may guest na pumasok sa pagkuwenta,
+     * ang susi (petsa|slot) ay hindi na sapat.
+     *
+     * @return array{base: float, discount: float, total: float, promo: ?\App\Models\Discount}
+     */
     public function quote(Carbon $date, string $slot): array
     {
         $key = $date->format('Y-m-d').'|'.$slot;
@@ -278,25 +333,51 @@ class DemandModel
         Booking::where('property_id', $this->villa->id)
             ->whereNotIn('status', ['cancelled', 'no_show'])
             ->whereBetween('check_in_date', [$from->toDateString(), $this->horizonEnd()->toDateString()])
-            ->get(['check_in_date', 'check_in_time'])
+            ->get(['check_in_date', 'check_in_time', 'check_out_date', 'check_out_time'])
             ->each(function ($booking) {
-                $date = $booking->check_in_date->format('Y-m-d');
-                $time = Carbon::parse($booking->check_in_time)->format('H:i');
+                // DATETIME-OVERLAP, hindi paghahambing ng check-in time.
+                //
+                // Dati ay hinahanap nito ang slot na ang `check_in` ay
+                // katumbas ng oras ng booking, at minamarkahan LANG iyon.
+                // Tatlong bagay ang mali roon ngayon:
+                //
+                //   1. Ang Night at ang 22-Hours ay pareho ang 19:00, kaya
+                //      ang isang 22-oras na booking ay nagmamarka ng
+                //      alinmang mauna sa SLOTS at hindi ng totoong sakop.
+                //   2. Ang isang 22-oras na booking ay sumasaklaw sa Day ng
+                //      KINABUKASAN. Hindi kailanman namarkahan iyon, kaya
+                //      ang engine ay nag-aalok ng promo sa isang slot na
+                //      okupado — at ang `slot_hold` index ay walang
+                //      masasalo doon (iba ang petsa at oras).
+                //   3. Ang isang stay na pinahaba ng extendStay() ay
+                //      dumudulas sa fallback at nagmamarka ng buong araw,
+                //      kahit alam ang tunay na sakop nito.
+                //
+                // Ang paraang ito ay tumatama sa tatlo nang walang
+                // kaso-kaso: sinusukat ang tunay na window ng booking at
+                // minamarkahan ang bawat slot na pinapatungan nito. Ito rin
+                // ang eksaktong pagsusuri ng Booking::slotAvailabilityMap()
+                // at ng hasConflict().
+                $start = $booking->checkInDateTime();
+                $end = $booking->checkOutDateTime();
 
-                foreach (Booking::SLOTS as $slot => $def) {
-                    if ($def['check_in'] === $time) {
-                        $this->occupied[$date.'|'.$slot] = true;
+                // Pati ang araw bago ang check-in: ang isang 22-oras na slot
+                // na nagsisimula KAHAPON ay umaabot pa rin sa araw na ito.
+                $cursor = $booking->check_in_date->copy()->subDay();
+                $last = $booking->check_out_date->copy()->addDay();
 
-                        return;
+                while ($cursor->lte($last)) {
+                    $date = $cursor->format('Y-m-d');
+
+                    foreach (array_keys(Booking::SLOTS) as $slot) {
+                        [$slotStart, $slotEnd] = Booking::slotDateTimes($slot, $date);
+
+                        if ($slotStart->lt($end) && $slotEnd->gt($start)) {
+                            $this->occupied[$date.'|'.$slot] = true;
+                        }
                     }
-                }
 
-                // Lumang booking na walang tugmang slot (bago ang fixed slots):
-                // ituring na sakop ang BUONG araw sa halip na ipagwalang-bahala
-                // — nangyari talaga iyon, at hindi tama ang mag-alok ng promo
-                // sa ibabaw nito.
-                foreach (array_keys(Booking::SLOTS) as $slot) {
-                    $this->occupied[$date.'|'.$slot] = true;
+                    $cursor->addDay();
                 }
             });
     }

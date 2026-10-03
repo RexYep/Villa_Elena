@@ -18,6 +18,7 @@ use Illuminate\Support\Str;
  * @property \Illuminate\Support\Carbon $check_out_date
  * @property string $check_out_time
  * @property string|null $slot_hold
+ * @property string|null $slot
  * @property \Illuminate\Support\Carbon|null $actual_check_out
  * @property int $num_nights
  * @property int $num_guests
@@ -204,6 +205,38 @@ class Booking extends Model
             $booking->slot_hold = $hold;
         });
 
+        // `slot` — ang pangalan ng slot na binook, itinatala bilang datos.
+        //
+        // Gaya ng `slot_hold`, hindi ito fillable at DITO LANG ito
+        // isinusulat: walang controller ang nagtatakda nito. Hindi na
+        // kailangang baguhin ang pitong daanang gumagawa o naglilipat ng
+        // booking — lahat sila ay dumadaan sa slotDateTimes() para sa
+        // oras, kaya ang mismong oras na iyon ang nagsasabi ng slot.
+        //
+        // ANG MAHALAGANG PATAKARAN: kapag may nakaimbak nang halaga at
+        // HINDI na tugma ang oras sa alinmang slot, PINAPANATILI ito —
+        // hindi ito nini-null.
+        //
+        // Iyon ang buong dahilan ng column na ito. Ang `extendStay()` ay
+        // nagbabago ng check_out_time ng isang naka-check-in nang bisita
+        // at hindi ng check_in_time, kaya pagkatapos noon ay wala nang
+        // slot na tutugma sa oras. Kung nini-null ito, mawawala ang
+        // pangalan ng slot sa calendar sa eksaktong sandaling
+        // pinahahaba ang stay — habang ang katotohanan ay alam pa naman:
+        // Night itong binook, at Night pa rin.
+        static::saving(function ($booking) {
+            if (! static::hasOptionalColumn('slot')) {
+                return;
+            }
+
+            // Ang exactSlotKey() ay sumasagot LAMANG kapag eksaktong
+            // tugma ang oras, kaya ang isang pinahabang stay (o isang
+            // legacy na 2:00 PM na row) ay walang isinasagot dito.
+            if ($slot = $booking->exactSlotKey()) {
+                $booking->slot = $slot;
+            }
+        });
+
         // Ang SoftDeletes::runSoftDelete() ay direktang UPDATE sa query
         // builder — hindi ito dumadaan sa save(), kaya hindi tumatakbo
         // ang saving() sa itaas. Kung hindi ito lilinisin dito,
@@ -292,22 +325,35 @@ class Booking extends Model
      * (nananatili ang lock ng reserveSlot()) — ang backstop lang ang
      * pansamantalang wala.
      */
-    protected static ?bool $slotHoldColumnExists = null;
+    /** @var array<string, bool> Sagot kada column, isang beses kada proseso. */
+    protected static array $optionalColumnExists = [];
 
-    protected static function slotHoldColumnExists(): bool
+    /**
+     * Umiiral na ba ang isang column na idinagdag ng migration na
+     * posibleng hindi pa tumakbo? Iisang kopya ng dahilan sa itaas,
+     * ginagamit ng `slot_hold` at ng `slot` — pareho silang isinusulat ng
+     * model hook sa bawat save, kaya pareho nilang kailangang kayanin ang
+     * dalawang hugis ng schema habang naglalabasan ang deploy.
+     */
+    protected static function hasOptionalColumn(string $column): bool
     {
-        if (static::$slotHoldColumnExists === null) {
+        if (! array_key_exists($column, static::$optionalColumnExists)) {
             try {
-                static::$slotHoldColumnExists = \Illuminate\Support\Facades\Schema::hasColumn(
+                static::$optionalColumnExists[$column] = \Illuminate\Support\Facades\Schema::hasColumn(
                     (new static)->getTable(),
-                    'slot_hold'
+                    $column
                 );
             } catch (\Throwable $e) {
-                static::$slotHoldColumnExists = false;
+                static::$optionalColumnExists[$column] = false;
             }
         }
 
-        return static::$slotHoldColumnExists;
+        return static::$optionalColumnExists[$column];
+    }
+
+    protected static function slotHoldColumnExists(): bool
+    {
+        return static::hasOptionalColumn('slot_hold');
     }
 
     /**
@@ -356,27 +402,295 @@ class Booking extends Model
         return (int) Setting::get('booking_hold_minutes', 60);
     }
 
-    // ── Fixed Booking Slots ──────────────────────────────────────────
-    // Dalawang fixed na package slot na lang ang pinipili ng guest —
-    // hindi na free-choice na oras. Ang gap sa pagitan ng dalawang slot
-    // (5:00 PM checkout → 7:00 PM check-in, at 6:00 AM checkout → 8:00 AM
-    // check-in) ang siya nang nagsisilbing cleaning buffer, kaya walang
-    // hiwalay na buffer na kailangan pang i-enforce sa hasConflict().
+    // ── Alin ang puwedeng ilipat ng petsa ───────────────────────────
+    /**
+     * Ang mga status LAMANG na makatuwirang ilipat sa ibang petsa.
+     *
+     * Ang admin calendar ay `editable: true` sa kabuuan at ang feed nito ay
+     * `cancelled` lang ang itinatanggi, kaya nadadala ang bawat `checked_out`
+     * na booking — 41 sa 55 sa production data. Dalawa ang tunay na pinsala
+     * niyon, hindi lang kalat:
+     *
+     *   1. Binabago nito ang kasaysayan. Isang stay na naganap noong Ago 8 ay
+     *      itatala nang ibang petsa, at `check_in_date` ang binabasa ng
+     *      revenue at occupancy reporting.
+     *   2. Umaagaw ito ng slot sa hinaharap. `cancelled` at `no_show` lang ang
+     *      hindi kasama sa hasConflict(), kaya HUMAHAWAK PA RIN ng slot ang
+     *      isang `checked_out`. I-drag ang tapos nang stay sa bakanteng petsa
+     *      sa hinaharap at haharangan nito ang petsang iyon laban sa totoong
+     *      booking — ipinapatupad hanggang sa `slot_hold` UNIQUE index.
+     *
+     * Wala ang `checked_in` dito nang sinasadya: nasa villa na mismo ang
+     * bisita, at ang pagpapalit ng kaniyang petsa ay trabaho ng extendStay(),
+     * na siyang itinakdang eksepsiyon sa free-choice na oras.
+     *
+     * IISANG listahan ito, ginagamit ng feed (para hindi na ma-drag) at ng
+     * moveBooking() (para tanggihan ang direktang POST). Ang pagtatago ng
+     * kontrol ay hindi pagbabawal, kaya kailangan ang dalawa — at kailangang
+     * iisa ang pinagmumulan nila, dahil ang dalawang kopya ng listahan ng
+     * status ay tiyak na maghihiwalay.
+     */
+    public const MOVABLE_STATUSES = ['pending', 'confirmed'];
 
+    public function canBeMoved(): bool
+    {
+        return in_array($this->status, static::MOVABLE_STATUSES, true);
+    }
+
+    // ── Fixed Booking Slots ──────────────────────────────────────────
+    // Fixed na package slot ang pinipili ng guest — hindi free-choice na
+    // oras. Ang gap sa pagitan ng Day at Night (5:00 PM checkout → 7:00 PM
+    // check-in, at 6:00 AM checkout → 8:00 AM check-in) ang siya nang
+    // nagsisilbing cleaning buffer, kaya walang hiwalay na buffer na
+    // kailangan pang i-enforce sa hasConflict().
+    //
+    // ⚠️ HINDI NA MAGKAHIWALAY ANG MGA SLOT (v7.47).
+    //
+    // Dalawa lang ang slot noon, at hindi sila kailanman nagpapatong: ang
+    // Day ng isang petsa at ang Night ng parehong petsa ay dalawang
+    // magkaibang bagay. Ang 22-Hours ay PUMAPATONG sa dalawa:
+    //
+    //   Biyernes 7PM ────────────── 22-Hours ───────────── Sabado 5PM
+    //   Biyernes 7PM ─ Night ─ Sabado 6AM
+    //                          Sabado 8AM ─ Day ─ Sabado 5PM
+    //
+    // Kaya ang isang 22-oras na booking sa Biyernes ay humahawak DIN sa
+    // Night ng Biyernes AT sa Day ng Sabado, at kabaligtaran: kapag may
+    // booking sa Day ng Sabado, sarado ang 22-Hours ng Biyernes. Walang
+    // kailangang baguhin para tumama ito — datetime-overlap ang
+    // hasConflict() at ang slotAvailabilityMap() (na sumasaklaw sa
+    // `check_in_date - 1` nang mismong dahilan na ito), hindi
+    // paghahambing ng slot key. Huwag ipapalit iyon sa pagsusuring
+    // "parehong slot key ba".
+    //
+    // TANDAAN: ang `slot_hold` UNIQUE index ay `{property}:{date}:{time}`,
+    // at 19:00 ang check-in ng Night AT ng 22-Hours — kaya nahuhuli nito
+    // ang Night-vs-22-Hours sa isang petsa (tama lang, nagkakabanggaan
+    // sila), pero HINDI ang 22-Hours-vs-Day-kinabukasan: iba ang petsa,
+    // iba ang oras. Ang lock ng reserveSlot() ang humahawak doon. Mas
+    // manipis ang backstop ngayon kaysa noong dalawa ang slot.
+
+    // Ang `name` at `times` ay para sa mga radio card, na ipinapakita ang
+    // pangalan nang bold at ang oras nang maliit. INVARIANT:
+    // `label === "{name} ({times})"`. Nakalista ang tatlo sa halip na
+    // pagbuo-buuin sa runtime dahil nasa isang tanawin lang silang lahat
+    // dito; kapag binago ang isa, tingnan ang katabi.
     public const SLOTS = [
         'day' => [
             'label'     => 'Day (8:00 AM – 5:00 PM)',
+            'name'      => 'Day',
+            'times'     => '8:00 AM – 5:00 PM',
             'check_in'  => '08:00',
             'check_out' => '17:00',
             'overnight' => false,
         ],
         'night' => [
             'label'     => 'Night (7:00 PM – 6:00 AM)',
+            'name'      => 'Night',
+            'times'     => '7:00 PM – 6:00 AM',
             'check_in'  => '19:00',
             'check_out' => '06:00',
             'overnight' => true,
         ],
+        // Pinayagan ng may-ari kasama ng Day at Night (tingnan ang
+        // booking policy sa v7.47). Kapareho ng check-in ng Night — iyon
+        // ang dahilan kung bakit dalawang field ang inihahambing ng
+        // exactSlotKey() at kung bakit may `bookings.slot` na column.
+        'stay22' => [
+            'label'     => '22 Hours (7:00 PM – 5:00 PM next day)',
+            'name'      => '22 Hours',
+            'times'     => '7:00 PM – 5:00 PM next day',
+            'check_in'  => '19:00',
+            'check_out' => '17:00',
+            'overnight' => true,
+            // ⚠️ Hindi ito inaalok araw-araw. Pinipili ng may-ari kung
+            // aling petsa (`slot_windows`), at sa petsang may window ay
+            // ITO LANG ang inaalok — nakatago ang Day at Night. Tingnan
+            // ang slotsOfferedOn(). Ang `window_required` ang nagbubukod
+            // sa "walang row = hindi kailanman inaalok" (dito) at sa
+            // "walang row = laging inaalok" (Day/Night).
+            'window_required' => true,
+        ],
     ];
+
+    /**
+     * Kailangan ba ng slot na ito ng `slot_windows` na row bago maalok?
+     */
+    public static function slotRequiresWindow(string $slot): bool
+    {
+        return (bool) (static::SLOTS[$slot]['window_required'] ?? false);
+    }
+
+    /** Ang mga slot na pinipili ng may-ari kada petsa. */
+    public static function windowedSlotKeys(): array
+    {
+        return array_values(array_filter(
+            array_keys(static::SLOTS),
+            fn (string $slot) => static::slotRequiresWindow($slot)
+        ));
+    }
+
+    /**
+     * Ang mga slot na KAILANMAN maipagbibili — mayroong presyo.
+     *
+     * ⚠️ HINDI ito ang tanong na "ano ang maaaring i-book sa petsang
+     * ito" — `slotsOfferedOn()` ang sumasagot niyon, at IYON ang dapat
+     * gamitin ng mga form, grid, dropdown at pampublikong pahina.
+     *
+     * Tatlong magkaibang tanong, tatlong method:
+     *
+     *   SLOTS                 ano ang mga DEPINISYON (laging tatlo)
+     *   bookableSlotKeys()    ano ang may PRESYO
+     *   slotsOfferedOn($date) ano ang inaalok SA PETSANG ITO
+     *
+     * Kailangang manatili sa SLOTS ang lahat para makapagbasa ng umiiral
+     * nang booking ang slotDateTimes(), ang slotKey() at ang calendar.
+     *
+     * Ito ay nananatiling kapaki-pakinabang para sa mga tanong na walang
+     * petsa — hal. "may 22-oras na slot ba na nakatakda man lang?" — at
+     * ito ang unang hadlang sa loob ng slotsOfferedOn() mismo.
+     *
+     * @return array<int, string>
+     */
+    public static function bookableSlotKeys(?\App\Models\Property $property = null): array
+    {
+        $property ??= \App\Models\Property::where('type', 'villa')->first();
+
+        if (! $property) {
+            return array_keys(static::SLOTS);
+        }
+
+        return array_values(array_filter(
+            array_keys(static::SLOTS),
+            fn (string $slot) => $property->isSlotPriced($slot)
+        ));
+    }
+
+    /**
+     * Ano ang inaalok sa ISANG PARTIKULAR na petsa. Ito ang awtoridad para
+     * sa bawat form, grid, dropdown, validator at pampublikong pahina.
+     *
+     * Ang 22-Hours ay hindi pang-araw-araw: pinipili ng may-ari kung
+     * aling petsa (`slot_windows`), at sa isang petsang may window ay
+     * ITO LANG ang inaalok — nakatago ang Day at Night doon. Kaya:
+     *
+     *   Okt 2 (may window)  →  ['stay22']
+     *   Okt 3 (walang)      →  ['day', 'night']
+     *
+     * Ang Okt 3 ay ordinaryong petsa kahit hawak ng 22-oras na stay ang
+     * umaga nito. Hindi ito trabaho ng window: kapag NA-BOOK ang 22 oras,
+     * isasara ng hasConflict() ang Day ng Okt 3 nang mag-isa. Tingnan ang
+     * tala sa ibaba tungkol sa paghihiwalay ng dalawang konsepto.
+     *
+     * ⚠️ DALAWANG BITAG NA NAPANSIN BAGO IPADALA:
+     *
+     * 1. WINDOW NA WALANG PRESYO. Kung magtatago ng Day/Night ang
+     *    exclusivity habang wala pang presyo ang 22 oras, ang petsa ay
+     *    WALANG inaalok — patay na petsa sa pampublikong calendar. Kaya
+     *    ang window ay may bisa LAMANG kapag may presyo na ang slot;
+     *    kung wala, bumabalik ang petsa sa Day/Night. Kung wala ito, ang
+     *    isang admin na naglalagay ng window bago ang presyo ay tahimik
+     *    na nagsasara ng mga petsang iyon.
+     *
+     * 2. ITO AY TUNGKOL SA PAG-AALOK, HINDI SA BANGGAAN. Ang
+     *    `hasConflict()` at ang `slotAvailabilityMap()` ay dapat
+     *    SUMUSURI PA RIN ng LAHAT ng slot, window man o wala — kailangan
+     *    pa ring markahan ng isang 22-oras na booking ang Night at ang
+     *    Day ng kinabukasan bilang sarado. Ang paghahalo ng dalawang
+     *    konseptong ito ay magbubukas muli ng double-booking.
+     *
+     * @param  \Carbon\Carbon|string  $date  Ang CHECK-IN date.
+     * @return array<int, string>
+     */
+    public static function slotsOfferedOn($date, ?\App\Models\Property $property = null): array
+    {
+        $property ??= \App\Models\Property::where('type', 'villa')->first();
+
+        if (! $property) {
+            return array_keys(static::SLOTS);
+        }
+
+        $priced = static::bookableSlotKeys($property);
+        $dateStr = $date instanceof \Carbon\Carbon
+            ? $date->format('Y-m-d')
+            : \Carbon\Carbon::parse($date)->format('Y-m-d');
+
+        // May window ba sa petsang ito para sa isang slot na may presyo?
+        // Ang unang tumama ang nananaig — at dahil iisa lang ngayon ang
+        // windowed na slot, hindi pa kailangan ng panuntunan sa pag-uuna.
+        foreach (static::windowedSlotKeys() as $slot) {
+            if (! in_array($slot, $priced, true)) {
+                continue;   // Bitag 1: walang presyo, walang bisa ang window.
+            }
+
+            $hasWindow = \App\Models\SlotWindow::query()
+                ->offeredOn($property->id, $slot, $dateStr)
+                ->exists();
+
+            if ($hasWindow) {
+                return [$slot];
+            }
+        }
+
+        // Walang window: ang mga hindi-windowed na slot na may presyo.
+        return array_values(array_filter(
+            $priced,
+            fn (string $slot) => ! static::slotRequiresWindow($slot)
+        ));
+    }
+
+    /**
+     * Ang mga petsang may window, kada windowed na slot — para sa mga
+     * front end na kailangang malaman ito nang hindi tumatawag sa server
+     * kada pagpalit ng petsa.
+     *
+     * Hugis: `['stay22' => ['2026-10-02', '2026-10-09']]`
+     *
+     * Ang mga slot na WALANG presyo ay hindi kasama, kaya ang JS na
+     * gumagamit nito ay eksaktong katumbas ng slotsOfferedOn(): window
+     * muna (at eksklusibo), at kung wala, ang mga hindi-windowed na slot.
+     * Kapag ang isa ay nagsasama ng hindi-presyadong slot at ang isa ay
+     * hindi, may mapipiling slot sa form na tatanggihan ng server.
+     *
+     * Naka-bound sa isang saklaw dahil ito ay ipinapadala sa bawat page
+     * load; ang isang buong taon ay iilang dosenang string lang.
+     *
+     * @return array<string, array<int, string>>
+     */
+    public static function slotWindowDates(
+        ?\App\Models\Property $property = null,
+        ?\Carbon\Carbon $from = null,
+        ?\Carbon\Carbon $to = null,
+    ): array {
+        $property ??= \App\Models\Property::where('type', 'villa')->first();
+
+        if (! $property) {
+            return [];
+        }
+
+        $from ??= today();
+        $to ??= today()->copy()->addMonths(12);
+
+        $priced = static::bookableSlotKeys($property);
+        $out = [];
+
+        foreach (static::windowedSlotKeys() as $slot) {
+            if (! in_array($slot, $priced, true)) {
+                continue;
+            }
+
+            $out[$slot] = \App\Models\SlotWindow::where('property_id', $property->id)
+                ->where('slot', $slot)
+                ->where('is_active', 1)
+                ->whereBetween('check_in_date', [$from->format('Y-m-d'), $to->format('Y-m-d')])
+                ->orderBy('check_in_date')
+                ->pluck('check_in_date')
+                ->map(fn ($d) => $d instanceof \DateTimeInterface ? $d->format('Y-m-d') : (string) $d)
+                ->all();
+        }
+
+        return $out;
+    }
 
     /**
      * Mapa ng mga SARADONG slot kada petsa para sa isang property.
@@ -521,22 +835,93 @@ class Booking extends Model
     }
 
     /**
-     * Kabaligtaran ng slotDateTimes() — tinitignan kung aling slot
-     * ('day'/'night') ang tugma sa check_in_time ng existing booking na
-     * ito, para sa pre-fill ng reschedule/edit forms. Null kung walang
-     * tugmang slot (hal. lumang booking bago ipatupad ang fixed slots).
+     * Kabaligtaran ng slotDateTimes() — tinitignan kung aling slot ang
+     * tugma sa NAKAIMBAK na oras ng booking na ito. Null kung walang
+     * eksaktong tugmang slot (hal. lumang booking bago ipatupad ang fixed
+     * slots, o isang stay na pinahaba ng extendStay()).
+     *
+     * ⚠️ EKSAKTO ang hinahanap na tugma: check-in time, check-out time, AT
+     * kung tumatawid ba ng araw — hindi ang check-in time lamang.
+     *
+     * Dati, check-in time lang ang sinusuri. Tama lang iyon HABANG dalawa
+     * ang slot: magkaiba ang 08:00 at 19:00, kaya isang field ay sapat na
+     * pambukod. Sa sandaling magkapareho ng check-in time ang dalawang
+     * slot — gaya ng Night (19:00–06:00) at ng 22-Hours (19:00–17:00, na
+     * pinayagan ng may-ari) — ang unang tumama sa loop ang nananalo, at
+     * TAHIMIK nang nagsisinungaling ang sagot.
+     *
+     * Hindi lang label ang nasisira doon. Ang haba ng booking ay
+     * kinukuha ng `Admin\CalendarController::move()` mula sa sinasagot
+     * nitong slot (tingnan ang slotDateTimes() na tawag doon), kaya ang
+     * isang 22-oras na booking na ikinaladkad sa ibang petsa ay muling
+     * maisusulat bilang 11-oras na Night: labing-isang oras na binayaran
+     * ng bisita, nawawala nang walang anumang tala. Kaya dalawa ang oras
+     * na sinusuri dito, hindi isa.
+     *
+     * Kasama rin ang day-span sa pagsusuri para hindi tumama ang isang
+     * sirang row (hal. 19:00–17:00 sa IISANG petsa — negatibo ang haba)
+     * sa isang tunay na overnight na slot.
+     *
+     * ⚠️ HINDI ITO ANG TANONG NA "anong slot ba ang booking na ito" —
+     * `slotKey()` ang sumasagot niyon, at binabasa nito ang nakaimbak na
+     * `slot` column. Ang tanong DITO ay: "ang oras na nakaimbak ngayon,
+     * tumutugma pa ba nang eksakto sa isang slot?"
+     *
+     * Dalawang magkaibang tanong iyon, at iisang method lang ang
+     * sumasagot sa kanila dati — ligtas lang iyon habang natatangi ang
+     * check-in time ng bawat slot. Ito ang bersiyong dapat gamitin kapag
+     * ang sagot ay magtatakda ng HABA ng booking (hal. ang drag-move sa
+     * calendar): kapag pinahaba na ng `extendStay()` ang isang stay,
+     * WALA itong isinasagot, kaya hindi maaaring maibalik ng isang
+     * drag-move ang checkout sa de-latang 6:00 AM at mabura ang
+     * extension — ang tunay nitong haba ang mapapanatili.
      */
-    public function slotKey(): ?string
+    public function exactSlotKey(): ?string
     {
-        $time = \Carbon\Carbon::parse($this->check_in_time)->format('H:i');
+        if (empty($this->check_in_time) || empty($this->check_out_time)
+            || empty($this->check_in_date) || empty($this->check_out_date)) {
+            return null;
+        }
+
+        $in  = \Carbon\Carbon::parse($this->check_in_time)->format('H:i');
+        $out = \Carbon\Carbon::parse($this->check_out_time)->format('H:i');
+
+        // Tumatawid ba ng araw ang booking? Ihahambing ito sa `overnight`
+        // ng bawat slot definition.
+        $crossesDay = $this->check_in_date->format('Y-m-d')
+            !== $this->check_out_date->format('Y-m-d');
 
         foreach (static::SLOTS as $key => $def) {
-            if ($def['check_in'] === $time) {
+            if ($def['check_in'] === $in
+                && $def['check_out'] === $out
+                && (bool) $def['overnight'] === $crossesDay) {
                 return $key;
             }
         }
 
         return null;
+    }
+
+    /**
+     * Anong slot ang booking na ito? Para sa mga label at sa pre-fill ng
+     * mga form. Null kung wala talaga (hal. legacy row bago ang v5.1).
+     *
+     * Ang NAKAIMBAK na `slot` ang unang sinasagot — iyon ang tanging
+     * mapagkakatiwalaang sagot kapag hindi na sinasabi ng oras. Ang
+     * paghahambing ng oras ay fallback lang para sa mga row na hindi pa
+     * nasusulatan ng column (mga naunang booking sa pagitan ng deploy at
+     * ng migration, o kung hindi pa tumakbo ang migration).
+     *
+     * Huwag itong gamitin para kuwentahin ang HABA ng booking — tingnan
+     * ang exactSlotKey() at ang dahilan sa docblock nito.
+     */
+    public function slotKey(): ?string
+    {
+        if (! empty($this->slot) && isset(static::SLOTS[$this->slot])) {
+            return $this->slot;
+        }
+
+        return $this->exactSlotKey();
     }
 
     public function checkInDateTime(): \Carbon\Carbon
@@ -1076,21 +1461,51 @@ class Booking extends Model
     public function isCancelled(): bool  { return $this->status === 'cancelled'; }
     public function isPaid(): bool       { return $this->payment_status === 'paid'; }
 
-    // ── Cancellation / Refund Policy ────────────────────────────────
+    // ── Cancellation / Refund Policy (v7.52) ────────────────────────
     //
-    //   Kailan nag-cancel                          Refund ng eligible amount
+    //   Sino ang nag-cancel                         Ibinabalik
     //   ─────────────────────────────────────────────────────────────
-    //   Within 24 hours matapos i-book (booking     100%
-    //     grace period — laging nangingibabaw ito
-    //     kahit malapit na ang check-in)
-    //   7+ araw bago ang check-in                   100%
-    //   3–6 araw bago ang check-in                    50%
-    //   Wala pang 3 araw bago ang check-in             0%
+    //   Ang guest (kusa, o hiniling sa admin)       ₱0 — deposit man o
+    //                                               buong bayad
+    //   Ang resort (maintenance, panahon, atbp.)    lahat ng naibayad
     //
-    // Iisang method na ito ang ginagamit KAPWA ng customer self-cancel
-    // (Customer\HomeController::cancelBooking) at admin manual-cancel
-    // (Admin\BookingController::updateStatus) — para hindi sila
-    // mag-out-of-sync sa computation.
+    // Patakaran ito ng may-ari: "Deposit is NON-REFUNDABLE", at ganoon
+    // din ang buong bayad. Dating may tiers dito (100% sa loob ng 24 oras
+    // o 7+ araw, 50% sa 3–6 araw, 0% kung wala pang 3) na kinukuwenta sa
+    // `amount_paid` — kaya ang 50% deposit mismo ay naibabalik nang buo,
+    // salungat sa patakaran.
+    //
+    // Ang tanong ay hindi na "kailan" kundi "SINO" — at hindi iyon
+    // mahuhulaan ng code mula sa booking. Ang guest path
+    // (Customer\HomeController::cancelBooking) ay hindi na gumagawa ng
+    // refund; ang admin ay tinatanong sa cancel modal kung sino ang
+    // nagpasya (Admin\BookingController::updateStatus).
+    //
+    // HINDI nito inaalis ang refund machinery (Send Money, refund
+    // destinations, Payments page). Tatlong uri ng refund ang walang
+    // kinalaman sa pag-cancel ng guest: ang resort ang nag-cancel,
+    // sobra/dobleng singil, at bayad na dumating matapos makuha ng iba
+    // ang slot.
+
+    /**
+     * Ang iisang pangungusap ng patakaran na ipinapakita sa guest.
+     *
+     * Limang lugar ang nagsasabi nito (Terms, booking form, checkout,
+     * booking detail, chatbot). Noong may kanya-kanya silang kopya,
+     * tatlo ang magkakaibang sinasabi — at ang chatbot ay nangangako pa
+     * ng "free cancellation 48 hours" na hindi kailanman ipinatupad.
+     */
+    public const CANCELLATION_POLICY = 'All payments are non-refundable — the deposit and a full payment alike. Cancelling a booking does not return what you have paid.';
+
+    /**
+     * Ibabalik sa guest kapag ANG RESORT ang nag-cancel: lahat ng
+     * naibayad niya. Ang `amount_paid` ay net na ng mga naunang refund
+     * (tingnan ang recalculateFinancials()), kaya hindi ito madodoble.
+     */
+    public function resortCancellationRefund(): float
+    {
+        return max(0, round((float) $this->amount_paid, 2));
+    }
 
     public function isCancellable(): bool
     {
@@ -1108,15 +1523,17 @@ class Booking extends Model
     /**
      * Ilang araw bago ang check-in huling pwedeng mag-reschedule.
      *
-     * Sinasadyang KAPAREHO ito ng 100%-refund tier sa
-     * calculateRefundPercentage() (>= 7 araw). Dati, walang cutoff ang
-     * reschedule habang may tiers ang cancellation — kaya kayang iwasan
-     * nang buo ang cancellation penalty: sa halip na mag-cancel 2 oras
-     * bago ang check-in (0% refund), ililipat na lang ang booking sa
-     * susunod na buwan, tapos saka mag-cancel doon habang malayo pa ang
-     * bagong petsa (100% refund). Ang pagpapareho ng dalawang cutoff ang
-     * nagsasara sa butas na iyon — sa sandaling mawala ang 100% tier,
-     * wala na ring reschedule.
+     * Ang dahilan nito ngayon (v7.52): ang slot na pinalaya nang huli
+     * ay slot na hindi na maibebenta ulit ng resort. Kailangan nito ng
+     * panahon para may ibang makapag-book.
+     *
+     * Iba ang orihinal na dahilan, at wala na iyon: noong may refund
+     * tiers pa, tinutugma ito sa 100% tier para hindi maiwasan ang
+     * cancellation penalty sa pamamagitan ng paglipat ng booking sa
+     * malayong petsa at doon mag-cancel. Wala nang refund ang guest
+     * cancellation, kaya wala nang butas na isasara. Dahil reschedule
+     * na lang ang natitirang lunas ng guest, desisyon ng may-ari kung
+     * luluwagan ang bilang na ito — hindi ng code.
      */
     public const RESCHEDULE_CUTOFF_DAYS = 7;
 
@@ -1157,41 +1574,6 @@ class Booking extends Model
     public function reschedulesRemaining(): int
     {
         return max(0, self::MAX_RESCHEDULES - (int) $this->reschedule_count);
-    }
-
-    public function calculateRefundPercentage(): int
-    {
-        $now = now();
-
-        // Grace period: 100% laging refund kung loob pa ng 24 oras mula
-        // nang gawin ang booking, anuman ang lapit ng check-in date.
-        if ($this->created_at && $this->created_at->diffInHours($now) <= 24) {
-            return 100;
-        }
-
-        $checkIn = $this->checkInDateTime();
-
-        // Positive na bilang ng oras kung nasa hinaharap pa ang check-in,
-        // negative kung nakalipas na (hal. late cancellation o no-show).
-        $hoursUntilCheckIn = $checkIn->gt($now)
-            ? $now->diffInHours($checkIn)
-            : -$now->diffInHours($checkIn);
-
-        $daysUntilCheckIn = $hoursUntilCheckIn / 24;
-
-        if ($daysUntilCheckIn >= 7) {
-            return 100;
-        }
-        if ($daysUntilCheckIn >= 3) {
-            return 50;
-        }
-        return 0;
-    }
-
-    public function calculateRefundAmount(): float
-    {
-        $percentage = $this->calculateRefundPercentage();
-        return round(((float) $this->amount_paid) * $percentage / 100, 2);
     }
 
     /**

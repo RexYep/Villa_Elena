@@ -7,6 +7,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Booking;
 use App\Models\Property;
 use App\Models\AvailabilityBlock;
+use App\Models\SlotWindow;
 use App\Models\StaffLog;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -14,10 +15,20 @@ use Illuminate\Support\Facades\Auth;
 class CalendarController extends Controller
 {
     // ── Calendar Page ──────────────────────────────────────────────
+    /**
+     * Ang villa LAMANG, hindi na `Property::all()`.
+     *
+     * Pitong row ang ibinibigay ng dating query — ang villa at ang anim na
+     * informational room — at dalawang dropdown ang pinupuno nito. Walang
+     * saysay ang una (isang listing lang naman ang puwedeng i-book, kaya
+     * laging blangko ang calendar kapag room ang pinili) at MAPANIRA ang
+     * ikalawa: nakakapag-block ng petsa sa isang room, na wala namang epekto
+     * sa availability — tingnan ang quickBlock() sa ibaba.
+     */
     public function index()
     {
-        $properties = Property::orderBy('sort_order')->orderBy('property_name')->get();
-        return view('admin.calendar.index', compact('properties'));
+        $villa = Property::where('type', 'villa')->firstOrFail();
+        return view('admin.calendar.index', compact('villa'));
     }
 
     // ── Events API (JSON for FullCalendar) ─────────────────────────
@@ -60,8 +71,30 @@ class CalendarController extends Controller
             // night booking on the same date are two separate rows in the cell,
             // and it is the only thing that tells them apart. Property still has
             // its own row in the detail modal.
-            $slot  = $booking->slotKey();
-            $label = $slot ? ucfirst($slot) . ' · ' : '';
+            $slot = $booking->slotKey();
+
+            // `name` mula sa Booking::SLOTS, hindi ucfirst($slot) — ang huli
+            // ay nagbubunga ng "Stay22" para sa 22-oras na slot.
+            $slotName = $slot ? (Booking::SLOTS[$slot]['name'] ?? ucfirst($slot)) : '';
+            $label = $slot ? $slotName . ' · ' : '';
+
+            // Ang oras ay galing sa NAKAIMBAK na check_in_time/check_out_time,
+            // HINDI sa Booking::SLOTS[$slot]['label'].
+            //
+            // Ang `extendStay()` ang sinasadyang eksepsiyon sa buong sistema:
+            // binabago nito ang oras ng checkout ng isang naka-check-in nang
+            // bisita, at hindi hinahawakan ang check_in_time. Kaya `night` pa
+            // rin ang isinasagot ng slotKey() habang ang totoong labasan ay
+            // ibang-iba na — at ang de-latang "7:00 PM – 6:00 AM" ay magiging
+            // kasinungalingan. Pangalan lang ang kinukuha sa slot; ang mga
+            // numero ay galing sa row mismo.
+            $times = \Carbon\Carbon::parse($booking->check_in_time)->format('g:i A')
+                   . ' – ' . \Carbon\Carbon::parse($booking->check_out_time)->format('g:i A');
+
+            // Walang slot ang mga legacy na booking mula bago ang v5.1 (hal.
+            // 2:00 PM na check-in), kaya NULL ang slotKey() doon. Ang saklaw ng
+            // oras lang ang ipinapakita — mas mainam kaysa blangkong hanay.
+            $slotDisplay = $slot ? $slotName . ' · ' . $times : $times;
 
             $events[] = [
                 'id'              => 'booking-' . $booking->id,
@@ -71,13 +104,19 @@ class CalendarController extends Controller
                 'backgroundColor' => $color['bg'],
                 'borderColor'     => $color['border'],
                 'textColor'       => '#ffffff',
+                // Kada event, hindi pangkalahatan. `editable: true` ang buong
+                // calendar, kaya nada-drag ang lahat maliban sa `cancelled`.
+                'editable'        => $booking->canBeMoved(),
                 'extendedProps'   => [
                     'type'           => 'booking',
+                    'movable'        => $booking->canBeMoved(),
                     'booking_id'     => $booking->id,
                     'booking_ref'    => $booking->booking_ref,
                     'guest'          => $booking->user->full_name ?? 'Guest',
                     'property'       => $booking->property->property_name ?? 'N/A',
                     'property_id'    => $booking->property_id,
+                    'slot'           => $slot,
+                    'slot_display'   => $slotDisplay,
                     'status'         => $booking->status,
                     'payment_status' => $booking->payment_status,
                     'num_guests'     => $booking->num_guests,
@@ -137,6 +176,11 @@ class CalendarController extends Controller
                 'start'           => $block->start_date,
                 'end'             => $endExclusive,
                 'allDay'          => true,
+                // Nada-drag din ang block bar dati: umuusad ito sa screen at
+                // saka biglang babalik, dahil ini-revert ito ng eventDrop
+                // (`type !== 'booking'`). Ang hindi pag-aalok ng paggalaw ay
+                // mas malinaw kaysa sa pag-urong nito.
+                'editable'        => false,
                 'backgroundColor' => '#dc2626',
                 'borderColor'     => '#b91c1c',
                 'textColor'       => '#fff',
@@ -156,28 +200,136 @@ class CalendarController extends Controller
             ];
         }
 
+        // ── 22-Hour slot windows ───────────────────────────────────
+        //
+        // Kabaligtaran ng block: ito ay NAGBUBUKAS. Kaparehong hugis ng
+        // dalawang-event (naka-label na bar + tint) sa parehong dahilan —
+        // hindi nagpapakita ng title ang background event, kaya kung
+        // iisa lang, walang makikitang dahilan ang admin.
+        //
+        // Ang bar ay umaabot sa ISANG petsa lang (ang check-in), hindi sa
+        // buong 22 oras: ang petsa ng check-out ay isang ordinaryong
+        // petsang may Day/Night, at ang pagpapahaba ng bar doon ay
+        // magmumukhang sarado rin ito.
+        $windows = SlotWindow::where('is_active', 1)
+            ->whereBetween('check_in_date', [$start, $end])
+            ->get();
+
+        foreach ($windows as $window) {
+            $slotName = Booking::SLOTS[$window->slot]['name'] ?? $window->slot;
+            $dateStr = $window->check_in_date->format('Y-m-d');
+            $endExclusive = $window->check_in_date->copy()->addDay()->format('Y-m-d');
+
+            $events[] = [
+                'id'              => 'slotwindow-' . $window->id,
+                'title'           => '🏡 ' . $slotName . ' only — ' . $window->span_label,
+                'start'           => $dateStr,
+                'end'             => $endExclusive,
+                'allDay'          => true,
+                'editable'        => false,
+                'backgroundColor' => '#0f766e',
+                'borderColor'     => '#115e59',
+                'textColor'       => '#fff',
+                'extendedProps'   => [
+                    'type'          => 'slot_window',
+                    'window_id'     => $window->id,
+                    'slot'          => $window->slot,
+                    'slot_name'     => $slotName,
+                    'span_label'    => $window->span_label,
+                    'check_in_date' => $dateStr,
+                    'notes'         => $window->notes,
+                ],
+            ];
+
+            $events[] = [
+                'id'              => 'slotwindow-bg-' . $window->id,
+                'start'           => $dateStr,
+                'end'             => $endExclusive,
+                'display'         => 'background',
+                'backgroundColor' => '#ccfbf1',
+                'extendedProps'   => ['type' => 'slot_window'],
+            ];
+        }
+
         return response()->json($events);
     }
 
     // ── Drag & Drop — move booking dates ──────────────────────────
     public function moveBooking(Request $request, Booking $booking)
     {
+        // `after_or_equal`, HINDI `after`.
+        //
+        // Ito ang dahilan ng "Error moving booking". Ang Day slot ay 8:00 AM–
+        // 5:00 PM sa IISANG petsa, kaya `check_out_date === check_in_date` —
+        // at hinihingi ng `after:` na mahigpit na mas huli, kaya BUMAGSAK ITO
+        // SA BAWAT DAY BOOKING, palagi. 39 sa 55 booking sa calendar ang Day.
+        //
+        // WALA nang `check_out_date` dito. Ang drag ay nagpapalit ng PETSA
+        // lamang; ang slot ang nagtatakda ng haba, at alam na iyon ng server
+        // mula sa `check_in_time`. Ang pagpapasya nito sa kliyente ay
+        // dalawang beses nang nagkamali sa iisang linya
+        // (`.toISOString()` sa isang lokal na hatinggabi, na umuurong ng isang
+        // araw sa UTC+8), at ang pinakahuling anyo niyon ay nakakapagpasok
+        // sana ng Night booking na ang checkout ay BAGO pa ang check-in.
+        //
+        // Ito rin ang iniuutos ng CLAUDE.md: `Booking::slotDateTimes()` ang
+        // iisang pinagmumulan ng katotohanan sa slot → oras, at dapat itong
+        // daanan ng bawat controller sa halip na magbasa ng hilaw na field.
         $request->validate([
-            'check_in_date'  => 'required|date',
-            'check_out_date' => 'required|date|after:check_in_date',
+            'check_in_date' => 'required|date',
         ]);
+
+        // Hindi na ito nada-drag sa feed (`editable` kada event), pero
+        // POST-able pa rin ang ruta nang diretso. Tingnan ang
+        // Booking::MOVABLE_STATUSES para sa dahilan.
+        if (! $booking->canBeMoved()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'A ' . str_replace('_', ' ', $booking->status) . ' booking cannot be moved to another date.',
+            ], 422);
+        }
 
         $oldIn  = $booking->check_in_date->format('M d, Y');
         $oldOut = $booking->check_out_date->format('M d, Y');
 
-        $newIn  = \Carbon\Carbon::parse($request->check_in_date);
-        $newOut = \Carbon\Carbon::parse($request->check_out_date);
-        $nights = $newIn->diffInDays($newOut);
+        $newIn = \Carbon\Carbon::parse($request->check_in_date);
 
-        // Petsa lang ang binabago ng drag — nananatili ang oras ng slot,
-        // kaya iyon ang isinasama sa window na tinitingnan.
-        $newCheckIn  = \Carbon\Carbon::parse($newIn->format('Y-m-d') . ' ' . $booking->check_in_time);
-        $newCheckOut = \Carbon\Carbon::parse($newOut->format('Y-m-d') . ' ' . $booking->check_out_time);
+        // `exactSlotKey()`, HINDI `slotKey()`.
+        //
+        // Ang haba ang kinukuwenta dito, kaya EKSAKTONG tugma lang ang
+        // maaaring pagbatayan. Ang `slotKey()` ay binabasa ang nakaimbak na
+        // `slot` column, at sinasadyang PINAPANATILI iyon ang sagot na
+        // `night` kahit inilipat na ng `extendStay()` ang checkout — tama
+        // iyon para sa label, pero kung dito gagamitin, ang isang
+        // pinahabang stay na idadrag sa ibang petsa ay muling isusulat sa
+        // de-latang 7:00 PM–6:00 AM at mabubura ang extension na binayaran
+        // ng bisita.
+        $slot = $booking->exactSlotKey();
+
+        if ($slot !== null) {
+            // Ang slot ang nagsasabi ng haba — Day ay iisang petsa, Night ay
+            // tumatawid sa hatinggabi. Ang server ang kumukuha nito, kaya
+            // walang depekto sa petsa sa kliyente ang makakasira ng row.
+            [$newCheckIn, $newCheckOut] = Booking::slotDateTimes($slot, $newIn->format('Y-m-d'));
+        } else {
+            // Mga legacy row bago ang v5.1 (hal. 2:00 PM na check-in) at ang
+            // mga pinahabang stay: wala silang eksaktong tugmang slot.
+            // Pinapanatili ang orihinal nitong haba sa halip na pilitin sa
+            // isang slot na hindi naman nito kailanman sinunod.
+            $minutes     = $booking->checkInDateTime()->diffInMinutes($booking->checkOutDateTime());
+            $newCheckIn  = \Carbon\Carbon::parse($newIn->format('Y-m-d') . ' ' . $booking->check_in_time);
+            $newCheckOut = $newCheckIn->copy()->addMinutes($minutes);
+        }
+
+        $newOut = $newCheckOut->copy()->startOfDay();
+
+        // max(1, …) — kagaya ng LIMANG ibang path na sumusulat ng num_nights
+        // (portal preview at submit, staff walk-in, admin create, extendStay).
+        // Ito lang ang hubad na diffInDays, at 0 ang isinasagot niyon sa isang
+        // Day booking, na iisang petsa lamang. LAHAT ng row sa database ay
+        // num_nights = 1, at `sum('num_nights')` ang ginagamit ng
+        // ReportController:115 — tahimik sanang kukulangin ang kabuuan.
+        $nights = max(1, $newIn->diffInDays($newOut));
 
         // Dati, WALANG availability check dito — ang pinaka-maluwag na
         // butas sa buong sistema: kayang i-drag ng admin ang isang
@@ -229,18 +381,34 @@ class CalendarController extends Controller
     }
 
     // ── Quick Block from Calendar ──────────────────────────────────
+    /**
+     * Ang property ay HINDI na galing sa request.
+     *
+     * Dati ay isang `exists:properties,id` lang ang bantay, at pumipili ang
+     * admin mula sa dropdown ng lahat ng property. Piliin ang "Room 3" at
+     * matagumpay ang lahat: nasusulat ang row, lumalabas ang pulang bar sa
+     * calendar, may StaffLog entry — at BUKAS PA RIN ANG VILLA. Iisang
+     * property_id lang naman ang tinitingnan ng `Booking::blockOn()` at ng
+     * availability grid ng frontdesk: ang sa villa. Tahimik na palya iyon na
+     * may tunay na bunga — akala ng may-ari sarado na ang petsa, at
+     * ipinagbibili pa rin ito ng portal.
+     *
+     * Hindi ito tsinetsek bilang validation rule dahil wala namang tanong na
+     * dapat itanong: iisa ang property na puwedeng i-block.
+     */
     public function quickBlock(Request $request)
     {
         $request->validate([
-            'property_id' => 'required|exists:properties,id',
             'start_date'  => 'required|date',
             'end_date'    => 'required|date|after_or_equal:start_date',
             'reason'      => 'required|in:maintenance,owner_use,private_event,other',
             'notes'       => 'nullable|string|max:255',
         ]);
 
+        $villa = Property::where('type', 'villa')->firstOrFail();
+
         $block = AvailabilityBlock::create([
-            'property_id' => $request->property_id,
+            'property_id' => $villa->id,
             'start_date'  => $request->start_date,
             'end_date'    => $request->end_date,
             'reason'      => $request->reason,
@@ -280,6 +448,151 @@ class CalendarController extends Controller
 
         StaffLog::record('deleted_availability_block', 'availability_blocks', $blockId,
             "Unblocked {$summary} on property #{$propertyId} — those dates are bookable again");
+
+        return response()->json(['success' => true]);
+    }
+
+    // ── 22-Hour slot windows ───────────────────────────────────────
+    /**
+     * Binubuksan ang isang slot na hindi pang-araw-araw para sa ISANG petsa.
+     *
+     * Kabaligtaran ito ng quickBlock() sa itaas: ang block ay NAGSASARA
+     * ng petsa, ang window ay NAGBUBUKAS ng slot na kung hindi ay hindi
+     * inaalok. Nasa parehong pahina sila dahil pareho silang aksyon sa
+     * kalendaryo, pero magkaibang-magkaiba ang ibig sabihin.
+     *
+     * IISANG PETSA ang tinatanggap, hindi saklaw: isang row = isang
+     * inaalok na stay. Ang haba ay hindi iniimbak — hinahango ito sa
+     * `Booking::slotDateTimes()`, kaya iisa lang ang nagsasabi niyon.
+     */
+    public function addSlotWindow(Request $request)
+    {
+        $request->validate([
+            'slot' => 'required|in:'.implode(',', Booking::windowedSlotKeys()),
+            'check_in_date' => 'required|date|after_or_equal:today',
+            'notes' => 'nullable|string|max:255',
+            'confirm_conflict' => 'nullable|boolean',
+        ]);
+
+        $villa = Property::where('type', 'villa')->firstOrFail();
+        $slot = $request->slot;
+        $date = \Carbon\Carbon::parse($request->check_in_date)->format('Y-m-d');
+
+        // Walang saysay ang window kung wala pang presyo ang slot: mananatili
+        // itong hindi inaalok (tingnan ang Booking::slotsOfferedOn()), kaya
+        // mas mabuting sabihin ito ngayon kaysa hayaang mag-isip ang admin
+        // na gumana na ito.
+        if (! $villa->isSlotPriced($slot)) {
+            return response()->json([
+                'success' => false,
+                'message' => Booking::SLOTS[$slot]['name'].' has no price yet, so the date would still not be '
+                    .'bookable. Set the rate in Properties first.',
+            ], 422);
+        }
+
+        if (SlotWindow::query()->offeredOn($villa->id, $slot, $date)->exists()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'That date already offers the '.Booking::SLOTS[$slot]['name'].' stay.',
+            ], 422);
+        }
+
+        // ⚠️ Ang isang window sa ibabaw ng umiiral nang booking ay
+        // karaniwang pagkakamali, at DALAWA ang pinsala:
+        //
+        //   1. Hindi kailanman maipagbibili ang 22 oras — hawak na ng
+        //      naunang booking ang bahagi ng saklaw nito.
+        //   2. Dahil ang petsang may window ay 22-oras LAMANG, itatago
+        //      nito ang Day/Night ng petsang iyon — kaya nawawala rin ang
+        //      isang slot na maaaring mabibili pa naman.
+        //
+        // Hindi pagbabawal, kundi pagtatanong: baka nagpaplano ang admin
+        // sa paligid ng isang kanselasyon. Kaparehong hati ng
+        // Payment::manualEntryProblem() — ang "mali" ay hinaharangan, ang
+        // "kaduda-duda" ay kailangang kumpirmahin.
+        if (! $request->boolean('confirm_conflict')) {
+            if ($clash = $this->slotWindowConflict($villa, $slot, $date)) {
+                return response()->json([
+                    'success' => false,
+                    'needs_confirmation' => true,
+                    'message' => $clash,
+                ], 409);
+            }
+        }
+
+        $window = SlotWindow::create([
+            'property_id' => $villa->id,
+            'slot' => $slot,
+            'check_in_date' => $date,
+            'notes' => $request->notes,
+            'created_by' => Auth::id(),
+        ]);
+
+        StaffLog::record('created_slot_window', 'slot_windows', $window->id,
+            "Opened the {$window->span_label} ".Booking::SLOTS[$slot]['name'].' stay'
+            .' — that date now offers only that slot');
+
+        return response()->json([
+            'success' => true,
+            'window_id' => $window->id,
+            'span_label' => $window->span_label,
+        ]);
+    }
+
+    /**
+     * Ang dahilan kung bakit hindi magagamit ang isang window sa petsang
+     * ito, o NULL kung malinaw. Teksto ang ibinabalik para maipakita nang
+     * buo sa admin — hindi sapat ang isang boolean para makapagpasya siya.
+     */
+    private function slotWindowConflict(Property $villa, string $slot, string $date): ?string
+    {
+        [$checkIn, $checkOut] = Booking::slotDateTimes($slot, $date);
+
+        // (1) May humahawak na ba sa saklaw ng 22-oras na stay?
+        $overlapping = Booking::where('property_id', $villa->id)
+            ->whereNotIn('status', ['cancelled', 'no_show'])
+            ->where('check_out_date', '>=', $checkIn->copy()->subDay())
+            ->where('check_in_date', '<=', $checkOut->copy()->addDay())
+            ->with('user')
+            ->get()
+            ->first(fn ($b) => $checkIn->lt($b->checkOutDateTime()) && $checkOut->gt($b->checkInDateTime()));
+
+        if ($overlapping) {
+            $who = $overlapping->user->full_name ?? 'a guest';
+
+            return "{$overlapping->booking_ref} ({$who}) already overlaps that stay, so the "
+                .Booking::SLOTS[$slot]['name'].' slot could never be booked on that date. '
+                .'Open it anyway?';
+        }
+
+        // (2) Mawawala ba ang isang Day/Night na alok na maaaring mabili pa?
+        //     Ito ang eksklusibidad na humahataw pabalik.
+        $hidden = array_values(array_diff(
+            Booking::slotsOfferedOn($date, $villa),
+            [$slot]
+        ));
+
+        if ($hidden) {
+            $names = array_map(fn ($k) => Booking::SLOTS[$k]['name'] ?? $k, $hidden);
+
+            return 'Opening this will hide '.implode(' and ', $names).' on '
+                .$checkIn->format('M j').', because a 22-hour date offers that slot only. Continue?';
+        }
+
+        return null;
+    }
+
+    public function deleteSlotWindow(SlotWindow $slotWindow)
+    {
+        // Binabasa bago ang delete — kasama ng row ang mga detalye.
+        $summary = $slotWindow->span_label;
+        $slotName = Booking::SLOTS[$slotWindow->slot]['name'] ?? $slotWindow->slot;
+        $id = $slotWindow->id;
+
+        $slotWindow->delete();
+
+        StaffLog::record('deleted_slot_window', 'slot_windows', $id,
+            "Closed the {$summary} {$slotName} stay — that date is back to the regular slots");
 
         return response()->json(['success' => true]);
     }

@@ -72,10 +72,16 @@ class PeakRateAdvisor extends Advisor
 
         $out = [];
 
-        foreach (array_keys(Booking::SLOTS) as $slot) {
+        foreach ($demand->bookableSlots() as $slot) {
             $perDate = [];
 
             for ($date = $start->copy(); $date->lte($end); $date->addDay()) {
+                // Tingnan ang kaparehong tala sa IdleDatePromoAdvisor:
+                // nakadepende sa petsa ang inaalok na slot.
+                if (! in_array($slot, $demand->slotsOfferedOn($date), true)) {
+                    continue;
+                }
+
                 $best = $this->bestIncreaseFor(
                     $demand, $date, $slot,
                     $elasticity, $peakCutoff, $maxIncrease, $candidates
@@ -265,7 +271,9 @@ class PeakRateAdvisor extends Advisor
         $totalBooked = array_sum(array_column($byDow, 'booked'));
         $rawFill = $totalSample > 0 ? $totalBooked / $totalSample : 0.0;
 
-        $slotLabel = $slot === 'day' ? 'Day' : 'Night';
+        // Mula sa Booking::SLOTS — tingnan ang kaparehong tala sa
+        // IdleDatePromoAdvisor.
+        $slotLabel = Booking::SLOTS[$slot]['name'] ?? ucfirst($slot);
         $window = $first->isSameDay($last)
             ? $first->format('M j')
             : $first->format('M j').'–'.$last->format('M j');

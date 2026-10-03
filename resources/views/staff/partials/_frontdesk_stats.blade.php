@@ -12,7 +12,9 @@
                 @endphp
                 <div class="stat-name" title="{{ $nextArrival->user->full_name ?? 'Guest' }}">{{ $nextArrival->user->full_name ?? 'Guest' }}</div>
                 <div class="stat-sub">
-                    {{ $arrivalDay }}{{ $arrivalSlot ? ' · '.ucfirst($arrivalSlot) : '' }} · {{ $arrivalIn->format('g:i A') }}
+                    {{-- `name` mula sa Booking::SLOTS: ucfirst() ang ibubunga ng
+                         "Stay22" para sa 22-oras na slot. --}}
+                    {{ $arrivalDay }}{{ $arrivalSlot ? ' · '.(\App\Models\Booking::SLOTS[$arrivalSlot]['name'] ?? ucfirst($arrivalSlot)) : '' }} · {{ $arrivalIn->format('g:i A') }}
                 </div>
                 <div class="stat-sub">
                     @if ($nextArrival->balance_due > 0)

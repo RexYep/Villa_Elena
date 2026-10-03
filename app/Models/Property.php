@@ -70,6 +70,10 @@ class Property extends Model
         'max_capacity',
         'base_price',
         'weekend_price',
+        // Presyo ng 22-Hours na slot. NULL = hindi pa ipinepresyo, kaya
+        // hindi pa inaalok ang slot (tingnan ang isSlotPriced()).
+        'base_price_22h',
+        'weekend_price_22h',
         'amenities',
         'floor_area_sqm',
         'floor_level',
@@ -83,6 +87,8 @@ class Property extends Model
         'amenities'   => 'array',
         'base_price'  => 'decimal:2',
         'weekend_price' => 'decimal:2',
+        'base_price_22h' => 'decimal:2',
+        'weekend_price_22h' => 'decimal:2',
         'is_featured' => 'boolean',
     ];
 
@@ -209,8 +215,26 @@ public function images()
      *  - Biyernes, Sabado, Linggo hanggang 6PM:   weekend_price (₱6,000)
      *  - Linggo 6:00 PM pataas:                   base_price    (₱4,000)
      */
-    public function getPackagePrice(\Carbon\Carbon $checkin): float
+    public function getPackagePrice(\Carbon\Carbon $checkin, ?string $slot = null): float
     {
+        // Aling pares ng column ang babasahin. Ang Day at Night ay
+        // pareho pa rin ang presyo — ang petsa lang ng check-in ang
+        // nagpapasya — kaya walang nagbabago sa kanila. Ang 22-Hours ay
+        // may sariling pares dahil sumasakop ito sa dalawang slot;
+        // tingnan ang 2026_09_28_110000_add_22h_pricing_to_properties_table.
+        [$baseCol, $weekendCol] = static::priceColumnsFor($slot);
+
+        $base    = $this->{$baseCol};
+        $weekend = $this->{$weekendCol};
+
+        // Hindi pa ipinepresyo. Ang mga tumatawag ay dapat nasala na ito
+        // sa pamamagitan ng isSlotPriced() / quoteFor(); NULL-safe lang
+        // ito para hindi maging 0.00 ang isang hindi-inaalok na slot —
+        // ang 0.00 ay LIBRENG booking, at nangyari na iyon (tingnan ang
+        // PortalController::assertBookableListing()).
+        if ($base === null) {
+            return 0.0;
+        }
         // Special date-range pricing rule (hal. holiday override) — mananatili
         // itong pinaka-priority kung meron.
         //
@@ -233,8 +257,15 @@ public function images()
             ->first();
 
         if ($rule) {
+            // Ang percentage rule ay porsyento ng base ng SLOT na ito,
+            // hindi laging ng `base_price`. Kung `base_price` ang laging
+            // pinagbabatayan, ang isang "+20% holiday" ay magiging
+            // ₱4,800 sa isang 22-oras na stay na ang listahan ay mas
+            // mataas pa roon — isang holiday surcharge na nagbabawas ng
+            // presyo. Ang fixed rule ay absolute pa rin: iyon ang sinabi
+            // ng admin na presyo para sa petsang iyon.
             return $rule->type === 'percentage'
-                ? $this->base_price * (1 + $rule->price / 100)
+                ? $base * (1 + $rule->price / 100)
                 : $rule->price;
         }
 
@@ -243,17 +274,46 @@ public function images()
         // Linggo: mahal pa hanggang 6PM, tapos mura na
         if ($dayOfWeek === 0) {
             return $checkin->format('H:i') >= '18:00'
-                ? $this->base_price
-                : ($this->weekend_price ?? $this->base_price);
+                ? $base
+                : ($weekend ?? $base);
         }
 
         // Biyernes (5) at Sabado (6): peak rate buong araw
         if (in_array($dayOfWeek, [5, 6])) {
-            return $this->weekend_price ?? $this->base_price;
+            return $weekend ?? $base;
         }
 
         // Lunes–Huwebes: regular rate
-        return $this->base_price;
+        return $base;
+    }
+
+    /**
+     * Aling `properties` column ang may presyo ng slot na ito.
+     *
+     * @return array{0: string, 1: string} [base column, weekend column]
+     */
+    public static function priceColumnsFor(?string $slot = null): array
+    {
+        return $slot === 'stay22'
+            ? ['base_price_22h', 'weekend_price_22h']
+            : ['base_price', 'weekend_price'];
+    }
+
+    /**
+     * May presyo na ba ang slot na ito — ibig sabihin, maaari na bang
+     * ipagbili?
+     *
+     * Ang `base` lang ang hinihingi. Ang `weekend` ay opsyonal at
+     * bumabagsak sa `base` (ganoon na ito dati para sa Day/Night), kaya
+     * ang isang admin na isang presyo lang ang itinakda ay may gumaganang
+     * slot pa rin — hindi isang bahagyang naka-configure na slot na
+     * tahimik na nagbebenta ng mali sa katapusan ng linggo.
+     */
+    public function isSlotPriced(?string $slot = null): bool
+    {
+        [$baseCol] = static::priceColumnsFor($slot);
+
+        return $this->{$baseCol} !== null && (float) $this->{$baseCol} > 0;
     }
 
     /**
@@ -274,12 +334,63 @@ public function images()
      * Admin\BookingController::recalculateBookingTotals() —
      * `base_amount + extras - discount_amount`.
      *
+     * Ang `$guest` ay ang taong magbabayad, kung kilala. Kailangan ito
+     * ng mga promong `guest_scope = 'returning'` — walang ibang paraan
+     * para malaman kung regular na customer ang nasa harap natin.
+     * Opsyonal ito dahil may mga tunay na kontekstong walang guest:
+     * anonymous na price preview, ang date×slot na list-price grid ng
+     * staff, ang prescriptive forecasting, at ang walk-in na BAGO pa
+     * lang ang guest (na likas namang hindi returning). Sa lahat ng
+     * iyon, LIST PRICE ang ibinibigay — tingnan ang
+     * Discount::isEligibleGuest() para sa dahilan kung bakit iyon ang
+     * tamang direksyon ng pagpalya.
+     *
      * @return array{base: float, discount: float, total: float, promo: ?\App\Models\Discount}
      */
-    public function quoteFor(\Carbon\Carbon $checkin, ?string $slot = null): array
+    public function quoteFor(\Carbon\Carbon $checkin, ?string $slot = null, ?User $guest = null): array
     {
-        $base  = round((float) $this->getPackagePrice($checkin), 2);
-        $promo = Discount::bestFor($base, $checkin, $slot);
+        // FAIL-CLOSED sa isang slot na wala pang presyo.
+        //
+        // Ang 22-Hours ay nasa Booking::SLOTS na — kailangan iyon para
+        // mabasa ng slotDateTimes() at ng calendar ang mga umiiral nang
+        // booking — pero NULL pa ang presyo nito hangga't hindi sumasagot
+        // ang may-ari. Walang form na nag-aalok nito (tingnan ang
+        // Booking::bookableSlotKeys()), kaya ito ang huling hadlang laban
+        // sa isang ginawa-gawang POST.
+        //
+        // 422 at hindi pagbalik ng 0.00, dahil ang 0.00 ay isang tunay at
+        // slot-holding na booking na LIBRE. Nangyari na iyon: ang mga
+        // `type = room` na row ay may `base_price = 0.00`, at
+        // `POST /book/{room}` ay gumawa ng ₱0 na booking hanggang sa
+        // isinara ito ng assertBookableListing() ng PortalController.
+        // Kapareho ang hugis; kapareho ang tugon.
+        abort_unless($this->isSlotPriced($slot), 422, 'That booking slot is not available.');
+
+        // At TUMATANGGI rin sa isang slot na hindi inaalok sa PETSANG ITO.
+        //
+        // Ang 22-Hours ay inaalok lang sa mga petsang pinili ng may-ari
+        // (`slot_windows`), at sa mga petsang iyon ay ITO LANG ang
+        // inaalok — kaya ang Day/Night ay tinatanggihan doon, at ang
+        // 22-Hours ay tinatanggihan sa lahat ng iba. Dito ito tinitingnan
+        // dahil ito lang ang lugar na may PAREHONG petsa at slot at
+        // dinaraanan ng lahat ng pitong booking path.
+        //
+        // Ligtas na maging mahigpit dito: bawat tumatawag ng quoteFor()
+        // ay nagpepresyo ng booking na gagawin o ililipat pa lang
+        // (`quote()` preview, `store()`, portal submit, walk-in,
+        // reschedule) — walang tumatawag nito para muling kuwentahin ang
+        // isang umiiral nang booking, kaya hindi puwedeng masira ng
+        // isang bagong window ang pag-edit ng naunang booking.
+        if ($slot !== null) {
+            abort_unless(
+                in_array($slot, \App\Models\Booking::slotsOfferedOn($checkin, $this), true),
+                422,
+                'That booking slot is not offered on that date.'
+            );
+        }
+
+        $base  = round((float) $this->getPackagePrice($checkin, $slot), 2);
+        $promo = Discount::bestFor($base, $checkin, $slot, $guest);
         $off   = $promo ? $promo->calculateDiscount($base) : 0.0;
 
         return [

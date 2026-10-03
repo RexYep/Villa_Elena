@@ -14,6 +14,7 @@ use App\Models\Property;
 use App\Models\Review;
 use App\Models\Setting;
 use App\Models\StaffLog;
+use App\Rules\SlotOfferedOnDate;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -29,7 +30,7 @@ class PortalController extends Controller
      * ipinapakita nito sa guest ay kung kailan huling nagbago ang
      * *patakaran*, hindi kung kailan huling na-deploy ang app.
      */
-    public const LEGAL_LAST_UPDATED = '2026-08-27';
+    public const LEGAL_LAST_UPDATED = '2026-10-03';
 
     // ── Homepage / Property Listing ────────────────────────────────
     public function home(Request $request)
@@ -70,7 +71,13 @@ class PortalController extends Controller
             // Ang tunay na conflict check ay gagawin ulit sa
             // bookingForm/submitBooking gamit ang aktwal na slot na
             // pipiliin ng customer — paunang listing filter lang ito.
-            $slot = in_array($request->get('slot'), array_keys(Booking::SLOTS)) ? $request->get('slot') : 'day';
+            // Ang default ay ang UNANG slot na inaalok sa petsang iyon, hindi
+            // laging 'day': sa isang petsang 22-oras lang ang alok, wala
+            // talagang Day na mapipili.
+            $offered = Booking::slotsOfferedOn($request->checkin);
+            $slot = in_array($request->get('slot'), $offered, true)
+                ? $request->get('slot')
+                : ($offered[0] ?? 'day');
             [$checkin, $checkout] = Booking::slotDateTimes($slot, $request->checkin);
 
             $properties = $properties->filter(
@@ -107,7 +114,27 @@ class PortalController extends Controller
         // HINDI pa naka-login, kaya wala silang user_id at hindi sila
         // maaabot ng in-app notification — banner lang ang umaabot sa
         // kanila.
-        $promos = Discount::publicActive();
+        //
+        // Ipinapasa ang titingin dahil ang ibang promo ay para LANG sa
+        // mga regular na customer. Hindi puwedeng mai-banner ang bawas
+        // na hindi naman makukuha ng nakakakita: ang presyong sisingilin
+        // ay galing sa quoteFor(), at iyon ay titingin din ng parehong
+        // pagiging karapat-dapat — kaya ang banner at ang presyo ay
+        // dapat tumingin sa isang bagay.
+        $viewer = Auth::user();
+        $promos = Discount::publicActive($viewer);
+
+        // Kapag may returning-guest na promo pero hindi ito makikita ng
+        // nakatingin, may sinasabi pa rin tayo sa halip na manahimik —
+        // iyon ang tanging bagay na nakakaabot sa isang regular na hindi
+        // pa naka-login. Walang pigura ng bawas: lalabas iyon sa presyo
+        // mismo kapag karapat-dapat na siya.
+        //
+        // ARRAY ito at hindi bool, at mahalaga iyon: kailangang
+        // maipaliwanag ng card KUNG BAKIT hindi pa nila ito nakukuha.
+        // Ang dating bool ay nagsasabi ng "sign in" sa isang taong
+        // naka-sign in na (v7.50).
+        $returningPromoTeaser = Discount::returningTeaserFor($viewer);
 
         $allowOnlineBooking = Setting::get('allow_online_booking', '1') === '1';
 
@@ -124,7 +151,7 @@ class PortalController extends Controller
         return view('portal.home', compact(
             'properties', 'featuredVilla', 'rooms', 'resortName', 'resortDesc', 'reviews',
             'resortEmail', 'resortPhone', 'resortAddress', 'facebookUrl', 'tiktokUrl',
-            'promos', 'allowOnlineBooking', 'guestRating', 'guestsServed'
+            'promos', 'returningPromoTeaser', 'allowOnlineBooking', 'guestRating', 'guestsServed'
         ));
     }
 
@@ -184,7 +211,16 @@ class PortalController extends Controller
             'villa' => Property::where('type', 'villa')->first(),
             'depositPct' => (float) Setting::get('deposit_percentage', 50),
             'holdMinutes' => Booking::pendingHoldMinutes(),
-            'slots' => Booking::SLOTS,
+            // Ang mga slot na TUNAY na maipagbibili. Ang Terms ay isang
+            // pahayag sa publiko tungkol sa aktwal na ipinagbibili, kaya
+            // walang saysay na ilista ang slot na wala pang presyo. Hindi
+            // ito per-date: isang pangkalahatang talahanayan ito, at ang
+            // pagiging "sa piling mga petsa lang" ng 22-Hours ay
+            // ipinapaliwanag ng teksto sa tabi nito.
+            'slots' => collect(Booking::bookableSlotKeys())
+                ->mapWithKeys(fn ($k) => [$k => Booking::SLOTS[$k]])
+                ->all(),
+            'windowedSlots' => Booking::windowedSlotKeys(),
             'maxReschedules' => Booking::MAX_RESCHEDULES,
             'rescheduleCutoff' => Booking::RESCHEDULE_CUTOFF_DAYS,
             'lastUpdated' => Carbon::parse(self::LEGAL_LAST_UPDATED),
@@ -268,7 +304,16 @@ class PortalController extends Controller
 
         $checkin = $request->get('checkin');
         $guests = $request->get('guests', 1);
-        $slot = in_array($request->get('slot'), array_keys(Booking::SLOTS)) ? $request->get('slot') : 'day';
+
+        // Ang pre-selection ay dapat isang slot na TUNAY na inaalok sa
+        // petsang tiningnan. Kapag walang petsa pa, ang pangkalahatang
+        // default ang ginagamit.
+        $offeredHere = $checkin
+            ? Booking::slotsOfferedOn($checkin, $property)
+            : Booking::slotsOfferedOn(today(), $property);
+        $slot = in_array($request->get('slot'), $offeredHere, true)
+            ? $request->get('slot')
+            : ($offeredHere[0] ?? 'day');
 
         // Approved guest reviews for this specific property. Narrowed in v7.40 —
         // see the note on home()'s query.
@@ -308,7 +353,8 @@ class PortalController extends Controller
 
         $validator = validator($request->all(), [
             'checkin' => 'required|date',
-            'slot' => 'required|in:'.implode(',', array_keys(Booking::SLOTS)),
+            // Nakadepende sa petsa — tingnan ang SlotOfferedOnDate.
+            'slot' => ['required', new SlotOfferedOnDate('checkin', $property)],
         ]);
 
         if ($validator->fails()) {
@@ -345,7 +391,14 @@ class PortalController extends Controller
         // Flat/package price + anumang tumatamang seasonal promo — iisang
         // quoteFor() ang ginagamit dito at sa bookingForm()/submitBooking(),
         // kaya hindi puwedeng magkaiba ang ipinakitang presyo sa sisingilin.
-        $quote = $property->quoteFor($checkin, $request->slot);
+        //
+        // Ipinapasa ang guest dahil may mga promong para lang sa mga
+        // regular na customer. Puwedeng ANONYMOUS ang preview na ito
+        // (walang auth ang route), at sa gayong kaso ay list price ang
+        // ibabalik — tapos mas MABABA ang makikita niya sa booking form
+        // kapag naka-login na siya. Iyon ang ligtas na direksyon; ang
+        // kabaligtaran ay mangako ng bawas sa taong hindi karapat-dapat.
+        $quote = $property->quoteFor($checkin, $request->slot, Auth::user());
         $baseAmount = $quote['base'];
         $isPeak = in_array($checkin->dayOfWeek, [5, 6]) || ($checkin->dayOfWeek === 0 && $checkin->format('H:i') < '18:00');
 
@@ -384,7 +437,7 @@ class PortalController extends Controller
 
         $request->validate([
             'checkin' => 'required|date|after_or_equal:today',
-            'slot' => 'required|in:'.implode(',', array_keys(Booking::SLOTS)),
+            'slot' => ['required', new SlotOfferedOnDate('checkin', $property)],
             'guests' => 'required|integer|min:1|max:'.$property->max_capacity,
         ]);
 
@@ -412,8 +465,9 @@ class PortalController extends Controller
         // Flat/package price — base lang sa segment ng CHECK-IN
         // (hindi na babago kahit anong araw mahulog ang check-out,
         // dahil isang package lang ang binabayaran, hindi per-night).
-        // Kasama na rito ang anumang tumatamang seasonal promo.
-        $quote = $property->quoteFor($checkin, $request->slot);
+        // Kasama na rito ang anumang tumatamang seasonal promo, at ang
+        // bawas para sa regular na customer kung karapat-dapat siya.
+        $quote = $property->quoteFor($checkin, $request->slot, Auth::user());
         $baseAmount = $quote['base'];
         $discountAmount = $quote['discount'];
         $totalAmount = $quote['total'];
@@ -486,7 +540,7 @@ class PortalController extends Controller
 
         $request->validate([
             'checkin' => 'required|date|after_or_equal:today',
-            'slot' => 'required|in:'.implode(',', array_keys(Booking::SLOTS)),
+            'slot' => ['required', new SlotOfferedOnDate('checkin', $property)],
             'guests' => 'required|integer|min:1|max:'.$property->max_capacity,
             'special_requests' => 'nullable|string|max:500',
 
@@ -514,7 +568,11 @@ class PortalController extends Controller
         // Flat/package price + seasonal promo. Muling kinukuwenta dito
         // (hindi tinatanggap mula sa form) — kung galing sa request ang
         // discount, kayang baguhin ng guest ang presyo mismo.
-        $quote = $property->quoteFor($checkin, $request->slot);
+        //
+        // Laging may Auth::user() dito: naka-`auth` middleware ang route
+        // na ito (hindi ang preview), kaya ang bawas para sa regular na
+        // customer ay tiyak na masusukat sa sandali ng pag-charge.
+        $quote = $property->quoteFor($checkin, $request->slot, Auth::user());
         $baseAmount = $quote['base'];
         $discountAmount = $quote['discount'];
         $totalAmount = $quote['total'];

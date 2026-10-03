@@ -38,20 +38,28 @@ class PropertyController extends Controller
     // ── List All Properties ────────────────────────────────────────
     public function index()
     {
+        // Dalawang zona, hindi isang grid ng magkakapantay.
+        //
+        // Isang villa at N room ay HINDI magkapantay: ang villa ang tanging
+        // naibe-book at dito nakasalalay ang lahat ng kita, samantalang ang
+        // room ay sanggunian lamang. Ang dating `ORDER BY sort_order,
+        // property_name` — na may sort_order na 0,0,0,67 at NULL na pangalan —
+        // ang naglagay sa villa sa PANGATLO sa apat, sa pagitan ng dalawang
+        // blangkong card.
         $properties = Property::withCount('bookings')
             ->with('primaryImage')
-            ->orderBy('sort_order')
-            ->orderBy('property_name')
+            ->orderBy('id')
             ->get();
 
-        $stats = [
-            'total'       => $properties->count(),
-            'available'   => $properties->where('status', 'available')->count(),
-            'occupied'    => $properties->where('status', 'occupied')->count(),
-            'maintenance' => $properties->where('status', 'maintenance')->count(),
-        ];
+        $villa = $properties->firstWhere('type', 'villa');
 
-        return view('admin.properties.index', compact('properties', 'stats'));
+        // Ayon sa `id`, hindi sa `sort_order`. Wala nang kahulugan ang
+        // sort_order sa datos na ito (0, 0, 0, 67 — mukhang aksidente ang 67),
+        // at `id` ang pagkakasunod na ginagamit ng ConvertVillasToRoomsSeeder
+        // sa pagbibigay ng titik: Room A, Room B, Room C.
+        $rooms = $properties->filter(fn ($p) => $p->type !== 'villa')->values();
+
+        return view('admin.properties.index', compact('villa', 'rooms'));
     }
 
     // ── Show Create Form ───────────────────────────────────────────
@@ -79,6 +87,11 @@ class PropertyController extends Controller
             'max_capacity'  => 'required|integer|min:1',
             'base_price'    => $isVilla ? 'required|numeric|min:0' : 'nullable|numeric|min:0',
             'weekend_price' => 'nullable|numeric|min:0',
+            // 22-Hours: NULL = hindi pa ipinepresyo, kaya hindi inaalok ang
+            // slot (Property::isSlotPriced()). Villa lang — walang slot ang
+            // mga informational na room.
+            'base_price_22h' => 'nullable|numeric|min:0',
+            'weekend_price_22h' => 'nullable|numeric|min:0',
             'floor_area_sqm'=> 'nullable|numeric|min:0',
             'amenities'     => 'nullable|array',
             // 10, not 20, and the number is not arbitrary: 10 x 3 MB is 30 MB,
@@ -98,6 +111,15 @@ class PropertyController extends Controller
             'max_capacity'   => $request->max_capacity,
             'base_price'     => $isVilla ? $request->base_price : 0,
             'weekend_price'  => $isVilla ? $request->weekend_price : null,
+            // Blangko = NULL, hindi 0. Ang NULL ang nagpapasara sa 22-Hours
+            // na slot; ang 0 ay magbubunga ng libreng booking, at hindi
+            // iyon kailanman ang ibig sabihin ng isang blangkong field.
+            'base_price_22h' => $isVilla && $request->filled('base_price_22h')
+                ? $request->base_price_22h
+                : null,
+            'weekend_price_22h' => $isVilla && $request->filled('weekend_price_22h')
+                ? $request->weekend_price_22h
+                : null,
             'floor_area_sqm' => $request->floor_area_sqm,
             'amenities'      => $isVilla ? ($request->amenities ?? []) : [],
             'is_featured'    => $request->boolean('is_featured'),
@@ -136,7 +158,15 @@ class PropertyController extends Controller
     {
         $property->load(['images', 'bookings.user', 'reviews', 'pricingRules', 'availabilityBlocks']);
         $recentBookings = $property->bookings()->with('user')->latest()->take(5)->get();
-        return view('admin.properties.show', compact('property', 'recentBookings'));
+
+        // Para sa "Block dates on the Villa" na link sa pahina ng isang room.
+        // Nullable — hindi dapat mag-500 ang pahina ng room kung wala pang
+        // villa row (mangyayari iyon sa isang bagong-seed na DB).
+        $villaId = $property->type === 'villa'
+            ? $property->id
+            : Property::where('type', 'villa')->value('id');
+
+        return view('admin.properties.show', compact('property', 'recentBookings', 'villaId'));
     }
 
     // ── Show Edit Form ─────────────────────────────────────────────
@@ -162,6 +192,11 @@ class PropertyController extends Controller
             'max_capacity'  => 'required|integer|min:1',
             'base_price'    => $isVilla ? 'required|numeric|min:0' : 'nullable|numeric|min:0',
             'weekend_price' => 'nullable|numeric|min:0',
+            // 22-Hours: NULL = hindi pa ipinepresyo, kaya hindi inaalok ang
+            // slot (Property::isSlotPriced()). Villa lang — walang slot ang
+            // mga informational na room.
+            'base_price_22h' => 'nullable|numeric|min:0',
+            'weekend_price_22h' => 'nullable|numeric|min:0',
             // 10, not 20, and the number is not arbitrary: 10 x 3 MB is 30 MB,
             // which fits inside PHP post_max_size (32M) and nginx
             // client_max_body_size (32M). Past post_max_size PHP throws the
@@ -185,6 +220,15 @@ class PropertyController extends Controller
             'max_capacity'   => $request->max_capacity,
             'base_price'     => $isVilla ? $request->base_price : 0,
             'weekend_price'  => $isVilla ? $request->weekend_price : null,
+            // Blangko = NULL, hindi 0. Ang NULL ang nagpapasara sa 22-Hours
+            // na slot; ang 0 ay magbubunga ng libreng booking, at hindi
+            // iyon kailanman ang ibig sabihin ng isang blangkong field.
+            'base_price_22h' => $isVilla && $request->filled('base_price_22h')
+                ? $request->base_price_22h
+                : null,
+            'weekend_price_22h' => $isVilla && $request->filled('weekend_price_22h')
+                ? $request->weekend_price_22h
+                : null,
             'floor_area_sqm' => $request->floor_area_sqm,
             'amenities'      => $isVilla ? ($request->amenities ?? []) : [],
             'is_featured'    => $request->boolean('is_featured'),
@@ -217,8 +261,41 @@ class PropertyController extends Controller
     }
 
     // ── Delete Property ────────────────────────────────────────────
+    /**
+     * ANG PINAKAMAPANIRANG PINDUTAN SA BUONG ADMIN PANEL, at wala itong bantay.
+     *
+     * CASCADE ang bawat foreign key papunta sa `properties`, at may sarili pang
+     * cascade ang `bookings`:
+     *
+     *   properties → bookings → payments, booking_extras, reviews
+     *              → property_images, pricing_rules, availability_blocks
+     *              → housekeeping_tasks, issue_reports
+     *
+     * Kaya ang pagpindot ng 🗑 sa card ng villa at pagkumpirma ay bumubura ng
+     * 74 booking, 95 payment, 4 review at 63 housekeeping task — ang buong
+     * kasaysayan ng negosyo — sa isang kisap. Walang ibinababalang naiiba ito
+     * sa pagbura ng isang walang lamang room, at "and all its images will be
+     * permanently deleted" ang sinasabi ng modal.
+     *
+     * Dalawang bantay, sinasadyang magkapatong:
+     *   1. Hindi kailanman puwedeng burahin ang villa. Ito ang tanging bookable
+     *      na listing; kung mawala ito ay wala nang sistema.
+     *   2. Hindi rin puwedeng burahin ang ANUMANG property na may booking. Wala
+     *      pang room na may booking ngayon, pero kung magkaroon man, hindi na
+     *      ang uri ang tanong kundi ang datos na kasama nitong mawawala.
+     */
     public function destroy(Property $property)
     {
+        if ($property->type === 'villa') {
+            return back()->with('error', 'The master Villa record cannot be deleted — it is the only bookable listing, and every booking, payment and review in the system is attached to it.');
+        }
+
+        $bookingCount = $property->bookings()->count();
+
+        if ($bookingCount > 0) {
+            return back()->with('error', "This property cannot be deleted: {$bookingCount} booking(s) are attached to it, and deleting it would delete them and their payments too.");
+        }
+
         // Delete associated images from storage
         foreach ($property->images as $image) {
             Storage::disk('public')->delete($image->image_path);
@@ -237,8 +314,26 @@ class PropertyController extends Controller
     }
 
     // ── Block Dates ────────────────────────────────────────────────
+    /**
+     * Villa lamang — at ito ang tseke na mahalaga, hindi ang pagtatago ng form.
+     *
+     * Isang property_id lang ang kinokonsulta ng `Booking::blockOn()` at ng
+     * availability grid ng frontdesk: ang sa villa. Kaya ang block sa isang
+     * room ay isang row na walang ginagawa — at "Dates blocked successfully"
+     * pa rin ang sagot. Inalis na ang form sa mga pahina ng room, pero ang
+     * ruta ay nananatiling POST-able nang diretso, at ang pagtatago ng isang
+     * kontrol ay hindi pagbabawal.
+     *
+     * Ibinabalik bilang `error` flash, na hindi pa naipapakita ng pahinang ito
+     * noon — `session('success')` lang ang inilalabas nito, kaya tahimik
+     * sanang nalulunok ang anumang pagtanggi.
+     */
     public function blockDates(Request $request, Property $property)
     {
+        if ($property->type !== 'villa') {
+            return back()->with('error', 'Dates can only be blocked on the master Villa record — it is the only listing guests can book, so a block on an individual room would have no effect on availability.');
+        }
+
         $request->validate([
             'start_date' => 'required|date|after_or_equal:today',
             'end_date'   => 'required|date|after_or_equal:start_date',

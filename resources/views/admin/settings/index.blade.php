@@ -499,10 +499,18 @@
                                         expiring.</span>
                                 </div>
                                 <div>
-                                    <label class="form-label">Cancellation Window (hours)</label>
-                                    <input type="number" name="cancellation_hours" class="form-control"
-                                        value="{{ $settings['cancellation_hours'] ?? '48' }}" min="0">
-                                    <span class="hint">Guests can cancel free of charge within this window.</span>
+                                    {{-- Dating may "Cancellation Window (hours)" na
+                                         field dito. Walang ipinapatupad ang
+                                         halagang iyon — ang chatbot lang ang
+                                         bumabasa, at ipinapangako nito ang
+                                         libreng cancellation na wala naman.
+                                         Hindi setting ang patakaran: nakasulat
+                                         ito sa Booking::CANCELLATION_POLICY. --}}
+                                    <label class="form-label">Cancellation Policy</label>
+                                    <div class="form-control" style="height:auto;background:#f8fafc;font-size:13px;line-height:1.5;">
+                                        {{ \App\Models\Booking::CANCELLATION_POLICY }}
+                                    </div>
+                                    <span class="hint">Fixed by the booking policy — not editable here.</span>
                                 </div>
                             </div>
                             <div class="two-col mb-16">
@@ -694,7 +702,7 @@
                                 <div>
                                     <label class="form-label">Deposit Percentage (%)</label>
                                     <input type="number" name="deposit_percentage" class="form-control"
-                                        value="{{ $settings['deposit_percentage'] ?? '30' }}" min="0"
+                                        value="{{ $settings['deposit_percentage'] ?? '50' }}" min="0"
                                         max="100" step="1">
                                     <span class="hint">% of total required to confirm booking.</span>
                                 </div>

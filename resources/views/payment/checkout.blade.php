@@ -456,6 +456,17 @@
                         any bank app that accepts QR Ph.</span>
                 </div>
 
+                {{-- Ito ang huling sandali bago gumalaw ang pera, kaya dito
+                     dapat makita ang patakaran — hindi lang sa Terms. --}}
+                <div
+                    style="background:#fef2f2;border:1px solid #fecaca;border-radius:10px;padding:12px 14px;margin-bottom:14px;font-size:12px;color:#991b1b;line-height:1.6;">
+                    <i class="bi bi-exclamation-circle me-1"></i>
+                    {{ \App\Models\Booking::CANCELLATION_POLICY }}
+                    If your plans change you can reschedule instead —
+                    <a href="{{ route('portal.terms') }}#cancellation" target="_blank" rel="noopener"
+                        style="color:#991b1b;text-decoration:underline;">see the terms</a>.
+                </div>
+
                 <button type="submit" class="btn-pay" id="payBtn">
                     <i class="bi bi-lock-fill"></i>
                     Pay Now via PayMongo

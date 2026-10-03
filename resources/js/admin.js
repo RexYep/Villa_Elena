@@ -11,6 +11,24 @@ document.addEventListener('DOMContentLoaded', () => {
     const backdrop = document.getElementById('sidebarBackdrop');
     if (!toggle || !sidebar || !backdrop) return;
 
+    // ── Sidebar scroll persistence ────────────────────────────────────────
+    // The sidebar is overflow-y: auto, so the browser resets its scrollTop
+    // to 0 on every full-page navigation (clicking Settings → new page load
+    // → sidebar snaps back to Dashboard). We save the position before the
+    // page unloads and restore it immediately on DOMContentLoaded so the
+    // user's scroll context survives navigation.
+    const SCROLL_KEY = 'admin_sidebar_scroll';
+
+    const savedScroll = sessionStorage.getItem(SCROLL_KEY);
+    if (savedScroll !== null) {
+        sidebar.scrollTop = parseInt(savedScroll, 10);
+    }
+
+    sidebar.addEventListener('scroll', () => {
+        sessionStorage.setItem(SCROLL_KEY, sidebar.scrollTop);
+    });
+
+    // ── Mobile toggle ─────────────────────────────────────────────────────
     const closeSidebar = () => {
         sidebar.classList.remove('open');
         backdrop.classList.remove('open');

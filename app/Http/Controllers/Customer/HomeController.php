@@ -6,7 +6,6 @@ use App\Events\PropertyAvailabilityChanged;
 use App\Http\Controllers\Controller;
 use App\Models\Booking;
 use App\Models\Notification;
-use App\Models\Payment;
 use App\Models\Property;
 use App\Models\StaffLog;
 use Illuminate\Http\Request;
@@ -88,13 +87,7 @@ class HomeController extends Controller
         // query kada refund ang `refundStage()` sa badge ng pahina.
         $booking->load(['property.images', 'payments.refundTransfers', 'extras', 'issueReports' => fn ($q) => $q->latest()]);
 
-        // Ipinapasa rin ang eligible refund preview (kung sakaling
-        // i-cancel ng guest ang booking na ito ngayon) para maipakita
-        // sa cancellation confirmation UI bago pa man sila mag-submit.
-        $refundPreviewPct    = $booking->isCancellable() ? $booking->calculateRefundPercentage() : null;
-        $refundPreviewAmount = $booking->isCancellable() ? $booking->calculateRefundAmount() : null;
-
-        return view('customer.booking_detail', compact('booking', 'refundPreviewPct', 'refundPreviewAmount'));
+        return view('customer.booking_detail', compact('booking'));
     }
 
     // ── Cancel Booking ─────────────────────────────────────────────
@@ -106,15 +99,22 @@ class HomeController extends Controller
             return back()->with('error', 'This booking can no longer be cancelled.');
         }
 
+        // Ang pag-cancel ng bayad nang booking ay hindi na maibabalik AT
+        // may halaga na ngayon: mawawala sa guest ang naibayad niya
+        // (Booking::CANCELLATION_POLICY). Kaya kailangan niyang sabihing
+        // naiintindihan niya iyon. Ang server ang hadlang, hindi ang
+        // `required` sa checkbox — kayang laktawan iyon ng sinumang
+        // direktang nagpapadala ng request. Walang hinihingi sa booking
+        // na wala pang bayad: walang mawawala roon.
+        $forfeits = (float) $booking->amount_paid;
+
         $request->validate([
             'cancellation_reason' => 'required|string|min:5',
+            'accept_no_refund'    => $forfeits > 0 ? 'accepted' : 'nullable',
+        ], [
+            'accept_no_refund.accepted' => 'Please confirm that you understand the ₱'
+                . number_format($forfeits, 2) . ' you have paid will not be refunded.',
         ]);
-
-        // Kinukuha ang refund eligibility BAGO baguhin ang status —
-        // batay ito sa tiered cancellation policy sa Booking model
-        // (24-hour grace period, 7+/3-6/<3 araw bago ang check-in).
-        $refundPercentage = $booking->calculateRefundPercentage();
-        $refundAmount     = $booking->calculateRefundAmount();
 
         $booking->update([
             'status'              => 'cancelled',
@@ -158,84 +158,29 @@ class HomeController extends Controller
             \Illuminate\Support\Facades\Log::error('Failed to broadcast PropertyAvailabilityChanged (customer cancel): ' . $e->getMessage());
         }
 
-        // Kung may eligible refund amount, gumawa ng refund Payment
-        // record — pareho ang pattern na ginagamit ng
-        // Admin\BookingController para consistent ang audit trail kahit
-        // saan pa galing ang cancellation.
-        // Hawak dahil kailangan ito ng notification sa ibaba para
-        // maituro ang guest sa form na nagtatanong kung saan ipapadala
-        // ang pera. Nananatiling null kung walang refund — at tama
-        // lang iyon: walang itatanong kung walang ipadadala.
-        $refundPayment = null;
-
-        if ($refundAmount > 0) {
-            $originalMethod = optional(
-                $booking->payments()->where('payment_type', '!=', 'refund')->latest()->first()
-            )->payment_method ?? 'cash';
-
-            $refundPayment = Payment::create([
-                'booking_id'     => $booking->id,
-                'amount'         => $refundAmount,
-                'payment_method' => $originalMethod,
-                'payment_type'   => 'refund',
-                // 'pending' — inaprubahan na ang refund, pero manu-mano
-                // pang ipapadala ng admin ang pera.
-                'status'         => 'pending',
-                'payment_date'   => today(),
-                'notes'          => "Auto-computed refund ({$refundPercentage}% policy) — guest self-cancelled booking.",
-            ]);
-
-            $booking->recalculateFinancials();
-
-            NotificationHelper::refundIssued(
-                $booking->fresh(),
-                $refundAmount,
-                "Self-cancelled booking ({$refundPercentage}% refund policy)"
-            );
-        }
+        // WALANG refund na ginagawa rito (v7.52). Dating may tiered na
+        // kalkulasyon at isang 'pending' na refund Payment sa puntong
+        // ito; ang patakaran ng may-ari ay non-refundable ang lahat ng
+        // bayad kapag ang guest ang nag-cancel. Nananatili sa booking
+        // ang `amount_paid` — pera iyon ng resort, at iyon din ang
+        // makikita sa mga ulat.
 
         NotificationHelper::bookingCancelled($booking->load(['user','property']), $request->cancellation_reason);
 
-        // Ang guest mismo ang nag-cancel, pero siya lang ang walang
-        // natatanggap na notification dito dati — puro notifyAdmin() ang
-        // dalawang tawag sa itaas. Flash message lang ang meron siya, at
-        // nawawala iyon pagkatapos ng isang page load, kaya walang
-        // matitirang patunay kung magkano (at kailan) ang refund niya.
-        // Iisa lang ang notification na ito para sa cancellation AT sa
-        // refund — nakapaloob na sa preset ang refund line, kaya hindi
-        // na kailangan ng hiwalay na refundApprovedForGuest() dito.
-        NotificationHelper::bookingCancelledForGuest(
-            $booking,
-            $refundAmount,
-            $refundAmount > 0 ? $refundPercentage : null,
-            $refundPayment
-        );
+        // Ang guest mismo ang nag-cancel, kaya siya rin ang dapat may
+        // matitirang tala nito. Nawawala ang flash message pagkatapos ng
+        // isang page load; ang notification ang nagsasabi kung magkano
+        // ang hindi na maibabalik, sa parehong pananalitang pinayagan
+        // niya bago mag-submit.
+        NotificationHelper::bookingCancelledForGuest($booking, $forfeits);
 
         StaffLog::record('guest_cancelled_booking', 'bookings', $booking->id,
-            "Guest cancelled booking {$booking->booking_ref}. Refund eligibility: {$refundPercentage}% (₱" . number_format($refundAmount, 2) . ").");
+            "Guest cancelled booking {$booking->booking_ref}. No refund (non-refundable policy); ₱"
+            . number_format($forfeits, 2) . ' paid is kept.');
 
         $message = "Booking {$booking->booking_ref} has been cancelled.";
-        if ($refundAmount > 0) {
-            $message .= " ₱" . number_format($refundAmount, 2) . " ({$refundPercentage}% ng iyong nabayaran) ay irerefund sa loob ng ilang araw.";
-        } else {
-            $message .= " Based on our cancellation policy, this is no longer eligible for a refund.";
-        }
-
-        // Kung may irerefund, dalhin agad siya sa form na nagtatanong
-        // kung saan ipapadala. Nandito na siya at hinihintay ang pera
-        // niya — dito ang pinakamataas na tsansang masagot ito.
-        //
-        // SINASADYANG redirect ito, hindi mga field sa loob mismo ng
-        // cancel form. Ang paglalagay ng tatlong required na field sa
-        // cancellation ay nangangahulugang kayang HARANGAN ng isang
-        // validation error ang isang cancellation — hindi iyon
-        // katanggap-tanggap. Natatapos muna ang pag-cancel; saka lang
-        // tayo nagtatanong. Kung aalis siya, naroon pa rin ang link sa
-        // notification.
-        if ($refundPayment && $refundPayment->needsRefundDestination()) {
-            return redirect()
-                ->route('customer.refunds.destination', $refundPayment)
-                ->with('success', $message . ' Please tell us where to send it.');
+        if ($forfeits > 0) {
+            $message .= ' As you confirmed, the ₱' . number_format($forfeits, 2) . ' you paid is non-refundable.';
         }
 
         return redirect()->route('customer.bookings')->with('success', $message);

@@ -268,9 +268,13 @@
         <div>
             <label>Slot</label>
             <select name="slot" class="form-control">
-                <option value="both" @selected($slotChoice === 'both')>Both slots</option>
-                <option value="day" @selected($slotChoice === 'day')>Day only</option>
-                <option value="night" @selected($slotChoice === 'night')>Night only</option>
+                {{-- Bookable-slots lang: ang simulator ay nagpepresyo sa
+                     pamamagitan ng quoteFor(), na tumatanggi sa slot na wala
+                     pang presyo. --}}
+                <option value="both" @selected($slotChoice === 'both')>All slots</option>
+                @foreach (\App\Models\Booking::bookableSlotKeys() as $slotKey)
+                    <option value="{{ $slotKey }}" @selected($slotChoice === $slotKey)>{{ \App\Models\Booking::SLOTS[$slotKey]['name'] }} only</option>
+                @endforeach
             </select>
         </div>
         <div>

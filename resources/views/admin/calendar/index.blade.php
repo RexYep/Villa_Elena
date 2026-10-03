@@ -8,6 +8,14 @@
     <button class="btn-navy" onclick="openBlockModal()">
         <i class="bi bi-calendar-x"></i> Block Dates
     </button>
+    {{-- Ipinapakita lang kapag may presyo na ang 22-oras na slot: kung wala,
+         ang window ay walang bisa (tingnan ang Booking::slotsOfferedOn()) at
+         ang pindutan ay nangangako ng isang bagay na hindi mangyayari. --}}
+    @if (in_array('stay22', \App\Models\Booking::bookableSlotKeys($villa), true))
+        <button class="btn-navy" style="background:#0f766e;" onclick="openSlotWindowModal()">
+            <i class="bi bi-house-door"></i> 22-Hour Date
+        </button>
+    @endif
     <form method="POST" action="{{ route('logout') }}" class="m-0">
         @csrf
         <button type="submit" class="logout-btn"><i class="bi bi-box-arrow-right"></i> Logout</button>
@@ -541,16 +549,10 @@
     </div>
 
     {{-- FILTER BAR --}}
+    {{-- Walang Property filter dito. Iisa ang listing na puwedeng i-book, kaya
+         ang tanging magagawa ng dropdown na iyon ay salain ang calendar
+         pababa sa isang room na permanenteng walang laman. --}}
     <div class="filter-bar">
-        <div>
-            <label>Property</label>
-            <select id="filterProperty" onchange="refreshCalendar()">
-                <option value="">All Properties</option>
-                @foreach ($properties as $property)
-                    <option value="{{ $property->id }}">{{ $property->property_name }}</option>
-                @endforeach
-            </select>
-        </div>
         <div>
             <label>Status</label>
             <select id="filterStatus" onchange="refreshCalendar()">
@@ -586,9 +588,14 @@
                     <span class="detail-label">Guest</span>
                     <span class="detail-val" id="modalGuest">—</span>
                 </div>
+                {{-- Slot, hindi Property. Iisa ang property, kaya "Villa Elena
+                     (Whole Villa)" ang nakasulat dito sa BAWAT booking — wala
+                     itong sinasagot na tanong. Ang slot naman ang kailangang
+                     malaman ng admin at hindi makita kahit saan sa modal na
+                     ito noon. --}}
                 <div class="detail-row">
-                    <span class="detail-label">Property</span>
-                    <span class="detail-val" id="modalProperty">—</span>
+                    <span class="detail-label">Slot</span>
+                    <span class="detail-val" id="modalSlot">—</span>
                 </div>
                 <div class="detail-row">
                     <span class="detail-label">Check-in</span>
@@ -629,14 +636,15 @@
                 <button class="modal-close" onclick="closeModal('blockModal')">✕</button>
             </div>
             <div class="modal-body">
+                {{-- Ipinapakita, hindi pinipili. Tinutukoy ng quickBlock() ang
+                     villa sa server; nandito ito para malaman ng admin kung ano
+                     ang isasara, hindi para magpasya. --}}
                 <div class="mb-12">
                     <label class="form-label-sm">Property</label>
-                    <select id="blockProperty" class="form-control-sm2" required>
-                        <option value="">Select property...</option>
-                        @foreach ($properties as $property)
-                            <option value="{{ $property->id }}">{{ $property->property_name }}</option>
-                        @endforeach
-                    </select>
+                    <div class="form-control-sm2 text-muted-theme"
+                        style="display:flex; align-items:center; background:transparent;">
+                        {{ $villa->property_name }}
+                    </div>
                 </div>
                 <div class="date-pair mb-12">
                     <div>
@@ -665,6 +673,78 @@
                 </div>
                 <button class="btn-submit" onclick="submitBlock()">
                     <i class="bi bi-calendar-x"></i> Block These Dates
+                </button>
+            </div>
+        </div>
+    </div>
+
+    {{-- 22-HOUR SLOT WINDOW MODAL --}}
+    {{-- Kabaligtaran ng Block Dates: ito ay NAGBUBUKAS ng slot na kung hindi
+         ay hindi inaalok. Iisang petsa ang tinatanggap — isang alok na stay
+         kada entry — at ipinapakita ang buong saklaw pabalik sa admin bago
+         siya mag-submit, para walang duda kung ano ang ginawa niya. --}}
+    <div class="modal-overlay" id="slotWindowModal">
+        <div class="modal-box">
+            <div class="modal-head" style="background:#0f766e;">
+                <div class="modal-title">Open a 22-Hour Date</div>
+                <button class="modal-close" onclick="closeModal('slotWindowModal')">✕</button>
+            </div>
+            <div class="modal-body">
+                <p class="text-muted-theme" style="font-size:13px; margin:0 0 12px;">
+                    Pick the <strong>check-in date</strong>. That date will offer the
+                    22-hour stay <strong>only</strong> — Day and Night are hidden on it.
+                    Every other date keeps the regular slots.
+                </p>
+                <div class="mb-12">
+                    <label class="form-label-sm">Check-in Date</label>
+                    <input type="date" id="swDate" class="form-control-sm2"
+                        min="{{ now()->format('Y-m-d') }}" required>
+                    <div id="swSpan" class="text-muted-theme"
+                        style="font-size:12.5px; margin-top:6px; min-height:18px;"></div>
+                </div>
+                <div class="mb-12">
+                    <label class="form-label-sm">Notes <span class="text-muted-theme"
+                            style="font-weight:400; text-transform:none;">(optional)</span></label>
+                    <input type="text" id="swNotes" class="form-control-sm2"
+                        placeholder="e.g. Reunion package">
+                </div>
+                <div id="swWarn" hidden
+                    style="background:#fffbeb; border:1px solid #fcd34d; border-radius:8px;
+                           padding:10px 12px; font-size:13px; margin-bottom:12px;"></div>
+                <button class="btn-submit" style="background:#0f766e;" onclick="submitSlotWindow()">
+                    <i class="bi bi-house-door"></i> Open This Date
+                </button>
+            </div>
+        </div>
+    </div>
+
+    {{-- 22-HOUR WINDOW DETAIL / DELETE --}}
+    <div class="modal-overlay" id="slotWindowDetailModal">
+        <div class="modal-box">
+            <div class="modal-head" style="background:#0f766e;">
+                <div class="modal-title">22-Hour Date</div>
+                <button class="modal-close" onclick="closeModal('slotWindowDetailModal')">✕</button>
+            </div>
+            <div class="modal-body">
+                <div class="detail-row">
+                    <span class="detail-label">Stay</span>
+                    <span class="detail-value" id="swdSpan">—</span>
+                </div>
+                <div class="detail-row">
+                    <span class="detail-label">Offered</span>
+                    <span class="detail-value" id="swdSlot">—</span>
+                </div>
+                <div class="detail-row">
+                    <span class="detail-label">Notes</span>
+                    <span class="detail-value" id="swdNotes">—</span>
+                </div>
+                <p class="text-muted-theme" style="font-size:12.5px; margin:12px 0 0;">
+                    Closing this returns the date to the regular Day and Night slots.
+                    Bookings already made on it are not touched.
+                </p>
+                <button class="btn-submit" style="background:#dc2626; margin-top:14px;"
+                    onclick="deleteSlotWindow()">
+                    <i class="bi bi-trash"></i> Close This Date
                 </button>
             </div>
         </div>
@@ -728,48 +808,84 @@
         // already uses for this page.
         const phoneMQ = window.matchMedia('(max-width: 600px)');
 
+        // Petsa bilang 'YYYY-MM-DD' mula sa LOKAL na mga getter.
+        //
+        // HINDI `.toISOString().split('T')[0]`. Ginagawa ng FullCalendar ang
+        // petsa ng all-day event sa hatinggabi na LOKAL, at ang toISOString()
+        // ay nagko-convert patungong UTC — kaya sa UTC+8 ang hatinggabi ng
+        // Ago 10 ay 16:00 ng Ago 9 sa UTC, at ang hinihiwang petsa ay
+        // NAUUNA NANG ISANG ARAW.
+        //
+        // Ito ang dahilan ng "must be a date after or equal to check in date":
+        // tama ang `startStr` (sariling lokal na string ng FullCalendar) pero
+        // ang dulo ay dumaraan sa UTC, kaya dalawang araw ang nababawas imbes
+        // na isa, at naipapadala ang checkout bago pa ang check-in.
+        function localDateStr(d) {
+            return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+        }
+
         // ── Init FullCalendar ──────────────────────────────────────────
         document.addEventListener('DOMContentLoaded', function() {
             const el = document.getElementById('calendar');
             calendar = new FullCalendar.Calendar(el, {
-                plugins: [FullCalendar.dayGridPlugin, FullCalendar.timeGridPlugin, FullCalendar.listPlugin,
+                plugins: [FullCalendar.dayGridPlugin, FullCalendar.listPlugin,
                     FullCalendar.interactionPlugin
                 ],
                 initialView: phoneMQ.matches ? 'listWeek' : 'dayGridMonth',
+
+                // Dalawang tab lang: Month at Week.
+                //
+                // WALA nang `timeGridWeek`. Petsa lamang ang ipinapadala ng
+                // events() (`check_in_date->format('Y-m-d')`), kaya all-day ang
+                // turing ng FullCalendar sa bawat booking — nasa manipis na
+                // guhit sa itaas ang lahat at WALANG LAMAN HABANG-BUHAY ang
+                // 24-oras na grid sa ilalim. Isang mataas na blangkong ruler
+                // ang buong tab.
+                //
+                // Kayang buhayin iyon sa pamamagitan ng tunay na datetime mula
+                // sa slotDateTimes(), at maganda sana ang hitsura — pero ang
+                // time grid ay nag-aanyaya ng patayong pag-drag, at DATES
+                // LAMANG ang binabasa ng moveBooking() (sinasadyang ginagamit
+                // muli ang nakaimbak na check_in_time, dahil walang
+                // free-choice na oras kahit saan). Mukhang tumatalab ang
+                // paglipat ng oras at saka babalik sa dati sa refetch.
+                //
+                // Ang dating `listWeek` ang tunay na week schedule, kaya
+                // "Week" na ang pangalan nito. Dati ay month / week / list,
+                // kung saan walang ipinapakita ang "week" at ang "list" ang
+                // hinahanap — at sa telepono ay awtomatikong napupunta ang
+                // admin sa tab na dating nakasulat na "list".
                 headerToolbar: {
                     left: 'prev,next today',
                     center: 'title',
-                    right: 'dayGridMonth,timeGridWeek,listWeek'
+                    right: 'dayGridMonth,listWeek'
+                },
+                buttonText: {
+                    listWeek: 'Week'
                 },
                 height: 'auto',
                 editable: true, // enables drag & drop
                 eventResizableFromStart: false,
                 selectable: true,
-                nowIndicator: true,
 
                 // ── Fetch events from API ──────────────────────────────
                 events: function(info, successCallback, failureCallback) {
-                    const propId = document.getElementById('filterProperty').value;
                     const status = document.getElementById('filterStatus').value;
 
-                    fetch(`{{ route('admin.calendar.events') }}?start=${info.startStr}&end=${info.endStr}&property_id=${propId}&status=${status}`, {
+                    fetch(`{{ route('admin.calendar.events') }}?start=${info.startStr}&end=${info.endStr}&status=${status}`, {
                             headers: {
                                 'X-Requested-With': 'XMLHttpRequest'
                             }
                         })
                         .then(r => r.json())
                         .then(data => {
-                            // Apply client-side filters
+                            // Kliyente pa rin ang sumasala ng status — hindi ito
+                            // binabasa ng events() sa server.
                             let filtered = data;
-                            if (propId) {
-                                filtered = filtered.filter(e =>
-                                    e.extendedProps.type === 'block' ||
-                                    String(e.extendedProps.property_id) === String(propId)
-                                );
-                            }
                             if (status) {
                                 filtered = filtered.filter(e =>
                                     e.extendedProps.type === 'block' ||
+                                    e.extendedProps.type === 'slot_window' ||
                                     e.extendedProps.status === status
                                 );
                             }
@@ -785,6 +901,8 @@
                         showBookingModal(info.event);
                     } else if (p.type === 'block') {
                         showBlockDetailModal(info.event);
+                    } else if (p.type === 'slot_window') {
+                        showSlotWindowDetailModal(info.event);
                     }
                 },
 
@@ -800,28 +918,50 @@
                     // end in FullCalendar is exclusive, so subtract 1 day for check_out
                     const endDate = new Date(info.event.end);
                     endDate.setDate(endDate.getDate() - 1);
-                    const newEnd = endDate.toISOString().split('T')[0];
+                    const newEnd = localDateStr(endDate);
 
                     if (!confirm(`Move ${p.booking_ref} to ${newStart} – ${newEnd}?`)) {
                         info.revert();
                         return;
                     }
 
+                    // 'Accept: application/json' — ito ang nawawala noon.
+                    //
+                    // Ang `Content-Type` ay nagsasabi kung ANO ang ipinapadala;
+                    // ang `Accept` ang nagsasabi kung ano ang tinatanggap. Kung
+                    // wala ito ay hindi itinuturing ni Laravel na humihingi ng
+                    // JSON ang request, kaya ang pagbagsak ng validation ay
+                    // nagre-redirect (302 → HTML) imbes na magbalik ng 422 JSON.
+                    // Sumasabog ang r.json() sa HTML na iyon, kaya ang .catch()
+                    // ang tumatakbo at "Error moving booking" ang lumalabas —
+                    // habang nasa response mismo ang tunay na dahilan.
                     fetch(`{{ url('admin/calendar/bookings') }}/${p.booking_id}/move`, {
                             method: 'PATCH',
                             headers: {
                                 'Content-Type': 'application/json',
+                                'Accept': 'application/json',
                                 'X-CSRF-TOKEN': CSRF
                             },
+                            // check_in_date lang. Ang slot ang nagtatakda ng
+                            // dulo at ang server ang kumukuha nito sa
+                            // slotDateTimes() — tingnan ang moveBooking().
+                            // Ginagamit pa rin ang `newEnd` sa itaas para sa
+                            // tanong ng confirm dialog.
                             body: JSON.stringify({
-                                check_in_date: newStart,
-                                check_out_date: newEnd
+                                check_in_date: newStart
                             })
                         })
                         .then(r => r.json())
                         .then(data => {
                             if (data.success) {
-                                showToast(`${p.booking_ref} moved — ${data.nights} nights`);
+                                // Hindi "${data.nights} nights". Ang num_nights
+                                // ay 1 sa BAWAT row sa database — isang slot ang
+                                // booking, hindi isang bilang ng gabi — kaya ang
+                                // tanging sinasabi ng "1 nights" ay isang lumang
+                                // modelo at maling gramatika. Ang slot at ang
+                                // bagong petsa ang aktuwal na nabago.
+                                const slot = p.slot ? p.slot.charAt(0).toUpperCase() + p.slot.slice(1) : 'Booking';
+                                showToast(`${p.booking_ref} moved — ${slot} on ${newStart}`);
                             } else {
                                 info.revert();
                                 // Ang server ang nagsasabi kung BAKIT — halos
@@ -840,9 +980,12 @@
                 select: function(info) {
                     document.getElementById('blockStart').value = info.startStr;
                     // end is exclusive in FC, so subtract 1 day
+                    // Parehong depekto ang nandito: prinipi-fill nito ang End
+                    // Date ng Block modal nang isang araw na maaga, kaya ang
+                    // pagpili ng Ago 10–12 ay nagsusulat ng Ago 10 sa dulo.
                     const endDate = new Date(info.end);
                     endDate.setDate(endDate.getDate() - 1);
-                    document.getElementById('blockEnd').value = endDate.toISOString().split('T')[0];
+                    document.getElementById('blockEnd').value = localDateStr(endDate);
                     openBlockModal();
                     calendar.unselect();
                 },
@@ -853,6 +996,45 @@
                     if (p.type === 'booking') {
                         info.el.title =
                         `${p.booking_ref} · ${p.guest} · ${p.check_in} – ${p.check_out}`;
+                    }
+
+                    // ── Hanay ng oras sa Week (list) view ──────────────
+                    //
+                    // Petsa lang ang ipinapadala ng events(), kaya all-day ang
+                    // turing ng FullCalendar sa bawat booking at "all-day" ang
+                    // isinusulat nito sa hanay ng oras — walang saysay sa isang
+                    // sistemang may dalawang nakapirming slot, at siya pang
+                    // tanging bagay na magkakaiba sana sa isang Day at isang
+                    // Night sa parehong petsa.
+                    //
+                    // HINDI ito kayang ayusin ng `allDayText`: iisang string
+                    // lang iyon para sa lahat ng event. Kailangang kada-event,
+                    // kaya dito.
+                    if (info.view.type !== 'listWeek') return;
+
+                    const timeCell = info.el.querySelector('.fc-list-event-time');
+                    if (!timeCell) return;
+
+                    if (p.type === 'block') {
+                        timeCell.textContent = 'Blocked';
+                        return;
+                    }
+
+                    if (p.type === 'slot_window') {
+                        timeCell.textContent = p.slot_name;
+                        return;
+                    }
+
+                    timeCell.textContent = p.slot_display;
+
+                    // May sariling hanay na ang slot, kaya doble na ang "Day · "
+                    // na unlapi sa pamagat dito. Pangalan na lang ng bisita.
+                    // Nananatili ito sa Month view, kung saan ito ang tanging
+                    // nagkakaiba sa dalawang booking sa iisang cell.
+                    const titleCell = info.el.querySelector('.fc-list-event-title');
+                    if (titleCell) {
+                        const link = titleCell.querySelector('a');
+                        (link || titleCell).textContent = p.guest;
                     }
                 }
             });
@@ -884,7 +1066,7 @@
             const p = event.extendedProps;
             document.getElementById('modalBookingRef').textContent = p.booking_ref;
             document.getElementById('modalGuest').textContent = p.guest;
-            document.getElementById('modalProperty').textContent = p.property;
+            document.getElementById('modalSlot').textContent = p.slot_display;
             document.getElementById('modalCheckin').textContent = p.check_in;
             document.getElementById('modalCheckout').textContent = p.check_out;
             document.getElementById('modalGuests').textContent = p.num_guests + ' guest(s)';
@@ -912,19 +1094,131 @@
             document.getElementById('blockDetailModal').classList.add('open');
         }
 
+        // ── 22-Hour Slot Windows ───────────────────────────────────────
+        let activeSlotWindowId = null;
+
+        function openSlotWindowModal() {
+            document.getElementById('swDate').value = '';
+            document.getElementById('swNotes').value = '';
+            document.getElementById('swSpan').textContent = '';
+            const warn = document.getElementById('swWarn');
+            warn.hidden = true;
+            warn.textContent = '';
+            // Ang confirm ay umaabot lang sa PARTIKULAR na petsang binalaan.
+            // Kung hindi, ang isang "oo" sa Okt 2 ay tahimik na magpapatuloy
+            // sa Okt 9 sa susunod na pagbukas ng modal.
+            confirmedFor = null;
+            document.getElementById('slotWindowModal').classList.add('open');
+        }
+
+        // Ipinapakita ang buong saklaw ng stay habang pumipili ng petsa, para
+        // hindi na kailangang hulaan ng admin kung saan ito nagtatapos. 19:00
+        // → 17:00 kinabukasan; nakasulat dito dahil ang input ay petsa lang.
+        document.getElementById('swDate')?.addEventListener('change', function () {
+            const el = document.getElementById('swSpan');
+            if (!this.value) { el.textContent = ''; return; }
+            const start = new Date(this.value + 'T19:00:00');
+            const end = new Date(start.getTime() + 22 * 3600 * 1000);
+            const f = d => d.toLocaleString('en-US', {
+                month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit'
+            });
+            el.textContent = 'Stay: ' + f(start) + ' → ' + f(end);
+        });
+
+        let confirmedFor = null;
+
+        function submitSlotWindow() {
+            const date = document.getElementById('swDate').value;
+            const notes = document.getElementById('swNotes').value;
+            const warn = document.getElementById('swWarn');
+
+            if (!date) {
+                warn.hidden = false;
+                warn.textContent = 'Pick a check-in date first.';
+                return;
+            }
+
+            fetch('{{ route('admin.calendar.addSlotWindow') }}', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json',
+                        'X-CSRF-TOKEN': CSRF
+                    },
+                    body: JSON.stringify({
+                        slot: 'stay22',
+                        check_in_date: date,
+                        notes,
+                        // Ipinapadala lang ang kumpirmasyon para sa EKSAKTONG
+                        // petsang binalaan tungkol sa server.
+                        confirm_conflict: confirmedFor === date
+                    })
+                })
+                .then(r => r.json().then(d => ({ ok: r.ok, status: r.status, d })))
+                .then(({ status, d }) => {
+                    if (d.success) {
+                        closeModal('slotWindowModal');
+                        calendar.refetchEvents();
+                        showToast('Opened ' + (d.span_label || 'that date') + ' as 22-hour only');
+                        return;
+                    }
+
+                    warn.hidden = false;
+                    warn.textContent = d.message || 'Could not open that date.';
+
+                    // 409 = kaduda-duda pero pinapayagan kung sinasadya. Ang
+                    // susunod na pindot sa parehong petsa ang magpapatuloy.
+                    if (status === 409 && d.needs_confirmation) {
+                        confirmedFor = date;
+                        warn.textContent += ' — press “Open This Date” again to continue.';
+                    } else {
+                        confirmedFor = null;
+                    }
+                })
+                .catch(() => showToast('Error opening that date', true));
+        }
+
+        function showSlotWindowDetailModal(event) {
+            const p = event.extendedProps;
+            activeSlotWindowId = p.window_id;
+            document.getElementById('swdSpan').textContent = p.span_label || '—';
+            document.getElementById('swdSlot').textContent = (p.slot_name || '—') + ' only';
+            document.getElementById('swdNotes').textContent = p.notes || '—';
+            document.getElementById('slotWindowDetailModal').classList.add('open');
+        }
+
+        function deleteSlotWindow() {
+            if (!activeSlotWindowId) return;
+            fetch(`{{ url('admin/calendar/slot-windows') }}/${activeSlotWindowId}`, {
+                    method: 'DELETE',
+                    headers: {
+                        'Accept': 'application/json',
+                        'X-CSRF-TOKEN': CSRF
+                    }
+                })
+                .then(r => r.json())
+                .then(data => {
+                    if (data.success) {
+                        closeModal('slotWindowDetailModal');
+                        calendar.refetchEvents();
+                        showToast('That date is back to the regular slots');
+                    }
+                })
+                .catch(() => showToast('Error closing that date', true));
+        }
+
         // ── Block Modal ────────────────────────────────────────────────
         function openBlockModal() {
             document.getElementById('blockModal').classList.add('open');
         }
 
         function submitBlock() {
-            const propertyId = document.getElementById('blockProperty').value;
             const start = document.getElementById('blockStart').value;
             const end = document.getElementById('blockEnd').value;
             const reason = document.getElementById('blockReason').value;
             const notes = document.getElementById('blockNotes').value;
 
-            if (!propertyId || !start || !end) {
+            if (!start || !end) {
                 alert('Please fill in all required fields.');
                 return;
             }
@@ -936,7 +1230,6 @@
                         'X-CSRF-TOKEN': CSRF
                     },
                     body: JSON.stringify({
-                        property_id: propertyId,
                         start_date: start,
                         end_date: end,
                         reason,
@@ -949,7 +1242,6 @@
                         closeModal('blockModal');
                         calendar.refetchEvents();
                         showToast('Dates blocked successfully');
-                        document.getElementById('blockProperty').value = '';
                         document.getElementById('blockStart').value = '';
                         document.getElementById('blockEnd').value = '';
                         document.getElementById('blockNotes').value = '';
@@ -995,7 +1287,8 @@
         }
 
         // Close modals on backdrop click
-        ['bookingModal', 'blockModal', 'blockDetailModal'].forEach(id => {
+        ['bookingModal', 'blockModal', 'blockDetailModal',
+         'slotWindowModal', 'slotWindowDetailModal'].forEach(id => {
             document.getElementById(id).addEventListener('click', function(e) {
                 if (e.target === this) closeModal(id);
             });

@@ -65,10 +65,19 @@ class IdleDatePromoAdvisor extends Advisor
 
         $out = [];
 
-        foreach (array_keys(Booking::SLOTS) as $slot) {
+        foreach ($demand->bookableSlots() as $slot) {
             $perDate = [];
 
             for ($date = $start->copy(); $date->lte($end); $date->addDay()) {
+                // Hindi pareho ang inaalok kada petsa: ang 22-Hours ay sa
+                // mga piling petsa lang, at sa mga petsang iyon ay ito
+                // lang. Kung wala ito, mag-aalok ng promo ang engine sa
+                // slot na hindi naman ipinagbibili sa araw na iyon — at
+                // ang pagpepresyo nito ay tatanggihan ng quoteFor().
+                if (! in_array($slot, $demand->slotsOfferedOn($date), true)) {
+                    continue;
+                }
+
                 $best = $this->bestDiscountFor(
                     $demand, $date, $slot,
                     $elasticity, $idleCutoff, $maxDiscount, $ceiling, $candidates
@@ -277,7 +286,10 @@ class IdleDatePromoAdvisor extends Advisor
 
         $rawFill = $totalSample > 0 ? $totalBooked / $totalSample : 0.0;
 
-        $slotLabel = $slot === 'day' ? 'Day' : 'Night';
+        // Mula sa Booking::SLOTS — ang dating anyo ay nagsasabing "Night"
+        // sa bawat slot na hindi Day, kaya ang isang 22-oras na
+        // rekomendasyon ay babasahin ng admin bilang Night.
+        $slotLabel = Booking::SLOTS[$slot]['name'] ?? ucfirst($slot);
         $window = $first->isSameDay($last)
             ? $first->format('M j')
             : $first->format('M j').'–'.$last->format('M j');

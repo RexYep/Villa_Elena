@@ -12,6 +12,7 @@ use App\Services\ChatbotGuard;
 use App\Services\GeminiService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
 
 class ChatbotController extends Controller
@@ -103,6 +104,12 @@ class ChatbotController extends Controller
         // seven quote characters and no well-formed string. json_encode()
         // emits a correctly escaped JSON string literal, which is exactly
         // what this prompt claims the value is.
+        // Iisang pinagmumulan ng listahan ng slot para sa DALAWANG prompt sa
+        // ibaba (intent extraction at ang sagot ni Elena). Kung magkaiba ang
+        // dalawa, may slot na kayang kilalanin ng extractor pero hindi
+        // kayang banggitin ni Elena — o mas malala, kabaligtaran.
+        $slotParts = $this->slotPromptParts();
+
         $intentPrompt = 'You are a booking intent extractor for a SINGLE-VILLA private resort (NOT a hotel — there is only ONE bookable villa, rented out in its entirety to one group at a time).
 Analyze this message and extract booking details.
 Respond ONLY with a valid JSON object — no explanation, no markdown, no backticks.
@@ -113,14 +120,14 @@ Extract:
 {
   \"intent\": \"check_availability\" or \"get_price\" or \"general_question\" or \"greeting\",
   \"checkin\": \"YYYY-MM-DD or null\",
-  \"slot\": \"day\" or \"night\" or null — \"day\" means a daytime/morning stay (8:00 AM–5:00 PM), \"night\" means an evening/overnight stay (7:00 PM–6:00 AM). Infer from words like 'morning', 'daytime', 'day tour' → day; 'evening', 'overnight', 'night' → night.
+  \"slot\": {$slotParts['json']} — the available slots are: {$slotParts['detail']}. Infer from words like 'morning', 'daytime', 'day tour' → day; 'evening', 'overnight', 'night' → night; '22 hours', 'whole day and night', 'until tomorrow afternoon' → stay22. Use only a slot listed above.
   \"guests\": number or null
 }
 
 Today is ".now()->format('Y-m-d').' ('.now()->format('l').").
 For relative dates like 'this weekend', 'next week', calculate the actual dates.
 This weekend = next Saturday ".now()->next('Saturday')->format('Y-m-d').' to Sunday '.now()->next('Sunday')->format('Y-m-d').'.
-If no slot is mentioned, leave slot as null (defaults to "day").';
+If no slot is mentioned, leave slot as null.';
 
         // Temperature 0: this step emits strict JSON, and there is nothing a
         // warmer setting can add except a parse failure.
@@ -162,10 +169,44 @@ If no slot is mentioned, leave slot as null (defaults to "day").';
         if ($villa && $intent && in_array($intent['intent'] ?? '', ['check_availability', 'get_price'])) {
 
             $checkin = $this->safeCheckinDate($intent['checkin'] ?? null);
-            $slot = in_array($intent['slot'] ?? null, array_keys(Booking::SLOTS)) ? $intent['slot'] : 'day';
+            // Ang mga bookable lang — kung hindi, ang isang naimbentong
+            // slot ng modelo ay dadaan sa quoteFor() at magiging 422 sa
+            // gitna ng isang usapan.
+            $slot = in_array($intent['slot'] ?? null, $slotParts['keys'], true)
+                ? $intent['slot']
+                : $slotParts['default'];
             $guests = $intent['guests'] ?? null;
 
+            // Ang hiniling na slot ay dapat TUNAY na inaalok sa petsang
+            // iyon, kung hindi ay aabort ang quoteFor() sa 422 at ang
+            // makikita ng guest ay isang error page sa gitna ng usapan.
+            //
+            // Kapag hindi inaalok, ililipat sa isang inaalok sa parehong
+            // petsa at SASABIHIN ito sa prompt — hindi tahimik na papalitan.
+            // Ang tahimik na paglipat ay nagbubunga ng sagot na tungkol sa
+            // ibang produkto kaysa sa itinanong.
+            $slotSwitchNote = '';
+
             if ($checkin) {
+                $offeredThen = Booking::slotsOfferedOn($checkin, $villa);
+
+                if (! in_array($slot, $offeredThen, true)) {
+                    $asked = Booking::SLOTS[$slot]['name'] ?? $slot;
+
+                    if (! $offeredThen) {
+                        $slotSwitchNote = "No booking slot is offered on {$checkin->format('M d, Y')} at all. ";
+                        $slot = null;
+                    } else {
+                        $slot = $offeredThen[0];
+                        $now = Booking::SLOTS[$slot]['name'] ?? $slot;
+                        $slotSwitchNote = "The guest asked about the {$asked} slot, but "
+                            ."{$checkin->format('M d, Y')} is offered as {$now} only — "
+                            .'say so plainly, and give the details below for that slot instead. ';
+                    }
+                }
+            }
+
+            if ($checkin && $slot) {
                 [$checkinDt, $checkoutDt] = Booking::slotDateTimes($slot, $checkin->format('Y-m-d'));
 
                 $guestOk = ! $guests || $guests <= $villa->max_capacity;
@@ -175,7 +216,14 @@ If no slot is mentioned, leave slot as null (defaults to "day").';
                 // property page at sisingilin sa booking form. Kung
                 // magkaiba ang dalawa, ang chatbot ang unang mapapansing
                 // nagsisinungaling.
-                $quote = $villa->quoteFor($checkinDt, $slot);
+                //
+                // Ipinapasa ang naka-login na guest, kung mayroon: kung
+                // regular na customer siya, ang presyong sinasabi ni
+                // Elena ay ang SA KANYA. Puwedeng anonymous ang chat
+                // (walang `auth` ang route), at sa gayong kaso ay list
+                // price — kailanman hindi isang bawas na pangako sa
+                // taong hindi pa natin kilala.
+                $quote = $villa->quoteFor($checkinDt, $slot, Auth::user());
                 $packagePrice = $quote['total'];
                 $slotLabel = Booking::SLOTS[$slot]['label'];
 
@@ -184,8 +232,13 @@ If no slot is mentioned, leave slot as null (defaults to "day").';
                     .'&slot='.$slot
                     .'&guests='.($guests ?? 2);
 
+                // Ang paglipat ng slot ay nauuna sa lahat: iyon ang unang
+                // bagay na kailangang malaman ng guest kung nagtanong siya
+                // tungkol sa ibang slot.
+                $contextData = $slotSwitchNote;
+
                 if (! $guestOk) {
-                    $contextData = "The requested guest count ({$guests}) exceeds Villa Elena's max capacity of {$villa->max_capacity} guests.";
+                    $contextData .= "The requested guest count ({$guests}) exceeds Villa Elena's max capacity of {$villa->max_capacity} guests.";
                 } elseif ($isAvailable) {
                     $propertyCards[] = [
                         'id' => $villa->id,
@@ -206,7 +259,7 @@ If no slot is mentioned, leave slot as null (defaults to "day").';
                         'image' => $villa->primaryImage ? $villa->primaryImage->url : null,
                     ];
 
-                    $contextData = "Villa Elena IS AVAILABLE for {$checkin->format('M d, Y')}, {$slotLabel} slot. ";
+                    $contextData .= "Villa Elena IS AVAILABLE for {$checkin->format('M d, Y')}, {$slotLabel} slot. ";
 
                     if ($quote['discount'] > 0) {
                         $contextData .= 'Package price: ₱'.number_format($quote['base'], 2)
@@ -218,8 +271,16 @@ If no slot is mentioned, leave slot as null (defaults to "day").';
                             .' (flat rate, not per guest). No promo applies to this particular date/slot.';
                     }
                 } else {
-                    $contextData = "Villa Elena is NOT available for {$checkin->format('M d, Y')}, {$slotLabel} slot — it's already booked. Suggest the guest try a different date or the other slot (Day or Night).";
+                    $contextData .= "Villa Elena is NOT available for {$checkin->format('M d, Y')}, {$slotLabel} slot — it's already booked. Suggest the guest try a different date or another slot ({$slotParts['names']}).";
                 }
+            } elseif ($checkin && ! $slot) {
+                // Walang anumang slot na inaalok sa petsang iyon — bihira,
+                // pero hindi puwedeng maiwan nang walang sagot: kung wala
+                // itong sangay, walang SEARCH RESULT at ang tagubilin sa
+                // prompt ay huhilingin kay Elena na magtanong ng petsa na
+                // ibinigay naman na ng guest.
+                $contextData = $slotSwitchNote
+                    .'Tell the guest that date is not open for booking and ask for another.';
             } elseif (($intent['intent'] ?? '') === 'get_price') {
                 // Walang petsang binanggit, kaya hindi masasabi kung
                 // tumatama ba ang isang promo — nakadepende iyon sa
@@ -228,7 +289,7 @@ If no slot is mentioned, leave slot as null (defaults to "day").';
                 // hindi naman pala tumama sa petsang pipiliin niya.
                 $contextData = "Villa Elena package pricing BEFORE any promo (flat rate regardless of number of guests, up to {$villa->max_capacity} max): ₱".number_format($villa->base_price, 2).' for Monday–Thursday check-in and Sunday check-in after 6:00 PM. ₱'.number_format($villa->weekend_price, 2).' for Friday, Saturday, or Sunday check-in before 6:00 PM.';
 
-                if (Discount::publicActive()->isNotEmpty()) {
+                if (Discount::publicActive(Auth::user())->isNotEmpty()) {
                     $contextData .= " A promo may lower this — see CURRENT PROMOS. Whether it applies depends on the check-in date, and the guest hasn't given one yet, so ask for their preferred date rather than promising a discounted figure.";
                 }
             }
@@ -265,23 +326,80 @@ If no slot is mentioned, leave slot as null (defaults to "day").';
         // MAHALAGA: kapag walang promo, sinasabi natin iyon nang tahasan.
         // Ang isang walang lamang seksyon ay iniimbita ang modelong
         // mag-imbento ng promong wala naman.
-        $promos = Discount::publicActive();
+        //
+        // Ipinapasa ang naka-login na guest dahil ang ibang promo ay para
+        // LANG sa mga regular na customer. Ang isang bagong bisitang
+        // nakakakita ng "20% OFF" at saka sisingilin ng list price ay
+        // ang eksaktong mababang-pangako/mataas-na-bayad na pagkakamali.
+        $viewer = Auth::user();
+        $promos = Discount::publicActive($viewer);
         $promoBlock = '';
 
+        // Ang isang returning-guest na promong hindi maipapakita sa
+        // kausap ay HINDI puwedeng tahimik na burahin lang. Sa v7.20,
+        // ang pagtanggi ay pahayag din: ang "wala pong promo ngayon" ay
+        // MALI para sa isang regular na hindi pa naka-login. Ang sagot
+        // ay aminin na mayroon, nang walang pigura at walang pangako —
+        // sapat para itanong ng guest, hindi sapat para umasa siya sa
+        // isang halagang baka hindi naman para sa kanya.
+        // DALAWANG MAGKAIBANG DAHILAN kung bakit hindi nila ito nakukuha,
+        // at magkaibang sagot ang tama sa dalawa. Ang "mag-sign in po
+        // kayo" ay walang kabuluhan sa isang naka-sign-in nang guest na
+        // kulang pa sa threshold — at mukhang sira ang sistema (v7.50).
+        //
+        // Ang bilang ng natapos na stay at ang threshold ay PAREHONG
+        // galing sa datos natin, kaya pinapasa ang dalawa: pinapayagan
+        // ng v7.20 ang pagsasabi ng anumang nasa prompt, at
+        // ipinagbabawal lang ang hindi naroroon. Ang halaga ng bawas ay
+        // sadyang WALA pa rin.
+        $returningNote = '';
+        $teaser = Discount::returningTeaserFor($viewer);
+
+        if ($teaser && $teaser['state'] === 'guest') {
+            $returningNote = "There is ALSO a returning-guest discount, for guests who have stayed here before.\n"
+                .'This guest is NOT signed in, so you cannot see their stay history. Do NOT state the discount\'s '
+                .'size. If they ask, tell them it applies automatically once they sign in to their account, and that '
+                ."it needs {$teaser['need']} completed stay".($teaser['need'] === 1 ? '' : 's')." to qualify.\n";
+        } elseif ($teaser) {
+            $remaining = max(0, $teaser['need'] - $teaser['have']);
+            $returningNote = "There is ALSO a returning-guest discount, and THIS GUEST DOES NOT QUALIFY YET.\n"
+                ."They have {$teaser['have']} completed stay".($teaser['have'] === 1 ? '' : 's')
+                ." and it needs {$teaser['need']}, so they are {$remaining} away. They ARE already signed in — do NOT "
+                ."tell them to sign in, that would be wrong and confusing.\n"
+                .'Only stays that have been checked out count. Do NOT state the discount\'s size. If they ask, you may '
+                ."tell them how many more stays they need.\n";
+        }
+
         if ($promos->isEmpty()) {
-            $promoBlock = "There are NO promos or discounts running right now. If the guest asks about promos, say so plainly and do NOT invent one.\n";
+            $promoBlock = $returningNote !== ''
+                ? "There are no general promos running right now that apply to every guest.\n".$returningNote
+                : "There are NO promos or discounts running right now. If the guest asks about promos, say so plainly and do NOT invent one.\n";
         } else {
             $promoBlock = "These promos are live. They apply AUTOMATICALLY based on the guest's CHECK-IN DATE — there is no promo code to type in, and the guest does not need to do anything to claim one:\n";
 
             foreach ($promos as $p) {
-                $window = $p->expiry_date
-                    ? $p->start_date?->format('M d, Y').' – '.$p->expiry_date->format('M d, Y')
-                    : 'ongoing, no end date';
-
                 $promoBlock .= "- \"{$p->label}\": {$p->value_label} the villa base rate";
                 $promoBlock .= $p->applies_to !== 'all' ? " ({$p->slot_label} bookings only)" : '';
-                $promoBlock .= ", for stays {$window}.";
+                // Ang PAREHONG parirala ng abiso sa bell — hindi "no end
+                // date". Ang promong walang expiry ay kayang tapusin ng
+                // resort anumang oras, kaya ang "walang katapusan" ay
+                // pangakong hindi dapat bitawan ni Elena (v7.51).
+                $promoBlock .= ", {$p->guest_window_phrase}.";
+
+                if (! $p->expiry_date) {
+                    $promoBlock .= ' It has no fixed end date, but the resort can end it at any time — do NOT tell the guest it is permanent or that it never ends.';
+                }
                 $promoBlock .= $p->description ? " {$p->description}" : '';
+
+                // Nasa listahan ito dahil KARAPAT-DAPAT ang kausap —
+                // pero kailangan pa rin niyang malaman KUNG BAKIT, kung
+                // hindi, iisipin niyang para sa lahat ito at ikukuwento
+                // niya sa kaibigang hindi naman makakakuha.
+                if ($p->isReturningOnly()) {
+                    $promoBlock .= ' '.$p->guest_scope_note
+                        .' This guest already qualifies, so it is shown here —'
+                        .' but it is NOT available to every guest.';
+                }
 
                 if ($p->isUpcoming()) {
                     // Ang pagkakaiba ay tunay na mahalaga sa guest: bukas
@@ -294,11 +412,12 @@ If no slot is mentioned, leave slot as null (defaults to "day").';
             }
 
             $promoBlock .= "Promos never stack — if two overlap, the guest automatically gets the bigger discount. The discount comes off the villa rate only, not off any add-ons or extras.\n";
+            $promoBlock .= $returningNote;
         }
 
         // ── Step 4: Resort settings ────────────────────────────────
         $resortName = Setting::get('resort_name', 'Villa Elena Private Rental Resort');
-        $depositRate = Setting::get('deposit_percentage', '30');
+        $depositRate = Setting::get('deposit_percentage', '50');
         $maxCapacity = $villa->max_capacity ?? 'N/A';
 
         // Ang mga ito ay NASA settings table na — telepono, email, address,
@@ -331,14 +450,24 @@ If no slot is mentioned, leave slot as null (defaults to "day").';
         // walang mapagtuturuan ang bisita pagkatapos.
         $handoffContact = $this->handoffContact();
 
-        $cancellationHours = Setting::get('cancellation_hours');
         $holdMinutes = Setting::get('booking_hold_minutes');
         $maxAdvanceDays = Setting::get('max_advance_days');
 
+        // Ang patakaran sa cancellation ay galing sa model — ang parehong
+        // pangungusap na nasa Terms at checkout. Dating binabasa rito ang
+        // `cancellation_hours` setting (48) at sinasabi ni Elena na "free
+        // cancellation up to 48 hours before check-in": isang pangakong
+        // hindi kailanman ipinatupad ng code, at ngayon ay tahasang
+        // salungat sa patakaran ng may-ari. Inalis na ang setting.
+        //
+        // Sinasabi rin ang mga EXCEPTION at ang reschedule: kung
+        // "non-refundable" lang ang alam ni Elena, ang natural niyang
+        // sagot sa "paano kung kayo ang mag-cancel?" ay "wala pa ring
+        // refund" — at ang pagtanggi ay claim din (v7.20).
         $policyBlock = "- Deposit required: {$depositRate}% of the total\n";
-        $policyBlock .= $cancellationHours
-            ? "- Free cancellation window: up to {$cancellationHours} hours before check-in. Cancelling later than that is refunded only in part — the exact amount depends on how close to check-in it is, so tell the guest to check their booking page or contact the resort rather than quoting a figure.\n"
-            : '';
+        $policyBlock .= '- Cancellation: '.Booking::CANCELLATION_POLICY." This is true however early the guest cancels; there is no free-cancellation window and no grace period. A booking that has not been paid for can be cancelled at no cost.\n";
+        $policyBlock .= "- If the RESORT cancels a booking (maintenance, weather or another reason on the resort's side), the guest is refunded in full. Do not offer or promise a refund in any other situation; for a specific case, hand off to the resort.\n";
+        $policyBlock .= '- Rescheduling: instead of cancelling, a guest can move a booking to another available date, up to '.Booking::MAX_RESCHEDULES.' times and no later than '.Booking::RESCHEDULE_CUTOFF_DAYS." days before check-in, from their booking page. If the new date costs more the difference is added to the balance; if it costs less the difference is not refunded.\n";
         $policyBlock .= $holdMinutes
             ? "- A booking is held for {$holdMinutes} minutes after it is made. If no payment is started within that time the slot is released and someone else can take it.\n"
             : '';
@@ -355,7 +484,7 @@ IMPORTANT — HOW THIS RESORT ACTUALLY WORKS:
 - Villa Elena is a SINGLE PRIVATE VILLA, not a hotel. There is only ONE bookable listing: the whole Villa.
 - Guests never book individual rooms. Booking the Villa means EXCLUSIVE use of the entire property (all {$rooms->count()} rooms included) for their group only — no other guests on-site at the same time.
 - Pricing is FLAT/PACKAGE-based — NOT per-night, NOT per-head/per-guest. Same price whether 1 person or {$maxCapacity} people come, because it's a private exclusive rental, not a public per-head resort.
-- Bookings are one of exactly TWO fixed slots — there is no free-choice time: Day (8:00 AM check-in – 5:00 PM check-out) or Night (7:00 PM check-in – 6:00 AM check-out the next day). For longer or custom stays, tell the guest to contact the resort directly.
+- Bookings are one of these fixed slots — there is no free-choice time: {$slotParts['detail']}. These are the ONLY slots offered; do not describe, offer or price any other length of stay. Never offer a slot on a date the list above does not allow it on, and never claim a slot is available every day when the list says otherwise. For longer or custom stays, tell the guest to contact the resort directly.
 
 THE MOST IMPORTANT RULE — ONLY SAY WHAT IS WRITTEN BELOW:
 Every factual statement you make about Villa Elena must come from the VILLA ELENA INFO, ROOM STATUS, BOOKING & PAYMENT POLICY, CURRENT PROMOS or SEARCH RESULT sections below. Those sections are the COMPLETE extent of what you know. They are not a summary of a larger document you can reason from — if a detail is not written there, the resort has not told you, and you must not state it, estimate it, or infer it from a related detail.
@@ -387,7 +516,7 @@ RULES:
 - Never comment on conversation history or repetitions.
 - If checking availability or price, use the SEARCH RESULT below — don't guess. If there is no SEARCH RESULT section, you have NOT checked any date: ask the guest for one instead of describing the villa as free or booked.
 - If available, briefly confirm and tell them to check the card shown below your message / click Book Now.
-- If not available, suggest trying a different date or the other slot (Day or Night).
+- If not available, suggest trying a different date or another slot ({$slotParts['names']}).
 - Keep responses concise (2-4 sentences). Be warm and helpful.
 - Today is ".now()->format('F d, Y').".
 
@@ -493,6 +622,89 @@ Everything between the BEGIN and END markers below was typed into a public chat 
      * always resolve to something: the whole point of "say you don't know" is
      * lost if the guest is left with nowhere to go afterwards.
      */
+    /**
+     * Ang mga slot, nakasalin para sa prompt.
+     *
+     * Hinahango sa Booking::bookableSlotKeys(), hindi sa Booking::SLOTS.
+     * Dalawang dahilan, at pareho silang panuntunan ng v7.20 na grounding:
+     *
+     *   - Ang mga seksiyon ng datos sa prompt ay IPINAPAHAYAG na buong
+     *     saklaw ng nalalaman ni Elena. Kung may slot na hindi nakalista
+     *     dito, hindi siya dapat magsalita tungkol doon — pero kung
+     *     nakalista ang isang slot na wala pang presyo, IAALOK niya ito at
+     *     tatanggihan naman ng quoteFor(). Ang naisasabi sa guest ay
+     *     kailangang katumbas ng tunay na naibubook.
+     *   - Kasama rito ang mga PAGTANGGI. Ang "wala kaming 22 oras" ay isang
+     *     pahayag din, kaya hindi puwedeng basta hindi na lang banggitin.
+     *
+     * @return array{keys: array<int, string>, default: ?string, json: string, detail: string, names: string}
+     */
+    private function slotPromptParts(): array
+    {
+        $keys = Booking::bookableSlotKeys();
+        $defs = array_map(fn ($k) => Booking::SLOTS[$k], $keys);
+
+        // hal. "day" or "night" or null
+        $json = implode(' or ', array_map(fn ($k) => '"'.$k.'"', $keys)).' or null';
+
+        // hal. Day (8:00 AM check-in – 5:00 PM check-out). Sinasabi rin kung
+        // ALIN ang hindi pang-araw-araw at KAILAN ito inaalok — kung hindi,
+        // iaalok ni Elena ang 22 oras sa anumang petsa at tatanggihan naman
+        // ng quoteFor(); at kapag tinanong kung kailan, wala siyang
+        // masasagot kundi mag-imbento.
+        $windowDates = Booking::slotWindowDates();
+        $detail = implode('; ', array_map(
+            function ($k) use ($windowDates) {
+                $d = Booking::SLOTS[$k];
+                $line = $d['name'].' ('.$d['times'].')';
+
+                if (! Booking::slotRequiresWindow($k)) {
+                    return $line;
+                }
+
+                $dates = array_values(array_filter(
+                    $windowDates[$k] ?? [],
+                    fn ($date) => $date >= now()->format('Y-m-d')
+                ));
+
+                if (! $dates) {
+                    return $line.' — NOT currently offered on any date; '
+                        .'if a guest asks for it, say it is not open at the moment '
+                        .'and offer to take their preferred date to the resort';
+                }
+
+                // Sapat na ang unang ilan: hindi nagbabasa ng listahan ang
+                // guest, at ang buong taon ay sumisira sa prompt budget.
+                $show = array_slice($dates, 0, 8);
+                $more = count($dates) - count($show);
+
+                return $line.' — offered ONLY on these check-in dates: '
+                    .implode(', ', array_map(
+                        fn ($date) => \Carbon\Carbon::parse($date)->format('M j, Y'),
+                        $show
+                    ))
+                    .($more > 0 ? " (and {$more} more)" : '')
+                    .'. On one of those dates this is the ONLY slot available — '
+                    .'Day and Night are not offered that day. On every other date '
+                    .'it cannot be booked at all';
+            },
+            $keys
+        ));
+
+        // hal. "Day or Night" / "Day, Night or 22 Hours"
+        $names = array_map(fn ($d) => $d['name'], $defs);
+        $last = array_pop($names);
+        $names = $names ? implode(', ', $names).' or '.$last : $last;
+
+        return [
+            'keys' => $keys,
+            'default' => $keys[0] ?? null,
+            'json' => $json,
+            'detail' => $detail,
+            'names' => (string) $names,
+        ];
+    }
+
     private function handoffContact(): string
     {
         $phone = Setting::get('resort_phone');

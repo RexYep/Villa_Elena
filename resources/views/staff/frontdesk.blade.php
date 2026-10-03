@@ -1070,13 +1070,13 @@
                                 <a class="next-slot free"
                                     href="{{ route('staff.walkin', ['date' => $row['date']->format('Y-m-d'), 'slot' => $slotKey]) }}">
                                     <div class="next-slot-lbl">{{ $row['is_today'] ? 'Today' : $row['date']->format('D') }}
-                                        · {{ ucfirst($slotKey) }}</div>
+                                        · {{ \App\Models\Booking::SLOTS[$slotKey]['name'] ?? ucfirst($slotKey) }}</div>
                                     <div class="next-slot-val">Available</div>
                                 </a>
                             @else
                                 <div class="next-slot taken">
                                     <div class="next-slot-lbl">{{ $row['is_today'] ? 'Today' : $row['date']->format('D') }}
-                                        · {{ ucfirst($slotKey) }}</div>
+                                        · {{ \App\Models\Booking::SLOTS[$slotKey]['name'] ?? ucfirst($slotKey) }}</div>
                                     <div class="next-slot-val">{{ $slot['state'] === 'blocked' ? 'Blocked' : 'Booked' }}
                                     </div>
                                 </div>

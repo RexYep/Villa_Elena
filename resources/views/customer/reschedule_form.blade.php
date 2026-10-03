@@ -348,7 +348,9 @@
     <div class="notice-box">
         <i class="bi bi-info-circle me-1"></i>
         Choose a new check-in date and slot — Day (8:00 AM–5:00 PM) or Night (7:00 PM–6:00 AM).
-        If the new dates have a different price, we'll bill you the difference or issue a refund automatically.
+        If the new date costs more, the difference is added to your balance. If it costs less than what you've
+        already paid, the difference is <strong style="color:var(--stone);">not refunded</strong> — payments are
+        non-refundable — and we'll ask you to confirm before moving the booking.
         <br><br>
         <strong style="color:var(--stone);">Reschedule policy:</strong>
         Each booking may be rescheduled up to {{ \App\Models\Booking::MAX_RESCHEDULES }} times, and only up to
@@ -377,15 +379,23 @@
                      mapipindot, hindi lang ang maliit na bilog. --}}
                 <div class="mb-16">
                     <label class="form-label">Slot</label>
+                    @php
+                        // Ang mga bookable lang. Ang isang slot na wala pang presyo ay
+                        // tatanggihan ng quoteFor(), kaya hindi ito dapat maalok bilang
+                        // mapipiliang destinasyon ng reschedule.
+                        $slotKeys = \App\Models\Booking::bookableSlotKeys($booking->property);
+                        $currentSlot = old('slot', $booking->slotKey());
+                        $currentSlot = in_array($currentSlot, $slotKeys, true) ? $currentSlot : ($slotKeys[0] ?? null);
+                    @endphp
                     <div class="two-col slot-options">
-                        @foreach (\App\Models\Booking::SLOTS as $key => $def)
+                        @foreach ($slotKeys as $key)
+                            @php $def = \App\Models\Booking::SLOTS[$key]; @endphp
                             <label class="slot-option" data-slot="{{ $key }}">
                                 <input type="radio" name="slot" value="{{ $key }}" id="slot_{{ $key }}"
-                                    {{ old('slot', $booking->slotKey() ?? 'day') === $key ? 'checked' : '' }}>
+                                    {{ $currentSlot === $key ? 'checked' : '' }}>
                                 <span class="slot-option-label">
-                                    <strong>{{ ucfirst($key) }}</strong>
-                                    <small>{{ \Carbon\Carbon::parse($def['check_in'])->format('g:i A') }} –
-                                        {{ \Carbon\Carbon::parse($def['check_out'])->format('g:i A') }}{{ $def['overnight'] ? ' next day' : '' }}</small>
+                                    <strong>{{ $def['name'] }}</strong>
+                                    <small>{{ $def['times'] }}</small>
                                     <span class="slot-state" data-state-for="{{ $key }}"></span>
                                 </span>
                             </label>
@@ -405,6 +415,17 @@
                     <div class="field-error" style="margin-bottom:12px;">{{ $message }}</div>
                 @enderror
 
+                {{-- Lumalabas lang matapos tanggihan ng server ang isang
+                     paglipat sa mas murang slot (update()): doon lang alam
+                     ang presyo ng bagong petsa. Ang mensahe mismo ay nasa
+                     alert sa itaas ng pahina. --}}
+                @error('accept_no_refund')
+                    <label style="display:flex;gap:8px;align-items:flex-start;font-size:13px;line-height:1.5;margin-bottom:14px;cursor:pointer;">
+                        <input type="checkbox" name="accept_no_refund" value="1" required style="margin-top:3px;flex-shrink:0;">
+                        <span>I understand the price difference will not be refunded. Move my booking anyway.</span>
+                    </label>
+                @enderror
+
                 <button type="submit" class="btn-submit" id="submitBtn"><i class="bi bi-calendar-check"></i> Confirm Reschedule</button>
             </div>
         </div>
@@ -421,9 +442,26 @@
         // ng ginagawa ng hasConflict() kapag nag-submit na.
         const BOOKED_SLOTS = @json($slotAvailability);
         const PAST_SLOTS_TODAY = @json($pastSlotsToday);
-        const SLOT_DEFS = @json(\App\Models\Booking::SLOTS);
+        // Ang mga bookable lang — kapareho ng listahan ng radio cards sa
+        // itaas. Kung Booking::SLOTS ang ipapasa, mag-iiterate ang JS sa
+        // isang slot na walang kaukulang radio sa pahina.
+        const SLOT_DEFS = @json(collect($slotKeys)->mapWithKeys(fn ($k) => [$k => \App\Models\Booking::SLOTS[$k]])->all());
         const SLOT_KEYS = Object.keys(SLOT_DEFS);
         const TODAY_STR = @json(now()->format('Y-m-d'));
+
+        // Kaparehong panuntunan ng Booking::slotsOfferedOn(): window muna at
+        // EKSKLUSIBO, at kung wala, ang mga hindi-windowed na slot. Dapat
+        // manatiling eksaktong pareho — kung hindi, may mapipiling slot dito
+        // na tatanggihan ng SlotOfferedOnDate sa pag-submit.
+        const WINDOWED_SLOTS = @json(\App\Models\Booking::windowedSlotKeys());
+        const SLOT_WINDOW_DATES = @json(\App\Models\Booking::slotWindowDates($booking->property));
+
+        function slotsOfferedOn(dateStr) {
+            for (const s of WINDOWED_SLOTS) {
+                if ((SLOT_WINDOW_DATES[s] || []).includes(dateStr)) return [s];
+            }
+            return SLOT_KEYS.filter(k => !WINDOWED_SLOTS.includes(k));
+        }
 
         const dateInput = document.getElementById('checkinDate');
         const alertBox = document.getElementById('slotAlert');
@@ -442,6 +480,9 @@
         }
 
         function stateOf(dateStr, slotKey) {
+            // Hindi inaalok sa petsang ito — iba ito sa "booked": walang
+            // kumuha, hindi talaga ito ipinagbibili sa araw na iyon.
+            if (!slotsOfferedOn(dateStr).includes(slotKey)) return 'unoffered';
             if (isPast(dateStr, slotKey)) return 'past';
             return isTaken(dateStr, slotKey) ? 'taken' : 'open';
         }
@@ -489,6 +530,11 @@
                 const radio = card.querySelector('input');
                 const state = stateOf(dateStr, key);
 
+                // Ang hindi inaalok ay ITINATAGO, hindi ipinapakitang sarado:
+                // ang isang greyed-out na "Already booked" ay nagsasabing may
+                // kumuha, at hindi iyon ang nangyari.
+                card.hidden = state === 'unoffered';
+
                 badge.className = 'slot-state is-' + (state === 'open' ? 'open' : state);
                 badge.textContent = state === 'open' ? 'Available' :
                     (state === 'past' ? 'Already started today' : 'Already booked');
@@ -515,8 +561,9 @@
             submitBtn.disabled = noneOpen;
             alertBox.hidden = !noneOpen;
             if (noneOpen) {
+                // "Every slot", hindi "Both slots" — hindi na laging dalawa.
                 alertBox.innerHTML = '<i class="bi bi-exclamation-circle me-1"></i>' +
-                    'Both slots on ' + prettyDate(dateStr) + ' are taken. Pick another date.';
+                    'Every slot on ' + prettyDate(dateStr) + ' is taken. Pick another date.';
             }
 
             const suggestions = noneOpen ? nextOpen(dateStr, 3) : [];

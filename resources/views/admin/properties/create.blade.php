@@ -408,7 +408,13 @@
                     <div class="form-card-body">
                         <div class="two-col">
                             <div>
-                                <label class="form-label">Base Price / Night <span class="req">*</span></label>
+                                {{-- Hindi "/ Night". Flat package kada slot ang
+                                     singil (Day 9 oras, Night 11 oras), hindi
+                                     kada gabi. --}}
+                                <label class="form-label">Regular Rate <span class="req">*</span></label>
+                                <small style="font-size: 13px; color:#94a3b8; margin-bottom:4px; display:block;">
+                                    Mon–Thu, and Sun after 6PM
+                                </small>
                                 <div class="input-prefix">
                                     <span>₱</span>
                                     <input type="number" name="base_price"
@@ -420,15 +426,45 @@
                                 @enderror
                             </div>
                             <div>
-                                <label class="form-label">Weekend Price / Night</label>
+                                <label class="form-label">Peak Rate</label>
                                 <div class="input-prefix">
                                     <span>₱</span>
                                     <input type="number" name="weekend_price" class="form-control"
                                         value="{{ old('weekend_price') }}" min="0" step="0.01"
                                         placeholder="0.00">
                                 </div>
+                                {{-- MALI ang dating "Applied on Saturdays &
+                                     Sundays" kahit sa lumang modelo. Ang peak ay
+                                     Fri/Sat AT Sun bago mag-6PM; ang Sun pagkatapos
+                                     ng 6PM ay regular. Tingnan ang
+                                     Property::getPackagePrice(). --}}
                                 <small style="font-size: 13px; color:#94a3b8; margin-top:4px; display:block;">
-                                    Applied on Saturdays &amp; Sundays
+                                    Fri/Sat, and Sun before 6PM
+                                </small>
+                            </div>
+                            <div>
+                                <label class="form-label">22-Hour Regular Rate</label>
+                                <div class="input-prefix">
+                                    <span>₱</span>
+                                    <input type="number" name="base_price_22h" class="form-control"
+                                        value="{{ old('base_price_22h') }}" min="0" step="0.01"
+                                        placeholder="Leave blank to hide the slot">
+                                </div>
+                                <small style="font-size: 13px; color:#94a3b8; margin-top:4px; display:block;">
+                                    {{ \App\Models\Booking::SLOTS['stay22']['label'] }} — leave blank and the
+                                    slot is not offered anywhere.
+                                </small>
+                            </div>
+                            <div>
+                                <label class="form-label">22-Hour Peak Rate</label>
+                                <div class="input-prefix">
+                                    <span>₱</span>
+                                    <input type="number" name="weekend_price_22h" class="form-control"
+                                        value="{{ old('weekend_price_22h') }}" min="0" step="0.01"
+                                        placeholder="0.00">
+                                </div>
+                                <small style="font-size: 13px; color:#94a3b8; margin-top:4px; display:block;">
+                                    Falls back to the 22-hour regular rate if blank
                                 </small>
                             </div>
                         </div>

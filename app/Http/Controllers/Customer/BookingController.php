@@ -5,8 +5,8 @@ namespace App\Http\Controllers\Customer;
 use App\Http\Controllers\Controller;
 use App\Models\Booking;
 use App\Models\Discount;
-use App\Models\Payment;
 use App\Models\StaffLog;
+use App\Rules\SlotOfferedOnDate;
 use App\Helpers\NotificationHelper;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -49,7 +49,9 @@ class BookingController extends Controller
 
         $request->validate([
             'checkin' => 'required|date|after_or_equal:today',
-            'slot'    => 'required|in:' . implode(',', array_keys(Booking::SLOTS)),
+            // Hindi isang nakapirming listahan: ang mga inaalok na slot ay
+            // nakadepende sa piniling petsa (tingnan ang SlotOfferedOnDate).
+            'slot'    => ['required', new SlotOfferedOnDate('checkin', $booking->property)],
         ]);
 
         [$checkin, $checkout] = Booking::slotDateTimes($request->slot, $request->checkin);
@@ -68,10 +70,37 @@ class BookingController extends Controller
         // ang balanse), o puwede namang bumaba ang presyo kung lumipat
         // papasok — parehong kaso ay hinahawakan na ng price-difference
         // na lohika sa ibaba.
-        $quote        = $booking->property->quoteFor($checkin, $request->slot);
+        // Ang may-ari ng booking ang guest dito — hindi Auth::user() sa
+        // pangalan ng kaginhawahan, kahit pareho sila (tiniyak na ng
+        // abort_if sa itaas). Ang booking ang nagsasabi kung kaninong
+        // kasaysayan ang sinusukat, at iyon ang nananatiling tama kahit
+        // dumaan pa ito sa ibang path sa hinaharap.
+        $quote        = $booking->property->quoteFor($checkin, $request->slot, $booking->user);
         $newTotal     = $quote['total'];
         $newPromo     = $quote['promo'];
         $oldPromoId   = $booking->discount_id;
+
+        // Mas mura ang bagong slot kaysa sa naibayad na. Dati, awtomatiko
+        // itong nagiging 'pending' na refund; salungat iyon sa patakaran
+        // ng may-ari na non-refundable ang lahat ng bayad (v7.52), at
+        // ginagawa nitong paraan ng pagkuha ng pera ang reschedule.
+        //
+        // Hindi ito MALI — baka iyon talaga ang petsang kaya ng guest —
+        // pero may kapalit na hindi niya makikita sa form (walang presyo
+        // roon). Kaya hinaharangan at tinatanong, gaya ng
+        // Payment::manualEntryProblem(): kahina-hinala = kumpirmahin.
+        // Kailangang mauna ito sa reserveSlot(): hindi na maibabalik ang
+        // isang reschedule, at nababawasan pa ang natitirang bilang.
+        $excess = max(0, round((float) $booking->amount_paid - $newTotal, 2));
+
+        if ($excess > 0 && ! $request->boolean('accept_no_refund')) {
+            $problem = 'That date costs ₱' . number_format($newTotal, 2) . ', which is ₱' . number_format($excess, 2)
+                . ' less than the ₱' . number_format((float) $booking->amount_paid, 2) . ' you have already paid. '
+                . 'Payments are non-refundable, so the difference will not be returned. '
+                . 'Tick the box below to move the booking anyway, or choose another date.';
+
+            return back()->withErrors(['accept_no_refund' => $problem])->withInput();
+        }
 
         // Availability check + ang paglipat mismo ng petsa ay iisang
         // atomic na hakbang (tingnan ang Booking::reserveSlot()) —
@@ -118,40 +147,19 @@ class BookingController extends Controller
             $newPromo?->increment('used_count');
         }
 
-        // Kung mas mura ang bagong slot kaysa sa nabayaran na, may sobra
-        // na dapat ibalik. Ginagawa itong 'pending' na refund — utang na
-        // ito ng resort, pero hindi pa nailalabas ang pera (manu-mano
-        // itong ipinapadala ng admin).
-        $refundAmount  = 0;
-        $refundPayment = null;
-
-        if ($newTotal < $booking->amount_paid) {
-            $refundAmount = round($booking->amount_paid - $newTotal, 2);
-
-            $originalMethod = optional(
-                $booking->payments()->where('payment_type', '!=', 'refund')->latest()->first()
-            )->payment_method ?? 'cash';
-
-            $refundPayment = Payment::create([
-                'booking_id'     => $booking->id,
-                'amount'         => $refundAmount,
-                'payment_method' => $originalMethod,
-                'payment_type'   => 'refund',
-                'status'         => 'pending',
-                'payment_date'   => today(),
-                'notes'          => "Auto-computed refund — guest rescheduled to a lower-priced slot.",
-            ]);
-
-            NotificationHelper::refundIssued($booking->fresh(), $refundAmount, 'Booking rescheduled to a lower-priced slot');
-
-            // Ang guest din ang dapat makaalam na may sobra siyang
-            // babalik — hindi lang ang admin.
-            NotificationHelper::refundApprovedForGuest(
-                $booking->fresh(),
-                $refundAmount,
-                'Rescheduled to a lower-priced slot',
-                $refundPayment
-            );
+        // WALANG refund sa price difference (tingnan sa itaas). Ang sobra
+        // ay nananatili sa booking bilang `amount_paid` na lampas sa
+        // `total_amount`, at iyon mismo ang tinitingnan ng
+        // flagOverpayment() — na ang abiso ay "malamang nasingil nang
+        // dalawang beses ang guest". Mali iyon dito at magtutulak sa
+        // admin na ibalik ang perang hindi dapat ibalik. Kaya minamarkahan
+        // nang naabisuhan ito bago ang recalculation, at ang tamang
+        // paliwanag ay nasa "Booking Rescheduled" na abiso sa ibaba.
+        // Query update, gaya ng sa flagOverpayment(): hindi fillable ang
+        // column at hindi dapat pumutok ang saving() hook.
+        if ($excess > 0) {
+            Booking::whereKey($booking->id)->update(['overpayment_notified_at' => now()]);
+            $booking->overpayment_notified_at = now();
         }
 
         $booking->recalculateFinancials();
@@ -164,33 +172,26 @@ class BookingController extends Controller
         NotificationHelper::notifyAdmin(
             "Booking Rescheduled — {$booking->booking_ref}",
             ($booking->user->full_name ?? 'Guest') . " rescheduled their booking from {$oldDates} to " .
-            $checkin->format('M d, Y') . ' — ' . $checkout->format('M d, Y') . '.',
+            $checkin->format('M d, Y') . ' — ' . $checkout->format('M d, Y') . '.'
+            . ($excess > 0
+                ? ' The new slot costs ₱' . number_format($excess, 2) . ' less than the guest has paid. '
+                    . 'Payments are non-refundable, so nothing was refunded and the guest agreed to that. '
+                    . 'This is not a double charge.'
+                : ''),
             route('admin.bookings.show', $booking, false)
         );
 
         $message = "Booking {$booking->booking_ref} has been rescheduled to " . $checkin->format('M d, Y') . '.';
         if ($booking->balance_due > 0) {
             $message .= ' An additional ₱' . number_format($booking->balance_due, 2) . ' is now due.';
-        } elseif ($refundAmount > 0) {
-            // "has been refunded" dati — 'pending' pa lang naman ang refund
-            // row, kaya walang perang naipadala sa puntong ito.
-            $message .= ' ₱' . number_format($refundAmount, 2) . ' will be refunded for the price difference.';
+        } elseif ($excess > 0) {
+            $message .= ' As you confirmed, the ₱' . number_format($excess, 2) . ' price difference is not refunded.';
         }
 
         $remaining = $booking->reschedulesRemaining();
         $message .= $remaining > 0
             ? " You have {$remaining} reschedule" . ($remaining === 1 ? '' : 's') . ' left for this booking.'
             : ' This was your last available reschedule for this booking.';
-
-        // Pareho ng dahilan sa cancel path: hindi hinaharangan ang
-        // reschedule ng isang form tungkol sa bank details — pagkatapos
-        // lang natin itinatanong, at may link pa rin sa notification
-        // kung sakaling umalis siya.
-        if ($refundPayment && $refundPayment->needsRefundDestination()) {
-            return redirect()
-                ->route('customer.refunds.destination', $refundPayment)
-                ->with('success', $message . ' Please tell us where to send the refund.');
-        }
 
         return redirect()->route('customer.bookings.show', $booking)->with('success', $message);
     }

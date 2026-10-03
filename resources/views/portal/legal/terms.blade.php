@@ -122,7 +122,9 @@
                                         [$slotIn, $slotOut] = \App\Models\Booking::slotDateTimes($key, now()->toDateString());
                                     @endphp
                                     <tr>
-                                        <td><strong>{{ ucfirst($key) }}</strong></td>
+                                        {{-- `name` mula sa Booking::SLOTS, hindi ucfirst($key):
+                                             "Stay22" ang ibinubunga ng huli. --}}
+                                        <td><strong>{{ $slot['name'] ?? ucfirst($key) }}</strong></td>
                                         <td>{{ $slotIn->format('g:i A') }}</td>
                                         <td>
                                             {{ $slotOut->format('g:i A') }}
@@ -134,6 +136,26 @@
                             </tbody>
                         </table>
                     </div>
+                    {{-- Ang mga windowed na slot ay hindi inaalok araw-araw, kaya
+                         hindi puwedeng ilista ang talahanayan sa itaas nang walang
+                         paliwanag: mangangako ito ng isang bagay na tatanggihan ng
+                         booking form sa halos lahat ng petsa. --}}
+                    @php
+                        $windowed = collect($windowedSlots ?? [])
+                            ->filter(fn ($k) => isset($slots[$k]))
+                            ->map(fn ($k) => $slots[$k]['name'])
+                            ->values();
+                    @endphp
+                    @if ($windowed->isNotEmpty())
+                        <p>
+                            <strong>{{ $windowed->join(' and ') }}</strong>
+                            {{ $windowed->count() === 1 ? 'is' : 'are' }} offered on
+                            <strong>selected dates only</strong>, not every day. The availability
+                            calendar shows which dates they are, and on such a date that stay is the
+                            only option — the Day and Night slots are not offered on it. Every other
+                            date offers Day and Night as usual.
+                        </p>
+                    @endif
                     <div class="legal-note">
                         <p>
                             The gap between slots is reserved for cleaning and preparation, so early
@@ -223,6 +245,10 @@
                         Any remaining balance is payable before or at check-in. Check-in may be held until
                         an outstanding balance is settled.
                     </p>
+                    <p>
+                        <strong>The deposit is non-refundable</strong>, and so is any further payment you
+                        make, including payment in full. See <a href="#cancellation">Section 9</a>.
+                    </p>
                 </section>
 
                 <section id="payments">
@@ -245,36 +271,24 @@
 
                 <section id="cancellation">
                     <h2><span class="num">09</span>Cancellation &amp; refunds</h2>
-                    <p>You may cancel a pending or confirmed booking from your account. The refund is
-                        calculated on the amount you have actually paid:</p>
-                    <div class="legal-table-wrap">
-                        <table class="legal-table">
-                            <thead>
-                                <tr>
-                                    <th>When you cancel</th>
-                                    <th>Refund</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                <tr>
-                                    <td><strong>Within 24 hours of booking</strong> — whatever the check-in date</td>
-                                    <td><strong>100%</strong></td>
-                                </tr>
-                                <tr>
-                                    <td><strong>7 days or more</strong> before check-in</td>
-                                    <td><strong>100%</strong></td>
-                                </tr>
-                                <tr>
-                                    <td><strong>3 to 6 days</strong> before check-in</td>
-                                    <td><strong>50%</strong></td>
-                                </tr>
-                                <tr>
-                                    <td><strong>Less than 3 days</strong> before check-in, or a no-show</td>
-                                    <td><strong>No refund</strong></td>
-                                </tr>
-                            </tbody>
-                        </table>
+                    <p>You may cancel a pending or confirmed booking from your account at any time before
+                        check-in.</p>
+                    {{-- Iisang pangungusap, galing sa model — ang parehong
+                         teksto ang nasa booking form, checkout, booking
+                         detail at chatbot. Dating may sariling talahanayan
+                         ng 100/50/0 dito na kopya lang ng nasa code. --}}
+                    <div class="legal-note">
+                        <p><strong>{{ \App\Models\Booking::CANCELLATION_POLICY }}</strong></p>
                     </div>
+                    <ul>
+                        <li>This applies whenever <em>you</em> cancel — however far ahead of check-in, and
+                            however soon after booking. There is no grace period.</li>
+                        <li>It also applies to a no-show.</li>
+                        <li>A booking that was never paid for can be cancelled at no cost — nothing was
+                            charged, so there is nothing to lose.</li>
+                        <li>If your plans change, <a href="#reschedule">rescheduling</a> lets you keep your
+                            payment by moving the booking to another date.</li>
+                    </ul>
                     <p>
                         If <em>we</em> have to cancel your confirmed booking — for maintenance, a utility
                         failure, weather, or any other reason on our side — you receive a
@@ -289,12 +303,13 @@
                         <li>You may reschedule a booking up to <strong>{{ $maxReschedules }} times</strong>.</li>
                         <li>Rescheduling must be done at least
                             <strong>{{ $rescheduleCutoff }} days before check-in</strong>. Past that point
-                            the booking can no longer be moved — the cancellation table in
-                            <a href="#cancellation">Section 9</a> applies instead.</li>
+                            the booking can no longer be moved, and cancelling it falls under
+                            <a href="#cancellation">Section 9</a>.</li>
                         <li>The new date and slot must be available.</li>
                         <li>If the new slot costs more, the difference is added to your balance. If it
-                            costs less, the difference is refunded under
-                            <a href="#payouts">Section 11</a>.</li>
+                            costs less than what you have already paid, the difference is
+                            <strong>not refunded</strong>; we tell you the amount and ask you to confirm
+                            before the booking is moved.</li>
                         <li>Promo eligibility is recalculated for the new check-in date — a promo may be
                             gained or lost by moving your stay.</li>
                     </ul>
@@ -302,6 +317,11 @@
 
                 <section id="payouts">
                     <h2><span class="num">11</span>How refunds are paid</h2>
+                    <p>
+                        Refunds are the exception, not the rule (<a href="#cancellation">Section 9</a>).
+                        They arise when we cancel your booking, when you were charged more than your
+                        booking's total, or when a payment arrives for a slot that is no longer available.
+                    </p>
                     <p>
                         A QR Ph payment cannot be reversed back to its source. An approved refund is
                         therefore sent as a <strong>separate transfer</strong> to a bank or e-wallet

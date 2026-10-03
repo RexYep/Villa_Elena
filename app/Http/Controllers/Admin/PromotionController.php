@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Admin;
 
 use App\Helpers\NotificationHelper;
 use App\Http\Controllers\Controller;
+use App\Models\Booking;
 use App\Models\Discount;
 use App\Models\PricingRule;
 use App\Models\Property;
@@ -37,10 +38,17 @@ class PromotionController extends Controller
                 'type'       => 'percentage',
                 'value'      => Discount::DEFAULT_PERCENTAGE,
                 'applies_to' => 'all',
+                // Ang bagong promo ay para sa lahat hangga't hindi
+                // sinasabi ni admin ang kabaligtaran, at ang threshold ay
+                // 1 — ang pinakalikas na kahulugan ng "regular" ay
+                // sinumang bumalik.
+                'guest_scope'            => 'all',
+                'min_completed_bookings' => 1,
                 'is_public'  => 1,
                 'is_active'  => 1,
             ]),
-            'customerCount' => $this->customerCount(),
+            'customerCount'   => $this->customerCount(),
+            'returningCounts' => $this->returningCounts(),
             'rates'         => $this->villaRates(),
         ]);
     }
@@ -48,6 +56,14 @@ class PromotionController extends Controller
     public function store(Request $request)
     {
         $data = $this->validated($request);
+
+        // Ang isang doble ay hindi mali, kaya nagtatanong tayo at hindi
+        // tumatanggi — tingnan ang Discount::duplicateProblem(). Dito,
+        // bago ang pag-create, dahil ang pinipigilan ay ang pangalawang
+        // row (at ang pangalawang blast na kasama nito).
+        if ($problem = Discount::duplicateProblem($data, $request->boolean('confirm_duplicate'))) {
+            return back()->withErrors(['label' => $problem])->withInput();
+        }
 
         $promo = Discount::create($data);
 
@@ -64,7 +80,8 @@ class PromotionController extends Controller
     {
         return view('admin.promotions.form', [
             'promo'         => $promotion,
-            'customerCount' => $this->customerCount(),
+            'customerCount'   => $this->customerCount(),
+            'returningCounts' => $this->returningCounts(),
             'rates'         => $this->villaRates(),
         ]);
     }
@@ -78,6 +95,9 @@ class PromotionController extends Controller
         // compared, so `used_count` drifting does not register as an edit.
         $before = collect($promotion->only(array_keys($data)))->all();
 
+        // Ang promo GAYA NG SINABI sa mga guest, bago ang edit na ito.
+        $old = clone $promotion;
+
         $promotion->update($data);
 
         StaffLog::recordChange('updated_promo', 'discounts', $promotion->id,
@@ -87,8 +107,13 @@ class PromotionController extends Controller
 
         $notified = $this->maybeNotifyCustomers($request, $promotion);
 
+        // Kung naianunsyo na ito dati at nagbago ang ALOK, sinasabihan
+        // ang mga nasabihan. Walang ginagawa ito sa isang promong
+        // ngayon pa lang inaanunsyo (walang `notified_at` ang $old).
+        $updated = $this->notifyPromoChange($old, $promotion);
+
         return redirect()->route('admin.promotions.index')
-            ->with('success', "Promo '{$promotion->label}' updated." . $this->notifySuffix($notified));
+            ->with('success', "Promo '{$promotion->label}' updated." . $this->notifySuffix($notified) . $this->changeSuffix($updated));
     }
 
     /**
@@ -97,6 +122,8 @@ class PromotionController extends Controller
      */
     public function toggle(Discount $promotion)
     {
+        $old = clone $promotion;
+
         $promotion->update(['is_active' => ! $promotion->is_active]);
 
         $state = $promotion->is_active ? 'activated' : 'deactivated';
@@ -104,7 +131,11 @@ class PromotionController extends Controller
         StaffLog::record('toggled_promo', 'discounts', $promotion->id,
             "Promo '{$promotion->label}' {$state}");
 
-        return back()->with('success', "Promo '{$promotion->label}' {$state}.");
+        // Ang pagpatay sa isang naianunsyong promo ang pinakamalaking
+        // pagbabago sa lahat — dati ay tahimik ito.
+        $updated = $this->notifyPromoChange($old, $promotion);
+
+        return back()->with('success', "Promo '{$promotion->label}' {$state}." . $this->changeSuffix($updated));
     }
 
     public function destroy(Discount $promotion)
@@ -115,13 +146,19 @@ class PromotionController extends Controller
         // financials. Nawawala lang ang atribusyon.
         $label = $promotion->label;
         $deletedId = $promotion->id;
+        $old = clone $promotion;
 
         $promotion->delete();
 
         StaffLog::record('deleted_promo', 'discounts', $deletedId,
             "Deleted promo '{$label}' (promo #{$deletedId})");
 
-        return back()->with('success', "Promo '{$label}' deleted. Past bookings keep their discounted totals.");
+        // Ang pagbura ay pagtatapos din ng alok. Ang mga abisong naipadala
+        // na ay hindi nabubura kasama ng promo, kaya kung walang kasunod
+        // na abiso, mananatili sa bell ng guest ang isang alok na wala na.
+        $updated = $this->notifyPromoChange($old, null);
+
+        return back()->with('success', "Promo '{$label}' deleted. Past bookings keep their discounted totals." . $this->changeSuffix($updated));
     }
 
     /**
@@ -131,9 +168,25 @@ class PromotionController extends Controller
      */
     public function notify(Discount $promotion)
     {
+        // Ang PAREHONG `notified_at` na hadlang ng maybeNotifyCustomers().
+        // Dati ay tumatawag ito ng broadcastToCustomers() nang diretso, at
+        // ang tanging pumipigil sa pangalawang blast ay ang pagkawala ng
+        // button sa listahan — pero nangyayari lang iyon kapag naka-render
+        // na ang tugon. Dalawang mabilisang pindot ay parehong dumadaan
+        // (v7.50). Ang isang affordance ay hindi hadlang.
+        if ($promotion->notified_at) {
+            return back()->with('error',
+                "'{$promotion->label}' was already announced "
+                . $promotion->notified_at->diffForHumans()
+                . '. Guests are only told once, so nothing was sent again.');
+        }
+
         $sent = $this->broadcastToCustomers($promotion);
 
-        return back()->with('success', "Announced '{$promotion->label}' to {$sent} customer" . ($sent === 1 ? '' : 's') . '.');
+        return back()->with('success',
+            "Announced '{$promotion->label}' to {$sent} "
+            . ($promotion->isReturningOnly() ? 'qualifying guest' : 'customer')
+            . ($sent === 1 ? '' : 's') . '.');
     }
 
     // ── Internals ──────────────────────────────────────────────────
@@ -179,7 +232,19 @@ class PromotionController extends Controller
             // pa rin siyang buhay sa form. `today` ang tinatanggap
             // (para sa promong ngayong araw nagtatapos), hindi kahapon.
             'expiry_date' => 'nullable|date|after_or_equal:today|after_or_equal:start_date',
-            'applies_to'  => 'required|in:all,day,night',
+            // Hinahango sa Booking::SLOTS, hindi nakalista — kung hindi,
+            // ang bagong slot sa dropdown ay tatanggihan ng validator na
+            // hindi nakakita nito.
+            'applies_to'  => 'required|in:all,'.implode(',', array_keys(Booking::SLOTS)),
+            // Pangalawang aksis ng pagiging karapat-dapat: SINO, hiwalay
+            // sa KAILAN at ALING SLOT. Tingnan ang Discount::isValidOn().
+            'guest_scope' => 'required|in:all,returning',
+            // 50 ang itaas na hangganan dahil ang bawat halagang mas
+            // mataas pa roon ay isang promong walang makakakuha — ang
+            // pinakamaraming stay ng sinumang guest sa sistemang ito ay
+            // nasa isang digit pa lang. Mas mabuting harangin ito sa form
+            // kaysa gumawa ng promong tahimik na walang bisa.
+            'min_completed_bookings' => 'required_if:guest_scope,returning|nullable|integer|min:1|max:50',
             'usage_limit' => 'nullable|integer|min:1',
         ];
 
@@ -220,7 +285,16 @@ class PromotionController extends Controller
         $data = $request->validate($rules, [
             'start_date.after_or_equal'  => 'The start date cannot be in the past.',
             'expiry_date.after_or_equal' => 'The end date cannot be in the past, and cannot come before the start date.',
+            'min_completed_bookings.required_if' => 'Say how many completed stays a guest needs to qualify.',
         ]);
+
+        // Ang isang promong para sa lahat ay hindi nagtatago ng threshold
+        // na nakalimutan — ibinabalik ito sa 1 para hindi maging gatilyo
+        // ng ibang kahulugan kapag ginawang "returning" sa susunod na
+        // pag-edit nang hindi muling tiningnan ang numero.
+        $data['min_completed_bookings'] = $data['guest_scope'] === 'returning'
+            ? max(1, (int) ($data['min_completed_bookings'] ?? 1))
+            : 1;
 
         $data['is_public'] = $request->boolean('is_public');
         $data['is_active'] = $request->boolean('is_active');
@@ -251,18 +325,44 @@ class PromotionController extends Controller
      * blast na pumatay sa quota ay hindi lang nakakainis — hindi na
      * makakapag-login ang mga guest. Ang bell sa portal ang tamang
      * lugar para dito.
+     *
+     * ANG AUDIENCE AY DUMADAAN SA PAREHONG PAGSUSURI NG PAGIGING
+     * KARAPAT-DAPAT GAYA NG PRESYO (v7.50).
+     *
+     * Dati ay `role = customer AND status = 1` lang — tama iyon noong
+     * ang bawat promo ay para sa lahat. Nang dumating ang
+     * `guest_scope` (v7.49), natutunan ng pagpepresyo, ng banner at ng
+     * chatbot ang aksis na "sino"; ang anunsyo ay hindi. Ang resulta ay
+     * ang pinakamasamang anyo ng pagkakamali: isang abisong nangangako
+     * ng bawas sa taong hindi naman makukuha iyon — at kapag pinindot
+     * niya, wala siyang makikita.
+     *
+     * Ang pagsusuri ay isang SQL predicate (tingnan ang
+     * User::scopeWithCompletedStays()) at hindi isang PHP filter kada
+     * guest: ang buong dahilan ng chunkById() ay hindi hawakan ang
+     * lahat ng user nang sabay-sabay.
      */
     private function broadcastToCustomers(Discount $promo): int
     {
-        $title   = 'New Promo: ' . $promo->label;
+        $title = ($promo->isReturningOnly() ? 'Returning-Guest Offer: ' : 'New Promo: ') . $promo->label;
+
+        // Sinasabi ng mensahe KUNG BAKIT nakuha ito ng guest. Kung
+        // hindi, ang isang bawas na para lang sa mga regular ay
+        // mukhang pangkalahatan, at ipapasa niya iyon sa kaibigang
+        // hindi naman makakakuha.
         $message = trim(($promo->description ? $promo->description . ' ' : '') .
-            $promo->value_label . ' on the villa rate — ' . $promo->window_label . '.');
-        $link    = route('home', [], false);
+            // guest_window_phrase, HINDI window_label: ang "no end date" ay
+            // pangakong hindi kayang tuparin (v7.51).
+            $promo->value_label . ' on the villa rate, ' . $promo->guest_window_phrase . '.' .
+            ($promo->isReturningOnly()
+                ? ' This is our thank-you for returning guests — it is applied automatically to your price, with no code to enter.'
+                : ''));
+
+        $link = route('home', [], false);
 
         $sent = 0;
 
-        User::where('role', 'customer')
-            ->where('status', 1)
+        $this->announcementAudience($promo)
             ->select('id')
             ->chunkById(200, function ($customers) use ($title, $message, $link, &$sent) {
                 foreach ($customers as $customer) {
@@ -270,7 +370,13 @@ class PromotionController extends Controller
                     // buong blast — mananatiling naabisuhan ang lahat ng
                     // iba pa, at nakatala sa log kung sino ang hindi.
                     try {
-                        NotificationHelper::notifyGuest($customer->id, $title, $message, $link);
+                        // `broadcast: false` — tingnan ang
+                        // NotificationHelper::notifyGuest(). Ang isang
+                        // blocking na tawag sa Pusher KADA guest ang
+                        // dahilan kung bakit umabot ng ~12 segundo ang
+                        // 8-guest na blast, at kung bakit mukhang
+                        // nag-hang ang form kaya napindot itong muli.
+                        NotificationHelper::notifyGuest($customer->id, $title, $message, $link, broadcast: false);
                         $sent++;
                     } catch (\Throwable $e) {
                         Log::error("Promo announcement failed for user {$customer->id}: " . $e->getMessage());
@@ -281,9 +387,122 @@ class PromotionController extends Controller
         $promo->forceFill(['notified_at' => now()])->save();
 
         StaffLog::record('announced_promo', 'discounts', $promo->id,
-            "Announced promo '{$promo->label}' to {$sent} customers");
+            "Announced promo '{$promo->label}' to {$sent} " .
+            ($promo->isReturningOnly()
+                ? 'qualifying returning guest' . ($sent === 1 ? '' : 's') . " ({$promo->min_completed_bookings}+ completed stays)"
+                : 'customer' . ($sent === 1 ? '' : 's')));
 
         return $sent;
+    }
+
+    /**
+     * Sabihan ang mga guest na nagbago ang isang promong NAIANUNSYO NA.
+     *
+     * Ang abiso ay nakaimbak na teksto: kapag nagbago ang promo, ang
+     * nasa bell ng guest ay nananatiling luma. Nangyari ito — isang
+     * promong inanunsyo bilang "no end date" ay nilagyan ng dulo, at
+     * walang nakaalam maliban kay admin (v7.51). Hindi kailanman
+     * nasisingil nang sobra ang guest (ang quoteFor() ay laging
+     * bumabasa ng buhay na row), pero umaasa siya sa pangakong wala na.
+     *
+     * HINDI nito sinisira ang "ang edit ay hindi nagbla-blast muli":
+     * ang panuntunang iyon ay para sa typo, at ang `label` at
+     * `description` ay wala sa Discount::MATERIAL_FIELDS. Ang
+     * nagpapadala rito ay pagbabago lang sa mismong alok.
+     *
+     * Tatlong uri ng pagbabago:
+     *   - natapos (na-deactivate o nabura; `$current` ay null kapag nabura)
+     *   - bumalik (muling in-activate)
+     *   - nagbago ang mga tuntunin
+     *
+     * Walang ipinapadala kung hindi naman ito naianunsyo, o kung
+     * walang nagbago sa paningin ng guest (hal. pag-deactivate ng
+     * promong lampas na sa expiry).
+     *
+     * ANG AUDIENCE AY AYON SA LUMANG TUNTUNIN — sila ang nasabihan.
+     * Kapag itinaas ang threshold mula 5 patungong 8, ang may 6 na
+     * stay ang pinakakailangang makaalam, at wala na siya sa bagong
+     * audience. (Ang pagbabalik lang ang gumagamit ng kasalukuyan:
+     * iyon ay panibagong alok sa mga karapat-dapat ngayon.)
+     */
+    private function notifyPromoChange(Discount $old, ?Discount $current): int
+    {
+        if (! $old->notified_at) {
+            return 0;
+        }
+
+        $wasLive = $old->isValid();
+        $isLive  = $current !== null && $current->isValid();
+
+        if ($wasLive && ! $isLive) {
+            $title    = 'Promo Ended: ' . $old->label;
+            $lines    = ['This promo has ended and no longer applies to new bookings. Bookings you have already made keep the price they were booked at.'];
+            $audience = $this->announcementAudience($old);
+        } elseif (! $wasLive && $isLive) {
+            $title    = 'Promo Is Back: ' . $current->label;
+            $lines    = ["It is available again: {$current->value_label} on the villa rate, {$current->guest_window_phrase}."];
+            $audience = $this->announcementAudience($current);
+        } elseif ($wasLive && $isLive) {
+            $title    = 'Promo Update: ' . $current->label;
+            $lines    = $current->guestFacingChangesFrom($old);
+            $audience = $this->announcementAudience($old);
+
+            if ($lines !== [] && $old->label !== $current->label) {
+                array_unshift($lines, "(Previously announced as \"{$old->label}\".)");
+            }
+        } else {
+            return 0;
+        }
+
+        if ($lines === []) {
+            return 0;
+        }
+
+        $message = implode(' ', $lines);
+        $link    = route('home', [], false);
+        $sent    = 0;
+
+        $audience->select('id')->chunkById(200, function ($customers) use ($title, $message, $link, &$sent) {
+            foreach ($customers as $customer) {
+                try {
+                    NotificationHelper::notifyGuest($customer->id, $title, $message, $link, broadcast: false);
+                    $sent++;
+                } catch (\Throwable $e) {
+                    Log::error("Promo change notice failed for user {$customer->id}: " . $e->getMessage());
+                }
+            }
+        });
+
+        StaffLog::record('announced_promo_change', 'discounts', $old->id,
+            "Told {$sent} guest" . ($sent === 1 ? '' : 's') . " that promo '{$old->label}' changed: {$message}");
+
+        return $sent;
+    }
+
+    private function changeSuffix(int $updated): string
+    {
+        return $updated > 0
+            ? " {$updated} guest" . ($updated === 1 ? ' who was' : 's who were') . ' told about it '
+                . ($updated === 1 ? 'has' : 'have') . ' been sent an update.'
+            : '';
+    }
+
+    /**
+     * Sino ang makakatanggap ng anunsyo ng promong ito.
+     *
+     * Hiwalay na method dahil DALAWA ang nagtatanong nito: ang blast
+     * mismo at ang bilang na ipinapakita sa form bago pa ito pindutin.
+     * Kung magkaiba ang dalawa, nagsisinungaling ang checkbox.
+     */
+    private function announcementAudience(Discount $promo)
+    {
+        $query = User::where('role', 'customer')->where('status', 1);
+
+        if ($promo->isReturningOnly()) {
+            $query->withCompletedStays((int) $promo->min_completed_bookings);
+        }
+
+        return $query;
     }
 
     /**
@@ -301,6 +520,44 @@ class PromotionController extends Controller
             'base'    => (float) ($villa->base_price ?? 0),
             'weekend' => (float) ($villa->weekend_price ?? $villa->base_price ?? 0),
         ];
+    }
+
+    /**
+     * Ilang aktibong customer ang may N o higit pang natapos na stay,
+     * para sa bawat N na maaaring ilagay ni admin (1..50, ang hangganan
+     * ng validation).
+     *
+     * Bakit buong distribusyon at hindi isang bilang: ang audience ay
+     * nakadepende sa `guest_scope` AT sa threshold, at pinipili pa lang
+     * ni admin ang dalawang iyon habang nasa form. Isang
+     * server-rendered na numero ay magiging mali sa sandaling may
+     * mapindot. Ipinapasa ang buong hugis para ma-update ng JS ang
+     * label habang nagbabago ang pinili — walang bagong request, at
+     * iisang pinagmumulan pa rin ang bilang.
+     *
+     * Isang aggregate query ito, hindi 50.
+     *
+     * @return array<int, int>
+     */
+    private function returningCounts(): array
+    {
+        // Bilang ng natapos na stay kada aktibong customer.
+        $perGuest = \App\Models\Booking::query()
+            ->selectRaw('bookings.user_id, count(*) as stays')
+            ->join('users', 'users.id', '=', 'bookings.user_id')
+            ->where('users.role', 'customer')
+            ->where('users.status', 1)
+            ->where('bookings.status', User::COMPLETED_STAY_STATUS)
+            ->groupBy('bookings.user_id')
+            ->pluck('stays')
+            ->all();
+
+        $counts = [];
+        for ($min = 1; $min <= 50; $min++) {
+            $counts[$min] = count(array_filter($perGuest, fn ($n) => $n >= $min));
+        }
+
+        return $counts;
     }
 
     private function customerCount(): int

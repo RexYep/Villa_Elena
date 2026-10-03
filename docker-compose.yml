@@ -61,6 +61,27 @@ services:
       - redis
     volumes:
       - ./storage:/var/www/html/storage
+      # Ang BUILT na JS/CSS (output ng `npm run build`), naka-bind-mount.
+      #
+      # Dati ay watch rule ito (`action: sync, path: ./public/build`), at
+      # HINDI ITO KAILANMAN GUMANA: nakalista ang `public/build` sa
+      # .dockerignore, at ipinapatupad ng Compose Watch ang .dockerignore sa
+      # mga sync rule nito — kaya walang kinokopya ang rule, nang walang
+      # anumang babala. Sinukat: dalawang probe file na ginawa nang sabay,
+      # dumating sa container ang nasa resources/, hindi ang nasa
+      # public/build/. Ang bunga ay isang ayos sa admin.js na tama sa source
+      # at nasa build ng host, pero hindi umabot sa browser — luma pa ring
+      # bundle ng image ang inihahain ng container.
+      #
+      # Hindi apektado ng .dockerignore ang bind mount, at kailangang manatili
+      # ang `public/build` doon (iyon ang nagpapanatiling kapareho ng Render
+      # ang lokal na image). Maliit ang folder na ito at nginx ang naghahain,
+      # kaya walang bigat na tulad ng pag-mount sa buong repo.
+      #
+      # ANG KAPALIT: TINATAKPAN nito ang sariling build ng image. Kailangang
+      # may kasalukuyang `npm run build` sa host; kapag wala ang folder, walang
+      # manifest.json at 500 ang bawat pahina ("Vite manifest not found").
+      - ./public/build:/var/www/html/public/build
     extra_hosts:
       - "host.docker.internal:host-gateway"
     develop:
@@ -96,10 +117,9 @@ services:
           path: ./database
           target: /var/www/html/database
           initial_sync: true
-        - action: sync
-          path: ./public/build
-          target: /var/www/html/public/build
-          initial_sync: true
+        # WALANG sync rule para sa ./public/build dito — bind mount na iyon sa
+        # `volumes:` sa itaas. Huwag itong ibalik bilang watch rule: pinapatay
+        # ito ng .dockerignore nang tahimik.
 
         # Isang FILE lang, sinadya — hindi ang buong ./bootstrap.
         # Dito nakatira ang middleware config (kasama ang CSRF exemption

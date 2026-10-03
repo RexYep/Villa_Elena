@@ -302,7 +302,10 @@
                 {{-- Existing Guest --}}
                 <div id="existingGuestFields">
                     <label class="form-label">Select Guest</label>
-                    <select name="user_id" class="form-select {{ $errors->has('user_id') ? 'is-invalid' : '' }}">
+                    {{-- May id dahil ginagamit ng live quote: nakakaapekto sa
+                         presyo kung sino ang guest (promo para sa regular). --}}
+                    <select name="user_id" id="guestSelect"
+                        class="form-select {{ $errors->has('user_id') ? 'is-invalid' : '' }}">
                         <option value="">Select existing guest</option>
                         @foreach ($customers as $customer)
                             <option value="{{ $customer->id }}" {{ old('user_id') == $customer->id ? 'selected' : '' }}>
@@ -417,19 +420,35 @@
                 </div>
                 <div class="mb-14">
                     <label class="form-label">Slot</label>
-                    @php($selectedSlot = old('slot', $prefill['slot'] ?? 'day'))
-                    <div class="two-col">
-                        <div class="form-check">
-                            <input type="radio" name="slot" value="day" id="slot_day" class="form-check-input"
-                                {{ $selectedSlot === 'day' ? 'checked' : '' }}>
-                            <label for="slot_day" class="form-check-label">Day (8:00 AM – 5:00 PM)</label>
-                        </div>
-                        <div class="form-check">
-                            <input type="radio" name="slot" value="night" id="slot_night"
-                                class="form-check-input" {{ $selectedSlot === 'night' ? 'checked' : '' }}>
-                            <label for="slot_night" class="form-check-label">Night (7:00 PM – 6:00 AM)</label>
-                        </div>
+                    {{-- Sinasadyang one-line na anyo lang ng PHP directive ang
+                         ginagamit sa file na ito: ang paghahalo ng block na anyo ay
+                         ipinapares ng compiler sa naunang one-liner at nilalamon
+                         ang lahat ng nasa pagitan (tingnan ang CLAUDE.md).
+
+                         At huwag isusulat ang pangalan ng directive kahit sa
+                         loob ng komentaryong ito — kinokompile ng Blade ang
+                         bawat directive na makita nito saanman sa file, komento
+                         man o hindi. Ang bersiyon ng komentong ito na may
+                         nakasulat na pangalan ay nagbunga ng
+                         "unexpected end of file, expecting endif" — at
+                         PUMASA ito sa Blade::compileString(); ang tunay na
+                         render lang ang nakahuli. --}}
+                    @php($slotKeys = \App\Models\Booking::bookableSlotKeys())
+                    @php($selectedSlot = old('slot', $prefill['slot'] ?? ($slotKeys[0] ?? null)))
+                    @php($selectedSlot = in_array($selectedSlot, $slotKeys, true) ? $selectedSlot : ($slotKeys[0] ?? null))
+                    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:12px;">
+                        @foreach ($slotKeys as $slotKey)
+                            <div class="form-check">
+                                <input type="radio" name="slot" value="{{ $slotKey }}" id="slot_{{ $slotKey }}"
+                                    class="form-check-input" {{ $selectedSlot === $slotKey ? 'checked' : '' }}>
+                                <label for="slot_{{ $slotKey }}" class="form-check-label">{{ \App\Models\Booking::SLOTS[$slotKey]['label'] }}</label>
+                            </div>
+                        @endforeach
                     </div>
+                    {{-- Ipinapaliwanag kung bakit iisa lang ang pagpipilian sa
+                         isang 22-oras na petsa. --}}
+                    <div id="slotOnlyNote" class="form-text" hidden
+                        style="margin-top:6px; color:#0f766e; font-size:13px;"></div>
                     @error('slot')
                         <div class="invalid-feedback d-block">{{ $message }}</div>
                     @enderror
@@ -553,6 +572,12 @@
             document.getElementById('newGuestFields').style.display = type === 'new' ? 'block' : 'none';
             document.getElementById('btnExisting').classList.toggle('active', type === 'existing');
             document.getElementById('btnNew').classList.toggle('active', type === 'new');
+
+            // Nagbabago ang presyo kapag nagpalit sa pagitan ng umiiral na
+            // guest (na baka regular na customer) at bagong guest (na hindi
+            // puwedeng maging regular). Nasa guard ito dahil tinatawag din
+            // ang setGuestType() bago pa madepinisyon ang updatePrice().
+            if (typeof updatePrice === 'function') updatePrice();
         }
 
         // Restore on validation error
@@ -655,6 +680,16 @@
                 slot: slotInput.value
             });
 
+            // Ang presyo ay nakadepende rin sa KUNG SINO: may mga promong
+            // para lang sa mga regular na customer. Ipinapasa lang ito
+            // kapag umiiral nang guest ang pinili — ang isang BAGONG guest
+            // ay walang natapos pang stay, kaya list price talaga ang tama.
+            const guestTypeEl = document.getElementById('guestType');
+            const guestEl = document.getElementById('guestSelect');
+            if (guestTypeEl && guestTypeEl.value === 'existing' && guestEl && guestEl.value) {
+                params.set('user_id', guestEl.value);
+            }
+
             fetch(`${QUOTE_URL}?${params.toString()}`, {
                     headers: {
                         'Accept': 'application/json'
@@ -692,9 +727,13 @@
         function renderQuote(data) {
             const preview = document.getElementById('pricePreview');
 
+            // Ang `promo_scope` ay naroon lang kapag ang bawas ay dahil
+            // REGULAR ang customer — kailangang masabi ito ni staff nang
+            // tama sa guest, dahil hindi ito isang promong para sa lahat.
+            const scopeNote = data.promo_scope ? ` — ${data.promo_scope}` : '';
             const promoRow = data.discount > 0 ? `
     <div class="price-row" style="color:#15803d;font-weight:600;">
-        <span><i class="bi bi-tag-fill" style="font-size: 13px;"></i> ${data.promo_label} (${data.promo_value})</span>
+        <span><i class="bi bi-tag-fill" style="font-size: 13px;"></i> ${data.promo_label} (${data.promo_value})${scopeNote}</span>
         <span>−${peso(data.discount)}</span>
     </div>` : '';
 
@@ -776,11 +815,72 @@
             summary.style.display = 'block';
         }
 
-        document.getElementById('checkinDate').addEventListener('change', updatePrice);
+        // ── Aling slot ang inaalok sa piniling petsa ──────────────────
+        //
+        // Kaparehong panuntunan ng Booking::slotsOfferedOn(): window muna at
+        // EKSKLUSIBO, at kung wala, ang mga hindi-windowed na slot. Dapat
+        // eksaktong tumugma sa server — kung hindi, makakapili si staff ng
+        // slot na tatanggihan ng SlotOfferedOnDate sa pag-submit.
+        const WINDOWED_SLOTS = @json(\App\Models\Booking::windowedSlotKeys());
+        const SLOT_WINDOW_DATES = @json(\App\Models\Booking::slotWindowDates());
+        const SLOT_NAMES = @json(collect(\App\Models\Booking::SLOTS)->map(fn ($d) => $d['name'])->all());
+        const ALL_SLOT_KEYS = @json(\App\Models\Booking::bookableSlotKeys());
+
+        function slotsOfferedOn(dateStr) {
+            for (const s of WINDOWED_SLOTS) {
+                if ((SLOT_WINDOW_DATES[s] || []).includes(dateStr)) return [s];
+            }
+            return ALL_SLOT_KEYS.filter(k => !WINDOWED_SLOTS.includes(k));
+        }
+
+        function refreshSlotOptions() {
+            const dateStr = document.getElementById('checkinDate').value;
+            if (!dateStr) return;
+
+            const offered = slotsOfferedOn(dateStr);
+            let keptChecked = false;
+
+            ALL_SLOT_KEYS.forEach(function (key) {
+                const input = document.getElementById('slot_' + key);
+                if (!input) return;
+                const wrap = input.closest('.form-check');
+                const on = offered.includes(key);
+
+                if (wrap) wrap.hidden = !on;
+                input.disabled = !on;
+                if (input.checked && on) keptChecked = true;
+                if (input.checked && !on) input.checked = false;
+            });
+
+            if (!keptChecked && offered.length) {
+                const first = document.getElementById('slot_' + offered[0]);
+                if (first) first.checked = true;
+            }
+
+            // Sabihin kay staff kung bakit nawala ang Day/Night.
+            const note = document.getElementById('slotOnlyNote');
+            if (note) {
+                const only = offered.length === 1 && WINDOWED_SLOTS.includes(offered[0]);
+                note.hidden = !only;
+                if (only) {
+                    note.textContent = 'This date is set up as a ' +
+                        (SLOT_NAMES[offered[0]] || offered[0]) +
+                        ' date, so the Day and Night slots are not offered on it.';
+                }
+            }
+        }
+
+        document.getElementById('checkinDate').addEventListener('change', function () {
+            refreshSlotOptions();
+            updatePrice();
+        });
         document.querySelectorAll('input[name="slot"]').forEach(el => el.addEventListener('change', updatePrice));
+        // Ang pagpili ng ibang guest ay maaaring magpalit ng presyo.
+        document.getElementById('guestSelect')?.addEventListener('change', updatePrice);
 
         // Run on load — may default check-in date + slot na naka-preset,
         // para agad makita ni staff ang price preview.
+        refreshSlotOptions();
         updatePrice();
     </script>
 @endpush

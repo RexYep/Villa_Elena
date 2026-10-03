@@ -310,4 +310,91 @@ class User extends Authenticatable implements MustVerifyEmail
         // MediaUrlHelper.
         return \App\Helpers\MediaUrlHelper::resolve($this->profile_image);
     }
+
+    // ── Pagiging regular na customer ───────────────────────────────
+
+    /**
+     * ANG IISANG KAHULUGAN ng "natapos na stay".
+     *
+     * Dalawang bagay ang nagtatanong nito at dapat hindi sila mag-iba:
+     * ang completedStayCount() (isang guest, pagpepresyo) at ang
+     * scopeWithCompletedStays() (maraming guest, ang audience ng
+     * anunsyo). Noong magkahiwalay ang dalawa, ang blast ay napunta sa
+     * lahat habang ang presyo ay para lang sa iilan.
+     */
+    public const COMPLETED_STAY_STATUS = 'checked_out';
+
+    /** Memo kada instance — tingnan ang completedStayCount(). */
+    private ?int $completedStayCount = null;
+
+    /**
+     * Ilang stay na ang TUNAY NANG natapos ng guest na ito.
+     *
+     * Ito ang sinusukat ng isang promong `guest_scope = 'returning'`
+     * (tingnan ang Discount::isValidOn()).
+     *
+     * `checked_out` LAMANG ang binibilang, at mahalaga ang bawat
+     * hindi-kasama:
+     *
+     *   - `pending` / `confirmed` — hindi pa natutuloy ang stay. Kung
+     *     bibilangin ang mga ito, kayang gawing "regular" ang sarili ng
+     *     sinuman sa pamamagitan ng paggawa ng mga booking na hindi
+     *     naman babayaran — isang diskuwentong binili ng wala.
+     *   - `checked_in` — nasa villa pa sila ngayon. Hindi pa tapos ang
+     *     stay, kaya hindi pa ito dapat maging basehan ng bawas.
+     *   - `cancelled` / `no_show` — walang nangyaring stay.
+     *
+     * Hindi ito sumusuri ng petsa: ang tanong ay "ilan na ang natapos
+     * NGAYON", kaya ang isang guest na may dalawang tapos nang stay ay
+     * regular na kahit gaano pa kalayo sa hinaharap ang bino-book niya.
+     *
+     * Hindi ito nakaka-dedup ng magkaparehong tao na may dalawang User
+     * row (hal. dalawang email) — walang identity matching ang sistema.
+     * Ang pagpili ni staff sa umiiral nang guest sa walk-in dropdown ang
+     * tunay na panlaban doon.
+     */
+    public function completedStayCount(): int
+    {
+        // Ang isang guest-aware na quote ay maaaring tawagin nang
+        // paulit-ulit sa isang request (preview, form, submit), kaya
+        // isang COUNT lang kada instance.
+        return $this->completedStayCount ??= $this->bookings()
+            ->where('status', static::COMPLETED_STAY_STATUS)
+            ->count();
+    }
+
+    /**
+     * Ang MARAMIHANG anyo ng isReturningGuest(), bilang isang SQL
+     * predicate.
+     *
+     * Kailangan ito ng anunsyo ng promo: ang pagtawag ng
+     * completedStayCount() kada guest ay isang COUNT kada row, at ang
+     * buong punto ng chunkById() ay hindi hawakan ang lahat ng user
+     * nang sabay. Ang `whereHas(..., '>=', $min)` ay isang sub-select,
+     * kaya nananatiling isang query ang audience gaano man karami.
+     *
+     * Pareho ang kahulugan ng "natapos" dito at sa
+     * completedStayCount() dahil pareho silang dumadaan sa
+     * COMPLETED_STAY_STATUS.
+     */
+    public function scopeWithCompletedStays($query, int $min = 1)
+    {
+        return $query->whereHas(
+            'bookings',
+            fn ($b) => $b->where('status', static::COMPLETED_STAY_STATUS),
+            '>=',
+            max(1, $min)
+        );
+    }
+
+    /**
+     * May sapat na bang natapos na stay ang guest para sa threshold na
+     * ito? Tumatanggap ng threshold < 1 bilang 1 — ang isang promong
+     * "returning" na nasisiyahan sa zero na stay ay para sa lahat, at
+     * hindi iyon kailanman ang ibig sabihin ng admin.
+     */
+    public function isReturningGuest(int $minCompleted = 1): bool
+    {
+        return $this->completedStayCount() >= max(1, $minCompleted);
+    }
 }

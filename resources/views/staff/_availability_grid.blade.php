@@ -2,11 +2,15 @@
      ang page mismo, at ang GET /staff/availability/grid na kinukuha muli ng
      page kapag may nagbago (FrontDeskController::availabilityGrid). Iisang
      Blade, iisang hasConflict() — walang panuntunang kinopya sa JS. --}}
-<div class="grid-card">
+{{-- `--slot-cols` ay itinatakda dito, hindi sa CSS ng page: ang partial na
+     ito ay ini-render din nang mag-isa ng GET /staff/availability/grid, kaya
+     ang bilang ng column ay kailangang kasama sa markup na ipinapadala. --}}
+<div class="grid-card" style="--slot-cols: {{ max(1, count($slotDefs)) }};">
     <div class="grid-head">
         <div>Date</div>
-        <div>Day — 8:00 AM to 5:00 PM</div>
-        <div>Night — 7:00 PM to 6:00 AM</div>
+        @foreach($slotDefs as $slotKey => $def)
+            <div>{{ $def['name'] }} — {{ $def['times'] }}</div>
+        @endforeach
     </div>
 
     @foreach($grid as $row)
@@ -20,7 +24,10 @@
         </div>
 
         @foreach($row['slots'] as $slotKey => $slot)
-            <div class="slot-cell" data-slot="{{ ucfirst($slotKey) }}">
+            {{-- `name` mula sa Booking::SLOTS, hindi ucfirst($slotKey) — ang
+                 huli ay nagbubunga ng "Stay22". Ito ang mobile label
+                 (`.slot-cell::before`), kaya nakikita ito ng staff. --}}
+            <div class="slot-cell" data-slot="{{ $slotDefs[$slotKey]['name'] ?? ucfirst($slotKey) }}">
                 @if($slot['state'] === 'free')
                     <a class="slot-box free"
                        href="{{ route('staff.walkin', ['date' => $row['date']->format('Y-m-d'), 'slot' => $slotKey]) }}"
@@ -48,6 +55,8 @@
                                 <i class="bi bi-person-fill"></i>
                             @elseif($slot['state'] === 'blocked')
                                 <i class="bi bi-lock-fill"></i>
+                            @elseif($slot['state'] === 'unoffered')
+                                <i class="bi bi-slash-circle"></i>
                             @else
                                 <i class="bi bi-dash-lg"></i>
                             @endif
@@ -56,8 +65,21 @@
                             <span class="slot-state">
                                 @if($slot['state'] === 'booked') Booked
                                 @elseif($slot['state'] === 'blocked') Blocked
+                                {{-- Hindi inaalok ang slot sa petsang ito. Iba ito sa
+                                     "Booked": walang kumuha — hindi talaga ito
+                                     ipinagbibili sa araw na iyon. --}}
+                                @elseif($slot['state'] === 'unoffered') Not offered
                                 @else Passed @endif
                             </span>
+                            @if($slot['state'] === 'unoffered')
+                                <span class="slot-sub d-block">
+                                    @if (\App\Models\Booking::slotRequiresWindow($slotKey))
+                                        selected dates only
+                                    @else
+                                        22-hour date
+                                    @endif
+                                </span>
+                            @endif
                             @if($slot['guest'])
                                 <span class="slot-sub d-block">{{ $slot['guest'] }} · {{ $slot['label'] }}</span>
                             @elseif($slot['state'] === 'blocked')

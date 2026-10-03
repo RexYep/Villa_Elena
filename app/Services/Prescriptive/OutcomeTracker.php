@@ -136,13 +136,25 @@ class OutcomeTracker
             ->whereDate('check_in_date', '>=', $rec->target_start->toDateString())
             ->whereDate('check_in_date', '<=', $rec->target_end->toDateString());
 
+        $bookings = $query->get([
+            'base_amount', 'discount_amount',
+            // Kailangan ng slotKey() sa ibaba.
+            'slot', 'check_in_date', 'check_in_time', 'check_out_date', 'check_out_time',
+        ]);
+
         // Kapag may tinukoy na slot ang mungkahi, ang kabilang slot sa
         // parehong araw ay ibang produkto — hindi ito bunga ng mungkahi.
+        //
+        // Sinasala ito sa PHP sa pamamagitan ng slotKey(), HINDI ng
+        // `whereTime('check_in_time', ...)`. Ang Night at ang 22-Hours ay
+        // pareho ang 19:00 na check-in, kaya ang dating query ay
+        // nagbibilang ng kita ng 22-oras na booking laban sa isang
+        // mungkahing para sa Night, at kabaligtaran. Ang slotKey() ay
+        // binabasa ang nakaimbak na `slot` at bumabalik sa paghahambing
+        // ng oras, kaya iisa ang panuntunan sa buong sistema.
         if ($rec->slot && isset(Booking::SLOTS[$rec->slot])) {
-            $query->whereTime('check_in_time', Booking::SLOTS[$rec->slot]['check_in'].':00');
+            $bookings = $bookings->filter(fn ($b) => $b->slotKey() === $rec->slot);
         }
-
-        $bookings = $query->get(['base_amount', 'discount_amount']);
 
         return round($bookings->sum(
             fn ($b) => (float) $b->base_amount - (float) $b->discount_amount

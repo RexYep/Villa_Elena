@@ -176,7 +176,11 @@
                     </div>
                     <div class="form-card-body">
                         <label class="form-label">Select Guest <span class="req">*</span></label>
-                        <select name="user_id" class="form-select @error('user_id') is-invalid @enderror" required>
+                        {{-- Ang id ay ginagamit ng live quote: nakakaapekto sa
+                             PRESYO kung sino ang guest, dahil may mga promong
+                             para lang sa mga regular na customer. --}}
+                        <select name="user_id" id="guestSelect"
+                            class="form-select @error('user_id') is-invalid @enderror" required>
                             <option value="">Choose a guest...</option>
                             @foreach ($customers as $customer)
                                 <option value="{{ $customer->id }}" {{ old('user_id') == $customer->id ? 'selected' : '' }}>
@@ -229,19 +233,28 @@
                         </div>
                         <div class="mb-3">
                             <label class="form-label">Slot <span class="req">*</span></label>
-                            <div class="two-col">
-                                <div class="form-check">
-                                    <input type="radio" name="slot" value="day" id="slot_day"
-                                        class="form-check-input" {{ old('slot', 'day') === 'day' ? 'checked' : '' }}
-                                        required>
-                                    <label for="slot_day" class="form-check-label">Day (8:00 AM – 5:00 PM)</label>
-                                </div>
-                                <div class="form-check">
-                                    <input type="radio" name="slot" value="night" id="slot_night"
-                                        class="form-check-input" {{ old('slot') === 'night' ? 'checked' : '' }}>
-                                    <label for="slot_night" class="form-check-label">Night (7:00 PM – 6:00 AM)</label>
-                                </div>
+                            {{-- auto-fit sa halip na .two-col (isang matigas na 1fr 1fr):
+                                 tatlo na ang slot, at ang isang 2x2 na grid ay nag-iiwan ng
+                                 ulilang cell. Hinahango sa bookableSlotKeys() — hindi
+                                 inaalok ang slot na wala pang presyo. --}}
+                            @php
+                                $slotKeys = \App\Models\Booking::bookableSlotKeys();
+                                $checkedSlot = old('slot', $slotKeys[0] ?? null);
+                            @endphp
+                            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:12px;">
+                                @foreach ($slotKeys as $slotKey)
+                                    <div class="form-check">
+                                        <input type="radio" name="slot" value="{{ $slotKey }}" id="slot_{{ $slotKey }}"
+                                            class="form-check-input" {{ $checkedSlot === $slotKey ? 'checked' : '' }}
+                                            @if ($loop->first) required @endif>
+                                        <label for="slot_{{ $slotKey }}" class="form-check-label">{{ \App\Models\Booking::SLOTS[$slotKey]['label'] }}</label>
+                                    </div>
+                                @endforeach
                             </div>
+                            {{-- Ipinapaliwanag kung bakit iisa lang ang pagpipilian
+                                 sa isang 22-oras na petsa. --}}
+                            <div id="slotOnlyNote" hidden
+                                style="margin-top:6px; color:#0f766e; font-size:13px;"></div>
                             @error('slot')
                                 <span class="invalid-feedback d-block">{{ $message }}</span>
                             @enderror
@@ -353,6 +366,7 @@
             const QUOTE_URL = @json(route('admin.bookings.quote'));
             const propertyId = document.getElementById('propertyId').value;
             const checkInEl = document.getElementById('checkIn');
+            const guestEl = document.getElementById('guestSelect');
             const submitBtn = document.getElementById('submitBtn');
             const statusEl = document.getElementById('availabilityStatus');
             const $ = id => document.getElementById(id);
@@ -403,6 +417,13 @@
                         checkin: checkIn,
                         slot: slotInput.value
                     });
+
+                    // Kung sino ang guest ay bahagi ng presyo, hindi lang
+                    // ng record: ang isang regular na customer ay maaaring
+                    // may promong para lang sa kanya. Kapag wala pang
+                    // piniling guest, hindi ito ipinapasa at list price
+                    // ang ibinibigay ng server.
+                    if (guestEl && guestEl.value) params.set('user_id', guestEl.value);
                     const res = await fetch(QUOTE_URL + '?' + params, {
                         headers: {
                             'Accept': 'application/json',
@@ -424,8 +445,14 @@
                     $('previewTotal').textContent = peso(data.total);
 
                     if (data.discount > 0) {
+                        // Ang `promo_scope` ay naroon lang kapag ang bawas
+                        // ay dahil REGULAR ang customer. Sinasabi ito
+                        // dahil magkaibang bagay ang ipapaliwanag sa guest:
+                        // ang seasonal promo ay para sa lahat, ito ay sa
+                        // kanya lang.
                         $('previewPromoLabel').textContent = (data.promo_label || 'Promo') +
-                            (data.promo_value ? ' (' + data.promo_value + ')' : '');
+                            (data.promo_value ? ' (' + data.promo_value + ')' : '') +
+                            (data.promo_scope ? ' — ' + data.promo_scope : '');
                         $('previewDiscount').textContent = '−' + peso(data.discount);
                         $('previewPromoRow').hidden = false;
                     } else {
@@ -447,8 +474,67 @@
                 }
             }
 
-            checkInEl.addEventListener('change', refresh);
+            // ── Aling slot ang inaalok sa piniling petsa ──────────────
+            //
+            // Kaparehong panuntunan ng Booking::slotsOfferedOn(): window muna
+            // at EKSKLUSIBO, at kung wala, ang mga hindi-windowed na slot.
+            const WINDOWED_SLOTS = @json(\App\Models\Booking::windowedSlotKeys());
+            const SLOT_WINDOW_DATES = @json(\App\Models\Booking::slotWindowDates());
+            const SLOT_NAMES = @json(collect(\App\Models\Booking::SLOTS)->map(fn ($d) => $d['name'])->all());
+            const ALL_SLOT_KEYS = @json(\App\Models\Booking::bookableSlotKeys());
+
+            function slotsOfferedOn(dateStr) {
+                for (const s of WINDOWED_SLOTS) {
+                    if ((SLOT_WINDOW_DATES[s] || []).includes(dateStr)) return [s];
+                }
+                return ALL_SLOT_KEYS.filter(k => !WINDOWED_SLOTS.includes(k));
+            }
+
+            function refreshSlotOptions() {
+                const dateStr = checkInEl.value;
+                if (!dateStr) return;
+
+                const offered = slotsOfferedOn(dateStr);
+                let keptChecked = false;
+
+                ALL_SLOT_KEYS.forEach(function (key) {
+                    const input = document.getElementById('slot_' + key);
+                    if (!input) return;
+                    const wrap = input.closest('.form-check');
+                    const on = offered.includes(key);
+
+                    if (wrap) wrap.hidden = !on;
+                    input.disabled = !on;
+                    if (input.checked && on) keptChecked = true;
+                    if (input.checked && !on) input.checked = false;
+                });
+
+                if (!keptChecked && offered.length) {
+                    const first = document.getElementById('slot_' + offered[0]);
+                    if (first) first.checked = true;
+                }
+
+                const note = document.getElementById('slotOnlyNote');
+                if (note) {
+                    const only = offered.length === 1 && WINDOWED_SLOTS.includes(offered[0]);
+                    note.hidden = !only;
+                    if (only) {
+                        note.textContent = 'This date is set up as a ' +
+                            (SLOT_NAMES[offered[0]] || offered[0]) +
+                            ' date, so Day and Night are not offered on it.';
+                    }
+                }
+            }
+
+            checkInEl.addEventListener('change', function () {
+                refreshSlotOptions();
+                refresh();
+            });
             document.querySelectorAll('input[name="slot"]').forEach(el => el.addEventListener('change', refresh));
+            // Ang pagpalit ng guest ay nagpapalit ng presyo kapag may
+            // promong para sa mga regular — kaya muling nagtatanong.
+            if (guestEl) guestEl.addEventListener('change', refresh);
+            refreshSlotOptions();
             refresh();
         })();
     </script>

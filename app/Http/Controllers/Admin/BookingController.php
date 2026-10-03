@@ -11,6 +11,7 @@ use App\Models\Payment;
 use App\Models\HousekeepingTask;
 use App\Models\Notification;
 use App\Models\StaffLog;
+use App\Rules\SlotOfferedOnDate;
 use Illuminate\Http\Request;
 use App\Helpers\NotificationHelper;
 use App\Helpers\BookingMailHelper;
@@ -93,7 +94,13 @@ class BookingController extends Controller
         $validator = validator($request->all(), [
             'property_id' => 'required|exists:properties,id,type,villa',
             'checkin'     => 'required|date',
-            'slot'        => 'required|in:' . implode(',', array_keys(Booking::SLOTS)),
+            // Nakadepende sa petsa — tingnan ang SlotOfferedOnDate.
+            'slot'        => ['required', new SlotOfferedOnDate('checkin')],
+            // Kung sino ang guest ay nakakaapekto sa PRESYO, dahil may
+            // mga promong para lang sa mga regular na customer. Opsyonal
+            // ito dahil nagre-refresh ang preview bago pa man pumili ng
+            // guest si admin; list price ang ibinibigay hangga't ganoon.
+            'user_id'     => 'nullable|exists:users,id',
         ]);
 
         if ($validator->fails()) {
@@ -103,7 +110,8 @@ class BookingController extends Controller
         $property = Property::findOrFail($request->property_id);
         [$checkIn, $checkOut] = Booking::slotDateTimes($request->slot, $request->checkin);
 
-        $quote = $property->quoteFor($checkIn, $request->slot);
+        $guest = $request->user_id ? User::find($request->user_id) : null;
+        $quote = $property->quoteFor($checkIn, $request->slot, $guest);
         $payload = [
             'valid'       => true,
             'slot_label'  => ucfirst($request->slot) . ' (' . round($checkIn->diffInHours($checkOut)) . ' hrs)',
@@ -113,6 +121,13 @@ class BookingController extends Controller
             'total'       => $quote['total'],
             'promo_label' => $quote['promo']?->label,
             'promo_value' => $quote['promo']?->value_label,
+            // Para malaman ni admin na ang bawas ay dahil REGULAR ang
+            // customer, hindi isang seasonal promo — magkaibang bagay
+            // na ipapaliwanag sa guest.
+            'promo_scope' => $quote['promo']?->isReturningOnly()
+                ? $quote['promo']->guest_scope_label
+                : null,
+            'guest_stays' => $guest?->completedStayCount(),
         ];
 
         // Parehong kondisyon na tinatanggihan ng store().
@@ -141,7 +156,7 @@ class BookingController extends Controller
             // Villa lang — ang mga Room record ay hindi bookable.
             'property_id'      => 'required|exists:properties,id,type,villa',
             'check_in_date'    => 'required|date|after_or_equal:today',
-            'slot'             => 'required|in:' . implode(',', array_keys(Booking::SLOTS)),
+            'slot'             => ['required', new SlotOfferedOnDate('check_in_date')],
             'num_guests'       => 'required|integer|min:1',
             'special_requests' => 'nullable|string',
             'source'           => 'required|in:online,walk_in,phone,partner',
@@ -173,8 +188,10 @@ class BookingController extends Controller
         // Flat/package price — base lang sa segment ng CHECK-IN (hindi
         // per-night) — kasama na ang anumang tumatamang seasonal promo.
         // Awtomatiko ito: kahit admin ang gumawa ng booking, pareho pa
-        // rin ang presyong nakukuha ng guest sa online portal.
-        $quote          = $property->quoteFor($checkIn, $request->slot);
+        // rin ang presyong nakukuha ng guest sa online portal — kasama
+        // na ang bawas sa regular na customer, na sinusukat laban sa
+        // guest na pinili sa dropdown.
+        $quote          = $property->quoteFor($checkIn, $request->slot, User::find($request->user_id));
         $baseAmount     = $quote['base'];
         $discountAmount = $quote['discount'];
         $totalAmount    = $quote['total'];
@@ -311,6 +328,8 @@ class BookingController extends Controller
             'status' => 'required|in:pending,confirmed,checked_in,checked_out,cancelled,no_show',
             'cancellation_reason' => 'nullable|string|required_if:status,cancelled',
             'balance_arrangement' => 'nullable|in:deferred',
+            // Sino ang nagpasyang i-cancel — tingnan sa ibaba.
+            'cancel_initiator'    => 'nullable|in:guest,resort',
         ]);
 
         $oldStatus = $booking->status;
@@ -362,25 +381,59 @@ class BookingController extends Controller
                 . $booking->checkInDateTime()->format('M d, Y g:i A') . ' na slot.');
         }
 
+        // Ang refund sa isang cancellation ay nakadepende sa SINO ang
+        // nagpasya, hindi na sa kung kailan (v7.52):
+        //
+        //   guest   — hiniling ng guest (tumawag, nag-message). Walang
+        //             refund, deposit man o buong bayad.
+        //   resort  — kami ang nag-cancel (maintenance, panahon). Buong
+        //             refund ng lahat ng naibayad, gaya ng ipinapangako
+        //             ng Terms.
+        //
+        // Hindi ito mahuhulaan mula sa booking, kaya TINATANONG ang
+        // admin — at walang default. Ang maling hula ay alinman sa
+        // perang naibalik na hindi dapat, o perang hindi naibalik na
+        // ipinangako namin. Hinihingi lang kapag may naibayad: kung wala,
+        // pareho ang kalalabasan ng dalawa.
+        $cancelInitiator = $request->cancel_initiator;
+
+        if ($newStatus === 'cancelled' && (float) $booking->amount_paid > 0 && ! $cancelInitiator) {
+            return back()->with('error',
+                'Choose who is cancelling this booking — the guest (no refund) or the resort (full refund of ₱'
+                . number_format((float) $booking->amount_paid, 2) . ').');
+        }
+
         $updates = ['status' => $newStatus];
 
-        // Refund preview — kinukuha bago pa man baguhin ang status
-        // (kailangan ng tiered calculation ang orihinal na created_at at
-        // check-in datetime, hindi apektado man ito ng status change,
-        // pero mas malinaw itong tawagin habang tumpak pa ang konteksto).
-        $refundPercentage = null;
-        $refundAmount     = 0;
+        // Kinukuha bago baguhin ang status, habang `amount_paid` pa ang
+        // tunay na naibayad.
+        $refundAmount  = 0;
+        $refundPayment = null;
+        // Ang naibayad na HINDI ibabalik (guest ang nag-cancel).
+        $forfeited     = 0;
 
         if ($newStatus === 'cancelled') {
-            $refundPercentage = $booking->calculateRefundPercentage();
-            $refundAmount     = $booking->calculateRefundAmount();
+            $refundAmount = $cancelInitiator === 'resort' ? $booking->resortCancellationRefund() : 0;
+            $forfeited    = $cancelInitiator === 'resort' ? 0 : (float) $booking->amount_paid;
 
             $updates['cancelled_at']        = now();
             $updates['cancellation_reason'] = $request->cancellation_reason;
             $updates['cancelled_by']        = 'admin';
             $updates['balance_due']         = 0; // cancelled na, walang balance na dapat pa bayaran
-            // Free up the property
-            $booking->property->update(['status' => 'available']);
+            // SINASADYANG walang `properties.status = 'available'` dito.
+            // OCCUPANCY ang sinusubaybayan ng column na iyon, at ang
+            // check-in/check-out lang ang gumagalaw nito. `pending` o
+            // `confirmed` lang ang nakakansela (isCancellable() sa
+            // itaas) — hindi pa nakapasok ang guest, kaya walang
+            // pinapalaya ang cancellation. Ang nagagawa lang ng dating
+            // write ay burahin ang status na itinakda ng admin: mag-cancel
+            // habang `maintenance` ang villa at tahimik itong bumabalik
+            // sa `available`; mag-cancel ng booking sa susunod na buwan
+            // habang may naka-check-in at nagiging `available` ang
+            // okupadong villa. Parehong dahilan ng pag-alis nito sa
+            // Customer\HomeController::cancelBooking(). Ang tunay na
+            // availability ay galing sa Booking::hasConflict(), na hindi
+            // kailanman bumabasa sa column na ito.
         }
 
         if ($newStatus === 'checked_in') {
@@ -395,16 +448,15 @@ class BookingController extends Controller
 
         $booking->update($updates);
 
-        // ── Auto-compute at i-record ang refund (kung ang new status ay
-        //    "cancelled") — parehong policy at Payment-record pattern na
-        //    ginagamit sa Customer\HomeController::cancelBooking(), para
-        //    hindi mag-out-of-sync ang dalawang entry point na ito.
+        // ── I-record ang buong refund kapag ANG RESORT ang nag-cancel.
+        //    'pending' ito gaya ng lahat ng refund: naaprubahan na, pero
+        //    sa Payments page pa ipapadala ang pera.
         if ($newStatus === 'cancelled' && $refundAmount > 0) {
             $originalMethod = optional(
                 $booking->payments()->where('payment_type', '!=', 'refund')->latest()->first()
             )->payment_method ?? 'cash';
 
-            Payment::create([
+            $refundPayment = Payment::create([
                 'booking_id'     => $booking->id,
                 'amount'         => $refundAmount,
                 'payment_method' => $originalMethod,
@@ -414,7 +466,7 @@ class BookingController extends Controller
                 'status'         => 'pending',
                 'processed_by'   => Auth::id(),
                 'payment_date'   => today(),
-                'notes'          => "Auto-computed refund ({$refundPercentage}% policy) — cancelled by admin/staff.",
+                'notes'          => 'Full refund — booking cancelled by the resort.',
             ]);
 
             $booking->recalculateFinancials();
@@ -422,16 +474,30 @@ class BookingController extends Controller
             NotificationHelper::refundIssued(
                 $booking->fresh(),
                 $refundAmount,
-                "Booking cancelled by admin/staff ({$refundPercentage}% refund policy)"
+                'Booking cancelled by the resort (full refund)'
             );
         }
 
         // Notify guest
         $statusMessage = "Your booking {$booking->booking_ref} status has been updated to: " . ucfirst(str_replace('_', ' ', $newStatus));
+        $statusLink    = route('customer.bookings.show', $booking, false);
+
         if ($newStatus === 'cancelled') {
-            $statusMessage .= $refundAmount > 0
-                ? ". ₱" . number_format($refundAmount, 2) . " ({$refundPercentage}%) will be refunded per our cancellation policy."
-                : ". Based on our cancellation policy, this booking is not eligible for a refund.";
+            if ($refundPayment) {
+                $statusMessage .= '. We had to cancel it on our side, so the full ₱' . number_format($refundAmount, 2)
+                    . " you paid will be refunded. The money hasn't been sent yet — we'll notify you again once it's on its way.";
+
+                // Kailangan namin ng account na padadalhan. Kung wala ang
+                // tanong na ito, naghihintay ang guest ng perang walang
+                // mapupuntahan.
+                if ($refundPayment->needsRefundDestination()) {
+                    $statusMessage .= ' First, please tell us where to send it — open this to add your GCash, Maya, or bank account details.';
+                    $statusLink     = route('customer.refunds.destination', $refundPayment, false);
+                }
+            } elseif ($forfeited > 0) {
+                $statusMessage .= '. The ₱' . number_format($forfeited, 2)
+                    . ' you paid is non-refundable under our booking policy, so no refund will be sent.';
+            }
         }
 
         Notification::create([
@@ -439,14 +505,18 @@ class BookingController extends Controller
             'type' => 'in_app',
             'title'   => 'Booking Status Updated',
             'message' => $statusMessage,
-            'link'    => route('customer.bookings.show', $booking, false),
+            'link'    => $statusLink,
             'sent_at' => now(),
             'status'  => 'sent',
         ]);
 
         $logMessage = "Status changed from {$oldStatus} to {$newStatus} for {$booking->booking_ref}";
         if ($newStatus === 'cancelled') {
-            $logMessage .= ". Refund eligibility: {$refundPercentage}% (₱" . number_format($refundAmount, 2) . ").";
+            $logMessage .= match (true) {
+                $refundAmount > 0 => '. Cancelled by the resort — full refund of ₱' . number_format($refundAmount, 2) . ' recorded.',
+                $forfeited > 0    => ". Cancelled at the guest's request — no refund; ₱" . number_format($forfeited, 2) . ' paid is kept.',
+                default           => '. Nothing had been paid.',
+            };
         }
         if ($newStatus === 'checked_in' && $booking->balance_due > 0) {
             $logMessage .= ". DEFERRED BALANCE: ₱" . number_format($booking->balance_due, 2) . " — authorized by " . (Auth::user()->full_name ?? Auth::user()->name ?? 'admin') . ".";
@@ -475,9 +545,11 @@ class BookingController extends Controller
 
         $successMsg = "Booking status updated to " . ucfirst(str_replace('_', ' ', $newStatus)) . ".";
         if ($newStatus === 'cancelled') {
-            $successMsg .= $refundAmount > 0
-                ? " ₱" . number_format($refundAmount, 2) . " ({$refundPercentage}%) refund recorded."
-                : " No refund — this booking is outside the eligible window of the cancellation policy.";
+            $successMsg .= match (true) {
+                $refundAmount > 0 => ' Full refund of ₱' . number_format($refundAmount, 2) . ' recorded — send it from the Payments page.',
+                $forfeited > 0    => ' No refund — the ₱' . number_format($forfeited, 2) . ' paid is non-refundable.',
+                default           => '',
+            };
         }
         if ($newStatus === 'checked_in' && $booking->balance_due > 0) {
             $successMsg .= " ⚠️ Outstanding balance of ₱" . number_format($booking->balance_due, 2) . " — deferred until check-out.";

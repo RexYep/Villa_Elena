@@ -555,9 +555,18 @@
             <i class="bi bi-cash-stack me-2"></i>
             <strong>Overpaid by ₱{{ number_format($booking->overpaidAmount(), 2) }}.</strong>
             This booking has received ₱{{ number_format($booking->amount_paid, 2) }} against a total of
-            ₱{{ number_format($booking->total_amount, 2) }} — usually a sign the guest was charged twice.
-            Check the payments below and return the excess through the
-            <a href="{{ route('admin.payments.index') }}">Payments page</a>.
+            ₱{{ number_format($booking->total_amount, 2) }}.
+            {{-- Dalawa na ang sanhi nito mula v7.52, at magkasalungat ang
+                 dapat gawin sa bawat isa. --}}
+            @if ($booking->reschedule_count > 0)
+                This booking was rescheduled, so the likely cause is a move to a cheaper slot — that
+                difference is <strong>non-refundable</strong> and the guest agreed to it. Only if the payments
+                below show a double charge should the excess be returned through the
+                <a href="{{ route('admin.payments.index') }}">Payments page</a>.
+            @else
+                This is usually a sign the guest was charged twice. Check the payments below and return the
+                excess through the <a href="{{ route('admin.payments.index') }}">Payments page</a>.
+            @endif
         </div>
     @endif
     @if (session('error'))
@@ -1091,6 +1100,31 @@
                                 style="width:100%;border:1.5px solid var(--border);border-radius:8px;padding:10px;font-size:13px;font-family:'DM Sans',sans-serif;resize:none;"
                                 placeholder="Enter reason..." required></textarea>
                         </div>
+                        {{-- Ang refund ay nakadepende sa kung SINO ang
+                             nagpasya, at hindi iyon mahuhulaan ng sistema —
+                             kaya walang naka-preselect. Ang server din ang
+                             tumatanggi kapag walang napili
+                             (BookingController::updateStatus()). Hindi ito
+                             itinatanong kapag wala pang naibabayad. --}}
+                        @if ($booking->amount_paid > 0)
+                            <div style="margin-bottom:16px;">
+                                <label style="font-size:13px;font-weight:600;display:block;margin-bottom:6px;">Who is
+                                    cancelling? *</label>
+                                <label style="display:flex;gap:8px;align-items:flex-start;font-size:13px;padding:10px;border:1.5px solid var(--border);border-radius:8px;margin-bottom:6px;cursor:pointer;">
+                                    <input type="radio" name="cancel_initiator" value="guest" required style="margin-top:3px;">
+                                    <span><strong>The guest asked to cancel</strong><br>
+                                        <span style="color:#64748b;">No refund. The
+                                            ₱{{ number_format($booking->amount_paid, 2) }} paid is non-refundable.</span></span>
+                                </label>
+                                <label style="display:flex;gap:8px;align-items:flex-start;font-size:13px;padding:10px;border:1.5px solid var(--border);border-radius:8px;cursor:pointer;">
+                                    <input type="radio" name="cancel_initiator" value="resort" required style="margin-top:3px;">
+                                    <span><strong>The resort is cancelling</strong><br>
+                                        <span style="color:#64748b;">Full refund of
+                                            ₱{{ number_format($booking->amount_paid, 2) }} is recorded, to be sent from
+                                            the Payments page.</span></span>
+                                </label>
+                            </div>
+                        @endif
                         <div style="display:flex;gap:8px;">
                             <button type="button" class="btn btn-light w-50" data-bs-dismiss="modal">Keep
                                 Booking</button>

@@ -32,11 +32,11 @@
 
 /* ── Grid ── */
 .grid-card{background:#fff;border-radius:14px;border:1px solid var(--border);overflow:hidden;}
-.grid-head{display:grid;grid-template-columns:150px 1fr 1fr;
+.grid-head{display:grid;grid-template-columns:150px repeat(var(--slot-cols,2),1fr);
     border-bottom:1px solid var(--border);background:#f8fafc;}
 .grid-head div{padding:12px 16px;font-size: 13px;font-weight:700;text-transform:uppercase;
     letter-spacing:.5px;color:var(--muted);}
-.grid-row{display:grid;grid-template-columns:150px 1fr 1fr;border-bottom:1px solid #f1f5f9;}
+.grid-row{display:grid;grid-template-columns:150px repeat(var(--slot-cols,2),1fr);border-bottom:1px solid #f1f5f9;}
 .grid-row:last-child{border-bottom:none;}
 .grid-row.today{background:#fffdf5;}
 
@@ -78,6 +78,14 @@
 .slot-box.past{background:#f8fafc;border-color:#e2e8f0;}
 .slot-box.past .slot-icon{background:#e2e8f0;color:#94a3b8;}
 .slot-box.past .slot-state{color:#94a3b8;}
+
+/* Hindi inaalok sa petsang ito — mas mapurol pa kaysa "past", dahil ito
+   ang cell na dapat hindi tumatawag ng pansin. Dashed ang border para
+   maiba agad sa isang tunay na estado (bakante / booked / sarado). */
+.slot-box.unoffered{background:#fcfcfd;border-style:dashed;border-color:#e2e8f0;}
+.slot-box.unoffered .slot-icon{background:#f1f5f9;color:#cbd5e1;}
+.slot-box.unoffered .slot-state{color:#b6c2cf;}
+.slot-box.unoffered .slot-sub{color:#cbd5e1;font-style:italic;}
 
 .hint{font-size: 14px;color:var(--muted);margin-top:14px;text-align:center;}
 

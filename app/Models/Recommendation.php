@@ -292,13 +292,14 @@ class Recommendation extends Model
         return round((float) $this->baseline_projection + (float) $this->expected_impact, 2);
     }
 
+    /**
+     * Hinahango sa Booking::SLOTS — tingnan ang kaparehong tala sa
+     * Discount::getSlotLabelAttribute(). Ang "All slots" ay para sa NULL
+     * (walang tinatanging slot ang rekomendasyon).
+     */
     public function getSlotLabelAttribute(): string
     {
-        return match ($this->slot) {
-            'day' => Booking::SLOTS['day']['label'] ?? 'Day slot',
-            'night' => Booking::SLOTS['night']['label'] ?? 'Night slot',
-            default => 'Both slots',
-        };
+        return Booking::SLOTS[$this->slot]['label'] ?? 'All slots';
     }
 
     public function getWindowLabelAttribute(): string

@@ -180,7 +180,22 @@ class MaintenanceWindowAdvisor extends Advisor
                 return null;
             }
 
-            foreach (array_keys(Booking::SLOTS) as $slot) {
+            // Ang tanong dito ay "walang-wala bang nangyayari sa petsang
+            // ito", at ang Day + Night ang sumasaklaw sa buong araw
+            // (8AM–5PM at 7PM–6AM). Sapat na iyon kahit may 22-oras na
+            // booking: ang isang 22-oras na nagsimula kahapon ay
+            // pumapatong sa Day ngayon, kaya nahuhuli ito ng Day.
+            //
+            // TANDAAN: ang pagsama ng 22-Hours dito (kapag naipresyo na)
+            // ay nagpapahigpit nang bahagya — nangangailangan din na
+            // bakante ang umaga ng KINABUKASAN, dahil doon umaabot ang
+            // slot na iyon. Bookable-slots ang ini-loop para tumugma sa
+            // ibang advisor; kung magiging masyadong mahigpit ito, dito
+            // ang tamang lugar para paliitin sa Day + Night.
+            // Ang mga slot na maaaring humawak ng booking SA PETSANG ITO.
+            // Sa isang petsang 22-oras lamang, ang tanong ay tungkol sa
+            // 22-oras — walang Day/Night doon na maaaring okupado.
+            foreach ($demand->slotsOfferedOn($d) as $slot) {
                 if ($demand->isOccupied($d, $slot)) {
                     return null;
                 }

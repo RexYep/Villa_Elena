@@ -2705,7 +2705,16 @@
         // petsang tiningnan ng bisita. Ang availability mismo ay ipinapakita
         // ng showcase sa ibaba, na $properties ang batayan.
         $heroPromo = $promos->first();
-        $heroSlot = in_array(request('slot'), array_keys(\App\Models\Booking::SLOTS)) ? request('slot') : 'day';
+        // Ang mga slot na TUNAY na maibubook — hindi Booking::SLOTS. Ang isang
+        // slot na wala pang presyo ay nakadepinisyon na pero hindi pa
+        // ipinagbibili, at ang landing page ay hindi dapat mag-anunsyo ng
+        // isang bagay na tatanggihan ng quoteFor(). Iisang listahan para sa
+        // hero dropdown, sa highlight text at sa footer sa ibaba.
+        $bookableSlots = \App\Models\Booking::bookableSlotKeys($featuredVilla ?? null);
+        $bookableSlotDefs = collect($bookableSlots)
+            ->mapWithKeys(fn($k) => [$k => \App\Models\Booking::SLOTS[$k]])
+            ->all();
+        $heroSlot = in_array(request('slot'), $bookableSlots) ? request('slot') : ($bookableSlots[0] ?? null);
         $heroPhoto = $featuredVilla?->primaryImage?->url;
         $heroBookUrl =
             $featuredVilla && $allowOnlineBooking
@@ -2834,9 +2843,14 @@
                 </div>
                 <div class="book-field">
                     <label for="heroSlot">Slot</label>
+                    {{-- Ang mga opsyon ay sinasala sa piniling petsa ng maliit na
+                         script sa ibaba ng form na ito: ang 22-oras na slot ay
+                         inaalok lang sa mga petsang pinili ng may-ari, at sa mga
+                         petsang iyon ay ito lang ang inaalok. --}}
                     <select id="heroSlot" name="slot">
-                        @foreach (\App\Models\Booking::SLOTS as $key => $slotInfo)
-                            <option value="{{ $key }}" @selected($heroSlot === $key)>{{ $slotInfo['label'] }}
+                        @foreach ($bookableSlotDefs as $key => $slotInfo)
+                            <option value="{{ $key }}" data-slot-option="{{ $key }}"
+                                @selected($heroSlot === $key)>{{ $slotInfo['label'] }}
                             </option>
                         @endforeach
                     </select>
@@ -2856,6 +2870,41 @@
                 </button>
                 <p class="book-bar-note">One booking takes the whole villa, so a slot is either open or it isn't.</p>
             </form>
+            <script>
+                // Kaparehong panuntunan ng Booking::slotsOfferedOn(): window muna
+                // at EKSKLUSIBO, at kung wala, ang mga hindi-windowed na slot.
+                (function () {
+                    const WINDOWED = @json(\App\Models\Booking::windowedSlotKeys());
+                    const WINDOW_DATES = @json(\App\Models\Booking::slotWindowDates($featuredVilla ?? null));
+                    const ALL_KEYS = @json($bookableSlots);
+                    const dateEl = document.getElementById('heroCheckin');
+                    const slotEl = document.getElementById('heroSlot');
+                    if (!dateEl || !slotEl) return;
+
+                    function offeredOn(d) {
+                        for (const s of WINDOWED) {
+                            if ((WINDOW_DATES[s] || []).includes(d)) return [s];
+                        }
+                        return ALL_KEYS.filter(k => !WINDOWED.includes(k));
+                    }
+
+                    function sync() {
+                        if (!dateEl.value) return;
+                        const offered = offeredOn(dateEl.value);
+                        let keep = false;
+                        slotEl.querySelectorAll('[data-slot-option]').forEach(opt => {
+                            const on = offered.includes(opt.dataset.slotOption);
+                            opt.hidden = !on;
+                            opt.disabled = !on;
+                            if (opt.selected && on) keep = true;
+                        });
+                        if (!keep && offered.length) slotEl.value = offered[0];
+                    }
+
+                    dateEl.addEventListener('change', sync);
+                    sync();
+                })();
+            </script>
 
             <ul class="hero-trust">
                 @if ($guestRating > 0)
@@ -2880,7 +2929,7 @@
     {{-- ══════════════════════════════════
      SEASONAL PROMOS
 ══════════════════════════════════ --}}
-    @if ($promos->isNotEmpty())
+    @if ($promos->isNotEmpty() || $returningPromoTeaser)
         <section class="promo-band" id="promos">
             <div class="promo-band-inner">
                 @foreach ($promos as $promo)
@@ -2902,11 +2951,61 @@
                                 @if ($promo->applies_to !== 'all')
                                     &middot; {{ $promo->slot_label }}
                                 @endif
+                                @if ($promo->isReturningOnly())
+                                    &middot; {{ $promo->guest_scope_label }}
+                                @endif
 
                             </div>
                         </div>
                     </a>
                 @endforeach
+
+                {{-- Lumalabas lang ito kapag may buhay na promong para sa
+                     mga regular na customer na HINDI makukuha ng nakatingin
+                     ngayon. Walang pigura ng bawas dito: nakadepende iyon sa
+                     promo at sa petsa, at lumalabas sa presyo mismo kapag
+                     karapat-dapat na siya. Ang manahimik na lang ay mas
+                     malala — ito ang tanging bagay na umaabot sa isang
+                     regular na hindi pa naka-login.
+
+                     DALAWANG MAGKAIBANG DAHILAN, dalawang magkaibang
+                     sinasabi. Ang "sign in" ay tama LANG sa hindi pa
+                     naka-sign-in; sa isang naka-sign-in nang guest na kulang
+                     pa sa threshold, ang sign-in ay walang kinalaman at ang
+                     pagsabi niyon ay mukhang sira ang sistema. --}}
+                @if ($returningPromoTeaser)
+                    {{-- Walang one-line na php directive dito: may blokeng
+                         anyo nito ang view na ito, at pinagpapares sila ng
+                         compiler (tingnan ang CLAUDE.md). Diretsong array
+                         access na lang. --}}
+                    @if ($returningPromoTeaser['state'] === 'guest')
+                        <a href="{{ route('login') }}" class="promo-card">
+                            <div class="promo-badge"><i class="bi bi-arrow-repeat"></i></div>
+                            <div>
+                                <h4>Stayed with us before?</h4>
+                                <p>Returning guests get an automatic discount. Sign in and it shows up in your price —
+                                    no code to enter.</p>
+                                <div class="promo-meta">Sign in to see your rate</div>
+                            </div>
+                        </a>
+                    @else
+                        {{-- Walang link sa sign-in: naka-sign in na siya. Ang
+                             tanging bagay na magpapabago nito ay ang pananatili. --}}
+                        <div class="promo-card" style="cursor:default;">
+                            <div class="promo-badge"><i class="bi bi-stars"></i></div>
+                            <div>
+                                <h4>You're {{ $returningPromoTeaser['need'] - $returningPromoTeaser['have'] }}
+                                    stay{{ $returningPromoTeaser['need'] - $returningPromoTeaser['have'] === 1 ? '' : 's' }} away</h4>
+                                <p>Our returning-guest discount applies automatically once you've completed
+                                    {{ $returningPromoTeaser['need'] }} stay{{ $returningPromoTeaser['need'] === 1 ? '' : 's' }} with us. You're at
+                                    {{ $returningPromoTeaser['have'] }}.</p>
+                                <div class="promo-meta">
+                                    Counted when a stay is checked out — nothing to claim
+                                </div>
+                            </div>
+                        </div>
+                    @endif
+                @endif
             </div>
         </section>
     @endif
@@ -2931,7 +3030,7 @@
                     {{-- Joined in PHP: a Blade loop leaves whitespace around the
                          separators, which shows up as "5:00 PM) , or". --}}
                     <p class="highlight-text">
-                        {{ implode(', or ', array_column(\App\Models\Booking::SLOTS, 'label')) }}.
+                        {{ implode(', or ', array_column($bookableSlotDefs, 'label')) }}.
                     </p>
                 </div>
             </div>
@@ -3008,7 +3107,7 @@
                     $showAmenities = array_slice($amenities ?? [], 0, 6);
                     $checkin = request('checkin');
                     $guests = request('guests', 2);
-                    $slot = in_array(request('slot'), array_keys(\App\Models\Booking::SLOTS)) ? request('slot') : 'day';
+                    $slot = in_array(request('slot'), $bookableSlots) ? request('slot') : ($bookableSlots[0] ?? null);
                 @endphp
 
                 <div class="villa-showcase reveal">
@@ -3439,7 +3538,7 @@
                         <div>
                             <div class="location-item-label">Booking Slots</div>
                             <div class="location-item-value">
-                                @foreach (\App\Models\Booking::SLOTS as $slotInfo)
+                                @foreach ($bookableSlotDefs as $slotInfo)
                                     {{ $slotInfo['label'] }}@if (!$loop->last)
                                         <br>
                                     @endif

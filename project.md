@@ -1,7 +1,7 @@
 # Villa Elena Private Rental Resort
 ## Resort Management System — Project Documentation
 
-**Version:** 7.44
+**Version:** 7.52
 **Stack:** PHP 8.2 / Laravel 12 / MySQL 8 / Bootstrap 5
 **Local URL:** `http://127.0.0.1:8000` (`php artisan serve`) or `http://localhost:8000` (Docker — see v5.3)
 **Live URL:** `https://villa-elena.onrender.com` (Render, free tier — testing only, not yet handed to real guests)
@@ -185,6 +185,1636 @@ through `user_id` and nothing denormalises their name into a booking row.
 from Task 11 · F5 get dropped at the same time — they are empty and reserved
 (`users.id_type` / `users.id_number`, see v7.40), and a schema change for erasure
 is the natural moment to remove them rather than a migration of their own.
+
+---
+
+## What Changed in v7.52 (Read This First)
+
+### All payments are non-refundable when the guest cancels
+
+The owner's booking policy says *"Deposit is NON-REFUNDABLE"*, and the owner's
+answer for a payment in full is the same. The code contradicted both. It refunded
+by **when** the guest cancelled — 100% within 24 hours of booking or 7+ days
+out, 50% at 3–6 days, 0% under 3 — computed on `amount_paid`. Nothing knew what
+a deposit was, so a 50% deposit cancelled eight days out came back in full.
+
+The question is no longer *when* but **who**:
+
+| Who cancels | Refund |
+|---|---|
+| The guest (self-service, or asked an admin to) | **₱0** — deposit or full payment, any time, no grace period |
+| The resort (maintenance, weather, …) | **everything paid** — unchanged promise in Terms §9 |
+
+`Booking::calculateRefundPercentage()` and `calculateRefundAmount()` are
+**deleted**. What replaces them:
+
+- **`Booking::CANCELLATION_POLICY`** — the one guest-facing sentence. Terms §9,
+  the booking form's policy box, the checkout page, the booking-detail cancel
+  panel, the admin Settings page and the chatbot prompt all print this constant.
+  Five places used to carry their own copy and three said different things.
+- **`Booking::resortCancellationRefund()`** — `amount_paid`, which
+  `recalculateFinancials()` already keeps net of earlier refunds.
+
+#### The refund machinery is NOT removed
+
+Send Money, `refund_destinations`, `refund_transfers`, the Payments page and
+`PaymentController::refund()` are untouched. Three refunds have nothing to do
+with a guest cancelling: the resort cancels, a guest is charged twice or
+overpays (v7.1), and a payment lands after the slot was taken
+(`confirmOnFirstPayment()`). Deleting the feature would have broken all three.
+
+#### Guest cancel — `Customer\HomeController::cancelBooking()`
+
+No refund `Payment` row is created. `amount_paid` stays on the booking; it is the
+resort's money and reports still count it. Because cancelling now **costs** the
+guest what they paid and cannot be undone, a paid booking requires
+`accept_no_refund` — validated on the server (`accepted`), not just a `required`
+checkbox. An unpaid booking cancels exactly as before, with no box. The panel
+shows the peso amount that will not come back and points at Reschedule first.
+
+`payment_status` is left as it was (`partial` for a deposit). That is the same
+thing the old 0% tier did — no `recalculateFinancials()` call on a cancel that
+moves no money — and was deliberately not changed here.
+
+#### Admin cancel — `Admin\BookingController::updateStatus()`
+
+This path applied the **guest** tiers even when the resort was the one
+cancelling, so a resort-side cancel three days out refunded 50% against a Terms
+page promising 100%. The modal now asks **who is cancelling** —
+`cancel_initiator` = `guest` (no refund) or `resort` (full refund row, `pending`,
+sent from the Payments page as always). **Nothing is preselected and the server
+refuses a paid booking with no choice**: a wrong guess is either money returned
+that shouldn't be or money withheld that was promised. Not asked when nothing
+was paid. The resort-side notification now also carries the refund-destination
+prompt, which this path never had.
+
+No migration: `bookings.cancelled_by` stays `admin` for both choices; the
+StaffLog line records which one it was.
+
+#### Rescheduling to a cheaper slot no longer refunds the difference
+
+`Customer\BookingController::update()` used to turn `amount_paid − newTotal`
+into a `pending` refund automatically. Under a no-refund policy that makes
+rescheduling a way to take money back out. Now:
+
+- If the new total is below what was paid, the move is **stopped before
+  `reserveSlot()`** and the guest is told the exact difference and asked to
+  confirm (`accept_no_refund`). It is the `Payment::manualEntryProblem()` split
+  again — suspicious, not wrong. It has to come *before* the move: a reschedule
+  can't be undone and uses up one of `MAX_RESCHEDULES`. The reschedule form shows
+  no price, so the server is the only place that knows.
+- A deposit-only payer moving cheaper has no excess and is asked nothing; they
+  just owe less.
+- **The excess would trip `flagOverpayment()`**, whose alert says *"usually means
+  the guest was charged twice … return the excess"* — the opposite of what the
+  admin should do. So `overpayment_notified_at` is stamped before
+  `recalculateFinancials()`, and the "Booking Rescheduled" admin notification
+  carries the real explanation (*"not a double charge"*). The admin booking
+  page's overpaid banner branches on `reschedule_count > 0` for the same reason.
+  The admin can still refund by hand if the owner decides to.
+
+#### Wording, the chatbot, and one dead setting
+
+- **Terms**: §7 states the deposit is non-refundable; §9's 100/50/0 table is
+  replaced by the policy constant and four bullets; §10 and §11 reworded;
+  `LEGAL_LAST_UPDATED` = 2026-10-03. The checkout page shows the policy directly
+  above the Pay button — the last moment before money moves.
+- **`cancellation_hours` is deleted** (seeder, Settings validator and save list,
+  Settings form, chatbot). It enforced nothing. Its only reader was the chatbot,
+  which told guests *"free cancellation up to 48 hours before check-in"* — never
+  true, even under the tiers. Existing databases still have the row; nothing
+  reads it.
+- **The chatbot prompt states the exceptions and rescheduling too**, not just
+  "non-refundable". With only the bare rule, the natural answer to "what if
+  *you* cancel?" is "still no refund" — and under v7.20 a denial is a claim.
+- **`deposit_percentage` defaults were 30 in three places** (seeder, Settings
+  form, chatbot) and 50 in the three that charge money. All are 50 now, matching
+  the owner's policy. Only a fresh install was affected.
+
+#### `RESCHEDULE_CUTOFF_DAYS` stays 7, for a different reason
+
+It was set to match the 100% tier, to stop a guest dodging a late-cancel penalty
+by moving the booking far out and cancelling from there (v5.5). That loophole no
+longer exists. The cutoff remains because a slot freed late is a slot the resort
+cannot resell. With rescheduling now the guest's only remedy, loosening it is the
+owner's call — the constant's docblock says so.
+
+#### Applies to existing bookings
+
+Not grandfathered. The live site has not been handed to real guests, so no
+booking was made in reliance on the old tiers.
+
+#### Admin cancel no longer resets the villa to `available`
+
+`Admin\BookingController::updateStatus()` wrote
+`properties.status = 'available'` on every cancel. Only a `pending` or
+`confirmed` booking can be cancelled, so the guest was never in the villa and
+the cancel had nothing to free. What the write did do was erase a status someone
+had set: cancel any booking while the villa is at `maintenance` and it silently
+became `available`; cancel next month's booking while a guest is checked in and
+the occupied villa became `available`. The write is removed — the same fix the
+guest path already had. `properties.status` is moved only by check-in and
+check-out; slot availability comes from `Booking::hasConflict()`, which never
+read that column. Verified for `maintenance`, `occupied` and `available`: the
+booking cancels, its slot is released, the villa status is unchanged.
+
+#### Verification
+
+`refund_policy.php` (scratchpad): 69 assertions in a rolled-back transaction
+against the dev DB, including real renders of the booking page, reschedule form,
+checkout, Terms, admin booking page and Settings. Test suite unchanged at 313
+passed / 6 skipped / 1 failed (the documented `ExampleTest` SQLite failure).
+
+---
+
+## What Changed in v7.51
+
+### A promo announcement is a promise, and the promo can change underneath it
+
+Found by the owner: "Undas Promo" was announced with no end date, the
+notification said so — *"20% OFF on the villa rate — Anytime — no end date."* —
+and the promo was then edited to end on Oct 6. The guests' bells still said it
+never ends.
+
+The notification is **stored text**. It does not change when the promo does.
+Nobody is ever overcharged (`quoteFor()` always reads the live row); the damage
+is a guest relying on terms the resort no longer offers. And it was broader than
+the end date: the discount, the slot and the completed-stays requirement are
+all baked into the same string.
+
+Two changes. The owner chose to keep the freedom to change an announced promo,
+so the rule is **"a change is never silent"**, not "an announced promo can't be
+narrowed".
+
+#### 1. Guest-facing text never says "no end date"
+
+It was untrue even before any edit: an undated promo can be switched off at any
+moment, so "no end date" promised something the system had no way to keep.
+`Discount::$guest_window_phrase` is the guest wording — *"until further
+notice"*, *"for stays until Nov 05, 2026"*, and the two start-date forms.
+`window_label` ("Anytime — no end date") stays for the admin list and staff log,
+where it is accurate: the admin knows they hold the end. Same split as
+`guest_scope_label` / `guest_scope_note`.
+
+The chatbot prompt had the identical overclaim (`'ongoing, no end date'`) and
+now uses the same accessor, with an explicit line that an undated promo is not
+permanent.
+
+#### 2. Changing an announced promo tells the guests who were told
+
+`PromotionController::notifyPromoChange($old, $current)`, called from
+`update()`, `toggle()` and `destroy()`:
+
+| What happened | Guests get |
+|---|---|
+| A field in `Discount::MATERIAL_FIELDS` changed | **Promo Update** — one sentence per change, each with the previous value |
+| Switched off, or deleted, while still usable | **Promo Ended** — and that existing bookings keep their price |
+| Switched back on | **Promo Is Back** — restating the current terms |
+
+`MATERIAL_FIELDS` is `type`, `value`, `start_date`, `expiry_date`,
+`applies_to`, `guest_scope`, `min_completed_bookings`. **`label` and
+`description` are deliberately not in it**, so the v6.0 rule — fixing a typo
+does not re-blast — still holds exactly. A change to the money or the dates is
+not a typo; it is a different offer.
+
+Rules that must survive:
+
+- **The audience is the one under the OLD terms** — they are who was told.
+  Raise the requirement from 5 stays to 8 and the guest with 6 is the one who
+  most needs to hear it, and is no longer in the new audience. (Only "Is Back"
+  uses the current terms: that is a fresh offer to whoever qualifies now.)
+- **Nothing is sent for a promo that was never announced**, or when nothing
+  changes from the guest's side — e.g. switching off a promo already past its
+  expiry.
+- **A first announcement made from the edit form is not also an "update".**
+  `$old->notified_at` is null there, so only the announcement goes out, carrying
+  the new terms.
+- Sent with `broadcast: false`, like the announcement, and logged as
+  `announced_promo_change` with the full text.
+- The sentences are built on the model (`guestFacingChangesFrom()`) from the
+  same label accessors the original announcement used, so "previously …" matches
+  what the guest actually read.
+
+The edit form's "Already announced" note and the list's toggle tooltip now say
+that guests will be notified — switching a promo off is one click, and it is no
+longer a silent one.
+
+The four notifications already sent for the real Undas Promo were left as they
+were, at the owner's request.
+
+Verified with 37 assertions (wording in all four date shapes; cosmetic edits
+silent; the reported case; value, threshold, scope and slot changes; ended /
+back / deleted; never-announced and already-expired promos silent; real renders
+of the form and the list), plus the 144 earlier ones still passing.
+
+### v7.51 Schema Changes
+
+None.
+
+---
+
+## What Changed in v7.50 (Read This First)
+
+### Three bugs found by actually using the v7.49 loyalty discount
+
+The owner created a returning-guest promo needing **5** completed stays and
+announced it. Three things went wrong, found in minutes of real use that 94
+passing assertions had not covered. Two were straight omissions in v7.49.
+
+#### 1. The announcement ignored `guest_scope`
+
+`PromotionController::broadcastToCustomers()` blasted
+`role = customer AND status = 1` with no eligibility filter. That was correct
+in v6.0, when every promo applied to everyone. v7.49 taught the *who* axis to
+pricing, to the landing banner and to the chatbot — **and not to the
+announcement channel.**
+
+Measured on the real promo: 8 guests notified, **4 of them ineligible** (2, 0,
+4 and 1 completed stays against a threshold of 5). It is the worst shape a bug
+can take here — a notification promising a discount to someone who cannot have
+it, and nothing to see when they tap it.
+
+The audience now goes through `User::scopeWithCompletedStays($min)`, a
+`whereHas(..., '>=', $min)` sub-select, so it stays **one** query however many
+guests exist — `chunkById()` is there precisely so the table is never held in
+memory at once. The count and the audience now share
+`User::COMPLETED_STAY_STATUS`, so "what counts as a completed stay" is stated
+in exactly one place; the bug was two places answering differently.
+
+Also: the title and body now say *why* the guest is getting it
+("Returning-Guest Offer: …", "our thank-you for returning guests"). Without
+that, a targeted discount reads as a general one and gets passed to a friend
+who cannot use it.
+
+#### 2. The landing-page teaser told a signed-in guest to sign in
+
+`$returningPromoTeaser` was a **bool**. It knew a loyalty promo existed and
+that the viewer wasn't getting it — it never asked *why*. Both exclusions
+rendered the same card, so a signed-in guest three stays short was told
+*"Sign in and it shows up in your price."*
+
+It is now `Discount::returningTeaserFor(?User)`, returning **three states**,
+and it cannot go back to a bool because the two exclusions need different
+words:
+
+| State | Who | What they're told |
+|---|---|---|
+| `null` | no live promo, or they already qualify | nothing — they have a real promo card |
+| `guest` | not signed in | "Stayed with us before?" + sign-in |
+| `short` | signed in, below the threshold | "You're 3 stays away" — **no sign-in CTA** |
+
+`need` is the **lowest unmet** threshold, not the highest: that's the next one
+actually reachable. Quoting a higher one would advertise a tier they may never
+hit. The figures are from our own data, so stating them satisfies the v7.20
+grounding rule; the discount's *size* still isn't stated.
+
+The chatbot's note had the identical defect and got the same three-way split —
+its `short` branch explicitly tells Elena the guest **is** already signed in,
+so she cannot repeat the bad advice.
+
+#### 3. The double announcement was a double form submit, not a logic bug
+
+The audit trail settled it: two `created_promo` entries for **two different
+promos** (#28 at 20:43:10, #29 at 20:43:21), each announced to the same 8
+guests. `notified_at` could not help — it guards one promo row, and there were
+two. The duplicate promo was then deleted, but **deleting a promo does not
+retract notifications already sent.**
+
+Why it was double-clicked: the first blast took ~12 seconds.
+`NotificationCreated` is `ShouldBroadcast` and `QUEUE_CONNECTION=sync`, so
+every notification made a **blocking** HTTP call to Pusher inside the request.
+8 guests ≈ 12s; 500 would be a timeout.
+
+Three changes, because one wasn't enough:
+
+- **`NotificationHelper::notifyGuest(..., broadcast: false)`** for bulk blasts
+  only. The trade-off is explicit: a guest with the portal open gets no toast
+  for an announcement, and the bell picks it up on the next page load. Right
+  for marketing; **never** use it for payment, booking or issue-report
+  notifications, where realtime is the whole point.
+- **`Discount::duplicateProblem()`** — follows the
+  `Payment::manualEntryProblem()` precedent: an identical promo created in the
+  last 10 minutes is *suspicious*, not *wrong*, so it blocks and asks rather
+  than refusing. "Create it anyway" confirms. 10 minutes covers a double-click
+  or a page resubmit without blocking a promo genuinely remade tomorrow.
+- **Disable-on-submit** on the promo form. An affordance only — the server
+  guard is the real barrier, same reasoning as `policies_accepted`.
+
+And a fourth, latent: **`notify()` never checked `notified_at`.**
+`maybeNotifyCustomers()` did, but the manual Announce route called
+`broadcastToCustomers()` directly, and the button only disappears once the
+response renders — so two fast clicks both went through. Not what bit the
+owner, but the same class of hole.
+
+#### Data repair
+
+The 16 mis-sent rows were cleaned up in one transaction, logged as
+`cleaned_promo_notifications`: the 4 ineligible guests lost both copies, the 4
+eligible guests kept **one** each (they do qualify and should be told), and
+every duplicate went. 12 deleted, 4 kept.
+
+#### What the tests had missed
+
+94 assertions passed while all three bugs shipped. The gap is instructive: they
+all tested *pricing* eligibility, and the announcement is a different consumer
+of the same rule. The teaser was asserted as "is it shown?", never "does it say
+the right thing to this particular viewer" — a bool is hard to be wrong about
+and easy to be wrong *with*. 49 new assertions cover the audience query against
+the pricing set, both teaser states, the duplicate guard, and a literal
+double-`store()` call.
+
+### v7.50 Schema Changes
+
+None. Every fix is behaviour.
+
+---
+
+## What Changed in v7.49 (Read This First)
+
+### Discounts for regular customers
+
+The owner gives a discount to guests who keep coming back. Until now the
+`discounts` table only knew **when** (the check-in date window) and **which
+slot** (`applies_to`). It now also knows **who**.
+
+Two columns on `discounts` carry it:
+
+| Column | Meaning |
+|---|---|
+| `guest_scope` | `all` (every guest — the default, and what every existing promo is) or `returning` |
+| `min_completed_bookings` | how many finished stays qualify a guest; read only when the scope is `returning` |
+
+**This is deliberately not a new table.** A regular-customer discount is the
+same object as a seasonal promo with one extra eligibility test, so it reuses
+the date window, the slot match, `used_count`, the `bookings.discount_id` FK,
+the admin CRUD and `Discount::bestFor()`'s competition. A separate loyalty
+table would have had to duplicate all of it, and would have needed its own
+answer for what happens when a loyalty discount and a seasonal promo both
+apply.
+
+Every pre-existing row defaults to `all`, so migrating changes no price.
+
+#### Three questions, one place each
+
+- `Discount::isValidOn($checkIn, $slot, $guest)` — the whole eligibility test,
+  both axes.
+- `Discount::isEligibleGuest($guest)` — the *who* axis alone.
+- `User::completedStayCount()` — how many stays the guest has actually
+  finished. Memoised per instance.
+
+**Only `checked_out` bookings count.** Each exclusion matters:
+`pending`/`confirmed` would let anyone become a "regular" by creating bookings
+they never pay for — a discount bought with nothing; `checked_in` is a stay not
+yet finished; `cancelled`/`no_show` never happened.
+
+#### The default is to fail closed, and that is load-bearing
+
+`Property::quoteFor($checkin, $slot, $guest)` takes the guest as a third,
+optional argument, and `$guest = null` means a `returning` promo does **not**
+apply.
+
+So a call site that forgets to pass the guest charges the **list price**. That
+is the safe direction. The opposite default — assume eligible — would show a
+low price in the preview and charge more at submit, which is the exact failure
+the single pricing choke point exists to prevent. A larger bill can never be a
+surprise; an unexpected discount can.
+
+Three contexts pass `null` on purpose, and are commented as such:
+
+| Context | Why |
+|---|---|
+| `Portal\PortalController::pricePreview()` | the route is unauthenticated; an anonymous visitor gets the list price, and sees the lower one once signed in |
+| `Staff\FrontDeskController::buildSlotGrid()` | a date×slot table with no particular guest in it |
+| `Prescriptive\DemandModel::quote()` | forecasting is about a date, not a person — and it keeps the `date\|slot` cache key correct |
+
+The front desk reading a price off `/staff/availability` to a regular on the
+phone therefore quotes the list price. The walk-in form, where a guest is
+actually selected, shows the real number — both AJAX quote endpoints
+(`GET /admin/bookings/quote`, `GET /staff/walkin/quote`) now accept `user_id`
+and re-quote when the selection changes.
+
+#### Competing, not stacking
+
+A loyalty promo enters the existing `bestFor()` sort unchanged: **largest peso
+discount wins**, tie-broken by highest `id`. A regular customer during a
+seasonal promo gets the bigger of the two, not both.
+
+That was a decision, confirmed with the owner. Stacking would need a
+`booking_discounts` pivot, because `bookings.discount_id` is one FK,
+`discount_amount` is one number and `used_count` is one counter — the entire
+promo accounting rests on that one-discount invariant.
+
+#### Advertising it without lying to anyone
+
+`Discount::publicActive($viewer)` drops a `returning` promo when the viewer
+isn't eligible. Without that, an anonymous visitor would read "20% OFF" on the
+landing page and be charged full price.
+
+But silence creates a *second* bug, against the v7.20 grounding rule that
+**a denial is a claim too**: with only a loyalty promo live, Elena would tell
+an anonymous regular "There are NO promos running right now," which is false
+for them. So `Discount::returningOnlyExists()` drives one extra line — a
+returning-guest discount exists, it applies automatically once signed in — with
+no figure and no promise. The landing page shows the same thing as a
+*"Stayed with us before?"* card linking to sign-in.
+
+When the viewer **is** eligible the promo is listed normally, the extra line is
+suppressed, and the chatbot prompt says plainly that this one is not available
+to every guest — so Elena cannot pass it on as a general offer.
+
+#### Admin
+
+Admin → Promotions grew a **Who gets this** select and a **Completed stays
+needed** field (shown only for `returning`, default 1). The promo list has a
+**Guests** column badging the two kinds apart. Validation: `guest_scope` is
+`in:all,returning`; the threshold is `required_if` + `integer|min:1|max:50`,
+and an `all`-scope promo normalises its threshold back to 1 so a later edit to
+`returning` can't inherit a number nobody looked at.
+
+`Discount::$guest_scope_label` ("Returning guests (2+ stays)") and
+`$guest_scope_note` (the guest-facing sentence) exist for the same reason
+`slot_label` does: three views render this, and a copy that drifts states a
+rule the code doesn't enforce.
+
+#### Verified
+
+94 assertions across two scratchpad scripts, in rolled-back transactions
+against the dev database: all-scope promos unchanged for anonymous/new/
+returning; the fail-closed null case; thresholds at the boundary (`>=`, not
+`>`), at 0 and above a guest's count; all five non-`checked_out` statuses
+refusing to count; competition in both directions and the no-stacking total;
+the percentage multiplying the *peak* base on a Saturday; both axes together;
+the date window still bounding a loyalty promo; `publicActive()` and the
+chatbot's extra line for all three viewer kinds; both AJAX endpoints with and
+without `user_id`; a real `store()` writing `discount_id` and moving
+`used_count` by exactly one; and real renders of the landing page (anonymous
+*and* signed-in-regular), the promo form, the promo list, admin create and the
+walk-in form. Suite: 313 passed, 6 skipped, 1 failed — the documented
+`ExampleTest` SQLite failure.
+
+#### The migration
+
+```sql
+-- 2026_10_01_100000_add_guest_scope_to_discounts_table.php
+ALTER TABLE discounts
+  ADD guest_scope ENUM('all','returning') NOT NULL DEFAULT 'all' AFTER applies_to,
+  ADD min_completed_bookings SMALLINT UNSIGNED NOT NULL DEFAULT 1 AFTER guest_scope;
+```
+
+`DEFAULT 'all'` is why no existing promo changes meaning. `DEFAULT 1` is the
+most natural reading of "regular": anyone who came back. It is editable per
+promo, so the owner decides whether that means 1 stay or 5.
+
+---
+
+## What Changed in v7.48 (Read This First)
+
+### The 22-hour slot is offered on dates the owner picks, not on every date
+
+v7.47 shipped the slot behind a single price switch: set `base_price_22h` and it
+appeared on **every** date. That is not how the owner sells it. They nominate
+dates — "the night of Oct 2 through the afternoon of Oct 3" — and every other
+date stays Day/Night.
+
+The price switch is still there and still required, but it is no longer what
+decides *when*. Three questions now, three methods, and they are not
+interchangeable:
+
+| Question | Method |
+|---|---|
+| What slots exist at all? | `Booking::SLOTS` — always three |
+| What has a price? | `Booking::bookableSlotKeys($property)` |
+| **What is offered on this date?** | **`Booking::slotsOfferedOn($date, $property)`** |
+
+Every form, grid, dropdown, validator and public page asks the third one. The
+second survives for date-free questions and as the first gate inside the third.
+
+### On a nominated date, the 22-hour stay is the only option
+
+The owner's decision, and it shapes everything below:
+
+```
+Oct 2  (nominated)   →  [ 22 Hours ]        only; Day and Night hidden
+Oct 3  (its checkout)→  [ Day ] [ Night ]   an ordinary date
+Oct 4                →  [ Day ] [ Night ]
+```
+
+Oct 3 is deliberately ordinary even though a 22-hour stay owns its morning. That
+is not the window's job: once the 22-hour is **booked**, `hasConflict()` closes
+Oct 3's Day slot by itself — already verified in both directions in v7.47.
+
+### `slot_windows` — one row is one offered stay
+
+```sql
+CREATE TABLE slot_windows (
+  id, property_id → properties (cascade),
+  slot          VARCHAR(20),   -- 'stay22'
+  check_in_date DATE,          -- THE date; the span is derived, never stored
+  is_active     TINYINT(1) DEFAULT 1,
+  notes         TEXT NULL,
+  created_by    → users (nullOnDelete),
+  UNIQUE (property_id, slot, check_in_date),
+  INDEX slot_windows_lookup_index (property_id, slot, check_in_date, is_active)
+);
+```
+
+**A single date, not a range**, because one row means one bookable stay. The
+length is not stored — it comes from `Booking::slotDateTimes()`, so only one
+thing in the system ever states how long a slot is. `slot` is a column rather
+than assumed, so the next slot needing this treatment costs no migration.
+
+Modelled on `AvailabilityBlock` deliberately, including the
+`scopeOfferedOn()` ↔ `scopeCoveringDate()` parallel: both match on the
+**check-in date**, because the grid, the public calendar and the guard have to
+ask one identical question. That docblock already explains what happens when
+they drift — "shows available, rejects on submit". It carries the same
+`saved`/`deleted` → `Booking::touchAvailability()` hooks, so the live staff grid
+refreshes when a window is opened or closed.
+
+**It is the opposite of a block.** A block *closes* a date; a window *opens* a
+slot that is otherwise not offered. They coexist on the calendar page and their
+events are drawn the same way (labelled bar + tint) because a FullCalendar
+background event never renders a title — the reason v7.45 split the block into
+two events.
+
+### Two traps found before shipping, both now guarded
+
+**1. A window without a price would have made the date unbookable.** Exclusivity
+hides Day and Night; if the 22-hour slot is unpriced it is not offered either, so
+the date would offer **nothing** — a dead date on the public calendar. A window
+therefore only takes effect when the slot is priced; otherwise the date falls
+back to Day/Night. Without that, an admin adding windows before entering the rate
+silently closes those dates. The admin action also refuses outright and says to
+set the rate first, rather than creating a row that does nothing.
+
+**2. Offering and conflict are separate concerns, and must stay separate.**
+`hasConflict()` and `slotAvailabilityMap()` still evaluate **all** slots
+regardless of windows — a 22-hour booking must still mark Night and the next
+day's Day as taken. Only the *offering* surfaces filter. Conflating them reopens
+the double-booking hole. This is asserted directly: with a 22-hour booking in
+place, the conflict map still marks both halves taken while
+`slotsOfferedOn()` is unchanged by the booking's existence.
+
+### `quoteFor()` is still the one fail-closed backstop
+
+It already received the check-in datetime, so it now refuses a slot that is
+unpriced **or** not offered on that date — `abort(422)`, never a ₱0 quote. That
+means Day and Night are refused **on** a 22-hour date, and the 22-hour is refused
+everywhere else.
+
+Safe to be this strict because every `quoteFor()` caller prices a booking about
+to be made or moved — `quote()` previews, `store()`, portal submit, walk-in,
+reschedule. **Nothing re-quotes an existing booking**, checked before adding the
+guard, so opening a window can never break editing a booking already on that
+date.
+
+### Validation became a rule object, because the answer depends on another field
+
+`'slot' => 'required|in:day,night'` cannot express "depends on the check-in
+date". `App\Rules\SlotOfferedOnDate` replaces it in all seven validators (portal
+preview/form/submit, walk-in quote + store, admin quote + store, customer
+reschedule), taking the date field's name because it differs per surface
+(`checkin` vs `check_in_date`).
+
+Two distinct messages, because the user has to do two different things:
+
+```
+The 22 Hours stay is only offered on selected dates, and Oct 8, 2026 is not
+one of them. Please pick another date, or choose a different slot.
+
+Oct 7, 2026 is offered as 22 Hours only, so the Night slot cannot be booked
+on that date.
+```
+
+A missing or unparseable date adds **no** error to the slot field — that field's
+own rule reports it, and a second error would point the user at the wrong box.
+
+### Three more places that assumed a fixed slot list
+
+- **`DemandModel`** gained `slotsOfferedOn()` (cached per date, since every
+  advisor walks the same range). The three advisors and the simulator skip a
+  slot not offered on the date being examined. Without it,
+  `prescriptive:generate` would **abort outright** the first time it priced the
+  22-hour slot on an ordinary date, and would have recommended promos on slots
+  that are not for sale that day.
+- **`MaintenanceWindowAdvisor`** now asks about the slots offered on the date
+  rather than every priced slot — on a 22-hour date the question is about the
+  22-hour stay; there is no Day or Night there to be occupied.
+- **The chatbot** lists the actual window dates in its prompt and states that on
+  such a date it is the only slot. When there are no windows it says so
+  explicitly. Both directions are the v7.20 grounding rule: Elena must not offer
+  a slot `quoteFor()` will refuse, and because the rule **covers denials**, the
+  slot cannot simply be omitted either. Her availability path also re-checks the
+  date before quoting and, if the guest asked about a slot that date does not
+  offer, is told to say so and answer about the offered one — never to switch
+  silently, which would answer about a different product than the question.
+
+### Front ends mirror the server rule, deliberately duplicated
+
+The pickers cannot round-trip to the server on every date change, so five
+surfaces carry a small `slotsOfferedOn(dateStr)` in JS — **window first and
+exclusive, otherwise the non-windowed slots** — fed by
+`Booking::slotWindowDates()`, which ships only *priced* slots' dates so the two
+implementations cannot disagree. Affected: the villa page (calendar pills **and**
+radios), the landing hero dropdown, the walk-in form, admin booking create, and
+the customer reschedule form. Each also explains *why* the options shrank, since
+a form that silently loses two of its three choices reads as broken.
+
+The staff grid keeps **all three columns** with a dashed "Not offered" cell on
+ordinary dates, rather than a jagged table — which also shows staff at a glance
+which dates carry a 22-hour offer.
+
+### Verified
+
+- **21 core assertions** (transaction, rolled back): the unpriced-window
+  fallback, exclusivity, the ordinary checkout date, `is_active`, both price
+  columns by weekday, offering-vs-conflict separation, and every `quoteFor()`
+  refusal direction.
+- **14 guard assertions**: all four validation outcomes plus both messages, the
+  missing-date case, `DemandModel`, all three advisors running clean, and the
+  chatbot prompt with and without windows.
+- **20 render assertions** against real renders of every surface, with a window
+  present: the payload ships, the shared rule is defined, the window date
+  pre-checks the 22-hour and hides Day server-side, an ordinary date pre-checks
+  Day, the grid keeps three columns with "Not offered" cells, and the terms page
+  explains "selected dates only".
+- **Suite: 313 passed, 6 skipped, 1 failed** — `Feature\ExampleTest`
+  (`no such table: settings`), pre-existing.
+
+### A note on the price already being set
+
+`base_price_22h` is **₱8,000** / `weekend_price_22h` **₱10,000** in the local
+database. Under v7.47 that alone made the slot appear on every date. It now
+appears on **no** date until a window exists, which is the correct default: the
+rate is known, the schedule is the owner's to fill in.
+
+---
+
+## What Changed in v7.47 (Read This First)
+
+### The 22 Hours Stay (7:00 PM – 5:00 PM next day)
+
+The owner's booking policy lists **three** schedules, not two:
+
+```
+🌞 Day Tour:      8:00 AM – 5:00 PM
+🌙 Night Tour:    7:00 PM – 6:00 AM
+🏡 22 Hours Stay: 7:00 PM – 5:00 PM (Next Day)
+```
+
+The third is now defined in `Booking::SLOTS` as `stay22`. **It is built but not
+yet offered** — see *The gate* below.
+
+### The first slot that overlaps another slot
+
+Every assumption in this system that "a slot" is independent of the others was
+safe only because Day and Night never touch. `stay22` breaks that:
+
+```
+Friday 7PM ──────────────── 22 Hours ─────────────── Saturday 5PM
+Friday 7PM ─ Night ─ Saturday 6AM
+                      Saturday 8AM ─ Day ─ Saturday 5PM
+```
+
+So one 22-hour booking on Friday holds **Friday Night *and* Saturday Day**, and
+in reverse, a booking in Saturday's Day slot closes Friday's 22-hour slot.
+
+**`hasConflict()` and `slotAvailabilityMap()` needed no changes at all.** Both
+were already datetime-overlap tests, and the map already walked
+`check_in_date - 1` precisely because overnight slots cross a day boundary.
+Measured in both directions before anything else was built — see *Verified*.
+**Do not ever replace those with a "same slot key?" comparison.** It would look
+equivalent and would silently permit a double-booking.
+
+**What did get thinner is the `slot_hold` backstop.** The key is
+`{property}:{date}:{check_in_time}`, and `19:00` is the check-in for both Night
+and 22 Hours — so the index still catches Night-vs-22-Hours on one date (they do
+collide, correctly), but it **cannot** catch 22-Hours-vs-next-day's-Day: different
+date, different time. `reserveSlot()`'s row lock is what holds there. The
+database-level guarantee is weaker than it was with two slots; that is a known
+consequence, not an oversight.
+
+### The gate: defined, priced separately, and not offered until it is
+
+There is no per-slot price in the schema — Day and Night both cost whatever the
+check-in **date** says (`base_price` / `weekend_price`). A 22-hour stay consumes
+two slots' worth of villa time, so charging the Night rate would sell 22 hours
+at the 11-hour price. **The owner has not yet said what 22 hours costs.**
+
+So `properties` gained `base_price_22h` / `weekend_price_22h`, both **nullable**,
+and NULL means *not priced yet* — which means *not offered*:
+
+| Question | Answered by |
+|---|---|
+| what slots exist? | `Booking::SLOTS` — all three, always |
+| what can be sold right now? | `Booking::bookableSlotKeys()` — those with a price |
+
+`SLOTS` must keep all three so `slotDateTimes()`, `slotKey()` and the calendar can
+read an existing booking. Every **form, grid, dropdown, validator and public
+page** uses `bookableSlotKeys()` instead. Set the two columns in
+Admin → Properties and the slot appears everywhere at once, with no code change.
+
+**`quoteFor()` fails closed — it `abort(422)`s on an unpriced slot rather than
+returning `0.00`.** This is not theoretical caution. The `type = room` rows carry
+`base_price = 0.00`, and until `PortalController::assertBookableListing()` closed
+it, `POST /book/{room}` created a real, slot-holding booking **for ₱0**. A NULL
+price reaching arithmetic is the same bug shape, so the answer is refusal, not
+zero. `Blade`-side the slot is never offered; this is the backstop for a crafted
+POST. One consequence worth knowing: `$room->quoteFor()` now throws instead of
+returning 0, and `InputValidationTest` was updated to assert that stronger
+guarantee (it still asserts the raw list price is 0 via `getPackagePrice()`).
+
+A percentage `pricing_rules` override now multiplies **the slot's own base**, not
+always `base_price`. Otherwise a "+20% holiday" rule would price a 22-hour stay at
+₱4,800 — a surcharge that *reduces* the price.
+
+### Three more places that matched a slot by check-in time
+
+`slotKey()` was fixed in v7.46. The same latent assumption turned out to be in
+three more places, all invisible until a second slot shared `19:00`:
+
+- **`DemandModel::loadOccupancy()`** matched `$def['check_in'] === $time` and
+  marked that one slot. A 22-hour booking would mark whichever of Night/22-Hours
+  came first in the array and **never mark the next day's Day slot at all** — so
+  the prescriptive engine would offer a promo on an occupied slot. Now it measures
+  the booking's real window and marks every slot it overlaps, which also fixes
+  extended stays (previously dumped into a "mark the whole day" fallback).
+- **`OutcomeTracker::actualRevenue()`** filtered with
+  `whereTime('check_in_time', '19:00:00')`, which matches Night **and** 22 Hours —
+  so a Night recommendation would be credited with 22-hour revenue. Now filtered
+  in PHP through `slotKey()`, so one rule serves the whole system.
+- **The advisors** looped `array_keys(Booking::SLOTS)` and price through
+  `quoteFor()`, which would have made `prescriptive:generate` **abort outright**
+  on the unpriced slot. They now loop `DemandModel::bookableSlots()`.
+
+`MaintenanceWindowAdvisor` also loops bookable slots. Noted in-code: once 22 Hours
+is priced, including it makes a maintenance window slightly stricter (it also
+requires the *next* morning free, since the slot reaches there). Day + Night
+already cover a whole date, so narrowing it back to those two is the fix if that
+becomes annoying.
+
+### Labels: `ucfirst($slotKey)` produces "Stay22"
+
+Seven display sites built a slot label with `ucfirst()` or a
+`$slot === 'day' ? 'Day' : 'Night'` ternary — the latter reporting **"Night" for
+every slot that isn't Day**. `SLOTS` entries now carry `name` and `times`
+alongside `label` (invariant: `label === "{name} ({times})"`), and every label
+site reads `name`. Fixed in the admin calendar (event title and modal), the
+frontdesk villa strip, the next-arrival stat, the availability grid's mobile
+label, the terms table, and both advisors.
+
+`Discount::getSlotLabelAttribute()` and `Recommendation::getSlotLabelAttribute()`
+were `match` statements with a `default` — so a 22-hour promo read as
+**"Any slot"**, which is a wrong statement about a discount, not just a cosmetic
+one. Both are now a direct `SLOTS` lookup.
+
+### Everything else that assumed two
+
+- **`discounts.applies_to`** was `ENUM('all','day','night')` — a 22-hour promo
+  could not be stored, and picking one would throw *"Data truncated"*. Now
+  includes `stay22`. `all` already covered the new slot, since `isValidOn()` only
+  compares when `applies_to !== 'all'`, so **no existing promo changed meaning**.
+  The promo form deliberately lists **all** slots, including unpriced ones: a promo
+  may be prepared before the slot launches, and `applies_to` is not a claim about
+  what is bookable today.
+- **The availability grid** hardcoded two `<th>`s and a `150px 1fr 1fr` grid. The
+  header is now generated and the column count comes from
+  `--slot-cols`, set **in the partial** — because `GET /staff/availability/grid`
+  renders that partial alone, so the count has to travel with the markup or a
+  refetch would not match a reload.
+- **Three slot pickers** hardcoded two radios (`portal/property`,
+  `admin/bookings/create`, `staff/walkin`); two more looped `SLOTS`
+  (`customer/reschedule_form`, `portal/home`). All five now loop
+  `bookableSlotKeys()`, and the two-column `.two-col` grids became
+  `auto-fit` so three options do not leave an orphan cell.
+- **Copy** that counted slots: the villa page's *"Every date has two slots"* is
+  now generated, and the reschedule form's *"Both slots … are taken"* became
+  *"Every slot …"*.
+- **The chatbot** named the slots in five places. All five now come from one
+  `slotPromptParts()` built on `bookableSlotKeys()`. This is the v7.20 grounding
+  rule doing its job in both directions: Elena must not offer a slot that
+  `quoteFor()` will refuse, and because the rule **covers denials**, the slot list
+  cannot simply be omitted either. The intent extractor and the reply prompt read
+  the same list, so the extractor can never recognise a slot Elena cannot discuss.
+
+### Verified
+
+Everything below was run, not reasoned about.
+
+- **The overlap, both directions (18 assertions, transaction rolled back).** A
+  Friday 22-hour booking blocks Friday Night and **Saturday Day**, leaves Friday
+  Day and Saturday Night free, and shows all of that correctly in
+  `slotAvailabilityMap()`. In reverse, a Saturday Day booking blocks Friday's
+  22-hour slot while leaving Friday Night free.
+- **Both halves of the gate, by real render.** Unpriced: all four public pages
+  return 200 and **no page anywhere mentions the slot**; staff and admin pages
+  offer exactly Day and Night. Priced (temporarily, rolled back): the landing page
+  advertises it, the villa page offers the radio and says *"three slots"*, the
+  terms table lists it, the grid widens to `--slot-cols: 3`, walk-in and admin
+  create offer it, Friday prices at ₱13,000 and Monday at ₱9,000, Day/Night
+  pricing is unchanged, and the chatbot prompt becomes *"Day, Night or 22 Hours"*.
+- **A real render, because `compileString()` cannot catch this.** It reported
+  `staff/walkin.blade.php` as fine while the page **500'd** with
+  `unexpected end of file, expecting endif`. The cause was a Blade comment that
+  *mentioned* `@php` while explaining the directive-in-comment trap — Blade
+  compiles directives inside comments too, which is exactly what v7.5 documented.
+  Rendering found it; compiling did not.
+- **Suite: 313 passed, 6 skipped, 1 failed** — the failure is `Feature\ExampleTest`
+  (`no such table: settings`), pre-existing. v7.46's 20 assertions still pass.
+
+### Still open
+
+**The 22-hour price.** Until the owner answers, the slot is invisible and the two
+columns stay NULL. Two questions belong in that conversation:
+
+1. The rate itself. Day+Night sum would be ₱8,000 / ₱12,000; a package rate would
+   presumably sit below that.
+2. A 22-hour stay checking in **Sunday 7PM** prices as *regular* (the existing
+   Sunday-after-6PM rule) while occupying Monday's Day slot. That falls out of the
+   current rule rather than being a decision anyone made.
+
+---
+
+## What Changed in v7.46 (Read This First)
+
+### `slotKey()` was one field away from silently shortening a booking by 11 hours
+
+Nothing was broken yet. This is groundwork for the owner-approved **22 Hours
+Stay (7:00 PM – 5:00 PM next day)**, and the point of doing it first is that
+adding that slot to `Booking::SLOTS` without this change would have corrupted
+data on day one.
+
+`slotKey()` matched on **check-in time alone**:
+
+```php
+$time = Carbon::parse($this->check_in_time)->format('H:i');
+foreach (static::SLOTS as $key => $def) {
+    if ($def['check_in'] === $time) return $key;   // first match wins
+}
+```
+
+That is correct only while every slot has a distinct check-in time — `08:00`
+for Day, `19:00` for Night. **The 22-hour slot checks in at `19:00` too.** It
+and Night differ only in check-out (`06:00` vs `17:00`), so every 22-hour
+booking would have answered `'night'`, whichever came first in the array.
+
+The label would have been wrong, which is cosmetic. The data loss is not:
+`Admin\CalendarController::moveBooking()` takes the booking's **duration** from
+whatever `slotKey()` returns —
+
+```php
+[$newCheckIn, $newCheckOut] = Booking::slotDateTimes($slot, $newIn->format('Y-m-d'));
+```
+
+— so dragging a 22-hour booking to another date would have rewritten it as an
+11-hour Night stay. Eleven paid hours gone, no error, no log line, nothing on
+screen to notice. The reschedule form would also have pre-selected the wrong
+radio for the guest.
+
+### The real fix is to stop deriving the slot and start storing it
+
+Two rounds here, and the second exists because the first had a cost.
+
+**Round one — exact matching.** `slotKey()` now compares check-in time,
+check-out time **and** whether the booking crosses a day boundary. The day-span
+test is not redundant: a corrupt row holding overnight times on a single date
+(`19:00 → 06:00`, a negative duration) must not be called a real Night booking.
+
+That fixed the 22-hour ambiguity but broke something else. `extendStay()` moves
+a checked-in guest's `check_out_time` and leaves `check_in_time` alone, so after
+an extension **no combination of times matches any slot** — an extended booking
+answered `NULL`, losing the `Night · ` prefix the calendar had been showing since
+v7.45.
+
+**Round two — `bookings.slot`.** The slot is now recorded as data rather than
+reverse-engineered on every call, which is what makes both cases work at once.
+
+The timing was forced. **Once one genuine 22-hour booking exists, the backfill
+becomes impossible** — `19:00` would no longer identify Night, so an extended
+Night stay could never again be told apart from a 22-hour stay by its times.
+The only moment the answer is knowable for the existing 74 rows was before the
+slot shipped.
+
+### Two different questions, which had been sharing one method
+
+| Method | Answers | Callers |
+|---|---|---|
+| `slotKey()` | "what was this booked as?" | calendar label, frontdesk stats, reschedule pre-fill |
+| `exactSlotKey()` | "do the stored times still define a slot exactly?" | calendar drag-move duration |
+
+`slotKey()` reads the stored `slot`, falling back to `exactSlotKey()` for rows the
+column has not reached — pre-migration bookings, or a process running ahead of the
+migration. It also ignores a stored value that is no longer a defined slot rather
+than passing it to `slotDateTimes()`, which would `abort(422)`.
+
+**`exactSlotKey()` is the one to use wherever the answer sets a duration.**
+`slotKey()` deliberately still says `night` for an extended stay, which is right
+for a label and would quietly re-create the original bug if `moveBooking()` used
+it. An extended booking now takes the `$slot === null` branch there and keeps its
+**real** measured duration instead of being snapped back to 6:00 AM — a small
+improvement that falls out of the split for free.
+
+### The maintenance rule that matters
+
+A `saving` hook writes the column; **no controller does**, and `slot` is not in
+`$fillable`. None of the seven booking-creating paths needed a single line
+changed, because they all already route through `slotDateTimes()` for their times
+— and those times are what name the slot.
+
+> **When the times match a slot, store it. When they do not, keep whatever is
+> already there — never null it.**
+
+That second clause is the entire reason the column exists. Null it on a
+non-match and `extendStay()` erases the slot name at exactly the moment a stay
+is extended, while the truth is still perfectly well known: it was booked as
+Night, and it is still Night.
+
+`slotHoldColumnExists()` was generalised to `hasOptionalColumn($column)` (one
+`array` cache, same try/catch) so `slot` inherits the existing
+non-atomic-deploy guard instead of copying it. Both columns are written by a
+model hook on every save, so both must tolerate a process that started before
+`RUN_MIGRATIONS=true` ran — see §15.
+
+**Test-fixture note, mirroring the `slot_hold` trap.** `hasOptionalColumn()`
+memoises per column for the whole PHPUnit process, so whichever test class builds
+`bookings` first decides the answer for all of them. No fixture currently has a
+`slot` column, so it caches `false`, the hook no-ops and the suite is unaffected.
+If you ever add `slot` to one fixture, **add it to all of them** — a cached
+`true` against a later table that lacks the column throws
+`table bookings has no column named slot`.
+
+### Verified
+
+- **Backfill:** 53 `day`, 20 `night`, 1 `NULL` across all 74 rows including
+  soft-deleted. **Zero** rows where the stored value disagrees with the
+  time-derived answer. The one `NULL` is `VE-FPZ4MKAF`, a pre-v5.1 `14:00 → 12:00`
+  row that already resolved to no slot.
+- **12 assertions** run inside a transaction and rolled back, twice: the hook sets
+  the slot on a fresh booking with no controller change; a mass-assigned `slot` is
+  ignored; **`extendStay()` preserves `night` while `exactSlotKey()` returns
+  `NULL`**; a reschedule day↔night follows; a legacy 2:00 PM row stays `NULL`; an
+  unknown stored value falls back instead of reaching `slotDateTimes()`.
+- **`down()`** — rolled back, column dropped, all 74 bookings intact, re-migrated
+  to a byte-identical backfill.
+- **The deploy guard, measured rather than argued.** With the column genuinely
+  dropped, bookings still created and saved with no 500, and `slotKey()` degraded
+  to time matching.
+- **Suite: 313 passed, 6 skipped, 1 failed** — the failure is `Feature\ExampleTest`
+  (`no such table: settings`), the pre-existing SQLite limitation.
+- A third slot was simulated via a `Booking` subclass overriding `SLOTS`, so the
+  22-hour disambiguation is proven **before** the slot ships, not after.
+
+### Still to do (v7.47)
+
+The 22-hour slot itself. The groundwork above is inert until `Booking::SLOTS`
+gains the entry, and the remaining work is listed in §8 — pricing is the open
+question, since no per-slot price exists in the schema and a 22-hour stay
+consumes two slots' worth of villa time.
+
+---
+
+## What Changed in v7.45 (Read This First)
+
+### The admin calendar still offered all seven properties — and blocking the wrong one silently did nothing
+
+`Admin\CalendarController::index()` passed `Property::orderBy(...)->get()` to the
+view: the villa **and the six informational rooms**. Two dropdowns were built
+from it, and they failed differently.
+
+**The filter (harmless, but wrong).** "All Properties" over a system with exactly
+one bookable listing. Picking a room filtered the calendar down to permanently
+empty, because a room can never hold a booking. Worth noting for anyone reading
+the old code: `property_id` was appended to the `events()` query string but the
+controller **never read it** — the filtering was done client-side in the `events:`
+callback. Removing the filter was therefore a view-only change; the endpoint's
+signature did not move.
+
+**The Block Dates modal (a real defect).** Same list, but this one writes. Choose
+"Room 3", and every visible signal says it worked: the row is inserted, a red bar
+appears on the calendar, a `StaffLog` entry is recorded. **And the villa stays
+bookable.** `Booking::blockOn()` and the frontdesk availability grid only ever
+look up blocks on the villa's `property_id`, so a block on any other row is
+inert. The owner closes dates for maintenance; the portal keeps selling them.
+Nothing anywhere reports the mismatch.
+
+`'property_id' => 'required|exists:properties,id'` was the only guard, and
+`exists` was satisfied — the room is a real row.
+
+**The fix is to stop asking.** There is one property that can be blocked, so
+`quickBlock()` resolves it server-side (`Property::where('type','villa')`) and
+ignores any `property_id` in the request; the rule is gone from the validator,
+and the field is gone from the JSON body. The modal shows the villa's name as
+static text so the admin still sees what is being closed. `index()` now passes
+`$villa`, not `$properties`.
+
+Tightening the validation rule instead would have left the dropdown in place —
+an admin choosing between one correct option and six that produce an error is
+still being asked a question that has no second answer.
+
+### The "week" tab showed nothing, and the tab that showed the week was called "list"
+
+The toolbar read **month / week / list**. `timeGridWeek` was the widest of the
+three and the emptiest: `events()` sends `check_in_date->format('Y-m-d')` —
+**date only** — so FullCalendar treats every booking as all-day, puts it in the
+thin strip above the grid, and leaves the 24-hour grid beneath it blank
+forever. The tab was a tall empty ruler. `nowIndicator: true` went with it; it
+only draws in a timeGrid view.
+
+`listWeek` — the tab actually worth having, one row per booking — was labelled
+"list", so the admin looking for the week's schedule was drawn to the tab that
+could not show it. On a phone this was worse: the page already auto-switches to
+`listWeek` below 600px, so a phone landed on a tab named "list" with no week in
+sight.
+
+Now **Month | Week**, with `buttonText: { listWeek: 'Week' }`.
+
+**A note on that option key.** FullCalendar resolves a button label by
+`viewDef.defaults.buttonTextKey` *first* and only then by view type
+(`@fullcalendar/core/index.js:390-399`). The list plugin declares
+`buttonTextKey: 'list'`, so `buttonText.list` — if anyone ever adds it — would
+**win over `buttonText.listWeek`** and silently rename the button back. Use the
+view-type key, and don't add the other one.
+
+**Reviving the time grid is possible and was rejected.** Feeding it real
+datetimes from `slotDateTimes()` would draw Day as 8AM–5PM and Night as
+7PM–6AM, which would look right — but a time grid invites vertical dragging,
+and `moveBooking()` reads **dates only** (it deliberately reuses the stored
+`check_in_time`, because there is no free-choice time input anywhere). A
+time-drag would appear to work and then snap back on the next refetch. Revisit
+only if slot changes by drag ever become a thing.
+
+`resources/js/admin-calendar.js` no longer imports `@fullcalendar/timegrid`.
+**This saves essentially nothing — 29.23 kB → 29.21 kB** — because Vite had
+already kept timegrid out of the shared chunk; it is correct to drop a plugin
+no view uses, but do not expect a bundle win from it. `resources/js/portal-
+calendar.js` still imports `timeGridPlugin` **and `listPlugin`, and uses
+neither** (`portal/property.blade.php` is `dayGridMonth` only). Left alone —
+out of scope for this change, and it is where the remaining timegrid bytes are.
+
+### The Week view said "all-day" on every row, and the detail modal said "Villa Elena" on every booking
+
+Two halves of the same omission: **the slot was the one thing the calendar never
+showed**, and both surfaces spent their space on something that is identical on
+every booking instead.
+
+**The Week (list) view.** `events()` sends date-only values, so FullCalendar
+treats each booking as all-day and writes **"all-day"** into the time column —
+on a system whose bookings are one of exactly two fixed slots, and where a Day
+and a Night on the same date are otherwise indistinguishable. `allDayText`
+cannot fix this: it is a single string for every event. The label has to be
+per-event, so it is set in `eventDidMount`, guarded on
+`info.view.type === 'listWeek'`. Blocks — which really are all-day — get
+`Blocked`.
+
+**The booking modal** had a **Property** row reading "Villa Elena (Whole Villa)"
+on every booking, the same dead string the event-title comment had already
+argued out of the month grid, while the slot appeared nowhere in the modal at
+all. It is now a **Slot** row.
+
+**The time range comes from the stored `check_in_time`/`check_out_time`, never
+from `Booking::SLOTS[$slot]['label']`.** `extendStay()` is the deliberate
+free-choice exception in this system: it moves a checked-in guest's checkout
+time and leaves `check_in_time` alone, so `slotKey()` still answers `night`
+while the real checkout has moved. The canned label would state "7:00 PM –
+6:00 AM" for a booking that actually ends at 9:30 AM. The slot supplies the
+*name*; the row supplies the *numbers*.
+
+> **Mechanism note (v7.46):** this paragraph still holds, but `slotKey()` now
+> answers `night` there by reading the stored `bookings.slot` column, not by
+> matching `check_in_time`. Time matching cannot survive two slots sharing a
+> check-in time. Anything here that computes a **duration** must use
+> `exactSlotKey()` instead — see v7.46.
+
+`slotKey()` returns **NULL** for any pre-v5.1 booking (a 2:00 PM check-in
+resolves to no slot), so `slot_display` falls back to the bare time range rather
+than rendering an empty column.
+
+In list view the title's `"Day · "` prefix would now be duplicated by the time
+column, so the title there is reduced to the guest name. **The prefix stays in
+Month view** — that is where it is the only thing separating two bookings in one
+37px cell.
+
+The DOM contract this leans on was read out of the installed
+`@fullcalendar/list` rather than assumed: `internal.js:99,103` put the class on
+the `<td>` in both of its time-cell branches, `:63,68` wrap the title cell's
+content in an `<a>` (hence the `link || titleCell` fallback), and the shipped
+CSS sets `.fc-list-event-time { white-space: nowrap; width: 1px }`, so a longer
+string widens that column instead of wrapping it.
+
+`extendedProps.property` and `.property_id` are now unread by the page. They are
+left in the payload deliberately — small, and the obvious raw material for a
+future tooltip — but nothing consumes them today.
+
+### The property page's Block Dates form had never once worked — and it was also aimed at the wrong record
+
+Two defects stacked on `/admin/properties/{id}`, and the second was hiding the
+first.
+
+**The form was malformed and submitted no CSRF token.** `show.blade.php` had:
+
+```blade
+<form method="POST" action="{{ route('admin.properties.block', $property) }}" @csrf <div
+```
+
+The `<form>` tag is **never closed**. The browser's parser reads attributes until
+the first `>`, which it finds at the end of the `@csrf` input — so `type`,
+`name`, `value` and `autocomplete` all become **attributes of the `<form>`
+element** and the hidden input never exists. Parsed with `DOMDocument`, the form
+reports exactly that:
+
+```
+form attributes: method, action, type, name, value, autocomplete
+_token INPUTS inside this form: 0
+```
+
+Zero `_token` fields means `VerifyCsrfToken` rejects every submission: **419 Page
+Expired, on the villa page as much as on a room page.** This feature has been
+dead since the markup was written. The only `AvailabilityBlock` rows in the
+database came from the calendar's quick-block and the prescriptive module.
+
+**And it targeted whatever record you were looking at.** `blockDates()` wrote
+`'property_id' => $property->id` — so on a room page it created a block on the
+room. `Booking::blockOn()` and the frontdesk grid consult only the villa's
+`property_id`, so such a row is inert: the owner closes the dates, the portal
+keeps selling them.
+
+> **Correction to the v7.45 write-up above.** That section says of the calendar's
+> equivalent that "nothing anywhere reports the mismatch." On *this* page that
+> was too strong — the room branch did carry a caveat paragraph saying the block
+> "does not directly affect the whole Villa's availability". It was still a live
+> form, with a submit button, ending in a green success message, so the caveat
+> was doing very little; but it existed, and the earlier sentence overstated it.
+
+**The fix, as chosen by the owner: remove the form, and reject the route.**
+
+- The Block Dates form now renders **only** when `$property->type === 'villa'`.
+  A room page gets a short explanation and a link to the villa's own panel
+  (`$villaId`, passed from `show()` and **nullable** — a freshly seeded database
+  with no villa row must not 500 the room page).
+- The Quick Actions "Block Dates" button is villa-only too; on a room it used to
+  scroll to a panel that no longer holds a form.
+- `blockDates()` rejects a non-villa property **before validation**, because
+  hiding a control is not a prohibition and the route stays POST-able directly.
+- The rejection is an `error` flash, **and this page had no `session('error')`
+  block at all** — it rendered only `session('success')`, so any rejection would
+  have been swallowed in silence. That block now exists.
+- The malformed tag is closed and `@csrf` moved inside it, so the villa form
+  works for the first time.
+
+**Existing room blocks are left in place**, not deleted — one exists
+(`availability_blocks#1`, property 9, 2026-04-01). They still render on the room
+page under a heading that now reads **"Blocked Periods (no effect on
+availability)"**, which is the honest description of what they are.
+
+### Verified
+
+- **Both pages rendered** as an admin: villa `200` with **one** block form whose
+  attributes are just `method, action` and which contains **one** `_token`
+  input; room `200` with **zero** block forms, the explanation shown, and the
+  Quick Actions button gone.
+- **A real POST** to a room's `block-dates` route with an **empty body** — chosen
+  so that a guard failure could only ever surface as a validation error, never
+  as a created row. Result: `302`, the error flash set, **no** validation errors
+  (so the guard ran first), and `availability_blocks` unchanged at 2 rows.
+- Pint's fixer list for `PropertyController` is a strict subset of its
+  pre-change list — no new style violation introduced. (The file already fails
+  Pint for unrelated reasons; that is pre-existing.)
+
+**Not verified in a real browser:** that the villa form now round-trips a
+successful block. Doing so writes a row, and the sandbox denied this session's
+database writes. The CSRF field is present and the guard passes for a villa, but
+**submit it once by hand** to confirm end to end.
+
+### Deleting the villa would have destroyed the business, and the properties page still priced it per night
+
+Three problems on `/admin/properties`, found while cleaning the page up.
+
+#### 1. One click from total data loss
+
+`PropertyController::destroy()` had **no guard of any kind**, and every foreign
+key into `properties` is `ON DELETE CASCADE` — with `bookings` cascading again
+on its own:
+
+```
+properties → bookings → payments, booking_extras, reviews
+           → property_images, pricing_rules, availability_blocks
+           → housekeeping_tasks, issue_reports
+```
+
+So 🗑 on the Villa Elena card, then Confirm, deletes **74 bookings, 95 payments,
+4 reviews and 63 housekeeping tasks** along with the villa. The confirmation
+modal said only *"and all its images will be permanently deleted"* — an
+understatement of the consequence by every measure that matters — and nothing
+distinguished it from deleting one of the three empty room rows.
+
+Two overlapping guards, both server-side: the **villa can never be deleted**,
+and **no property with bookings can be deleted** (no room has any today, but
+once one does the question stops being about `type` and starts being about the
+rows that would go with it). The villa's Delete control is gone from both the
+card and the property page's danger zone, which now explains why instead of
+offering a button that is certain to fail. The modal's copy now names the real
+consequence and counts the bookings.
+
+#### 2. "/ night" — a v4.0 leftover, wrong even for the villa
+
+The card read `₱4,000.00 / night`. **This system has no nights.** It sells two
+fixed slots as a flat package (Day 9 hrs, Night 11 hrs), which is why
+`Property::quoteFor()` takes a slot and not a night count. Every other surface
+already says so — `admin/promotions/form.blade.php:210-215` and the public terms
+page both use **Regular / Peak** — so this page was the last holdout, and its
+wording is now taken from those rather than invented.
+
+Corrected in five places: the index card (`/ night`, `wknd`), the show page's
+mini stat (`Base Price / Night`) and its two info rows, and the labels on both
+the create and edit forms.
+
+One of them was not merely dated but **factually wrong**: the create form said
+the weekend price is *"Applied on Saturdays & Sundays"*. Per
+`Property::getPackagePrice()`, peak is **Fri/Sat and Sun before 6PM**, while
+**Sun after 6PM is regular**. The date qualifiers now appear under every rate
+field on all four pages so the rule is visible where it is being set.
+
+#### 3. The rooms are empty shells, and the cards showed it
+
+The three `type=room` rows carry `property_name = NULL`, no description,
+`amenities = []` and `base_price = 0.00`. The grid rendered them as three
+**nameless** cards reading `Room · PART OF VILLA / (blank) / 4 guests ·
+0 bookings / ₱0.00 / night`.
+
+- **Price is villa-only now.** On a room it was not merely redundant — `₱0.00`
+  reads as *free*.
+- **Booking count is villa-only now.** Every booking attaches to the villa, so a
+  room card was structurally incapable of showing anything but `0 bookings`.
+- **A name fallback** (`Untitled room`) renders, because a card with no title is
+  a dead end — you cannot tell which room you are about to open. This is a
+  guard, **not** a substitute for fixing the data; the rooms still need real
+  names.
+
+Note for anyone reading `CLAUDE.md`: it says there are **6** rooms. There are
+**3**. The doc has drifted.
+
+`show.blade.php`'s delete confirmation also moved from `addslashes()` to
+`Js::from()` — the same shape this repo already flags as measured-exploitable in
+`index.blade.php` and `staff/partials/_today_list.blade.php`.
+
+### Verified
+
+- **All four pages rendered** (index, show ×2, create, edit): HTTP 200, and a
+  sweep for `/ night`, `/ Night`, `wknd`, `Weekend Price`, `Base Price` and
+  `Saturdays` returns **nothing** on any of them.
+- **The cards, parsed from the DOM:** the villa card shows
+  `₱4,000.00 regular ₱6,000.00 peak`, `30 guests 72 bookings`, and **no delete
+  button**; each room card shows a name, capacity, **no price element at all**,
+  no booking count, and keeps its delete button.
+- **Danger zone, by element and not by string match:** the villa page has
+  **0** `btn-danger` buttons and **0** `#deleteForm`s and shows the "cannot be
+  deleted" notice; a room page has 1 of each and no notice.
+- **A real DELETE request** to the villa: `302`, the refusal in `error`, and the
+  counts unchanged at **4 properties / 72 bookings / 95 payments**.
+- Pint's fixer list for `PropertyController` remains a subset of its pre-change
+  list.
+
+**Not verified:** the `bookings > 0` branch of the guard, and the room delete
+path itself. Both need a real deletion or a fabricated booking to exercise, and
+neither is something to do to live data — the villa branch, which is the one
+that carries the risk, is measured above.
+
+### The properties page was a grid of equals, over a system that has none
+
+`/admin/properties` rendered four identical cards. One of them was the villa —
+the only bookable listing, holder of every booking and every peso — and
+`ORDER BY sort_order, property_name` put it **third of four**, between two blank
+room cards, because `sort_order` is `0, 0, 0, 67` and the room names are NULL.
+
+A uniform grid is the wrong container for one villa and N rooms, because they
+are not peers. The page is now two zones:
+
+- **The villa**, as a full-width panel: photo, name, the two rates set large in
+  the serif display face, capacity / bookings / status, and View + Edit. It is
+  deliberately *not* the same shape as a room card — the villa carries the
+  money, so it carries the visual weight. No Delete (see the guard above).
+- **The rooms**, as a quiet row of compact tiles below a `Rooms · 3 rooms · not
+  separately bookable` heading: photo, name, capacity, status, actions. Smaller
+  radius, no hover-lift, no entrance animation — subordinate, and shaped to look
+  it.
+
+Rooms are ordered by **`id`, not `sort_order`**. `sort_order` carries no meaning
+in this data (`0, 0, 0, 67`, the 67 looking accidental), and `id` order is what
+`ConvertVillasToRoomsSeeder` uses when it assigns letters. If manual ordering is
+ever wanted, `sort_order` has to be set deliberately first.
+
+#### The furniture outweighed the content
+
+Removed, over a page with four items on it:
+
+- **The four-card stats row.** "Total Properties: 4" is not a KPI, and
+  Available / Occupied / Maintenance summed the villa's status — which affects
+  sales — with room statuses, which only matter to housekeeping. The combined
+  number answered no question. The villa's status now sits on the villa panel,
+  and the room count sits in the Rooms heading.
+- **The search box and the Type filter.** Searching four cards costs more than
+  it saves, and Type is fully redundant once the page is split into Villa and
+  Rooms. The Status filter went with them.
+- **`filterCards()`**, which only those controls called, and the `.property-*` /
+  `.properties-grid` / `.stats-row` CSS, which nothing references any more.
+
+"Add New Property" is kept but demoted to a secondary button reading **Add
+room** — `store()` already refuses a second villa, so a room is the only thing
+it can actually add.
+
+**A duplicate element id went with the search box.** The page's own
+`id="searchInput"` collided with the admin topbar's global search
+(`admin/partials/topbar_features.blade.php:437`), which calls
+`getElementById('searchInput').focus()` and `.value = term`. The layout yields
+content *before* including the topbar, so the page's input came first in the DOM
+and won every lookup — meaning the **topbar's** global search was focusing and
+clearing the properties filter box instead of its own, on this page only. The
+rendered page now has no duplicate ids at all.
+
+#### The rooms have names now
+
+All three `type=room` rows had `property_name = NULL`, so every card was
+untitled and you could not tell which room you were about to open. They are now
+**Room A / Room B / Room C**, assigned by `id` order — which is not an invented
+convention but the one `ConvertVillasToRoomsSeeder` already implements
+(`chr(65 + $index)` over `orderBy('id')`). The `Untitled room` view fallback
+stays as a guard for any future row that arrives without a name.
+
+`CLAUDE.md` claimed **6** rooms; there are **3**. It no longer states a count at
+all, because the count is not load-bearing anywhere — and neither is the villa's
+name: every lookup in the codebase is `Property::where('type', 'villa')`, never
+a name match. Worth knowing, since the seeder writes "Villa Elena (Whole Villa)"
+while the local row is plain "Villa Elena", so a name-based lookup would already
+be broken. **Production's room count could not be checked** — the `aiven`
+connection fails TLS from this machine (`project.md` v7.39), so "3" is a
+statement about local dev only, which is exactly why the doc now avoids the
+number.
+
+### Verified
+
+- **Rendered order on the page:** `villa-panel`, `rooms-head`, then three
+  `room-card`s. The villa is first, not third.
+- **The villa panel**, parsed from the DOM: eyebrow "The bookable listing", name
+  "Villa Elena", rates `₱4,000.00 Regular · Mon–Thu, Sun after 6PM` and
+  `₱6,000.00 Peak · Fri/Sat, Sun before 6PM`, meta `30 guests 72 bookings
+  Available`, actions `View Edit`, and **zero** delete buttons.
+- **Each room tile:** a real name (Room A/B/C), capacity, status, one image, one
+  delete button, and **no price or booking-count element at all**.
+- **Furniture gone, by element:** no `.stats-row`, no `#filterStatus`, no
+  `#filterType`, no `.properties-grid`. The one surviving `#searchInput` is the
+  topbar's, and the page now reports **no duplicate ids**.
+- **CSS survived the surgery:** all three rendered `<style>` blocks are
+  brace-balanced after the dead rules were cut out.
+- Pint's fixer list for `PropertyController` is still a subset of its
+  pre-change list.
+
+**Not verified in a real browser.** This is a layout change, and layout is the
+one thing DOM assertions cannot judge — column widths, the panel's proportions,
+how the rooms row wraps, the phone breakpoint. The dev session is not logged in
+and no seeded credentials exist locally, so **open `/admin/properties` and look
+at it**, at desktop width and at phone width, before treating this as done.
+
+### Dragging a Day booking always failed, finished stays could be dragged anywhere, and a third bug was hiding behind the first
+
+Reported as *"Error moving booking"* on the admin calendar, plus *"why can a
+checked-out booking be moved at all?"*. Three defects, and the third only became
+reachable once the first was fixed.
+
+#### 1. `after:` vs a slot that starts and ends on one date
+
+```php
+'check_out_date' => 'required|date|after:check_in_date',   // moveBooking()
+```
+
+A **Day** slot is 8:00 AM–5:00 PM on a *single* date, so
+`check_out_date === check_in_date`. `after:` demands strictly later, so it
+failed — **on every Day booking, every time**. A Night slot is 7PM→6AM next
+day, so `check_out = check_in + 1` and it passed. Hence the bug looked
+intermittent: Night drags worked, Day drags never did. **39 of the 55 bookings
+on the calendar are Day slots.**
+
+The rule is now `after_or_equal:check_in_date` — a checkout is never *earlier*
+than its check-in, so the bound stays, it just stops excluding the equal case.
+
+#### 2. The error message was hiding the reason
+
+The `eventDrop` fetch sent `Content-Type: application/json` but **no `Accept`
+header**. `Content-Type` describes what is being *sent*; `Accept` describes what
+is wanted *back*. Without it Laravel does not consider the request to want JSON,
+so a validation failure **redirects** rather than returning 422 JSON:
+
+```
+HTTP 302 · Content-Type: text/html · Location: http://localhost
+validation[check_out_date]: The check out date field must be a date after check in date.
+```
+
+`r.json()` throws on that HTML, the `.catch()` runs, and the toast reads the
+generic **"Error moving booking"** — while the actual reason sat in the response
+the whole time. `Accept: application/json` is now sent, so a rejected move
+states why.
+
+#### 3. Finished bookings were movable — and still held their slot
+
+The feed rejects only `cancelled`, and `editable: true` was set on the whole
+calendar, so **41 of 55** events were `checked_out` and freely draggable. Two
+real consequences, not just untidiness:
+
+1. **It rewrites history.** A stay that happened on Aug 8 would be recorded
+   elsewhere, and `check_in_date` is what revenue and occupancy reporting reads.
+2. **It steals future slots.** `hasConflict()` excludes only `cancelled` and
+   `no_show`, so a `checked_out` booking **still holds a slot**. Dragging a
+   finished stay onto a free future date blocks that date against a real
+   booking, enforced all the way down to the `slot_hold` UNIQUE index.
+
+`Booking::MOVABLE_STATUSES` (`pending`, `confirmed`) is now the single source,
+used by **both** the feed (`editable` per event, so it cannot be dragged) and
+`moveBooking()` (a `422`, so the route cannot be POSTed directly). Both are
+needed — hiding a control is not a prohibition — and they read one constant,
+because two copies of a status list drift. `checked_in` is excluded on purpose:
+the guest is physically in the villa, and changing their dates is
+`extendStay()`'s job, the deliberate free-choice exception.
+
+Block bars are `editable: false` too. They were draggable, moved on screen, then
+snapped back when `eventDrop` reverted them for not being a booking. Not
+offering the movement is clearer than undoing it.
+
+#### 4. The bug that was asleep behind #1
+
+`moveBooking()` wrote `'num_nights' => $newIn->diffInDays($newOut)` — a bare
+diff, which is **0** for a Day booking. The five other paths that write this
+column (portal preview and submit, staff walk-in, admin create, `extendStay()`)
+all use `max(1, …)`, and **all 74 rows in the database hold `num_nights = 1`**.
+
+This never fired because Day bookings could not be dragged — `after:` rejected
+them before execution reached that line. **Fixing #1 would have made a dragged
+Day booking the first `num_nights = 0` row in the system**, and
+`ReportController:115` sums that column, so the total would have quietly gone
+short. Now `max(1, …)`, matching every other writer.
+
+The success toast said `moved — 0 nights`. `num_nights` is 1 on every row — a
+booking is a slot, not a count of nights — so `"1 nights"` would only have been
+bad grammar attached to a retired model. It now names the slot and the new date.
+
+### Verified
+
+- **The feed's `editable` flags:** `confirmed` → `true` ×14, `checked_out` →
+  `false` ×41, block bars → `false`. (The three `display: background` block
+  events carry no flag and are not draggable anyway.)
+- **The reported case**, replayed as the page sends it — a Day booking with
+  `check_out_date == check_in_date`, aimed at an occupied slot so nothing could
+  be written: **HTTP 409 `application/json`** with the real conflict message.
+  Validation passed; the Day-slot rejection is gone.
+- **A genuinely successful move**, run inside a transaction that was rolled
+  back: `{"success":true,"nights":1}`, dates moved, **slot times preserved at
+  08:00–17:00**, `slotKey()` still `day`. After rollback the booking is back on
+  its original date with **no stray `StaffLog` rows**.
+- **A finished booking:** `HTTP 422`, *"A checked out booking cannot be moved to
+  another date."*, nothing written.
+- **A genuinely invalid request** (checkout before check-in): `HTTP 422`
+  `application/json`, message *"…must be a date after or equal to check in
+  date."* — the toast now shows this instead of "Error moving booking".
+- **The database is untouched by all of the above:** 72 bookings, and **0 rows
+  with `num_nights != 1`**.
+
+> **Superseded below.** The drag was still broken after this round — see
+> "`toISOString()` on a local midnight". The verification here exercised
+> the server with a hand-built payload and never ran the page's own date
+> arithmetic, which is where the remaining bug lived.
+
+**Not verified in a real browser:** the drag gesture itself, and that a
+`checked_out` event now refuses to pick up. The dev session is not logged in.
+The HTTP layer is measured above; the pointer behaviour is FullCalendar reading
+the `editable` flag the feed now sends.
+
+#### 5. `toISOString()` on a local midnight — the drag was still broken after all of the above
+
+The fix in #2 did its job immediately: the next failed drag reported *"The
+check-out date field must be a date after or equal to check-in date"* instead of
+"Error moving booking". That is a real message, and it was telling the truth —
+the page was sending a **check-out date earlier than the check-in date**.
+
+```js
+const endDate = new Date(info.event.end);
+endDate.setDate(endDate.getDate() - 1);
+const newEnd = endDate.toISOString().split('T')[0];   // ← UTC
+```
+
+FullCalendar builds an all-day event's dates at **local** midnight.
+`toISOString()` converts to UTC, and in UTC+8 local midnight is 16:00 *the
+previous day*, so slicing the date off the ISO string rolls it back a day. The
+handler therefore subtracted **two** days instead of one. Measured under
+`TZ=Asia/Manila`:
+
+| | value |
+|---|---|
+| `check_in_date` (`event.startStr`, FullCalendar's own local string) | `2026-08-10` |
+| `check_out_date` (via `toISOString()`) | **`2026-08-09`** |
+
+`startStr` was right and the end was wrong, which is why only one of the two
+drifted.
+
+**This also made #1's loosened rule dangerous.** For a Night booking the same
+miscalculation lands on `check_out_date == check_in_date`, which `after:` used
+to reject and `after_or_equal` accepts — and a Night slot checks out at 6:00 AM,
+so the row would have been written with its **checkout before its check-in**.
+The correct bound from #1 stands; it simply must not be the only thing standing
+between a client bug and a corrupt row.
+
+**So the server no longer takes the checkout from the client at all.** A drag
+changes the *date*; the **slot** decides the span, and the server already knows
+the slot from `check_in_time`. `moveBooking()` now derives both datetimes from
+`Booking::slotDateTimes()` — which `CLAUDE.md` names as the single source of
+truth for slot → time, and which this controller was quietly bypassing by
+parsing raw fields. `check_out_date` is gone from the request contract, and a
+stale page that still sends the bad value is simply ignored. Legacy rows where
+`slotKey()` is NULL keep their original duration rather than being forced into a
+slot they never followed.
+
+The identical `toISOString()` mistake sat **two lines away** in the `select:`
+handler, pre-filling the Block modal's End Date a day early; it is fixed with
+the same helper. Both now go through `localDateStr()`, which formats from local
+getters.
+
+### Verified
+
+Both runs inside a transaction that was rolled back, sending **exactly what the
+page now sends** (`check_in_date` only):
+
+- **Day booking** → `200 {"success":true,"nights":1}`, dates `2029-12-03 /
+  2029-12-03`, times `08:00–17:00`, `slotKey()` `day`, span **9h**, checkout
+  after check-in.
+- **Night booking** → `200`, dates `2029-12-05 / 2029-12-06`, times
+  `19:00–06:00`, `slotKey()` `night`, span **11h**, checkout after check-in —
+  the case that would have been written backwards.
+- **A stale client** posting the buggy `check_out_date` one day *before* the
+  check-in → `200`, and the row still written as `2029-12-09 / 2029-12-10`. The
+  bad field is ignored.
+- Both bookings back on their original dates after rollback. Database unchanged:
+  72 bookings, **0 rows with `num_nights != 1`**.
+- The rendered page contains **no `toISOString()` call** — the only two
+  occurrences left are inside the comment explaining why it must not be used.
+
+**Not verified in a real browser:** the drag gesture itself. Everything above is
+the HTTP layer and the date arithmetic, the latter measured with `node` under
+`TZ=Asia/Manila` rather than reasoned about. The remaining unknown is purely
+whether the pointer interaction feels right.
+
+**A note on how this was missed.** The previous round's verification replayed
+the request the page *should* send, hand-building the payload from the booking's
+own dates. It never executed the page's date arithmetic, so a bug that lived
+entirely in that arithmetic could not show up — every server-side test passed
+while the feature stayed broken. **When a handler is fed by a client-side
+computation, the computation is part of the path**; test it directly, or test
+through the browser.
+
+### Still open (deliberately out of scope)
+
+Nothing. The `PropertyController::blockDates()` gap that this section was
+originally written to record was fixed in this same version — see the section
+above.
+
+### Verified
+
+- **A real render** of `/admin/calendar` as an admin: `200`, no `All Properties`,
+  no `filterProperty`, no `blockProperty` in the output, and the block modal
+  shows "Villa Elena".
+- **A real POST** to `/admin/calendar/block` carrying a **spoofed room
+  `property_id`** — the old UI's exact payload. The block was created on the
+  villa (`property_id=14`), not the room. Test row and its `StaffLog` deleted
+  afterwards; re-checked as gone.
+- `php -l` on the controller; `Blade::compileString()` on the view (which, per
+  the note in `CLAUDE.md`, proves only that it parses — the real render above is
+  what proves it runs).
+- **The rendered toolbar config**, read back out of the served HTML:
+  `right: 'dayGridMonth,listWeek'`, `buttonText.listWeek: 'Week'`, and no
+  `timeGridPlugin` / `nowIndicator` anywhere. The only surviving `timeGridWeek`
+  in the file is inside the comment explaining its removal.
+- **`npm run build`** succeeds, and `fc-timegrid` no longer appears in
+  `admin-calendar-*.js` (it remains in `portal-calendar-*.js`, which still
+  imports it).
+- **The `buttonText` lookup order** was read out of the installed
+  `@fullcalendar/core` and `@fullcalendar/list` rather than assumed — that is
+  where the `buttonTextKey: 'list'` precedence trap above came from.
+
+- **The real `events()` JSON**, read back from the endpoint: 55 booking
+  events, every one carrying `slot` and a `slot_display` of
+  `"Day · 8:00 AM – 5:00 PM"` or `"Night · 7:00 PM – 6:00 AM"`.
+- **The two fallback paths**, built in memory (no row written): a 2:00 PM
+  check-in gives `slotKey() === NULL` and displays `"2:00 PM – 12:00 PM"`;
+  an extendStay-shaped night booking displays
+  `"Night · 7:00 PM – 9:30 AM"` — **not** the canned 6:00 AM.
+- **The list-view DOM contract** read out of the installed
+  `@fullcalendar/list`, not assumed (see above).
+- The rendered page carries the `Slot` row, `modalSlot`, the `listWeek`
+  guard and both cell selectors; `modalProperty` is gone.
+
+**Not verified in a real browser:** the rendered button *label*, and the
+list-view cell rewrite actually landing on screen. The dev session was not
+logged in and no seeded credentials exist locally (`SEED_*_PASSWORD` are unset
+since v7.39), so both were confirmed from the installed library's own
+resolution order and markup rather than from a screenshot. `eventDidMount` DOM
+surgery is exactly the class of thing `CLAUDE.md` says only a real render
+catches — **look at `/admin/calendar` in the Week tab before trusting it.**
 
 ---
 
@@ -5520,6 +7150,115 @@ Managed via Laravel migrations with sequential timestamps to resolve foreign key
 | 16 | **`trusted_devices`** ← **NEW v5.0** | Devices a customer has verified via 2FA email OTP; lets a device skip OTP on future logins and lets the customer view/revoke them |
 | 17 | **`login_activities`** ← **NEW v5.0** | Read-only per-login history (device, IP, timestamp, whether it required OTP) shown on the customer Profile page |
 
+### v7.49 Schema Changes
+
+`2026_10_01_100000_add_guest_scope_to_discounts_table.php` — the second
+eligibility axis on `discounts`: *who*, alongside the existing *when* and
+*which slot*. Full DDL and reasoning in
+[What Changed in v7.49](#what-changed-in-v749-read-this-first); the details
+worth repeating here:
+
+- **`guest_scope` defaults to `all`**, so every pre-existing promo keeps its
+  exact meaning and no price changes on migrate.
+- **`min_completed_bookings` defaults to 1** and is read *only* when the scope
+  is `returning`. It is editable per promo, because "regular customer" is the
+  owner's judgement, not ours.
+- **No new table, on purpose.** A loyalty discount is a promo with one more
+  test; it reuses the date window, `applies_to`, `used_count`,
+  `bookings.discount_id` and `bestFor()`'s competition rather than duplicating
+  them.
+- **Nothing was added to `bookings`.** A loyalty discount competes with
+  seasonal ones instead of stacking, so one `discount_id` and one
+  `discount_amount` still describe a booking completely.
+
+### v7.48 Schema Changes
+
+`2026_09_30_100000_create_slot_windows_table.php` — which dates offer a slot that
+is not sold every day. Full DDL and the reasoning are in
+[What Changed in v7.48](#what-changed-in-v748-read-this-first); the details worth
+repeating here:
+
+- **`check_in_date` is a single date, not a range.** One row = one offered stay.
+  The span is derived from `Booking::slotDateTimes()` and never stored, so only
+  one thing states a slot's length.
+- **No relationship to `availability_blocks` beyond shape.** A block closes a
+  date; a window opens a slot. Both match on the check-in date for the reason in
+  `AvailabilityBlock::scopeCoveringDate()`'s docblock.
+- **A window on an unpriced slot has no effect** — by design, so that adding
+  windows before setting the rate cannot silently close those dates. The admin
+  action refuses and says to set the rate first.
+- Deleting a property cascades its windows; deleting the admin who made one only
+  nulls `created_by`.
+
+### v7.47 Schema Changes
+
+Two migrations for the 22-hour slot.
+
+`2026_09_28_110000_add_22h_pricing_to_properties_table.php`:
+
+```sql
+ALTER TABLE properties
+  ADD COLUMN base_price_22h    DECIMAL(10,2) NULL AFTER weekend_price,
+  ADD COLUMN weekend_price_22h DECIMAL(10,2) NULL AFTER base_price_22h;
+```
+
+**NULL means "not priced yet", which means "not offered".** It does not mean free.
+`Property::isSlotPriced()` requires a non-null value **greater than zero**, and
+`quoteFor()` `abort(422)`s rather than quoting ₱0 — the `type = room` rows already
+proved what a zero price does if it reaches arithmetic (a real ₱0 booking; see
+`assertBookableListing()`). The admin form writes NULL for a blank field, never 0.
+`weekend_price_22h` falls back to `base_price_22h`, mirroring how
+`weekend_price` falls back to `base_price`, so one rate is enough to launch the
+slot.
+
+`2026_09_28_110001_add_stay22_to_discounts_applies_to.php`:
+
+```sql
+ALTER TABLE discounts
+  MODIFY applies_to ENUM('all','day','night','stay22') NOT NULL DEFAULT 'all';
+```
+
+The `DEFAULT 'all'` is restated deliberately — MySQL drops a column default on a
+bare `MODIFY`. No existing promo changes meaning: `isValidOn()` only compares the
+slot when `applies_to !== 'all'`. The `down()` migrates any `stay22` promo to
+`night` first, since the rollback would otherwise fail on those rows.
+
+### v7.46 Schema Changes
+
+`2026_09_28_100000_add_slot_to_bookings_table.php` — records which slot a booking
+was made on, instead of inferring it from the stored times on every call.
+
+```sql
+ALTER TABLE bookings
+  ADD COLUMN slot VARCHAR(20) NULL AFTER slot_hold;
+
+-- then backfilled by exact time match (query builder, not raw SQL):
+--   slot='day'   where 08:00:00 → 17:00:00 and check_out_date =  check_in_date
+--   slot='night' where 19:00:00 → 06:00:00 and check_out_date <> check_in_date
+```
+
+**No index.** Unlike `slot_hold` this enforces nothing — it is descriptive, not a
+claim on a slot — and nothing queries by it. The uniqueness guarantee stays where
+it is.
+
+**The slot times are hardcoded inside the migration and it does *not* read
+`Booking::SLOTS`.** Two reasons, both load-bearing:
+
+- A migration must always mean the same thing. Reading the constant would make
+  this same file behave differently on a fresh database once a third slot is added
+  to it.
+- **The backfill window closes permanently after this runs.** Night and the coming
+  22-hour slot share a `19:00` check-in, so once a real 22-hour booking exists an
+  extended Night stay can no longer be distinguished from it by time alone. This
+  was the only moment the answer was knowable.
+
+Rows with no exact match — pre-v5.1 bookings, and any stay already extended by
+`extendStay()` — are left `NULL` on purpose. They genuinely have no slot, and
+`slotKey()` falls back to time comparison for them.
+
+Soft-deleted and cancelled bookings **are** backfilled. This is not a claim on a
+slot the way `slot_hold` is, so status is irrelevant to it.
+
 ### v7.1 Schema Changes
 
 `2026_09_08_110000_add_payment_duplicate_guards.php` — two guards against a guest paying twice.
@@ -6449,20 +8188,34 @@ Automatic seasonal discounts on the villa base rate. Full rationale and the rule
 | `code` | Made **nullable** — the automatic flow never uses it |
 | `description` | One-line subtext for the landing-page card and the notification body |
 | `start_date` | Window start; `NULL` = starts immediately (`expiry_date` is the end, **inclusive**) |
-| `applies_to` | `all` / `day` / `night` — lets a promo target a single slot |
+| `applies_to` | `all` / `day` / `night` / `stay22` (v7.47) — lets a promo target a single slot |
 | `is_public` | Whether it appears on the landing page. A non-public promo still applies, it just isn't advertised |
 | `notified_at` | Set once when announced; stops edits from re-blasting the bell |
+
+**Guest eligibility** (v7.49, `2026_10_01_100000_add_guest_scope_to_discounts_table.php`):
+
+| Column | Purpose |
+|---|---|
+| `guest_scope` | `all` (every guest — the default) or `returning` (regular customers only) |
+| `min_completed_bookings` | Finished stays needed to qualify; read only when the scope is `returning`. Default 1 |
+
+A promo therefore has **two independent eligibility axes**: *when/which slot*
+(the date window + `applies_to`) and *who* (`guest_scope`). See the
+[v7.49 notes](#what-changed-in-v749-read-this-first).
 
 Plus `bookings.discount_id` (`2026_08_25_100001`, `nullOnDelete`) for attribution — `discount_amount` remains the authority on the money.
 
 **Key model methods:**
 
-- `Discount::bestFor(float $base, Carbon $checkIn, ?string $slot): ?Discount` — the largest-peso-discount winner among overlapping promos
-- `Discount::isValidOn(Carbon $checkIn, ?string $slot)` — window + slot + active + limit
-- `Discount::publicActive()` — what the landing page advertises. Bounded only by `expiry_date`, so **upcoming** promos are included; ordered running-first, then soonest-starting. Do not narrow this to match `isValidOn()`
+- `Discount::bestFor(float $base, Carbon $checkIn, ?string $slot, ?User $guest): ?Discount` — the largest-peso-discount winner among overlapping promos. Loyalty promos **compete** here, they never stack
+- `Discount::isValidOn(Carbon $checkIn, ?string $slot, ?User $guest)` — window + slot + active + limit + guest scope
+- `Discount::isEligibleGuest(?User $guest)` — the *who* axis alone. Returns `false` for a `returning` promo when `$guest` is `null`: it **fails closed**, so a forgotten argument charges the list price rather than promising a discount that won't be honoured
+- `Discount::returningOnlyExists()` — is there a live loyalty promo? Drives the one line that stops "no promos right now" from being a false denial to a regular who isn't signed in (v7.20: a denial is a claim too)
+- `User::completedStayCount()` / `isReturningGuest(int $min)` — only `checked_out` bookings count, so nobody qualifies by booking dates they never pay for
+- `Discount::publicActive(?User $viewer)` — what the landing page advertises. Bounded only by `expiry_date`, so **upcoming** promos are included; ordered running-first, then soonest-starting. Do not narrow this to match `isValidOn()`. It *does* drop a `returning` promo the viewer can't get, because advertising a price nobody will be charged is the one thing a banner must never do
 - `Discount::isUpcoming()` — drives the *"For stays …"* wording on the banner instead of *"Until …"*
 - `Discount::calculateDiscount(float $amount)` — clamps percentages at 100 and never exceeds the amount, so no booking can go negative
-- `$promo->value_label` / `->state` / `->state_badge` / `->window_label` / `->slot_label` — display accessors; render enums through these rather than rebuilding strings, same rule as `Payment::$method_label`
+- `$promo->value_label` / `->state` / `->state_badge` / `->window_label` / `->slot_label` / `->guest_scope_label` / `->guest_scope_note` — display accessors; render enums through these rather than rebuilding strings, same rule as `Payment::$method_label`
 
 **Admin actions:** create, edit, toggle active, announce (one-time in-app blast to active customers), delete. Every action writes a `staff_logs` entry.
 
@@ -6472,7 +8225,7 @@ Plus `bookings.discount_id` (`2026_08_25_100001`, `nullOnDelete`) for attributio
 
 Villa Elena is rented as a **flat-rate package** — one of two fixed slots, Day (9 hrs) or Night (11 hrs), see [Section 8](#8-booking-availability--fixed-slots-v51) — not a per-night hotel stay, and the price does **not** vary by number of guests (private/exclusive resort, not per-head pricing). The rate depends only on **when the guest checks in**.
 
-**Implementation:** `Property::getPackagePrice(Carbon $checkin): float` in `app/Models/Property.php` — but **do not call it directly from booking code.** Since v6.0 the entry point is `Property::quoteFor(Carbon $checkin, ?string $slot)`, which wraps it and applies any active seasonal promo (see [v6.0 notes](#what-changed-in-v60-read-this-first)). It returns `['base', 'discount', 'total', 'promo']`. `getPackagePrice()` remains the source of the *base* rate and is still called directly where only a list price is wanted.
+**Implementation:** `Property::getPackagePrice(Carbon $checkin): float` in `app/Models/Property.php` — but **do not call it directly from booking code.** Since v6.0 the entry point is `Property::quoteFor(Carbon $checkin, ?string $slot, ?User $guest)`, which wraps it and applies any active seasonal promo (see [v6.0 notes](#what-changed-in-v60-read-this-first)). It returns `['base', 'discount', 'total', 'promo']`. The third argument is the paying guest, needed since v7.49 for promos aimed at regular customers; omitting it yields the list price. `getPackagePrice()` remains the source of the *base* rate and is still called directly where only a list price is wanted.
 
 | Segment | Days / Times | Rate |
 |---|---|---|
@@ -6497,26 +8250,60 @@ Villa Elena is rented as a **flat-rate package** — one of two fixed slots, Day
 
 **v5.1 rewrite:** v4.0 had guests pick any free-choice check-in/check-out time, validated against a 12–24 hour window, with a separately-enforced 2-hour buffer padded onto both ends of `hasConflict()`. That's gone — replaced with exactly two fixed package slots and no separate buffer concept.
 
-**Implementation:** `Booking::SLOTS` (the slot definitions) + `Booking::slotDateTimes($slot, $checkInDate)` (slot + date → check-in/check-out `Carbon` pair) + `Booking::slotKey()` (existing booking → slot, for pre-filling forms) + `Booking::hasConflict()`, all in `app/Models/Booking.php`, plus `checkInDateTime()` / `checkOutDateTime()` helper accessors.
+**Implementation:** `Booking::SLOTS` (the slot definitions) + `Booking::slotDateTimes($slot, $checkInDate)` (slot + date → check-in/check-out `Carbon` pair) + `Booking::slotKey()` / `Booking::exactSlotKey()` (existing booking → slot; see below) + `Booking::hasConflict()`, all in `app/Models/Booking.php`, plus `checkInDateTime()` / `checkOutDateTime()` helper accessors.
 
-**The two fixed slots:**
+**The reverse lookup is two methods, not one (v7.46).** They answer different questions and are not interchangeable:
 
-| Slot | Check-in | Check-out | Duration |
-|---|---|---|---|
-| `day` | 8:00 AM | 5:00 PM (same day) | 9 hours |
-| `night` | 7:00 PM | 6:00 AM (**next day**) | 11 hours |
+| Method | Answers | Use for |
+|---|---|---|
+| `slotKey()` | "what was this booked as?" — reads the stored `bookings.slot`, falling back to an exact time match | labels, form pre-fill |
+| `exactSlotKey()` | "do the stored times still define a slot exactly?" — check-in **and** check-out **and** day-span | anything that sets a **duration** |
+
+Matching on check-in time alone was safe only while every slot had a distinct one. It no longer will be: the 22-hour slot checks in at `19:00`, the same as Night. Using `slotKey()` where a duration is computed re-creates the v7.46 bug — `slotKey()` deliberately still answers `night` for a stay `extendStay()` has lengthened, which is right for a label and wrong for a length. `Admin\CalendarController::moveBooking()` is the one duration caller and uses `exactSlotKey()`.
+
+**The fixed slots:**
+
+| Slot | Check-in | Check-out | Duration | Offered? |
+|---|---|---|---|---|
+| `day` | 8:00 AM | 5:00 PM (same day) | 9 hours | yes |
+| `night` | 7:00 PM | 6:00 AM (**next day**) | 11 hours | yes |
+| `stay22` | 7:00 PM | 5:00 PM (**next day**) | 22 hours | **only on dates in `slot_windows`, and then exclusively** (v7.48) |
+
+**Three questions, three methods (v7.48).** `Booking::SLOTS` is the definitions —
+all three must stay there so `slotDateTimes()`, `slotKey()` and the calendar can
+read existing bookings. `Booking::bookableSlotKeys()` is what has a **price**.
+`Booking::slotsOfferedOn($date)` is what is offered **on a given date**, and that
+last one is what every form, grid, dropdown, validator and public page must use.
+
+`stay22` is not sold every day: the owner nominates dates in **`slot_windows`**,
+and **on a nominated date it is the only slot offered** — Day and Night are hidden
+there. A window has no effect unless the slot is also priced, otherwise a
+nominated date would offer nothing at all. `quoteFor()` refuses a slot that is
+unpriced *or* not offered on that date, with a 422 rather than a ₱0 quote.
+Validation goes through `App\Rules\SlotOfferedOnDate`, not an `in:` list, because
+the allowed set depends on the submitted check-in date.
+
+⚠️ **`stay22` overlaps two other slots**, and it is the first slot that ever did.
+A 22-hour booking on Friday holds Friday's Night **and Saturday's Day**; a booking
+in Saturday's Day slot closes Friday's 22-hour slot. `hasConflict()` and
+`slotAvailabilityMap()` handle this with no special cases because both are
+datetime-overlap tests — **never replace them with a "same slot key?" check.** The
+`slot_hold` index is a weaker backstop than it was: `19:00` is the check-in for
+both Night and 22 Hours, so it catches those two colliding on one date but cannot
+catch 22-Hours-vs-next-day's-Day. `reserveSlot()`'s lock covers that.
 
 **Rules:**
-- Every booking channel (public portal, customer reschedule, staff walk-in, admin-created) submits a check-in **date** + a **`slot`** (`day` or `night`) — no raw time input anywhere in the booking-creation flow. `Booking::slotDateTimes()` is the single source of truth that turns those two values into the actual check-in/check-out datetimes; every controller calls it instead of parsing `check_in_time`/`check_out_time` from the request.
+- Every booking channel (public portal, customer reschedule, staff walk-in, admin-created) submits a check-in **date** + a **`slot`** (one of the keys above) — no raw time input anywhere in the booking-creation flow. Every one of those validators derives its allowed list from `Booking::bookableSlotKeys()`, never a hardcoded `in:day,night`. `Booking::slotDateTimes()` is the single source of truth that turns those two values into the actual check-in/check-out datetimes; every controller calls it instead of parsing `check_in_time`/`check_out_time` from the request.
 - Bookings are checked against the single master Villa's existing bookings using **full date+time**, not date-only (`Booking::hasConflict()`).
 - **`hasConflict()` is never called on its own by a path that then writes (v7.0).** It is a SELECT; calling it and then creating leaves a window where two concurrent requests both see the slot free and both take it — which is exactly what happened in production (`VE-4C7INQOG` / `VE-YHLBMLUU`, same Day slot, identical `created_at`, both paid). **`Booking::reserveSlot($propertyId, $checkIn, $checkOut, $callback, $excludeBookingId)` is the single source of truth for creating or moving a booking**, the way `slotDateTimes()` is for time and `quoteFor()` is for price. It does the check and the write in one transaction under `lockForUpdate()` on the **`properties`** row — a row that always exists, so serialization is deterministic rather than relying on InnoDB gap-lock behaviour over a range that may match nothing. It returns the callback's value, or `null` when the slot is gone. Read-only uses of `hasConflict()` (availability grids, the chatbot, form pre-checks) are fine and unchanged.
 - **`bookings.slot_hold` + its UNIQUE index is the schema-level backstop (v7.0)** for any path that forgets. Value is `"{property_id}:{check_in_date}:{check_in_time}"` while the booking holds its slot, **NULL** when it doesn't (`cancelled`, `no_show`, soft-deleted) — MySQL allows repeated NULLs in a unique index, so a cancelled booking's slot frees up while two live bookings on one slot stay impossible to store. Maintained solely by `Booking::computeSlotHold()` through `saving`/`deleted` hooks; not fillable, never written by a controller. **Its exclusion list must stay identical to `hasConflict()`'s** — if they drift, the index will reject a booking the availability calendar is showing as open.
+- **`bookings.slot` is a different column with a different job (v7.46).** `slot_hold` is a *claim* — it enforces uniqueness and goes NULL the moment a booking stops holding its slot. `slot` is a *description* — it records what was booked, carries no index, and is kept even for cancelled and soft-deleted rows. Both are model-maintained via `saving` hooks and neither is fillable, but their rules are opposites: `slot_hold` is recomputed from scratch on every save, while `slot` is **preserved** when the times no longer match any slot (which is exactly what `extendStay()` produces).
 - **Expired unpaid holds are released inside `reserveSlot()`'s lock** (`Booking::releaseAsExpiredHold()`, shared with the stale sweeper). Necessary because `hasConflict()` ignores a `pending` booking past `booking_hold_minutes` while that row still carries a `slot_hold` — without the release, the index would refuse an INSERT for a slot the grid calls free. It also means slot correctness no longer depends on the external cron pinger running.
 - **No separate cleaning buffer is enforced.** The gap built into the two fixed slots themselves (5:00 PM checkout → 7:00 PM next check-in, or 6:00 AM checkout → 8:00 AM next check-in — both exactly 2 hours) *is* the cleaning buffer. `hasConflict()` no longer takes a `$bufferHours` parameter — it does a plain datetime overlap check.
 - **No 12–24 hour cap exists anymore** — moot, since duration is fixed per slot and there's no time input to misuse. **Admin/staff bookings use the same two fixed slots as customers** (no free-choice discretion for fresh bookings anymore).
 - **Exception — "Extend Stay":** the one place free-choice time still exists is `Admin\BookingController::extendStay()`, which pushes out the check-out of an *already checked-in* guest's existing stay (not a new booking, so it's deliberately exempt from the fixed-slot policy). Its `hasConflict()` call was updated only to drop the removed `$bufferHours` argument — behavior otherwise unchanged.
 
-**Frontend note:** every booking form (`portal/property.blade.php`, `portal/booking_form.blade.php`, `customer/reschedule_form.blade.php`, `admin/bookings/create.blade.php`, `staff/walkin.blade.php`) presents the slot choice as two radio cards ("Day 8AM–5PM" / "Night 7PM–6AM") instead of a time picker; all client-side price-preview JS was rewritten to compute off the selected slot rather than a raw time diff.
+**Frontend note:** every booking form (`portal/property.blade.php`, `portal/booking_form.blade.php`, `customer/reschedule_form.blade.php`, `admin/bookings/create.blade.php`, `staff/walkin.blade.php`) presents the slot choice as radio cards instead of a time picker; all client-side price-preview JS was rewritten to compute off the selected slot rather than a raw time diff. Since v7.47 every one of those forms **generates** its cards from `Booking::bookableSlotKeys()` — none hardcodes a slot, and the label comes from the `name` / `times` fields on the `SLOTS` entry (`ucfirst($slotKey)` renders the useless "Stay22").
 
 **Availability display (v6.8):** the public property page's calendar renders the two slots **per day cell** as independent pills rather than one bar per booking, because a date is rarely wholly free or wholly taken — `night` booked leaves `day` open. The per-date map comes from `PortalController::buildSlotAvailability()`, which mirrors `hasConflict()` exactly (including its abandoned-pending-hold exemption) so the calendar and the booking form can never disagree. Clicking a pill fills the booking form; the two stay in sync both ways. See [What Changed in v6.8](#what-changed-in-v68-read-this-first).
 
@@ -7357,11 +9144,33 @@ docker compose down           # stop
 docker compose logs -f app    # tail logs (same as Render's dashboard Logs tab)
 ```
 
-**Why not a plain bind mount:** the first working version bind-mounted the whole repo into the container — simple, but every `vendor/` file read crosses the Windows↔WSL2 filesystem boundary on every request, which made page loads take multiple seconds (see Known Issues Fixed). `docker-compose.yml` instead bind-mounts only `storage/` (needs to persist uploads/sessions/cache across restarts) and uses **Compose Watch** to sync `app/`, `resources/`, `routes/`, `config/`, `database/` into the container as they change — edits still show up in a second or two, but requests read from the container's own fast filesystem. Editing `composer.json`, `package.json`, the `Dockerfile`, or anything under `docker/` triggers an automatic image rebuild instead of a sync (declared under `develop.watch` in `docker-compose.yml`).
+**Why not a plain bind mount:** the first working version bind-mounted the whole repo into the container — simple, but every `vendor/` file read crosses the Windows↔WSL2 filesystem boundary on every request, which made page loads take multiple seconds (see Known Issues Fixed). `docker-compose.yml` instead bind-mounts only `storage/` (needs to persist uploads/sessions/cache across restarts) and `public/build/` (the built JS/CSS — see "What needs what" below) and uses **Compose Watch** to sync `app/`, `resources/`, `routes/`, `config/`, `database/` into the container as they change — edits still show up in a second or two, but requests read from the container's own fast filesystem. Editing `composer.json`, `package.json`, the `Dockerfile`, or anything under `docker/` triggers an automatic image rebuild instead of a sync (declared under `develop.watch` in `docker-compose.yml`).
 
 **`bootstrap/cache/` is deliberately not bind-mounted or synced** — it holds Laravel's compiled package-manifest cache. The host's version reflects a full `composer install` (dev packages included); mounting it over the container's clean `--no-dev` build reproduces the same "class not found" crash that motivated adding `.dockerignore` in the first place (see Known Issues Fixed). Let the container regenerate its own.
 
 **`.env` is shared as-is** (`env_file: .env` in `docker-compose.yml`) between `php artisan serve` and Docker — only `DB_HOST`/`DB_USERNAME`/`DB_PASSWORD` and `REDIS_HOST` are overridden per-service in `docker-compose.yml`, since those are genuine connection details (how to reach services from inside vs. outside a container), not application behavior. Everything else — mail driver, filesystem disk, broadcast connection — stays identical between the two ways of running the app locally, which is the point: nothing about *how the app behaves* should depend on whether you're running it via `php artisan serve` or Docker.
+
+#### What needs what (the table to check before reaching for `--build`)
+
+| What changed | What to do | Why |
+|---|---|---|
+| PHP, Blade, routes, config, migrations (`app/`, `resources/views`, `routes/`, `config/`, `database/`) | Nothing | Compose Watch copies them in within a second or two |
+| JS or CSS (`resources/js`, `resources/css`) | `npm run build` on the host | `public/build` is bind-mounted, so the container sees the new bundle at once |
+| `composer.json` / `composer.lock`, `package.json` / `package-lock.json`, `Dockerfile`, anything under `docker/` | Rebuild — automatic while watch is running; otherwise `docker compose up --build --watch` | These change what is *installed in the image* |
+| `.env` | Stop (Ctrl+C) and `docker compose up --watch` again | `.env` is not inside the container and is not watched — `env_file` is read **once**, when the container is created. No `--build` needed: the image does not contain it |
+| `docker-compose.yml` itself | Stop and `docker compose up --watch` again | Mounts and env are fixed when the container is created |
+
+When in doubt, `docker compose up --build --watch` is never wrong, only slower.
+
+**`public/build` is a bind mount, not a watch rule — and the watch rule it replaced never worked.** Commit `14244d2` added `action: sync, path: ./public/build` so that JS/CSS edits would not need a rebuild. But `.dockerignore` lists `public/build`, and **Compose Watch applies `.dockerignore` to its sync rules**, so that rule copied nothing, with no warning anywhere. Measured with two probe files created at the same moment: the one under `resources/` reached the container, the one under `public/build/` never did.
+
+It surfaced as a sidebar fix that was "still the same" after being fixed: `resources/js/admin.js` was correct, the host's `npm run build` had produced a bundle containing it (`admin-CLXgOwZo.js`), and `localhost:8000` kept serving the image's older `admin-BL9U2KJQ.js`. The new file returned 404 through Docker. **Port 8000 is the container, not `php artisan serve`** — a correct fix that changes nothing in the browser is the signature of this.
+
+A bind mount is not subject to `.dockerignore`, and `public/build` must stay listed there (it is what keeps a local image identical to Render's fresh-clone build). The folder is a handful of static files served by nginx, so it carries none of the cost that ruled out mounting the whole repo.
+
+**The trade-off:** the mount *hides* the image's own build. The host must have a current `npm run build`; if `public/build/` does not exist, Docker creates it empty, there is no `manifest.json`, and every page 500s with "Vite manifest not found". Don't put the sync rule back.
+
+*Verified:* `docker compose config` resolves the mount and no `public/build` watch rule remains; a throwaway `docker compose run` container on the same image sees `admin-CLXgOwZo.js` and the manifest pointing at it. The sidebar fix itself was exercised in Chrome against that same bundle — scrolled to the bottom, clicked a real nav link, and the next page loaded with the sidebar still scrolled and the active item visible. *Not verified:* the `.env` row — it follows from how `env_file` works and was not tested by restarting the live container.
 
 ### 15.8 Database users and privileges (v7.39)
 

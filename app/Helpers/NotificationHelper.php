@@ -10,7 +10,7 @@ use Illuminate\Support\Facades\Log;
 class NotificationHelper
 {
     // ── Create + Broadcast a Notification ──────────────────────────
-    protected static function create(int $userId, string $title, string $message, ?string $link, string $type): void
+    protected static function create(int $userId, string $title, string $message, ?string $link, string $type, bool $broadcast = true): void
     {
         $notification = Notification::create([
             'user_id' => $userId,
@@ -22,6 +22,26 @@ class NotificationHelper
             'status'  => 'sent',
             'sent_at' => now(),
         ]);
+
+        // `$broadcast = false` ay para sa MARAMIHANG blast lang.
+        //
+        // Ang NotificationCreated ay ShouldBroadcast, at ang
+        // QUEUE_CONNECTION ay `sync` — kaya ang bawat abiso ay isang
+        // HUMAHARANG na HTTP call sa Pusher sa loob mismo ng request.
+        // Sa 8 guest, ~12 segundo iyon; sa 500, isang timeout. Iyon ang
+        // dahilan kung bakit mukhang nag-hang ang pag-save ng promo at
+        // napindot itong muli, kaya dalawang promo at dalawang blast
+        // ang nagawa (v7.50).
+        //
+        // Ang kapalit ay tahasan: ang isang guest na nakabukas ang
+        // portal ay HINDI makakakita ng toast para sa isang anunsyo —
+        // kukunin ito ng bell sa susunod na page load. Tama ang palitan
+        // na iyon para sa marketing; HUWAG itong gamitin para sa bayad,
+        // booking o issue-report na abiso, kung saan ang realtime ang
+        // mismong punto.
+        if (! $broadcast) {
+            return;
+        }
 
         // This helper gets called from registration, bookings, payments,
         // etc. — a broadcast hiccup (bad/missing Pusher config, API
@@ -48,9 +68,9 @@ class NotificationHelper
     }
 
     // ── Notify a Specific Guest ────────────────────────────────────
-    public static function notifyGuest(int $userId, string $title, string $message, ?string $link = null, string $type = 'in_app'): void
+    public static function notifyGuest(int $userId, string $title, string $message, ?string $link = null, string $type = 'in_app', bool $broadcast = true): void
     {
-        self::create($userId, $title, $message, $link, $type);
+        self::create($userId, $title, $message, $link, $type, $broadcast);
     }
 
     // ── Preset: New Booking Received ───────────────────────────────
@@ -200,25 +220,24 @@ class NotificationHelper
     // ══════════════════════════════════════════════════════════════
 
     // ── Preset: Cancellation Confirmed (guest) ────────────────────
-    public static function bookingCancelledForGuest($booking, float $refundAmount = 0, ?int $refundPercentage = null, $refund = null): void
+    // Para lang ito sa pag-cancel NG GUEST, kaya wala na itong refund
+    // (v7.52 — non-refundable ang lahat ng bayad). `$forfeited` ang
+    // halagang naibayad na hindi na maibabalik; ₱0 kung wala pa siyang
+    // naibabayad, at doon ay walang dapat sabihin tungkol sa pera.
+    public static function bookingCancelledForGuest($booking, float $forfeited = 0): void
     {
         $message = "Your booking {$booking->booking_ref} has been cancelled.";
 
-        if ($refundAmount > 0) {
-            $message .= " A refund of ₱" . number_format($refundAmount, 2)
-                . ($refundPercentage !== null ? " ({$refundPercentage}% of what you paid)" : '')
-                . " has been approved. The money hasn't been sent yet — we'll notify you again once it's on its way.";
-        } else {
-            $message .= " Based on our cancellation policy, this booking is no longer eligible for a refund.";
+        if ($forfeited > 0) {
+            $message .= ' The ₱' . number_format($forfeited, 2)
+                . ' you paid is non-refundable under our booking policy, so no refund will be sent.';
         }
-
-        [$message, $link] = self::withRefundDestinationPrompt($message, $booking, $refund);
 
         self::notifyGuest(
             $booking->user_id,
             "Booking Cancelled — {$booking->booking_ref}",
             $message,
-            $link
+            route('customer.bookings.show', $booking, false)
         );
     }
 

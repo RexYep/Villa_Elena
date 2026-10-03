@@ -89,7 +89,16 @@ class InputValidationTest extends TestCase
 
         $room = Property::create(['property_name' => 'Room 1', 'type' => 'room', 'status' => 'available', 'base_price' => 0, 'max_capacity' => 7]);
 
-        $this->assertSame(0.0, (float) $room->quoteFor(now()->addMonth(), 'day')['total']);
+        // Zero pa rin ang hilaw na list price — iyon ang katotohanang
+        // nagpapahalaga sa gate.
+        $this->assertSame(0.0, (float) $room->getPackagePrice(now()->addMonth(), 'day'));
+
+        // Pero hindi na ito kayang maging isang libreng booking: tumatanggi
+        // na ang quoteFor() sa halip na magbalik ng 0.00 (v7.47, kasama ng
+        // 22-Hours na slot na wala pang presyo). Ang gate sa route ay
+        // nananatiling unang depensa; ito ang huli.
+        $this->expectException(\Symfony\Component\HttpKernel\Exception\HttpException::class);
+        $room->quoteFor(now()->addMonth(), 'day');
     }
 
     // ── Finding 2: a guest cancel must not rewrite property status ──

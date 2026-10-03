@@ -132,6 +132,7 @@
                         <th>Discount</th>
                         <th>Window</th>
                         <th>Slot</th>
+                        <th>Guests</th>
                         <th>Used</th>
                         <th>Status</th>
                         <th>Actions</th>
@@ -159,6 +160,17 @@
                             <td><span class="promo-value">{{ $promo->value_label }}</span></td>
                             <td class="text-muted-theme" style="font-size: 14px;">{{ $promo->window_label }}</td>
                             <td class="text-muted-theme" style="font-size: 14px;">{{ $promo->slot_label }}</td>
+                            {{-- Ang dalawang uri ng promo ay nagmumukhang
+                                 pareho sa listahan kung wala ito, at ang
+                                 pagkakaiba ay tungkol sa kung sino ang
+                                 makakakuha — ang unang tanong ng may-ari. --}}
+                            <td style="font-size: 14px;">
+                                @if ($promo->isReturningOnly())
+                                    <span class="badge bg-info">{{ $promo->guest_scope_label }}</span>
+                                @else
+                                    <span class="text-muted-theme">All guests</span>
+                                @endif
+                            </td>
                             <td style="text-align:center;">
                                 {{ $promo->bookings_count }}
                                 @if ($promo->usage_limit)
@@ -175,7 +187,7 @@
                                     <form method="POST" action="{{ route('admin.promotions.toggle', $promo) }}" style="display:inline">
                                         @csrf @method('PATCH')
                                         <button type="submit" class="btn-icon warning"
-                                            title="{{ $promo->is_active ? 'Deactivate' : 'Activate' }}">
+                                            title="{{ ($promo->is_active ? 'Deactivate' : 'Activate') . ($promo->notified_at ? ' — guests who were told about it will be notified' : '') }}">
                                             <i class="bi bi-{{ $promo->is_active ? 'toggle-on' : 'toggle-off' }}"></i>
                                         </button>
                                     </form>
