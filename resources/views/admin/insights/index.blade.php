@@ -79,9 +79,9 @@
         }
 
         .ai-card-header .title {
-            font-family: 'Cormorant Garamond', serif;
+            font-family: var(--font-display);
             color: var(--cream);
-            font-size: 18px;
+            font-size: 17px;
             font-weight: 600;
         }
 
@@ -103,7 +103,7 @@
 
         .ai-insights-text {
             white-space: pre-wrap;
-            font-family: 'DM Sans', sans-serif;
+            font-family: var(--font-body);
             font-size: 15px;
             line-height: 1.9;
             color: var(--text-main);
@@ -284,7 +284,7 @@
     {{-- AI Insights Box --}}
     <div class="ai-card">
         <div class="ai-card-header">
-            <i class="bi bi-bar-chart-steps fs-5" style="color:var(--gold);"></i>
+            <i class="bi bi-bar-chart-steps fs-5 text-gold"></i>
             <span class="title">Smart Data Insights</span>
             <span class="ai-badge">AUTO</span>
         </div>

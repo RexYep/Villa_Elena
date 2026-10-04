@@ -179,12 +179,12 @@
         <div class="empty-state">
             <i class="bi bi-bell-slash"></i>
             <p style="font-size:15px;margin-bottom:4px;">No notifications yet</p>
-            <p style="font-size:13px;">We'll notify you about booking updates and important information.</p>
+            <p class="fs-13">We'll notify you about booking updates and important information.</p>
         </div>
     @endforelse
 
     @if ($notifications->hasPages())
-        <div style="margin-top:20px;">{{ $notifications->links() }}</div>
+        <div class="mt-20">{{ $notifications->links() }}</div>
     @endif
 @endsection
 

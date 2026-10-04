@@ -7,7 +7,7 @@
 
 @section('content')
 
-    <h2>Verify your email</h2>
+    <h1>Verify your email</h1>
 
     {{--
         This page is reached two different ways, and it must not describe

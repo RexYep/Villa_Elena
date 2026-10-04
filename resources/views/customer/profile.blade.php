@@ -29,7 +29,7 @@
         }
 
         .form-card-head h3 {
-            font-family: 'Playfair Display', serif;
+            font-family: var(--font-display);
             font-size: 17px;
             font-weight: 600;
         }
@@ -41,7 +41,7 @@
         .form-label {
             font-size: 14px;
             font-weight: 600;
-            color: #374151;
+            color: var(--stone);
             display: block;
             margin-bottom: 8px;
             letter-spacing: .2px;
@@ -110,7 +110,7 @@
         .avatar-title {
             font-size: 14px;
             font-weight: 600;
-            color: #374151;
+            color: var(--stone);
         }
 
         /* Nakatago ang tunay na input pero hindi `display:none`: kailangan pa
@@ -143,7 +143,7 @@
             gap: 7px;
             border-radius: 10px;
             padding: 9px 14px;
-            font-family: 'Jost', sans-serif;
+            font-family: var(--font-body);
             font-size: 13px;
             font-weight: 600;
             cursor: pointer;
@@ -166,15 +166,15 @@
                may kahulugan, at doon ito hinahanap ng mata: katabi ng larawan,
                hindi sa dulo ng form. */
         .btn-upload {
-            background: var(--stone);
+            background: var(--btn-primary);
             border: 1px solid var(--stone);
             color: #fff;
         }
 
         .btn-upload:hover {
-            background: var(--gold);
+            background: var(--btn-primary-hover);
             border-color: var(--gold);
-            color: var(--stone);
+            color: #fff;
         }
 
         .btn-delete-avatar {
@@ -183,14 +183,14 @@
             gap: 7px;
             border-radius: 10px;
             padding: 9px 14px;
-            font-family: 'Jost', sans-serif;
+            font-family: var(--font-body);
             font-size: 13px;
             font-weight: 600;
             cursor: pointer;
             transition: all .2s;
             background: #fff;
             border: 1px solid #fecaca;
-            color: #dc2626;
+            color: #b91c1c;
         }
 
         .btn-delete-avatar:hover {
@@ -203,7 +203,7 @@
             background: none;
             border: none;
             color: var(--muted);
-            font-family: 'Jost', sans-serif;
+            font-family: var(--font-body);
             font-size: 13px;
             cursor: pointer;
             text-decoration: underline;
@@ -218,7 +218,7 @@
         }
 
         .btn-submit {
-            background: var(--stone);
+            background: var(--btn-primary);
             color: #fff;
             border: none;
             border-radius: 10px;
@@ -226,7 +226,7 @@
             font-size: 14px;
             font-weight: 600;
             cursor: pointer;
-            font-family: 'Jost', sans-serif;
+            font-family: var(--font-body);
             transition: all .2s;
             display: inline-flex;
             align-items: center;
@@ -235,8 +235,8 @@
         }
 
         .btn-submit:hover {
-            background: var(--gold);
-            color: var(--stone);
+            background: var(--btn-primary-hover);
+            color: #fff;
         }
 
         .danger-card {
@@ -259,7 +259,7 @@
             font-size: 14px;
             font-weight: 600;
             cursor: pointer;
-            font-family: 'Jost', sans-serif;
+            font-family: var(--font-body);
         }
 
         .btn-danger:hover {
@@ -289,7 +289,7 @@
         .toggle-slider {
             position: absolute;
             inset: 0;
-            background: #d1d5db;
+            background: var(--border);
             border-radius: 24px;
             cursor: pointer;
             transition: .2s;
@@ -331,7 +331,7 @@
         .device-name {
             font-size: 13px;
             font-weight: 600;
-            color: #374151;
+            color: var(--stone);
         }
 
         .device-meta {
@@ -396,7 +396,7 @@
         }
 
         .rail-head h3 {
-            font-family: 'Playfair Display', serif;
+            font-family: var(--font-display);
             font-size: 16px;
             font-weight: 600;
         }
@@ -411,7 +411,7 @@
         }
 
         .rail-group-label {
-            font-size: 11px;
+            font-size: 12px;
             font-weight: 600;
             letter-spacing: .9px;
             text-transform: uppercase;
@@ -428,9 +428,9 @@
             background: none;
             border: none;
             border-left: 3px solid transparent;
-            font-family: 'Jost', sans-serif;
+            font-family: var(--font-body);
             font-size: 14px;
-            color: #374151;
+            color: var(--stone);
             text-align: left;
             cursor: pointer;
             transition: background .15s, color .15s;
@@ -526,7 +526,7 @@
             border: none;
             padding: 6px 2px;
             margin-bottom: 12px;
-            font-family: 'Jost', sans-serif;
+            font-family: var(--font-body);
             font-size: 14px;
             font-weight: 600;
             color: var(--muted);
@@ -613,7 +613,7 @@
 
 @section('content')
     <div class="page-title">Settings</div>
-    <div class="page-sub" style="margin-bottom:20px;">Manage your account information and security</div>
+    <div class="page-sub mb-20">Manage your account information and security</div>
 
     @if (session('success'))
         <div class="alert alert-success"><i class="bi bi-check-circle me-2"></i>{{ session('success') }}</div>
@@ -876,8 +876,8 @@
             @method('DELETE')
             <div class="danger-card">
                 <div class="form-card-head">
-                    <i class="bi bi-exclamation-triangle" style="color:#dc2626;"></i>
-                    <h3 style="color:#dc2626;">Deactivate Account</h3>
+                    <i class="bi bi-exclamation-triangle text-red"></i>
+                    <h3 class="text-red">Deactivate Account</h3>
                 </div>
                 <div class="form-card-body">
                     <p class="hint" style="margin-bottom:16px;">

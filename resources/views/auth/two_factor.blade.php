@@ -7,7 +7,7 @@
 
 @section('content')
 
-    <h2>Verify it's you</h2>
+    <h1>Verify it's you</h1>
     <p class="subtitle">We don't recognize this device. Enter the 6-digit code we sent to <strong>{{ $maskedEmail }}</strong>.</p>
 
     @if(session('success'))
@@ -44,7 +44,7 @@
 
     <form method="POST" action="{{ route('two-factor.resend') }}" class="mt-3">
         @csrf
-        <button type="submit" class="btn btn-link p-0" style="font-size:13px;">Didn't get a code? Resend</button>
+        <button type="submit" class="btn btn-link p-0 fs-13">Didn't get a code? Resend</button>
     </form>
 
     <div class="auth-footer">

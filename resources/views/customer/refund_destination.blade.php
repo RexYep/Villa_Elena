@@ -49,7 +49,7 @@
         .refund-amount {
             margin-left: auto;
             text-align: right;
-            font-family: 'Playfair Display', serif;
+            font-family: var(--font-display);
             font-size: 22px;
             font-weight: 700;
             color: var(--stone);
@@ -58,7 +58,7 @@
 
         .refund-amount small {
             display: block;
-            font-family: 'Jost', sans-serif;
+            font-family: var(--font-body);
             font-size: 13px;
             font-weight: 500;
             color: var(--muted);
@@ -78,7 +78,7 @@
         }
 
         .form-card-head h3 {
-            font-family: 'Playfair Display', serif;
+            font-family: var(--font-display);
             font-size: 17px;
             font-weight: 600;
         }
@@ -90,7 +90,7 @@
         .form-label {
             font-size: 14px;
             font-weight: 600;
-            color: #374151;
+            color: var(--stone);
             display: block;
             margin-bottom: 8px;
             letter-spacing: .2px;
@@ -143,7 +143,7 @@
         }
 
         .btn-submit {
-            background: var(--stone);
+            background: var(--btn-primary);
             color: #fff;
             border: none;
             border-radius: 10px;
@@ -152,7 +152,7 @@
             font-size: 15px;
             font-weight: 600;
             cursor: pointer;
-            font-family: 'Jost', sans-serif;
+            font-family: var(--font-body);
             margin-top: 8px;
             transition: all .2s;
             display: flex;
@@ -162,8 +162,8 @@
         }
 
         .btn-submit:hover {
-            background: var(--gold);
-            color: var(--stone);
+            background: var(--btn-primary-hover);
+            color: #fff;
         }
 
         .btn-back {

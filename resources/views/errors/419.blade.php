@@ -7,7 +7,7 @@
 
 @section('content')
 
-    <h2>This page expired</h2>
+    <h1>This page expired</h1>
 
     <p class="subtitle">
         For your security, the form timed out after sitting open too long. Nothing was submitted. Go back, refresh the page and try again.

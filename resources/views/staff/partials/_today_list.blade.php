@@ -38,10 +38,10 @@
                                 @endif
                                 <span><i class="bi bi-cash"></i>
                                     @if ($booking->balance_due > 0)
-                                        <span style="color:#dc2626;">₱{{ number_format($booking->balance_due, 0) }}
+                                        <span class="text-red">₱{{ number_format($booking->balance_due, 0) }}
                                             {{ $isArrival ? 'balance' : 'unpaid' }}</span>
                                     @else
-                                        <span style="color:#16a34a;">Fully paid</span>
+                                        <span class="text-green">Fully paid</span>
                                     @endif
                                 </span>
                             </div>
@@ -70,24 +70,16 @@
                                      Guests tab: walang early-checkout button
                                      para sa guest na bukas pa aalis. --}}
                                 <form method="POST" action="{{ route('staff.checkout', $booking) }}"
-                                    id="checkoutForm_{{ $booking->id }}" class="checkout-form-{{ $booking->id }}">
+                                    id="checkoutForm_{{ $booking->id }}" class="checkout-form-{{ $booking->id }}"
+                                    data-confirm="Check out {{ $booking->user->full_name }}?"
+                                    data-confirm-label="Check out" data-confirm-tone="neutral">
                                     @csrf @method('PATCH')
-                                    {{-- `{{ }}` IS NOT ENOUGH INSIDE AN INLINE HANDLER.
-                                         The HTML parser decodes &#039; back to ' before the JS
-                                         parser ever sees the attribute, so a guest whose
-                                         full_name is  '+alert('XSS')+'  produced
-                                             confirm('Check out '+alert('XSS')+'?')
-                                         and it ran — measured, in the staff portal, from a
-                                         name the guest sets at registration.
-
-                                         Js::from() emits a JSON literal with quotes, slashes,
-                                         angle brackets and newlines all \u-escaped, so there is
-                                         nothing left that can end the string. Measured against
-                                         six payloads (quote-concat, statement-close, backslash,
-                                         double quote, newline, </script>): Js::from 6 safe,
-                                         addslashes 5 safe + 1 broken button, bare {{ }} 1 XSS. --}}
-                                    <button type="submit" class="btn-checkout"
-                                        onclick="return confirm('Check out ' + {{ Illuminate\Support\Js::from($booking->user->full_name) }} + '?')">
+                                    {{-- The guest's name goes in a data attribute, never an inline
+                                         handler: an onclick is parsed as JavaScript after the HTML
+                                         parser has already decoded the escaping, so a name like
+                                         '+alert(1)+' ran there. partials/confirm_dialog reads this
+                                         attribute and sets it with textContent. --}}
+                                    <button type="submit" class="btn-checkout">
                                         <i class="bi bi-box-arrow-right"></i> Check Out
                                     </button>
                                 </form>
@@ -102,7 +94,7 @@
                                  may bagong balance (hal. dinagdagan ng extras). --}}
                             @if ($booking->balance_due > 0)
                                 <button type="button" class="btn-sm"
-                                    style="background:#f0fdf4;color:#16a34a;border:1px solid #bbf7d0;border-radius:7px;padding:6px 11px;font-size: 13px;font-weight:600;cursor:pointer;"
+                                    style="background:#f0fdf4;color:#15803d;border:1px solid #bbf7d0;border-radius:7px;padding:6px 11px;font-size: 13px;font-weight:600;cursor:pointer;"
                                     onclick="openPaymentModal({{ $booking->id }}, {{ Illuminate\Support\Js::from($booking->booking_ref) }}, {{ $booking->balance_due ?? 0 }})">
                                     <i class="bi bi-cash"></i> Payment
                                 </button>

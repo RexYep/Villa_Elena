@@ -2,7 +2,7 @@
 
 @section('title', 'Admin Dashboard — Villa Elena Resort')
 @section('page-title', 'Good ' . (now()->hour < 12 ? 'Morning' : (now()->hour < 18 ? 'Afternoon' : 'Evening' )) . ', ' .
-        explode(' ', Auth::user()->full_name)[0] . ' 👋') @section('page-subtitle', now()->format('l, F j, Y') .
+        explode(' ', Auth::user()->full_name)[0]) @section('page-subtitle', now()->format('l, F j, Y') .
             " ​·​
             Here's what's happening at the resort today")
 
@@ -84,8 +84,8 @@
                 }
 
                 .kpi-value {
-                    font-family: 'Cormorant Garamond', serif;
-                    font-size: 36px;
+                    font-family: var(--font-display);
+                    font-size: 32px;
                     font-weight: 700;
                     color: var(--stone);
                     line-height: 1;
@@ -159,8 +159,8 @@
                 }
 
                 .card-panel-header h3 {
-                    font-family: 'Cormorant Garamond', serif;
-                    font-size: 17px;
+                    font-family: var(--font-display);
+                    font-size: 16px;
                     font-weight: 600;
                     color: var(--stone);
                 }
@@ -255,7 +255,7 @@
 
                 .custom-table td {
                     padding: 12px 8px;
-                    border-bottom: 1px solid #f1f5f9;
+                    border-bottom: 1px solid var(--sand);
                     color: var(--stone);
                     vertical-align: middle;
                 }
@@ -270,13 +270,13 @@
                    breaking; the guest and property names absorb the wrapping. */
                 .custom-table .booking-ref {
                     font-size: 13px;
-                    color: #94a3b8;
+                    color: var(--muted);
                     white-space: nowrap;
                 }
 
                 .custom-table .checkin-cell {
                     font-size: 14px;
-                    color: #64748b;
+                    color: var(--muted);
                     white-space: nowrap;
                 }
 
@@ -666,7 +666,7 @@
                             <h3>Revenue Overview</h3>
                             <p>Monthly revenue for the past 6 months</p>
                         </div>
-                        <span class="badge-pill" style="background:#dcfce7; color:#15803d;">
+                        <span class="badge-pill tag-green">
                             <i class="bi bi-circle-fill" style="font-size:7px"></i> Live
                         </span>
                     </div>
@@ -696,15 +696,15 @@
                                 <i class="bi bi-globe2 me-1"></i> Online
                             </span>
 
-                            <span class="badge-pill" style="background:#dcfce7; color:#15803d;">
+                            <span class="badge-pill tag-green">
                                 <i class="bi bi-person-walking me-1"></i> Walk-in
                             </span>
 
-                            <span class="badge-pill" style="background:#fef9c3; color:#a16207;">
+                            <span class="badge-pill tag-amber">
                                 <i class="bi bi-telephone-fill me-1"></i> Phone
                             </span>
 
-                            <span class="badge-pill" style="background:#f3e8ff; color:#7c3aed;">
+                            <span class="badge-pill tag-purple">
                                 <i class="bi bi-people-fill me-1"></i> Partner
                             </span>
 
@@ -725,7 +725,7 @@
                             <p>Latest 5 reservations</p>
                         </div>
                         <a href="{{ route('admin.bookings.index') }}"
-                            style="font-size: 14px; color:#2e5fa3; text-decoration:none; font-weight:500;">
+                            style="font-size: 14px; color:var(--terracotta); text-decoration:none; font-weight:500;">
                             View all <i class="bi bi-arrow-right"></i>
                         </a>
                     </div>
@@ -738,7 +738,7 @@
                         @endphp
 
                         @if ($recentBookings->isEmpty())
-                            <div style="text-align:center; padding:40px 0; color:#94a3b8;">
+                            <div style="text-align:center; padding:40px 0; color:var(--muted);">
                                 <i class="bi bi-calendar-x" style="font-size:36px; display:block; margin-bottom:8px;"></i>
                                 No bookings yet
                             </div>
@@ -759,7 +759,7 @@
                                                 <div class="fw-medium">{{ $booking->user->full_name ?? 'N/A' }}</div>
                                                 <div class="booking-ref">{{ $booking->booking_ref }}</div>
                                             </td>
-                                            <td style="font-size:13px;">{{ $booking->property->property_name ?? 'N/A' }}
+                                            <td class="fs-13">{{ $booking->property->property_name ?? 'N/A' }}
                                             </td>
                                             <td class="checkin-cell">{{ $booking->check_in_date->format('M d, Y') }}</td>
                                             <td>
@@ -786,7 +786,7 @@
                                 <p>Villa & room housekeeping status</p>
                             </div>
                             <a href="{{ route('admin.properties.index') }}"
-                                style="font-size: 14px; color:#2e5fa3; text-decoration:none; font-weight:500;">
+                                style="font-size: 14px; color:var(--terracotta); text-decoration:none; font-weight:500;">
                                 Manage <i class="bi bi-arrow-right"></i>
                             </a>
                         </div>
@@ -796,7 +796,7 @@
                             @endphp
 
                             @if ($properties->isEmpty())
-                                <div style="text-align:center; padding:20px 0; color:#94a3b8; font-size:13px;">
+                                <div style="text-align:center; padding:20px 0; color:var(--muted); font-size:13px;">
                                     <i class="bi bi-house-x"
                                         style="font-size:28px; display:block; margin-bottom:8px;"></i>
                                     No properties yet
@@ -809,7 +809,7 @@
                                             <div>
                                                 <div style="font-size:13px; font-weight:500;">
                                                     {{ $property->property_name }}</div>
-                                                <div style="font-size: 13px; color:#94a3b8;">
+                                                <div class="note-text">
                                                     {{ ucfirst($property->type) }}
                                                     · {{ $property->max_capacity }} guests</div>
                                             </div>
@@ -857,7 +857,7 @@
                                             </div>
                                         </div>
                                         <div
-                                            style="flex-shrink:0;font-family:'Cormorant Garamond',serif;font-size:18px;font-weight:700;color:var(--terracotta)">
+                                            style="flex-shrink:0;font-family: var(--font-display);font-size: 17px;font-weight:700;color:var(--terracotta)">
                                             {{ $action->impact_label }}
                                         </div>
                                     </a>
@@ -876,25 +876,25 @@
                         <div class="card-panel-body">
                             <div class="quick-actions">
                                 <a href="{{ route('admin.bookings.create') }}" class="quick-action-btn">
-                                    <div class="qa-icon" style="background:#dbeafe; color:#1d4ed8;">
+                                    <div class="qa-icon tag-blue">
                                         <i class="bi bi-plus-circle"></i>
                                     </div>
                                     New Booking
                                 </a>
                                 <a href="{{ route('admin.properties.create') }}" class="quick-action-btn">
-                                    <div class="qa-icon" style="background:#dcfce7; color:#15803d;">
+                                    <div class="qa-icon tag-green">
                                         <i class="bi bi-house-add"></i>
                                     </div>
                                     Add Room
                                 </a>
                                 <a href="{{ route('admin.reports.index') }}" class="quick-action-btn">
-                                    <div class="qa-icon" style="background:#fef9c3; color:#a16207;">
+                                    <div class="qa-icon tag-amber">
                                         <i class="bi bi-file-earmark-bar-graph"></i>
                                     </div>
                                     Generate Report
                                 </a>
                                 <a href="{{ route('admin.reviews.index') }}" class="quick-action-btn">
-                                    <div class="qa-icon" style="background:#f3e8ff; color:#7c3aed;">
+                                    <div class="qa-icon tag-purple">
                                         <i class="bi bi-star-half"></i>
                                     </div>
                                     Moderate Reviews

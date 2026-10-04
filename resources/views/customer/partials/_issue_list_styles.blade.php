@@ -64,5 +64,5 @@
         .ws-pending { background: #fef9c3; color: #a16207; }
         .ws-in-progress { background: #dbeafe; color: #1d4ed8; }
         .ws-completed { background: #dcfce7; color: #15803d; }
-        .ws-cancelled { background: #f1f5f9; color: #475569; }
+        .ws-cancelled { background: var(--sand); color: var(--muted); }
 </style>

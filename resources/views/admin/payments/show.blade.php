@@ -27,7 +27,7 @@
         }
 
         .card-head h3 {
-            font-family: 'Cormorant Garamond', serif;
+            font-family: var(--font-display);
             font-size: 16px;
             font-weight: 600;
             color: var(--text-main);
@@ -102,8 +102,8 @@
         }
 
         .amount-val {
-            font-family: 'Cormorant Garamond', serif;
-            font-size: 44px;
+            font-family: var(--font-display);
+            font-size: 40px;
             font-weight: 700;
             color: #fff;
             position: relative;
@@ -299,7 +299,7 @@
             </div>
             <div class="card-body">
                 <div class="info-row"><span class="lbl">Amount</span><span class="val"
-                        style="font-family:'Playfair Display',serif;font-size:16px;">₱{{ number_format($payment->amount, 2) }}</span>
+                        style="font-family: var(--font-display);font-size:16px;">₱{{ number_format($payment->amount, 2) }}</span>
                 </div>
                 <div class="info-row"><span class="lbl">Method</span><span class="val"><span
                             class="badge b-{{ $payment->payment_method }}">{{ $payment->method_label }}</span></span>
@@ -346,11 +346,11 @@
                         class="val">{{ $payment->booking->check_out_date->format('M d, Y') }}</span></div>
                 <div class="info-row"><span class="lbl">Total Amount</span><span
                         class="val">₱{{ number_format($payment->booking->total_amount, 2) }}</span></div>
-                <div class="info-row"><span class="lbl">Amount Paid</span><span class="val"
-                        style="color:#16a34a;">₱{{ number_format($payment->booking->amount_paid, 2) }}</span></div>
+                <div class="info-row"><span class="lbl">Amount Paid</span><span class="val text-green"
+                       >₱{{ number_format($payment->booking->amount_paid, 2) }}</span></div>
                 @if ($payment->booking->balance_due > 0)
-                    <div class="info-row"><span class="lbl">Balance Due</span><span class="val"
-                            style="color:#dc2626;">₱{{ number_format($payment->booking->balance_due, 2) }}</span></div>
+                    <div class="info-row"><span class="lbl">Balance Due</span><span class="val text-red"
+                           >₱{{ number_format($payment->booking->balance_due, 2) }}</span></div>
                 @endif
             </div>
         </div>
@@ -365,7 +365,7 @@
          sa screen tuwing may nagbubukas ng pahinang ito. Kailangan
          lang ito sa mismong sandali ng pagpapadala. --}}
     @if ($payment->isRefund() && $payment->payment_method !== 'cash')
-        <div class="card" style="margin-bottom:20px;">
+        <div class="card mb-20">
             <div class="card-head" style="display:flex;align-items:center;justify-content:space-between;gap:12px;">
                 <h3>Refund Destination</h3>
                 {{-- Ang pagkakasunod ay mahalaga: `isReadyToSend()` ay
@@ -378,7 +378,7 @@
                 @elseif ($payment->needsRefundDestination())
                     <span class="badge" style="background:#e0e7ff;color:#3730a3;">WAITING ON GUEST</span>
                 @elseif ($payment->refundDestination)
-                    <span class="badge" style="background:#e2e8f0;color:#475569;">SENT</span>
+                    <span class="badge" style="background:var(--border);color:var(--muted);">SENT</span>
                 @endif
             </div>
             <div class="card-body">
@@ -395,14 +395,14 @@
                             <details style="display:inline;">
                                 <summary style="cursor:pointer;list-style:none;">
                                     {{ $destination->masked_account_number }}
-                                    <span style="font-size: 13px;color:var(--muted);">(show)</span>
+                                    <span class="note-text">(show)</span>
                                 </summary>
                                 <span style="font-family:monospace;font-size:14px;">{{ $destination->account_number }}</span>
                             </details>
                         </span>
                     </div>
                     <div class="info-row"><span class="lbl">Provided</span>
-                        <span class="val" style="font-size: 14px;">
+                        <span class="val fs-14">
                             {{ $destination->provided_at?->format('M d, Y g:i A') }}
                             @if ($destination->providedBy)
                                 · by {{ $destination->providedBy->full_name }}
@@ -411,7 +411,7 @@
                     </div>
 
                     @if ($payment->isAwaitingPayout())
-                        <div style="margin-top:18px;padding-top:18px;border-top:1px solid var(--border);">
+                        <div class="section-divider">
 
                             @if ($payment->isOverduePayout())
                                 <div style="font-size: 14px;color:#b91c1c;font-weight:600;margin-bottom:12px;">
@@ -426,7 +426,7 @@
                                      pagpapadala habang nasa daan pa ang isa ay
                                      magpapadala ng pera nang dalawang beses. --}}
                                 @php($inFlight = $payment->refundTransfers->firstWhere('status', 'pending'))
-                                <div class="alert alert-info" style="margin:0;">
+                                <div class="alert alert-info m-0-all">
                                     <strong>A transfer is on its way.</strong>
                                     @if ($inFlight && $inFlight->provider !== 'instapay')
                                         It went out over PESONet, which clears in batches on banking days
@@ -499,7 +499,7 @@
                                      ang isinasagot nito ay mukhang tungkol sa account
                                      (AC06 / RR04) — kaya sinasabi natin ang totoong
                                      dahilan dito, sa halip na hayaang bumagsak. --}}
-                                <div class="alert alert-warning" style="margin:0;">
+                                <div class="alert alert-warning m-0-all">
                                     <strong>Too small to transfer automatically.</strong><br>
                                     PayMongo will not send amounts of
                                     ₱{{ number_format(\App\Models\RefundTransfer::MINIMUM_AMOUNT, 2) }}
@@ -510,7 +510,7 @@
                                 {{-- Walang Send button dito nang sinasadya: alam
                                      nating babagsak ito. Mas mabuting sabihin
                                      kaysa magpakita ng button na hindi gagana. --}}
-                                <div class="alert alert-warning" style="margin:0;">
+                                <div class="alert alert-warning m-0-all">
                                     <strong>This one has to be sent by hand.</strong><br>
                                     {{ $destination->transferBlockedReason() }}
                                     Send ₱{{ number_format($payment->amount, 2) }} to the account above
@@ -591,7 +591,7 @@
                                 @csrf
                                 @method('PUT')
 
-                                <div style="margin-bottom:12px;">
+                                <div class="mb-12">
                                     <label for="f_institution_bic" class="field-lbl">Bank / E-Wallet</label>
                                     <select id="f_institution_bic" name="institution_bic" class="form-control" required>
                                         <option value="">Select…</option>
@@ -602,24 +602,24 @@
                                             </option>
                                         @endforeach
                                     </select>
-                                    <div style="font-size: 13px;color:var(--muted);margin-top:4px;">
+                                    <div class="field-hint">
                                         GCash is listed as <strong>G-Xchange, Inc.</strong>
                                     </div>
                                 </div>
 
-                                <div style="margin-bottom:12px;">
+                                <div class="mb-12">
                                     <label for="f_account_number" class="field-lbl">Account / Mobile Number</label>
                                     <input id="f_account_number" type="text" name="account_number" class="form-control" inputmode="numeric"
                                         placeholder="09171234567" required
                                         value="{{ old('account_number', $payment->refundDestination->account_number ?? '') }}">
                                 </div>
 
-                                <div style="margin-bottom:14px;">
+                                <div class="mb-14">
                                     <label for="f_account_name" class="field-lbl">Account Name</label>
                                     <input id="f_account_name" type="text" name="account_name" class="form-control"
                                         placeholder="Juan Dela Cruz" required
                                         value="{{ old('account_name', $payment->refundDestination->account_name ?? $payment->booking->user->full_name ?? '') }}">
-                                    <div style="font-size: 13px;color:var(--muted);margin-top:4px;">
+                                    <div class="field-hint">
                                         Exactly as registered on the account — a wrong name makes the transfer fail.
                                     </div>
                                 </div>
@@ -657,7 +657,7 @@
                                         it is kept with the refund as the record of where the money went.
                                     </div>
 
-                                    <div style="margin-bottom:12px;">
+                                    <div class="mb-12">
                                         <label for="f_institution_bic_2" class="field-lbl">Sent to (Bank / E-Wallet)</label>
                                         <select id="f_institution_bic_2" name="institution_bic" class="form-control" required>
                                             <option value="">Select…</option>
@@ -668,18 +668,18 @@
                                                 </option>
                                             @endforeach
                                         </select>
-                                        <div style="font-size: 13px;color:var(--muted);margin-top:4px;">
+                                        <div class="field-hint">
                                             GCash is listed as <strong>G-Xchange, Inc.</strong>
                                         </div>
                                     </div>
 
-                                    <div style="margin-bottom:12px;">
+                                    <div class="mb-12">
                                         <label for="f_account_number_2" class="field-lbl">Account / Mobile Number</label>
                                         <input id="f_account_number_2" type="text" name="account_number" class="form-control" inputmode="numeric"
                                             placeholder="09171234567" required value="{{ old('account_number') }}">
                                     </div>
 
-                                    <div style="margin-bottom:12px;">
+                                    <div class="mb-12">
                                         <label for="f_account_name_2" class="field-lbl">Account Name</label>
                                         <input id="f_account_name_2" type="text" name="account_name" class="form-control"
                                             placeholder="Juan Dela Cruz" required
@@ -706,7 +706,7 @@
                 @endif
 
                 @if (! $payment->refundDestination && ! $payment->isAwaitingPayout())
-                    <div style="font-size: 14px;color:var(--muted);">
+                    <div class="note-text-lg">
                         This refund was paid out before refund destinations were recorded,
                         so there is no record of where the money was sent.
                     </div>
@@ -719,7 +719,7 @@
          Destination card — at dahil doon, wala ring paraan dito para
          isara ito dati; nasa listahan lang ang Mark Paid Out. --}}
     @if ($payment->isAwaitingPayout() && $payment->payment_method === 'cash')
-        <div class="card" style="margin-bottom:20px;">
+        <div class="card mb-20">
             <div class="card-head">
                 <h3>Cash Refund</h3>
             </div>
@@ -735,7 +735,7 @@
 
                     @include('admin.payments._confirm_booking_ref', ['bookingRef' => $payment->booking->booking_ref])
 
-                    <label for="f_transfer_reference_3" class="field-lbl">Receipt / OR Number <span style="font-weight:400;">(optional)</span></label>
+                    <label for="f_transfer_reference_3" class="field-lbl">Receipt / OR Number <span class="fw-400">(optional)</span></label>
                     <input id="f_transfer_reference_3" type="text" name="transfer_reference" class="form-control" minlength="4" maxlength="100"
                         value="{{ old('transfer_reference') }}">
 
@@ -752,7 +752,7 @@
          tatlong beses bumagsak bago dumating ay isang kuwentong dapat
          nakikita ng admin, hindi tahimik na binubura. --}}
     @if ($payment->isRefund() && $payment->refundTransfers->isNotEmpty())
-        <div class="card" style="margin-bottom:20px;">
+        <div class="card mb-20">
             <div class="card-head">
                 <h3>Transfer History</h3>
             </div>
@@ -827,7 +827,7 @@
         <div class="card-body" style="padding:0;overflow-x:auto;">
             <table style="width:100%;border-collapse:collapse;min-width:520px;">
                 <thead>
-                    <tr style="background:#f8fafc;">
+                    <tr style="background:var(--cream);">
                         <th class="text-muted-theme"
                             style="padding:10px 16px;font-size: 13px;font-weight:700;text-transform:uppercase;border-bottom:1px solid var(--border);">
                             Date</th>
@@ -845,14 +845,14 @@
                 <tbody>
                     @foreach ($payment->booking->payments->sortByDesc(fn($x) => [$x->payment_date, $x->id]) as $p)
                         <tr
-                            style="border-bottom:1px solid #f8fafc;{{ $p->id === $payment->id ? 'background:rgba(201,168,76,.07);' : '' }}">
+                            style="border-bottom:1px solid var(--cream);{{ $p->id === $payment->id ? 'background:rgba(201,168,76,.07);' : '' }}">
                             <td style="padding:12px 16px;font-size:13px;">{{ $p->payment_date?->format('M d, Y') }}</td>
                             <td style="padding:12px 16px;"><span
                                     class="badge b-{{ $p->payment_method }}">{{ $p->method_label }}</span></td>
                             <td style="padding:12px 16px;"><span
                                     class="badge b-{{ $p->payment_type }}">{{ $p->type_label }}</span></td>
                             <td
-                                style="padding:12px 16px;text-align:right;font-weight:700;font-family:'Playfair Display',serif;color:{{ $p->payment_type === 'refund' ? '#dc2626' : '#0D1B2A' }};">
+                                style="padding:12px 16px;text-align:right;font-weight:700;font-family: var(--font-display);color:{{ $p->payment_type === 'refund' ? '#dc2626' : 'var(--stone)' }};">
                                 {{ $p->payment_type === 'refund' ? '-' : '' }}₱{{ number_format($p->amount, 2) }}
                             </td>
                         </tr>

@@ -289,6 +289,35 @@ class User extends Authenticatable implements MustVerifyEmail
         };
     }
 
+    /**
+     * Where this user makes a booking when they are NOT a guest — NULL for a
+     * customer, who books through the public portal.
+     *
+     * The public booking flow writes `user_id = Auth::id()`, so an admin or
+     * staff account that goes through it becomes the "guest" of a real,
+     * slot-holding booking it cannot even open afterwards (/my/ is
+     * role:customer). Their bookings are made for someone else, and these two
+     * forms are the ones that ask who that is.
+     */
+    public function bookingToolRouteName(): ?string
+    {
+        return match ($this->role) {
+            'admin' => 'admin.bookings.create',
+            'staff' => 'staff.walkin',
+            default => null,
+        };
+    }
+
+    /** NULL exactly when bookingToolRouteName() is, so a view can `??` on it. */
+    public function bookingToolLabel(): ?string
+    {
+        return match ($this->role) {
+            'admin' => 'Create a booking in Admin',
+            'staff' => 'Create a walk-in booking',
+            default => null,
+        };
+    }
+
     public function isActive(): bool
     {
         return (int) $this->status === 1;

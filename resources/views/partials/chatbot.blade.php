@@ -5,9 +5,7 @@
 
 <style>
     :root {
-        --navy: #0d1b2a;
-        --gold: #c9a84c;
-        --gold-light: #e8c97a;
+        --navy: #2c2416;
         --gold-dim: rgba(201, 168, 76, 0.12);
     }
 
@@ -62,7 +60,7 @@
         flex-direction: column;
         z-index: 9998;
         overflow: hidden;
-        border: 1px solid #e2e8f0;
+        border: 1px solid var(--border);
         animation: chatSlideUp .3s cubic-bezier(.34, 1.56, .64, 1);
     }
 
@@ -114,7 +112,7 @@
 
     .chat-header-info .status {
         color: var(--gold-light);
-        font-size: 11px;
+        font-size: 12px;
         display: flex;
         align-items: center;
         gap: 5px;
@@ -163,13 +161,13 @@
         gap: 6px;
         flex-wrap: wrap;
         background: #f8f9fb;
-        border-bottom: 1px solid #e2e8f0;
+        border-bottom: 1px solid var(--border);
         flex-shrink: 0;
     }
 
     .qr-btn {
         background: #fff;
-        border: 1px solid #e2e8f0;
+        border: 1px solid var(--border);
         border-radius: 20px;
         padding: 5px 12px;
         font-size: 12px;
@@ -202,7 +200,7 @@
     }
 
     .chat-messages::-webkit-scrollbar-thumb {
-        background: #e2e8f0;
+        background: var(--border);
         border-radius: 4px;
     }
 
@@ -231,7 +229,7 @@
     .msg.bot .msg-bubble {
         background: #fff;
         color: #1a2f45;
-        border: 1px solid #e2e8f0;
+        border: 1px solid var(--border);
         border-bottom-left-radius: 4px;
     }
 
@@ -268,7 +266,7 @@
         width: 7px;
         height: 7px;
         border-radius: 50%;
-        background: #94a3b8;
+        background: var(--muted);
         animation: bounce 1.2s infinite;
     }
 
@@ -305,7 +303,7 @@
     .prop-card {
         background: #fff;
         border-radius: 12px;
-        border: 1px solid #e2e8f0;
+        border: 1px solid var(--border);
         overflow: hidden;
         transition: box-shadow .2s;
     }
@@ -318,13 +316,13 @@
         width: 100%;
         height: 100px;
         object-fit: cover;
-        background: #f1f5f9;
+        background: var(--sand);
     }
 
     .prop-card-img-placeholder {
         width: 100%;
         height: 80px;
-        background: linear-gradient(135deg, #0d1b2a, #1a2f45);
+        background: linear-gradient(135deg, var(--stone), #4a3d2a);
         display: flex;
         align-items: center;
         justify-content: center;
@@ -339,19 +337,19 @@
     .prop-card-name {
         font-size: 13px;
         font-weight: 700;
-        color: #0d1b2a;
+        color: var(--stone);
         margin-bottom: 2px;
     }
 
     .prop-card-meta {
-        font-size: 11px;
-        color: #6b7a8d;
+        font-size: 12px;
+        color: var(--muted);
         margin-bottom: 6px;
     }
 
     .prop-card-price {
         font-size: 13px;
-        color: #0d1b2a;
+        color: var(--stone);
         margin-bottom: 8px;
     }
 
@@ -361,14 +359,14 @@
     }
 
     .prop-card-was {
-        color: #94a3b8;
+        color: var(--muted);
         font-size: 12px;
         margin-right: 3px;
     }
 
     .prop-card-slot {
-        color: #6b7a8d;
-        font-size: 11px;
+        color: var(--muted);
+        font-size: 12px;
     }
 
     .prop-card-promo {
@@ -377,7 +375,7 @@
         gap: 4px;
         background: #dcfce7;
         color: #15803d;
-        font-size: 10.5px;
+        font-size: 12px;
         font-weight: 600;
         padding: 3px 8px;
         border-radius: 999px;
@@ -392,11 +390,11 @@
     }
 
     .amenity-tag {
-        background: #f1f5f9;
+        background: var(--sand);
         border-radius: 10px;
         padding: 2px 8px;
-        font-size: 10px;
-        color: #475569;
+        font-size: 12px;
+        color: var(--muted);
     }
 
     .prop-card-book {
@@ -425,7 +423,7 @@
     /* ── Input ── */
     .chat-input-area {
         padding: 12px 14px;
-        border-top: 1px solid #e2e8f0;
+        border-top: 1px solid var(--border);
         display: flex;
         gap: 8px;
         align-items: flex-end;
@@ -435,7 +433,7 @@
 
     .chat-input {
         flex: 1;
-        border: 1.5px solid #e2e8f0;
+        border: 1.5px solid var(--border-strong);
         border-radius: 12px;
         padding: 9px 14px;
         font-size: 13.5px;

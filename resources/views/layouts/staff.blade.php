@@ -10,7 +10,7 @@
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <title>@yield('title', 'Villa Elena Staff')</title>
     @include('partials.favicon')
-    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+    @include('partials.fonts')
     @vite(['resources/js/staff.js'])
     @stack('styles')
 </head>
@@ -63,7 +63,7 @@
             <i class="bi bi-list"></i>
         </button>
         <div>
-            <div class="topbar-title">@yield('page-title')</div>
+            <h1 class="topbar-title">@yield('page-title')</h1>
             <div class="topbar-sub">@yield('page-subtitle')</div>
         </div>
     </div>
@@ -80,6 +80,7 @@
 
 @yield('modals')
 
+@include('partials.confirm_dialog')
 @stack('scripts')
 @include('staff.partials.realtime')
 </body>

@@ -47,8 +47,8 @@
         }
 
         .stat-val {
-            font-family: 'Cormorant Garamond', serif;
-            font-size: 24px;
+            font-family: var(--font-display);
+            font-size: 21px;
             font-weight: 700;
             color: var(--stone);
             line-height: 1;
@@ -89,8 +89,8 @@
         }
 
         .table-card-header h3 {
-            font-family: 'Cormorant Garamond', serif;
-            font-size: 17px;
+            font-family: var(--font-display);
+            font-size: 16px;
             font-weight: 600;
             color: var(--stone);
         }
@@ -207,7 +207,7 @@
 
         /* ── BUTTONS ── */
         .btn-navy {
-            background: var(--terracotta);
+            background: var(--btn-primary);
             color: #fff;
             border: none;
             border-radius: 9px;
@@ -215,7 +215,7 @@
             font-size: 13px;
             font-weight: 600;
             cursor: pointer;
-            font-family: 'DM Sans', sans-serif;
+            font-family: var(--font-body);
             display: inline-flex;
             align-items: center;
             gap: 6px;
@@ -224,12 +224,12 @@
         }
 
         .btn-navy:hover {
-            background: var(--gold);
+            background: var(--btn-primary-hover);
             color: #fff;
         }
 
         .view-link {
-            color: var(--gold);
+            color: var(--gold-text);
             text-decoration: none;
             font-weight: 600;
             font-size: 14px;
@@ -391,17 +391,17 @@
     {{-- Stat Cards --}}
     <div class="stats-row">
         <div class="stat-card">
-            <div class="stat-icon" style="background:#dcfce7; color:#15803d;"><i class="bi bi-cash-stack"></i></div>
+            <div class="stat-icon tag-green"><i class="bi bi-cash-stack"></i></div>
             <div class="stat-val">₱{{ number_format($totalRevenue, 2) }}</div>
             <div class="stat-lbl">Total Revenue</div>
         </div>
         <div class="stat-card">
-            <div class="stat-icon" style="background:#dbeafe; color:#1d4ed8;"><i class="bi bi-calendar-day"></i></div>
+            <div class="stat-icon tag-blue"><i class="bi bi-calendar-day"></i></div>
             <div class="stat-val">₱{{ number_format($todayRevenue, 2) }}</div>
             <div class="stat-lbl">Today's Revenue</div>
         </div>
         <div class="stat-card">
-            <div class="stat-icon" style="background:#fef9c3; color:#a16207;"><i class="bi bi-calendar-month"></i></div>
+            <div class="stat-icon tag-amber"><i class="bi bi-calendar-month"></i></div>
             <div class="stat-val">₱{{ number_format($monthRevenue, 2) }}</div>
             <div class="stat-lbl">This Month</div>
         </div>
@@ -411,7 +411,7 @@
             <div class="stat-lbl">Pending Balance</div>
         </div>
         <div class="stat-card">
-            <div class="stat-icon" style="background:#fee2e2; color:#dc2626;"><i class="bi bi-arrow-counterclockwise"></i>
+            <div class="stat-icon tag-red"><i class="bi bi-arrow-counterclockwise"></i>
             </div>
             <div class="stat-val">₱{{ number_format($totalRefunds, 2) }}</div>
             <div class="stat-lbl">Total Refunds</div>
@@ -501,7 +501,7 @@
     <div class="table-card">
         <div class="table-card-header">
             <h3>Payment Records</h3>
-            <span class="text-muted-theme" style="font-size: 14px;">{{ $payments->total() }} records</span>
+            <span class="text-muted-theme fs-14">{{ $payments->total() }} records</span>
         </div>
 
         @if ($payments->isEmpty())
@@ -527,11 +527,11 @@
                 <tbody>
                     @foreach ($payments as $payment)
                         <tr>
-                            <td class="text-muted-theme" style="font-size: 14px;">
+                            <td class="text-muted-theme fs-14">
                                 {{ $payment->created_at->format('M d, Y') }}
                             </td>
                             <td>
-                                <strong style="font-size:13px;">{{ $payment->booking->booking_ref ?? 'N/A' }}</strong>
+                                <strong class="fs-13">{{ $payment->booking->booking_ref ?? 'N/A' }}</strong>
                             </td>
                             <td>{{ $payment->booking->user->full_name ?? 'N/A' }}</td>
                             <td>{{ $payment->booking->property->property_name ?? 'N/A' }}</td>
@@ -583,7 +583,7 @@
                                 style="font-size: 14px; max-width:140px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
                                 {{ $payment->notes ?? '—' }}
                             </td>
-                            <td style="white-space:nowrap;">
+                            <td class="nowrap">
                                 <a href="{{ route('admin.bookings.show', $payment->booking_id) }}"
                                     class="view-link me-2">View</a>
                                 @if ($payment->payment_type !== 'refund')
@@ -695,7 +695,7 @@
                          tinype. Ang reference ang pinagbabatayan. --}}
                     <input type="hidden" name="booking_id" id="bookingIdInput">
                     <div id="bookingInfo" class="text-muted-theme"
-                        style="margin-top:8px; font-size: 14px; display:none; background:#f8fafc; border-radius:8px; padding:10px 12px;">
+                        style="margin-top:8px; font-size: 14px; display:none; background:var(--cream); border-radius:8px; padding:10px 12px;">
                     </div>
                 </div>
                 <div class="two-col mb-12">
@@ -728,8 +728,8 @@
                     </div>
                 </div>
                 <div class="mb-12">
-                    <label for="f_notes" class="form-label">Notes <span class="text-muted-theme"
-                            style="font-weight:400;">(optional)</span></label>
+                    <label for="f_notes" class="form-label">Notes <span class="text-muted-theme fw-400"
+                           >(optional)</span></label>
                     <input id="f_notes" type="text" name="notes" class="form-control"
                         placeholder="e.g. Cash received at frontdesk">
                 </div>
@@ -758,7 +758,7 @@
             <form method="POST" id="refundForm" class="modal-body">
                 @csrf
                 <div
-                    style="background:#fee2e2; border-radius:10px; padding:12px 16px; margin-bottom:16px; font-size:13px; color:#dc2626;">
+                    style="background:#fee2e2; border-radius:10px; padding:12px 16px; margin-bottom:16px; font-size:13px; color:#b91c1c;">
                     <i class="bi bi-exclamation-triangle me-2"></i>
                     Refund for booking <strong id="refundBookingRef"></strong>
                 </div>
@@ -775,7 +775,7 @@
                         placeholder="e.g. Guest cancelled 48 hours before check-in"></textarea>
                 </div>
                 <button type="submit"
-                    style="background:#dc2626; color:#fff; border:none; border-radius:9px; padding:12px; width:100%; font-size:14px; font-weight:600; cursor:pointer; font-family:'DM Sans',sans-serif;">
+                    style="background:#dc2626; color:#fff; border:none; border-radius:9px; padding:12px; width:100%; font-size:14px; font-weight:600; cursor:pointer; font-family: var(--font-body);">
                     <i class="bi bi-arrow-counterclockwise me-2"></i> Process Refund
                 </button>
             </form>
@@ -812,7 +812,7 @@
                 </div>
 
                 <div id="payoutDest"
-                    style="background:#f8fafc;border-radius:10px;padding:12px 16px;margin-bottom:16px;font-size: 14px;line-height:1.7;">
+                    style="background:var(--cream);border-radius:10px;padding:12px 16px;margin-bottom:16px;font-size: 14px;line-height:1.7;">
                 </div>
 
                 @include('admin.payments._confirm_booking_ref', ['bookingRef' => null, 'inputId' => 'payoutBookingRef'])
@@ -828,7 +828,7 @@
                 </div>
 
                 <button type="submit"
-                    style="background:var(--terracotta); color:#fff; border:none; border-radius:9px; padding:12px; width:100%; font-size:14px; font-weight:600; cursor:pointer; font-family:'DM Sans',sans-serif;">
+                    style="background:var(--terracotta); color:#fff; border:none; border-radius:9px; padding:12px; width:100%; font-size:14px; font-weight:600; cursor:pointer; font-family: var(--font-body);">
                     <i class="bi bi-check2-circle me-2"></i> Confirm Sent
                 </button>
             </form>

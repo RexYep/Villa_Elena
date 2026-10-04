@@ -79,7 +79,7 @@
         }
 
         .btn-run {
-            background: var(--terracotta);
+            background: var(--btn-primary);
             color: #fff;
             border: none;
             border-radius: 9px;
@@ -90,7 +90,7 @@
             height: 38px;
         }
 
-        .btn-run:hover { background: var(--gold); }
+        .btn-run:hover { background: var(--btn-primary-hover); color: #fff; }
 
         .result-strip {
             display: grid;
@@ -115,8 +115,8 @@
         }
 
         .result-tile .value {
-            font-family: 'Cormorant Garamond', serif;
-            font-size: 26px;
+            font-family: var(--font-display);
+            font-size: 23px;
             font-weight: 700;
             color: var(--stone);
             line-height: 1.1;
@@ -156,7 +156,7 @@
         td.num, th.num { text-align: right; white-space: nowrap; }
 
         .holiday-tag {
-            font-size: 11px;
+            font-size: 12px;
             background: #fef3c7;
             color: #92400e;
             padding: 1px 7px;

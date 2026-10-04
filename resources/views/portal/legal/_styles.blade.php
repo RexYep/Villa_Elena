@@ -21,7 +21,7 @@
     }
 
     .legal-back:hover {
-        color: var(--gold);
+        color: var(--gold-text);
     }
 
     /* ── Hero ── */
@@ -37,13 +37,13 @@
         font-size: 13px;
         letter-spacing: 3px;
         text-transform: uppercase;
-        color: var(--gold);
+        color: var(--gold-text);
         font-weight: 600;
         margin-bottom: 12px;
     }
 
     .legal-title {
-        font-family: 'Playfair Display', serif;
+        font-family: var(--font-display);
         font-size: clamp(30px, 4vw, 44px);
         font-weight: 600;
         color: var(--stone);
@@ -120,7 +120,7 @@
     }
 
     .toc-link.active {
-        color: var(--gold);
+        color: var(--gold-text);
         border-left-color: var(--gold);
         background: rgba(184, 148, 63, 0.08);
         font-weight: 500;
@@ -143,7 +143,7 @@
     }
 
     .toc-switch a:hover {
-        color: var(--gold);
+        color: var(--gold-text);
     }
 
     /* ── Document ── */
@@ -166,7 +166,7 @@
     }
 
     .legal-doc h2 {
-        font-family: 'Playfair Display', serif;
+        font-family: var(--font-display);
         font-size: 22px;
         font-weight: 600;
         color: var(--stone);
@@ -175,9 +175,9 @@
     }
 
     .legal-doc h2 .num {
-        color: var(--gold);
+        color: var(--gold-text);
         font-size: 15px;
-        font-family: 'Jost', sans-serif;
+        font-family: var(--font-body);
         font-weight: 600;
         margin-right: 10px;
         vertical-align: 3px;
@@ -221,7 +221,7 @@
     }
 
     .legal-doc a {
-        color: var(--gold);
+        color: var(--gold-text);
         text-decoration: none;
         border-bottom: 1px solid rgba(184, 148, 63, 0.35);
     }
@@ -264,7 +264,7 @@
 
     .legal-table th {
         text-align: left;
-        font-size: 10.5px;
+        font-size: 12px;
         letter-spacing: 1.4px;
         text-transform: uppercase;
         color: var(--muted);
@@ -305,7 +305,7 @@
 
     .legal-contact h2 {
         color: #fff;
-        font-family: 'Playfair Display', serif;
+        font-family: var(--font-display);
         font-size: 20px;
         margin: 0 0 10px;
     }
@@ -364,7 +364,7 @@
 
     .legal-doc-switch a:hover {
         border-color: var(--gold);
-        color: var(--gold);
+        color: var(--gold-text);
     }
 
     /* ── Responsive ── */

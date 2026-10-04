@@ -40,8 +40,8 @@
         }
 
         .stat-chip .val {
-            font-family: 'Cormorant Garamond', serif;
-            font-size: 24px;
+            font-family: var(--font-display);
+            font-size: 21px;
             font-weight: 700;
             color: var(--text-main);
             line-height: 1;
@@ -79,11 +79,11 @@
         }
 
         .filter-input {
-            border: 1.5px solid var(--border);
+            border: 1.5px solid var(--border-strong);
             border-radius: 8px;
             padding: 8px 12px;
             font-size: 13px;
-            font-family: 'DM Sans', sans-serif;
+            font-family: var(--font-body);
             background: #fff;
             color: var(--text-main);
             transition: border-color .2s;
@@ -95,7 +95,7 @@
         }
 
         .btn-filter {
-            background: var(--terracotta);
+            background: var(--btn-primary);
             color: #fff;
             border: none;
             border-radius: 8px;
@@ -103,12 +103,12 @@
             font-size: 13px;
             font-weight: 500;
             cursor: pointer;
-            font-family: 'DM Sans', sans-serif;
+            font-family: var(--font-body);
             transition: background .2s;
         }
 
         .btn-filter:hover {
-            background: var(--gold);
+            background: var(--btn-primary-hover); color: #fff;
         }
 
         .btn-clear {
@@ -119,7 +119,7 @@
             padding: 8px 14px;
             font-size: 13px;
             cursor: pointer;
-            font-family: 'DM Sans', sans-serif;
+            font-family: var(--font-body);
             text-decoration: none;
         }
 
@@ -127,7 +127,7 @@
             display: flex;
             align-items: center;
             gap: 7px;
-            background: var(--terracotta);
+            background: var(--btn-primary);
             color: #fff;
             border: none;
             border-radius: 9px;
@@ -140,7 +140,7 @@
         }
 
         .btn-add:hover {
-            background: var(--gold);
+            background: var(--btn-primary-hover);
             color: #fff;
         }
 
@@ -215,7 +215,7 @@
 
         .ref-source {
             font-size: 12px;
-            color: #94a3b8;
+            color: var(--muted);
             margin-top: 1px;
         }
 
@@ -225,7 +225,7 @@
 
         .guest-phone {
             font-size: 13px;
-            color: #94a3b8;
+            color: var(--muted);
             white-space: nowrap;
         }
 
@@ -363,12 +363,12 @@
         </a>
         <a href="{{ route('admin.bookings.index', ['status' => 'pending']) }}"
             class="stat-chip {{ request('status') == 'pending' ? 'active' : '' }}">
-            <div class="val" style="color:#a16207;">{{ $stats['pending'] }}</div>
+            <div class="val text-amber">{{ $stats['pending'] }}</div>
             <div class="lbl">Pending</div>
         </a>
         <a href="{{ route('admin.bookings.index', ['status' => 'confirmed']) }}"
             class="stat-chip {{ request('status') == 'confirmed' ? 'active' : '' }}">
-            <div class="val" style="color:#15803d;">{{ $stats['confirmed'] }}</div>
+            <div class="val text-green">{{ $stats['confirmed'] }}</div>
             <div class="lbl">Confirmed</div>
         </a>
         <a href="{{ route('admin.bookings.index', ['status' => 'checked_in']) }}"
@@ -378,7 +378,7 @@
         </a>
         <a href="{{ route('admin.bookings.index', ['status' => 'cancelled']) }}"
             class="stat-chip {{ request('status') == 'cancelled' ? 'active' : '' }}">
-            <div class="val" style="color:#dc2626;">{{ $stats['cancelled'] }}</div>
+            <div class="val text-red">{{ $stats['cancelled'] }}</div>
             <div class="lbl">Cancelled</div>
         </a>
 
@@ -452,17 +452,17 @@
                                 <div class="fw-medium guest-name">{{ $booking->user->full_name ?? 'N/A' }}</div>
                                 <div class="guest-phone">{{ $booking->user->phone ?? '' }}</div>
                             </td>
-                            <td style="white-space:nowrap;">{{ $booking->check_in_date->format('M d, Y') }}@if ($booking->check_in_time)
+                            <td class="nowrap">{{ $booking->check_in_date->format('M d, Y') }}@if ($booking->check_in_time)
                                     <br><small
                                         class="text-muted-theme">{{ \Carbon\Carbon::parse($booking->check_in_time)->format('g:i A') }}</small>
                                 @endif
                             </td>
-                            <td style="white-space:nowrap;">{{ $booking->check_out_date->format('M d, Y') }}@if ($booking->check_out_time)
+                            <td class="nowrap">{{ $booking->check_out_date->format('M d, Y') }}@if ($booking->check_out_time)
                                     <br><small
                                         class="text-muted-theme">{{ \Carbon\Carbon::parse($booking->check_out_time)->format('g:i A') }}</small>
                                 @endif
                             </td>
-                            <td style="font-weight:600;">₱{{ number_format($booking->total_amount, 2) }}</td>
+                            <td class="fw-600">₱{{ number_format($booking->total_amount, 2) }}</td>
                             <td><span
                                     class="status-badge s-{{ $booking->status }}">{{ ucfirst(str_replace('_', ' ', $booking->status)) }}</span>
                             </td>
@@ -499,18 +499,18 @@
     {{-- Delete Modal --}}
     <div class="modal fade" id="deleteModal" tabindex="-1">
         <div class="modal-dialog modal-sm modal-dialog-centered">
-            <div class="modal-content" style="border-radius:14px;border:none;">
+            <div class="modal-content modal-soft">
                 <div class="modal-body text-center p-4">
                     <div
-                        style="width:52px;height:52px;background:#fee2e2;border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 14px;font-size:22px;color:#ef4444;">
+                        style="width:52px;height:52px;background:#fee2e2;border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 14px;font-size:22px;color:#b91c1c;">
                         <i class="bi bi-trash"></i>
                     </div>
-                    <h5 style="font-family:'Cormorant Garamond',serif;font-size:19px;margin-bottom:8px;">Delete Booking?
+                    <h5 style="font-family: var(--font-display);font-size: 18px;margin-bottom:8px;">Delete Booking?
                     </h5>
-                    <p style="font-size:13px;color:#64748b;margin-bottom:20px;" id="deleteMsg"></p>
+                    <p style="font-size:13px;color:var(--muted);margin-bottom:20px;" id="deleteMsg"></p>
                     <form id="deleteForm" method="POST">
                         @csrf @method('DELETE')
-                        <div style="display:flex;gap:8px;">
+                        <div class="flex-gap-8">
                             <button type="button" class="btn btn-light w-50" data-bs-dismiss="modal">Cancel</button>
                             <button type="submit" class="btn btn-danger w-50">Delete</button>
                         </div>

@@ -7,13 +7,31 @@
  */
 :root {
     --stone: #2c2416;
-    --terracotta: #c4673a;
-    --gold: #b8943f;
-    --gold-light: #d4aa5a;
+    --terracotta: #b55a31;   /* 4.7:1 under white button text; was #c4673a at 3.9 */
+    /* These two were #b8943f / #d4aa5a here while the chatbot partial
+     * redefined them on :root for every public page, so the landing page
+     * showed a brighter gold than this file said. The public value is the
+     * one guests have always seen, so it is the one kept. */
+    --gold: #c9a84c;
+    --gold-light: #e8c97a;
     --sand: #f5f0e8;
     --cream: #fdfbf7;
     --border: #e4ddd0;
-    --muted: #8a7f6e;
+    --muted: #746a59;        /* 4.7:1 on --sand; was #8a7f6e at 3.5 */
+
+    /* Accessible variants. --gold is 2.8:1 on a light surface, fine for
+     * an icon tile or on --stone but not for text; --border is a hairline
+     * between cards, too faint (1.3:1) to mark the edge of an input. */
+    --gold-text: #86691f;
+    --border-strong: #9c917d;
+
+    /* One display face and one text face for every section. */
+    --font-display: 'Playfair Display', serif;
+    --font-body: 'DM Sans', sans-serif;
+
+    /* The one primary action colour for every section. Change it here. */
+    --btn-primary: var(--stone);
+    --btn-primary-hover: var(--terracotta);
 
     /* Semantic state colors — the single source of truth for status/role/
      * payment badge colors, referenced both by .tag-* below and directly
@@ -27,8 +45,8 @@
     --tag-blue-bg:#dbeafe;    --tag-blue-fg:#1d4ed8;
     --tag-purple-bg:#f3e8ff;  --tag-purple-fg:#7c3aed;
     --tag-cyan-bg:#e0f2fe;    --tag-cyan-fg:#0369a1;
-    --tag-red-bg:#fee2e2;     --tag-red-fg:#dc2626;
-    --tag-emerald-bg:#f0fdf4; --tag-emerald-fg:#16a34a; /* payment type: deposit */
+    --tag-red-bg:#fee2e2;     --tag-red-fg:#b91c1c;
+    --tag-emerald-bg:#f0fdf4; --tag-emerald-fg:#15803d; /* payment type: deposit */
     --tag-slate-bg:#f1f5f9;   --tag-slate-fg:#475569;   /* booking status: checked_out */
 }
 
@@ -38,12 +56,12 @@
  * navy/gold pages) since these represent booking/payment/task state, not
  * brand identity. Pair with an existing shape class (.badge, .status-badge,
  * .role-badge) or use bare for text-only coloring. */
-.tag-amber  { background: var(--tag-amber-bg);  color: var(--tag-amber-fg); }
-.tag-green  { background: var(--tag-green-bg);  color: var(--tag-green-fg); }
-.tag-blue   { background: var(--tag-blue-bg);   color: var(--tag-blue-fg); }
-.tag-purple { background: var(--tag-purple-bg); color: var(--tag-purple-fg); }
-.tag-cyan   { background: var(--tag-cyan-bg);   color: var(--tag-cyan-fg); }
-.tag-red    { background: var(--tag-red-bg);    color: var(--tag-red-fg); }
+.tag-amber  { background: var(--tag-amber-bg) !important; color: var(--tag-amber-fg) !important; }
+.tag-green  { background: var(--tag-green-bg) !important; color: var(--tag-green-fg) !important; }
+.tag-blue   { background: var(--tag-blue-bg) !important; color: var(--tag-blue-fg) !important; }
+.tag-purple { background: var(--tag-purple-bg) !important; color: var(--tag-purple-fg) !important; }
+.tag-cyan   { background: var(--tag-cyan-bg) !important; color: var(--tag-cyan-fg) !important; }
+.tag-red    { background: var(--tag-red-bg) !important; color: var(--tag-red-fg) !important; }
 
 /* Muted text — references the section's own --muted token (base's warm
  * gray by default, overridden to staff's cooler blue-gray in staff.css),
@@ -92,4 +110,63 @@
         transition-duration: .01ms !important;
         scroll-behavior: auto !important;
     }
+}
+
+/* Form fields: several pages drop the browser outline on focus and leave
+ * only a border-colour change. This ring is the visible replacement; zero
+ * specificity, so a page that draws its own focus shadow still wins. */
+:where(input, select, textarea):focus-visible {
+    box-shadow: 0 0 0 3px rgba(181, 90, 49, .3);
+}
+
+/* ── Shared text, spacing and form helpers ───────────────────────────
+ * These replace inline style="" attributes that were repeated across
+ * views. They carry !important for the same reason Bootstrap's utilities
+ * do: each one stands in for an inline style, which used to beat every
+ * page rule, and must keep doing so. Spacing names give the literal px
+ * value (see .mb-12 above), which also keeps them clear of Bootstrap's
+ * .mt-1 … .mt-5 scale. */
+.fs-13 { font-size: 13px !important; }
+.fs-14 { font-size: 14px !important; }
+.fw-400 { font-weight: 400 !important; }
+.fw-600 { font-weight: 600 !important; }
+.text-red   { color: #b91c1c !important; }
+.text-green { color: #15803d !important; }
+.text-amber { color: #a16207 !important; }
+.text-stone { color: var(--stone) !important; }
+.text-gold  { color: var(--gold) !important; }
+.mt-8  { margin-top: 8px !important; }
+.mt-12 { margin-top: 12px !important; }
+.mt-16 { margin-top: 16px !important; }
+.mt-20 { margin-top: 20px !important; }
+.mb-10 { margin-bottom: 10px !important; }
+.mb-14 { margin-bottom: 14px !important; }
+.mb-20 { margin-bottom: 20px !important; }
+.m-0-all { margin: 0 !important; }
+.flex-gap-8 { display: flex !important; gap: 8px !important; }
+.nowrap { white-space: nowrap !important; }
+.tag-neutral { background: var(--sand) !important; color: var(--muted) !important; }
+
+/* Small grey helper text under or above a field. */
+.note-text    { font-size: 13px !important; color: var(--muted) !important; }
+.note-text-lg { font-size: 14px !important; color: var(--muted) !important; }
+.field-hint    { font-size: 13px !important; color: var(--muted) !important; margin-top: 4px !important; }
+.field-caption { font-size: 13px !important; color: var(--muted) !important; margin-bottom: 4px !important; display: block !important; }
+.field-error   { font-size: 13px !important; color: #b91c1c !important; margin-top: 4px !important; }
+.field-label    { font-size: 14px !important; font-weight: 600 !important; color: var(--stone) !important; display: block !important; margin-bottom: 6px !important; }
+.field-label-sm { font-size: 13px !important; font-weight: 600 !important; color: var(--stone) !important; display: block !important; margin-bottom: 5px !important; }
+/* A rule line that separates two groups inside one card. */
+.section-divider { margin-top: 18px !important; padding-top: 18px !important; border-top: 1px solid var(--border) !important; }
+.link-accent { font-size: 14px !important; color: var(--terracotta) !important; text-decoration: none !important; font-weight: 500 !important; }
+.modal-soft { border-radius: 14px !important; border: none !important; }
+
+/* A bare text field on pages that do not use .form-control. */
+.input-plain {
+    width: 100% !important;
+    border: 1.5px solid var(--border-strong) !important;
+    border-radius: 8px !important;
+    padding: 10px 14px !important;
+    font-size: 13px !important;
+    font-family: var(--font-body) !important;
+    background: #fff !important;
 }

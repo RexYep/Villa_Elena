@@ -10,7 +10,7 @@
             display: flex;
             align-items: center;
             gap: 7px;
-            background: var(--terracotta);
+            background: var(--btn-primary);
             color: #fff;
             border: none;
             border-radius: 9px;
@@ -23,7 +23,7 @@
         }
 
         .btn-add:hover {
-            background: var(--gold);
+            background: var(--btn-primary-hover);
             color: #fff;
         }
 
@@ -44,8 +44,8 @@
         }
 
         .promo-value {
-            font-family: 'Cormorant Garamond', serif;
-            font-size: 20px;
+            font-family: var(--font-display);
+            font-size: 18px;
             font-weight: 700;
             color: var(--terracotta);
             line-height: 1;
@@ -65,7 +65,7 @@
 
         .badge.bg-success  { background: #dcfce7 !important; color: #15803d; }
         .badge.bg-info     { background: #dbeafe !important; color: #1d4ed8; }
-        .badge.bg-secondary{ background: #e2e8f0 !important; color: #475569; }
+        .badge.bg-secondary{ background: var(--border) !important; color: var(--muted); }
         .badge.bg-warning  { background: #fef3c7 !important; color: #92400e; }
 
         .visibility-tag {
@@ -158,13 +158,13 @@
                                 </div>
                             </td>
                             <td><span class="promo-value">{{ $promo->value_label }}</span></td>
-                            <td class="text-muted-theme" style="font-size: 14px;">{{ $promo->window_label }}</td>
-                            <td class="text-muted-theme" style="font-size: 14px;">{{ $promo->slot_label }}</td>
+                            <td class="text-muted-theme fs-14">{{ $promo->window_label }}</td>
+                            <td class="text-muted-theme fs-14">{{ $promo->slot_label }}</td>
                             {{-- Ang dalawang uri ng promo ay nagmumukhang
                                  pareho sa listahan kung wala ito, at ang
                                  pagkakaiba ay tungkol sa kung sino ang
                                  makakakuha — ang unang tanong ng may-ari. --}}
-                            <td style="font-size: 14px;">
+                            <td class="fs-14">
                                 @if ($promo->isReturningOnly())
                                     <span class="badge bg-info">{{ $promo->guest_scope_label }}</span>
                                 @else
@@ -174,7 +174,7 @@
                             <td style="text-align:center;">
                                 {{ $promo->bookings_count }}
                                 @if ($promo->usage_limit)
-                                    <span class="text-muted-theme" style="font-size: 13px;">/ {{ $promo->usage_limit }}</span>
+                                    <span class="text-muted-theme fs-13">/ {{ $promo->usage_limit }}</span>
                                 @endif
                             </td>
                             <td>{!! $promo->state_badge !!}</td>
@@ -226,9 +226,9 @@
 @section('modals')
     <div class="modal fade" id="deletePromoModal" tabindex="-1">
         <div class="modal-dialog modal-dialog-centered">
-            <div class="modal-content" style="border-radius:14px;border:none;">
+            <div class="modal-content modal-soft">
                 <div class="modal-body" style="padding:24px;">
-                    <h5 style="font-family:'Cormorant Garamond',serif;margin-bottom:8px;">Delete promo?</h5>
+                    <h5 style="font-family: var(--font-display);margin-bottom:8px;">Delete promo?</h5>
                     <p style="font-size:13px;color:var(--muted);margin-bottom:20px;">
                         <strong id="deletePromoName"></strong> will be removed. Bookings already made under it
                         keep their discounted totals — only the link back to this promo is lost.

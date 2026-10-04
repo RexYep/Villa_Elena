@@ -50,16 +50,16 @@
             min-height: 44px;
             padding: 0 16px;
             border-radius: 10px;
-            background: #f1f5f9;
-            color: #374151;
+            background: var(--sand);
+            color: var(--stone);
             font-size: 14px;
             font-weight: 600;
             text-decoration: none;
         }
 
         .btn-stay-view:hover {
-            background: #e2e8f0;
-            color: #374151;
+            background: var(--border);
+            color: var(--stone);
         }
 
         @media (max-width:700px) {
@@ -105,7 +105,7 @@
         }
 
         .welcome-text h1 {
-            font-family: 'Playfair Display', serif;
+            font-family: var(--font-display);
             color: #fff;
             font-size: 30px;
             font-weight: 600;
@@ -138,7 +138,7 @@
             padding: 11px 22px;
             font-size: 13px;
             font-weight: 600;
-            font-family: 'Jost', sans-serif;
+            font-family: var(--font-body);
             cursor: pointer;
             text-decoration: none;
             display: inline-flex;
@@ -160,7 +160,7 @@
             padding: 11px 22px;
             font-size: 13px;
             font-weight: 500;
-            font-family: 'Jost', sans-serif;
+            font-family: var(--font-body);
             cursor: pointer;
             text-decoration: none;
             display: inline-flex;
@@ -201,7 +201,7 @@
         }
 
         .stat-val {
-            font-family: 'Playfair Display', serif;
+            font-family: var(--font-display);
             font-size: 28px;
             font-weight: 700;
             color: var(--stone);
@@ -232,7 +232,7 @@
 
         .card-head a {
             font-size: 14px;
-            color: var(--gold);
+            color: var(--gold-text);
             text-decoration: none;
             font-weight: 500;
         }
@@ -253,7 +253,7 @@
         }
 
         .booking-row:hover .booking-ref {
-            color: var(--gold);
+            color: var(--gold-text);
         }
 
         .booking-row:last-child {
@@ -356,7 +356,7 @@
         }
 
         .upcoming-property {
-            font-family: 'Playfair Display', serif;
+            font-family: var(--font-display);
             color: #fff;
             font-size: 16px;
             font-weight: 600;
@@ -424,7 +424,7 @@
         }
 
         .notif-row:hover .notif-title {
-            color: var(--gold);
+            color: var(--gold-text);
         }
 
         .notif-row:last-child {
@@ -696,7 +696,7 @@
                                 style="font-size:36px;display:block;margin-bottom:8px;opacity:.4;"></i>
                             {{ $upcomingBookings->isEmpty() ? 'No bookings yet.' : 'No earlier bookings.' }}
                             <a href="{{ route('home') }}"
-                                style="color:var(--gold);display:block;margin-top:8px;font-size:13px;">
+                                style="color:var(--gold-text);display:block;margin-top:8px;font-size:13px;">
                                 Book the villa →
                             </a>
                         </div>
@@ -722,7 +722,7 @@
                                 <div class="upcoming-label">Upcoming reservation</div>
                                 <div class="upcoming-property">{{ $booking->property->property_name ?? 'N/A' }}</div>
                                 <div class="upcoming-dates">
-                                    <i class="bi bi-calendar3" style="font-size: 13px;"></i>
+                                    <i class="bi bi-calendar3 fs-13"></i>
                                     {{ $booking->check_in_date->format('M d') }} →
                                     {{ $booking->check_out_date->format('M d, Y') }}
                                 </div>
@@ -740,7 +740,7 @@
                             <i class="bi bi-moon-stars"></i>
                             No upcoming stays.<br>
                             <a href="{{ route('home') }}"
-                                style="color:var(--gold);font-size: 14px;margin-top:6px;display:inline-block;">
+                                style="color:var(--gold-text);font-size: 14px;margin-top:6px;display:inline-block;">
                                 Plan your next visit →
                             </a>
                         </div>

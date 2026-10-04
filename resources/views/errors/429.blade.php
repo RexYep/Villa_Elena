@@ -21,7 +21,7 @@
 
 @section('content')
 
-    <h2>Please slow down</h2>
+    <h1>Please slow down</h1>
 
     <p class="subtitle">
         We received too many requests from you in a short time. Please wait

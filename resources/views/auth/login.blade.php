@@ -8,7 +8,7 @@
 
 @section('content')
 
-    <h2>Welcome back</h2>
+    <h1>Welcome back</h1>
     <p class="subtitle">Sign in to your account to continue</p>
 
     <form method="POST" action="{{ route('login') }}">
@@ -62,7 +62,7 @@
         <div class="mb-4">
             <div class="form-check">
                 <input class="form-check-input" type="checkbox" name="remember" id="remember">
-                <label class="form-check-label" for="remember" style="font-size:13px; color:#64748b;">
+                <label class="form-check-label note-text" for="remember">
                     Keep me signed in
                 </label>
             </div>

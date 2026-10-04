@@ -232,7 +232,7 @@
                             <span>Peak rate (Fri/Sat, Sun before 6PM)</span>
                             <span><span class="preview-old">₱{{ number_format($rates['weekend'], 2) }}</span><span class="preview-new" id="prevPeak">—</span></span>
                         </div>
-                        <div class="hint" style="margin-top:8px;">
+                        <div class="hint mt-8">
                             Based on this villa's current package rates. A pricing rule for a specific date overrides
                             the base rate first — the discount then applies to whatever that rate turns out to be.
                         </div>
@@ -335,7 +335,7 @@
                         </div>
                     </div>
 
-                    <span class="hint" style="margin-top:12px;">
+                    <span class="hint mt-12">
                         A <strong>Returning guests only</strong> promo is matched against the guest's completed stays —
                         bookings that reached <strong>checked out</strong>. Pending, confirmed, cancelled and
                         no-show bookings never count, so nobody can qualify by booking dates they don't pay for.
@@ -344,7 +344,7 @@
                         existing guest rather than creating a new one.
                     </span>
 
-                    <span class="hint" style="margin-top:12px;">
+                    <span class="hint mt-12">
                         The window is matched against the guest's <strong>check-in date</strong>, not the date they book —
                         so a promo dated for September discounts September stays, whenever they were booked.
                         A promo whose window hasn't started yet is <strong>still advertised on the landing page</strong>

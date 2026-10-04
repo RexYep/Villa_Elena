@@ -6,7 +6,7 @@
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <title>@yield('title', 'Villa Elena Resort')</title>
     @include('partials.favicon')
-    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400&family=Jost:wght@300;400;500;600&display=swap" rel="stylesheet">
+    @include('partials.fonts')
     @vite(['resources/js/portal.js'])
     @stack('styles')
     <style>
@@ -31,10 +31,10 @@
             padding: 14px 16px;
             border-radius: 12px;
             background: #fff;
-            border: 1px solid #e5e7eb;
+            border: 1px solid var(--border);
             border-left: 4px solid #1d4ed8;
             box-shadow: 0 10px 30px rgba(0, 0, 0, .12);
-            color: #1f2937;
+            color: var(--stone);
             font-size: 14px;
             font-weight: 500;
             text-decoration: none;
@@ -42,12 +42,12 @@
             transition: opacity .3s, transform .3s;
         }
 
-        .issue-toast:hover { color: #1f2937; }
+        .issue-toast:hover { color: var(--stone); }
         .issue-toast i { font-size: 18px; color: #1d4ed8; }
         .issue-toast.is-completed { border-left-color: #15803d; }
         .issue-toast.is-completed i { color: #15803d; }
-        .issue-toast.is-cancelled { border-left-color: #64748b; }
-        .issue-toast.is-cancelled i { color: #64748b; }
+        .issue-toast.is-cancelled { border-left-color: var(--muted); }
+        .issue-toast.is-cancelled i { color: var(--muted); }
         .issue-toast.leaving { opacity: 0; transform: translateY(8px); }
 
         @keyframes issueToastIn {

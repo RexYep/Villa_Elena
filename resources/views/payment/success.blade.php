@@ -57,7 +57,7 @@
         }
 
         .card-top h1 {
-            font-family: 'Playfair Display', serif;
+            font-family: var(--font-display);
             color: #fff;
             font-size: 26px;
             font-weight: 700;
@@ -82,7 +82,7 @@
         }
 
         .amount-label {
-            font-size: 11px;
+            font-size: 12px;
             color: var(--muted);
             text-transform: uppercase;
             letter-spacing: 1px;
@@ -90,7 +90,7 @@
         }
 
         .amount-val {
-            font-family: 'Playfair Display', serif;
+            font-family: var(--font-display);
             font-size: 32px;
             font-weight: 700;
             color: var(--stone);
@@ -121,7 +121,7 @@
             color: var(--tag-green-fg);
             padding: 3px 10px;
             border-radius: 20px;
-            font-size: 11px;
+            font-size: 12px;
             font-weight: 700;
         }
 
@@ -130,13 +130,13 @@
             color: var(--tag-amber-fg);
             padding: 3px 10px;
             border-radius: 20px;
-            font-size: 11px;
+            font-size: 12px;
             font-weight: 700;
         }
 
         .btn-primary {
             display: block;
-            background: var(--stone);
+            background: var(--btn-primary);
             color: #fff;
             border-radius: 10px;
             padding: 14px;
@@ -149,8 +149,8 @@
         }
 
         .btn-primary:hover {
-            background: var(--gold);
-            color: var(--stone);
+            background: var(--btn-primary-hover);
+            color: #fff;
         }
 
         .btn-secondary {
@@ -219,7 +219,7 @@
             color: var(--tag-amber-fg);
             padding: 3px 10px;
             border-radius: 20px;
-            font-size: 11px;
+            font-size: 12px;
             font-weight: 700;
         }
     </style>
@@ -267,7 +267,7 @@
                             <strong>If you have already paid</strong>, keep this page open — we are checking
                             for your payment right now, and this page will update by itself the moment it
                             arrives. We will also send you a notification and an email.
-                            <div style="margin-top:8px;">
+                            <div class="mt-8">
                                 <strong>If not yet</strong>, you can retry the payment from your booking—you won't
                                 be charged twice.
                             </div>

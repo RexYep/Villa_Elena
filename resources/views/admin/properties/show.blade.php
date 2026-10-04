@@ -16,7 +16,7 @@
 @push('styles')
     <style>
         .btn-navy {
-            background: var(--terracotta);
+            background: var(--btn-primary);
             color: #fff;
             border: none;
             border-radius: 9px;
@@ -24,7 +24,7 @@
             font-size: 13px;
             font-weight: 600;
             cursor: pointer;
-            font-family: 'DM Sans', sans-serif;
+            font-family: var(--font-body);
             display: inline-flex;
             align-items: center;
             gap: 6px;
@@ -33,7 +33,7 @@
         }
 
         .btn-navy:hover {
-            background: var(--gold);
+            background: var(--btn-primary-hover);
             color: #fff;
         }
 
@@ -46,7 +46,7 @@
             font-size: 13px;
             font-weight: 500;
             cursor: pointer;
-            font-family: 'DM Sans', sans-serif;
+            font-family: var(--font-body);
             display: inline-flex;
             align-items: center;
             gap: 6px;
@@ -76,7 +76,7 @@
 
         .status-occupied {
             background: #fee2e2;
-            color: #dc2626;
+            color: #b91c1c;
         }
 
         .status-maintenance {
@@ -102,8 +102,8 @@
         }
 
         .panel-head h3 {
-            font-family: 'Cormorant Garamond', serif;
-            font-size: 17px;
+            font-family: var(--font-display);
+            font-size: 16px;
             font-weight: 600;
             color: var(--stone);
         }
@@ -128,8 +128,8 @@
         }
 
         .mini-card .val {
-            font-family: 'Cormorant Garamond', serif;
-            font-size: 26px;
+            font-family: var(--font-display);
+            font-size: 23px;
             font-weight: 700;
             color: var(--stone);
             line-height: 1;
@@ -244,7 +244,7 @@
 
         .booking-status.cancelled {
             background: #fee2e2;
-            color: #dc2626;
+            color: #b91c1c;
         }
 
         .booking-status.checked_in {
@@ -253,13 +253,13 @@
         }
 
         .booking-status.checked_out {
-            background: #f1f5f9;
-            color: #475569;
+            background: var(--sand);
+            color: var(--muted);
         }
 
         .booking-status.completed {
             background: #f0fdf4;
-            color: #16a34a;
+            color: #15803d;
         }
 
         /* REVIEW STARS */
@@ -412,7 +412,7 @@
         </div>
     @elseif($property->type === 'room')
         <div
-            style="background:#f1f5f9;color:#475569;border-radius:10px;padding:12px 16px;margin-bottom:18px;font-size:13px;">
+            style="background:var(--sand);color:var(--muted);border-radius:10px;padding:12px 16px;margin-bottom:18px;font-size:13px;">
             <i class="bi bi-info-circle me-2"></i>
             Ito ay isa sa mga <strong>kwarto ng Villa Elena</strong> — info/reference lang ito (status, litrato,
             housekeeping). Hindi ito hiwalay na binebentang listing, kaya inaasahang <strong>0 ang bookings/reviews</strong>
@@ -423,7 +423,7 @@
     {{-- MINI STAT CARDS --}}
     <div class="mini-stats">
         <div class="mini-card">
-            <div class="mini-icon" style="background:#dcfce7; color:#15803d;"><i class="bi bi-cash-stack"></i></div>
+            <div class="mini-icon tag-green"><i class="bi bi-cash-stack"></i></div>
             {{-- "Regular rate", hindi "Base Price / Night". Walang gabi ang
                  sistemang ito — dalawang nakapirming slot na binabayaran bilang
                  flat package. Ito ang mismong bokabularyo ng
@@ -432,17 +432,17 @@
             <div class="lbl">Regular Rate</div>
         </div>
         <div class="mini-card">
-            <div class="mini-icon" style="background:#dbeafe; color:#1d4ed8;"><i class="bi bi-people"></i></div>
+            <div class="mini-icon tag-blue"><i class="bi bi-people"></i></div>
             <div class="val">{{ $property->max_capacity }}</div>
             <div class="lbl">Max Capacity</div>
         </div>
         <div class="mini-card">
-            <div class="mini-icon" style="background:#fef9c3; color:#a16207;"><i class="bi bi-calendar-check"></i></div>
+            <div class="mini-icon tag-amber"><i class="bi bi-calendar-check"></i></div>
             <div class="val">{{ $property->bookings->count() }}</div>
             <div class="lbl">Total Bookings</div>
         </div>
         <div class="mini-card">
-            <div class="mini-icon" style="background:#f3e8ff; color:#7c3aed;"><i class="bi bi-star"></i></div>
+            <div class="mini-icon tag-purple"><i class="bi bi-star"></i></div>
             <div class="val">
                 {{ $property->reviews->count() > 0 ? number_format($property->reviews->avg('rating'), 1) : '—' }}</div>
             <div class="lbl">Avg Rating</div>
@@ -506,7 +506,7 @@
                     </div>
 
                     @if ($property->description)
-                        <div style="margin-top:18px; padding-top:18px; border-top:1px solid var(--border);">
+                        <div class="section-divider">
                             <label class="text-muted-theme section-label"
                                 style="font-size: 13px; display:block; margin-bottom:8px;">Description</label>
                             <p style="font-size:14px; color:var(--text-main); line-height:1.7;">
@@ -515,7 +515,7 @@
                     @endif
 
                     @if (!empty($property->amenities))
-                        <div style="margin-top:18px; padding-top:18px; border-top:1px solid var(--border);">
+                        <div class="section-divider">
                             <label class="text-muted-theme section-label"
                                 style="font-size: 13px; display:block; margin-bottom:8px;">Amenities</label>
                             <div>
@@ -534,7 +534,7 @@
                 <div class="panel-head">
                     <h3>Photos</h3>
                     <a href="{{ route('admin.properties.edit', $property) }}"
-                        style="font-size: 14px; color:var(--gold); text-decoration:none; font-weight:600;">
+                        style="font-size: 14px; color:var(--gold-text); text-decoration:none; font-weight:600;">
                         <i class="bi bi-plus-lg"></i> Add Photos
                     </a>
                 </div>
@@ -547,7 +547,7 @@
                                         class="gallery-img {{ $image->is_primary ? 'gallery-primary' : '' }}">
                                     @if ($image->is_primary)
                                         <span
-                                            style="position:absolute; top:6px; left:6px; background:var(--gold); color:#fff; font-size: 11px; font-weight:700; padding:2px 7px; border-radius:10px; text-transform:uppercase; letter-spacing:.3px;">Primary</span>
+                                            style="position:absolute; top:6px; left:6px; background:var(--gold); color:#fff; font-size: 12px; font-weight:700; padding:2px 7px; border-radius:10px; text-transform:uppercase; letter-spacing:.3px;">Primary</span>
                                     @endif
                                 </div>
                             @endforeach
@@ -566,7 +566,7 @@
                 <div class="panel-head">
                     <h3>Recent Bookings</h3>
                     <a href="{{ route('admin.bookings.index') }}?property={{ $property->id }}"
-                        style="font-size: 14px; color:#2e5fa3; text-decoration:none; font-weight:500;">
+                        style="font-size: 14px; color:var(--terracotta); text-decoration:none; font-weight:500;">
                         View all <i class="bi bi-arrow-right"></i>
                     </a>
                 </div>
@@ -597,9 +597,9 @@
                                         </a>
                                     </td>
                                     <td>{{ $booking->user->full_name ?? 'N/A' }}</td>
-                                    <td class="text-muted-theme" style="font-size: 14px;">
+                                    <td class="text-muted-theme fs-14">
                                         {{ $booking->check_in_date->format('M d, Y') }}</td>
-                                    <td class="text-muted-theme" style="font-size: 14px;">
+                                    <td class="text-muted-theme fs-14">
                                         {{ $booking->check_out_date->format('M d, Y') }}</td>
                                     <td>
                                         <span class="booking-status {{ $booking->status }}">
@@ -629,7 +629,7 @@
                     <div class="panel-body" style="display:flex; flex-direction:column; gap:14px;">
                         @foreach ($property->reviews->take(5) as $review)
                             <div
-                                style="padding:14px; background:#f8fafc; border-radius:10px; border:1px solid var(--border);">
+                                style="padding:14px; background:var(--cream); border-radius:10px; border:1px solid var(--border);">
                                 <div
                                     style="display:flex; align-items:center; justify-content:space-between; margin-bottom:6px;">
                                     <span
@@ -644,7 +644,7 @@
                                     <p class="text-muted-theme" style="font-size:13px; line-height:1.5;">
                                         {{ $review->comment }}</p>
                                 @endif
-                                <div style="font-size: 13px; color:#94a3b8; margin-top:6px;">
+                                <div style="font-size: 13px; color:var(--muted); margin-top:6px;">
                                     {{ $review->created_at->format('M d, Y') }}</div>
                             </div>
                         @endforeach
@@ -697,8 +697,8 @@
                     <div class="panel-body" style="display:flex; flex-direction:column; gap:8px;">
                         @foreach ($property->pricingRules as $rule)
                             <div
-                                style="background:#f8fafc; border-radius:9px; padding:10px 14px; border:1px solid var(--border); font-size:13px;">
-                                <div style="font-weight:600;">{{ $rule->name ?? ucfirst($rule->type) }}</div>
+                                style="background:var(--cream); border-radius:9px; padding:10px 14px; border:1px solid var(--border); font-size:13px;">
+                                <div class="fw-600">{{ $rule->name ?? ucfirst($rule->type) }}</div>
                                 <div class="text-muted-theme" style="font-size: 14px; margin-top:2px;">
                                     ₱{{ number_format($rule->price ?? $rule->amount, 2) }}
                                     @if (isset($rule->start_date))
@@ -728,7 +728,7 @@
                 </div>
                 <div class="panel-body">
                     @if ($property->type === 'villa')
-                        <p class="text-muted-theme mb-12" style="font-size: 14px;">
+                        <p class="text-muted-theme mb-12 fs-14">
                             Blocking dates here will directly affect the availability visible to customers (since this is
                             the master, bookable Villa).
                         </p>
@@ -742,35 +742,35 @@
                             @csrf
                             <div class="mb-12">
                                 <label for="f_start_date"
-                                    style="font-size: 13px; font-weight:600; color:#374151; display:block; margin-bottom:5px;">Start
+                                    class="field-label-sm">Start
                                     Date</label>
                                 <input id="f_start_date" type="date" name="start_date" required min="{{ date('Y-m-d') }}"
-                                    style="width:100%; border:1.5px solid var(--border); border-radius:8px; padding:9px 12px; font-size:13px; font-family:'DM Sans',sans-serif;">
+                                    style="width:100%; border:1.5px solid var(--border); border-radius:8px; padding:9px 12px; font-size:13px; font-family: var(--font-body);">
                             </div>
                             <div class="mb-12">
                                 <label for="f_end_date"
-                                    style="font-size: 13px; font-weight:600; color:#374151; display:block; margin-bottom:5px;">End
+                                    class="field-label-sm">End
                                     Date</label>
                                 <input id="f_end_date" type="date" name="end_date" required min="{{ date('Y-m-d') }}"
-                                    style="width:100%; border:1.5px solid var(--border); border-radius:8px; padding:9px 12px; font-size:13px; font-family:'DM Sans',sans-serif;">
+                                    style="width:100%; border:1.5px solid var(--border); border-radius:8px; padding:9px 12px; font-size:13px; font-family: var(--font-body);">
                             </div>
                             <div class="mb-12">
                                 <label for="f_reason"
-                                    style="font-size: 13px; font-weight:600; color:#374151; display:block; margin-bottom:5px;">Reason</label>
+                                    class="field-label-sm">Reason</label>
                                 <select id="f_reason" name="reason" required
-                                    style="width:100%; border:1.5px solid var(--border); border-radius:8px; padding:9px 12px; font-size:13px; font-family:'DM Sans',sans-serif; background:#fff;">
+                                    style="width:100%; border:1.5px solid var(--border); border-radius:8px; padding:9px 12px; font-size:13px; font-family: var(--font-body); background:#fff;">
                                     <option value="maintenance">Maintenance</option>
                                     <option value="owner_use">Owner Use</option>
                                     <option value="private_event">Private Event</option>
                                     <option value="other">Other</option>
                                 </select>
                             </div>
-                            <div style="margin-bottom:14px;">
+                            <div class="mb-14">
                                 <label for="f_notes"
-                                    style="font-size: 13px; font-weight:600; color:#374151; display:block; margin-bottom:5px;">Notes
-                                    <span class="text-muted-theme" style="font-weight:400;">(optional)</span></label>
+                                    class="field-label-sm">Notes
+                                    <span class="text-muted-theme fw-400">(optional)</span></label>
                                 <input id="f_notes" type="text" name="notes" placeholder="e.g. Repainting the walls"
-                                    style="width:100%; border:1.5px solid var(--border); border-radius:8px; padding:9px 12px; font-size:13px; font-family:'DM Sans',sans-serif;">
+                                    class="input-plain">
                             </div>
                             <button type="submit" class="btn-navy" style="width:100%; justify-content:center;">
                                 <i class="bi bi-calendar-x"></i> Block These Dates
@@ -792,7 +792,7 @@
 
                     {{-- Existing blocks --}}
                     @if ($property->availabilityBlocks->count() > 0)
-                        <div style="margin-top:18px; padding-top:18px; border-top:1px solid var(--border);">
+                        <div class="section-divider">
                             <div class="text-muted-theme section-label" style="font-size: 13px; margin-bottom:10px;">
                                 Blocked Periods{{ $property->type === 'villa' ? '' : ' (no effect on availability)' }}
                             </div>
@@ -803,7 +803,7 @@
                                         {{ \Carbon\Carbon::parse($block->start_date)->format('M d') }} –
                                         {{ \Carbon\Carbon::parse($block->end_date)->format('M d, Y') }}
                                     </div>
-                                    <div style="color:#6b7a8d; margin-top:2px;">
+                                    <div style="color:var(--muted); margin-top:2px;">
                                         {{ ucfirst(str_replace('_', ' ', $block->reason)) }}{{ $block->notes ? ' · ' . $block->notes : '' }}
                                     </div>
                                 </div>
@@ -823,7 +823,7 @@
                 <div>
                     <div style="font-weight:600; color:#dc2626; font-size:14px;"><i
                             class="bi bi-shield-lock me-2"></i>This property cannot be deleted</div>
-                    <div style="font-size: 14px; color:#6b7a8d; margin-top:2px;">
+                    <div style="font-size: 14px; color:var(--muted); margin-top:2px;">
                         Villa Elena is the only bookable listing. Every booking, payment and review in the system is
                         attached to it.
                     </div>
@@ -834,7 +834,7 @@
                 <div>
                     <div style="font-weight:600; color:#dc2626; font-size:14px;"><i
                             class="bi bi-shield-lock me-2"></i>This property cannot be deleted</div>
-                    <div style="font-size: 14px; color:#6b7a8d; margin-top:2px;">
+                    <div style="font-size: 14px; color:var(--muted); margin-top:2px;">
                         {{ $property->bookings->count() }} booking(s) are attached to it. Deleting it would delete them
                         and their payments too.
                     </div>
@@ -845,7 +845,7 @@
                 <div>
                     <div style="font-weight:600; color:#dc2626; font-size:14px;"><i
                             class="bi bi-exclamation-triangle me-2"></i>Delete Property</div>
-                    <div style="font-size: 14px; color:#6b7a8d; margin-top:2px;">This will permanently delete this
+                    <div style="font-size: 14px; color:var(--muted); margin-top:2px;">This will permanently delete this
                         property and its images. This cannot be undone.</div>
                 </div>
                 <button class="btn-danger" onclick="confirmDelete()">

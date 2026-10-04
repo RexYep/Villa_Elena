@@ -33,7 +33,7 @@
             font-size: 20px;
             font-weight: 700;
             color: var(--navy);
-            font-family: 'Playfair Display', serif;
+            font-family: var(--font-display);
         }
 
         .live-date {
@@ -79,7 +79,7 @@
 
         .villa-badge.occupied {
             background: #fee2e2;
-            color: #dc2626;
+            color: #b91c1c;
         }
 
         .villa-badge.available {
@@ -98,7 +98,7 @@
         }
 
         .villa-name {
-            font-family: 'Playfair Display', serif;
+            font-family: var(--font-display);
             font-size: 17px;
             font-weight: 600;
             color: var(--navy);
@@ -175,11 +175,11 @@
         }
 
         .next-slot.past {
-            background: #f8fafc;
+            background: var(--cream);
         }
 
         .next-slot.past .next-slot-val {
-            color: #94a3b8;
+            color: var(--muted);
         }
 
         @media (max-width:760px) {
@@ -239,7 +239,7 @@
 
         .clean-banner.urgent .clean-icon {
             background: #fee2e2;
-            color: #dc2626;
+            color: #b91c1c;
         }
 
         .clean-banner.soon .clean-icon {
@@ -289,7 +289,7 @@
             font-size: 13px;
             font-weight: 600;
             cursor: pointer;
-            font-family: 'DM Sans', sans-serif;
+            font-family: var(--font-body);
             display: inline-flex;
             align-items: center;
             gap: 7px;
@@ -357,7 +357,7 @@
             font-size: 13px;
             font-weight: 600;
             cursor: pointer;
-            font-family: 'DM Sans', sans-serif;
+            font-family: var(--font-body);
             display: inline-flex;
             align-items: center;
             gap: 7px;
@@ -387,7 +387,7 @@
         .ws-pending { background: #fef3c7; color: #92400e; }
         .ws-in-progress { background: #dbeafe; color: #1d4ed8; }
         .ws-completed { background: #dcfce7; color: #15803d; }
-        .ws-cancelled { background: #e2e8f0; color: #475569; }
+        .ws-cancelled { background: var(--border); color: var(--muted); }
         .ws-urgent { background: #fee2e2; color: #b91c1c; }
 
         .category-pick {
@@ -488,7 +488,7 @@
         .stat-val {
             font-size: 26px;
             font-weight: 700;
-            font-family: 'Playfair Display', serif;
+            font-family: var(--font-display);
             color: var(--navy);
             line-height: 1;
         }
@@ -549,7 +549,7 @@
             display: inline-flex;
             align-items: center;
             gap: 5px;
-            font-size: 11px;
+            font-size: 12px;
             font-weight: 700;
             text-transform: uppercase;
             letter-spacing: .04em;
@@ -603,7 +603,7 @@
             background: none;
             cursor: pointer;
             color: var(--muted);
-            font-family: 'DM Sans', sans-serif;
+            font-family: var(--font-body);
             display: flex;
             flex-shrink: 0;
             align-items: center;
@@ -624,7 +624,7 @@
         }
 
         .tab-btn:not(.active) .cnt {
-            background: #f1f5f9;
+            background: var(--sand);
             color: var(--muted);
         }
 
@@ -653,7 +653,7 @@
         }
 
         .card-head h3 {
-            font-family: 'Playfair Display', serif;
+            font-family: var(--font-display);
             font-size: 16px;
             font-weight: 600;
         }
@@ -668,7 +668,7 @@
             align-items: center;
             gap: 14px;
             padding: 14px 20px;
-            border-bottom: 1px solid #f8fafc;
+            border-bottom: 1px solid var(--cream);
             transition: background .15s;
         }
 
@@ -737,7 +737,7 @@
             font-size: 14px;
             font-weight: 600;
             cursor: pointer;
-            font-family: 'DM Sans', sans-serif;
+            font-family: var(--font-body);
             display: flex;
             align-items: center;
             gap: 6px;
@@ -757,7 +757,7 @@
             font-size: 14px;
             font-weight: 600;
             cursor: pointer;
-            font-family: 'DM Sans', sans-serif;
+            font-family: var(--font-body);
             display: flex;
             align-items: center;
             gap: 6px;
@@ -774,7 +774,7 @@
             border-radius: 7px;
             border: none;
             cursor: pointer;
-            font-family: 'DM Sans', sans-serif;
+            font-family: var(--font-body);
             font-weight: 600;
             display: inline-flex;
             align-items: center;
@@ -893,7 +893,7 @@
 
         .prop-guest {
             font-size: 13px;
-            color: #374151;
+            color: var(--stone);
             margin-top: 6px;
         }
 
@@ -903,7 +903,7 @@
             align-items: center;
             gap: 12px;
             padding: 12px 20px;
-            border-bottom: 1px solid #f8fafc;
+            border-bottom: 1px solid var(--cream);
         }
 
         .task-row:last-child {
@@ -1065,7 +1065,9 @@
             <div class="villa-next">
                 @foreach ($nextSlots as $row)
                     @foreach ($row['slots'] as $slotKey => $slot)
-                        @if ($slot['state'] !== 'past')
+                        {{-- `unoffered` is skipped like `past`: nobody took that slot, it
+                             simply isn't sold on that date, so "Booked" would be wrong. --}}
+                        @if (! in_array($slot['state'], ['past', 'unoffered'], true))
                             @if ($slot['state'] === 'free')
                                 <a class="next-slot free"
                                     href="{{ route('staff.walkin', ['date' => $row['date']->format('Y-m-d'), 'slot' => $slotKey]) }}">
@@ -1124,8 +1126,8 @@
     <div class="tab-content active" id="tab-today">
         <div class="card">
             <div class="card-head">
-                <h3><i class="bi bi-list-check me-2" style="color:#16a34a;"></i>Today's Arrivals &amp; Departures</h3>
-                <span class="text-muted-theme" style="font-size: 14px;">{{ today()->format('M d, Y') }}</span>
+                <h3><i class="bi bi-list-check me-2 text-green"></i>Today's Arrivals &amp; Departures</h3>
+                <span class="text-muted-theme fs-14">{{ today()->format('M d, Y') }}</span>
             </div>
             {{-- Kusang nag-a-update: auto check-in/out ng scheduler, bayad na
                  dumaan sa webhook, o aksiyon ng ibang staff. Ang server ang
@@ -1140,8 +1142,8 @@
     <div class="tab-content" id="tab-pending">
         <div class="card">
             <div class="card-head">
-                <h3><i class="bi bi-clock me-2" style="color:#a16207;"></i>Awaiting Payment</h3>
-                <span class="text-muted-theme" style="font-size: 14px;">Awaiting payment from guest</span>
+                <h3><i class="bi bi-clock me-2 text-amber"></i>Awaiting Payment</h3>
+                <span class="text-muted-theme fs-14">Awaiting payment from guest</span>
             </div>
             <div class="card-body">
                 @forelse($pendingBookings as $booking)
@@ -1163,7 +1165,7 @@
                         </div>
                         <div class="booking-action" style="text-align:right;">
                             @if ($booking->amount_paid > 0)
-                                <span class="badge b-pending" style="background:#fee2e2;color:#dc2626;">Paid · slot conflict</span>
+                                <span class="badge b-pending tag-red">Paid · slot conflict</span>
                                 <div class="stat-sub" style="white-space:normal;">₱{{ number_format($booking->amount_paid, 0) }} paid — admin decides</div>
                             @else
                                 @php $holdLeft = max(1, (int) ceil(now()->diffInMinutes($booking->created_at->copy()->addMinutes($holdMinutes)))); @endphp
@@ -1198,8 +1200,8 @@
 
         <div class="card">
             <div class="card-head">
-                <h3><i class="bi bi-list-task me-2" style="color:#a16207;"></i>Tasks from Admin</h3>
-                <span class="text-muted-theme" style="font-size: 14px;">{{ $inProgressTasks->count() + $pendingTasks->count() }} open</span>
+                <h3><i class="bi bi-list-task me-2 text-amber"></i>Tasks from Admin</h3>
+                <span class="text-muted-theme fs-14">{{ $inProgressTasks->count() + $pendingTasks->count() }} open</span>
             </div>
             <div class="card-body">
                 @forelse ($inProgressTasks->concat($pendingTasks) as $task)
@@ -1266,7 +1268,7 @@
             <form method="POST" action="{{ route('staff.reports.store') }}">
                 @csrf
                 <div class="modal-body">
-                    <div style="font-size: 14px;font-weight:600;color:#374151;margin-bottom:8px;" id="reportCategoryLabel">
+                    <div style="font-size: 14px;font-weight:600;color:var(--stone);margin-bottom:8px;" id="reportCategoryLabel">
                         What kind of problem?</div>
                     <div class="category-pick" role="radiogroup" aria-labelledby="reportCategoryLabel">
                         @foreach (\App\Models\IssueReport::CATEGORIES as $key => $cat)
@@ -1282,20 +1284,20 @@
                     @endif
 
                     <label for="reportDescription"
-                        style="font-size: 14px;font-weight:600;color:#374151;display:block;margin:16px 0 6px;">
-                        Details <span style="color:#6B7A8D;font-weight:400;">(required for "Other")</span></label>
+                        style="font-size: 14px;font-weight:600;color:var(--stone);display:block;margin:16px 0 6px;">
+                        Details <span style="color:var(--muted);font-weight:400;">(required for "Other")</span></label>
                     <textarea name="description" id="reportDescription" rows="3" maxlength="{{ \App\Models\IssueReport::DESCRIPTION_MAX }}"
-                        style="border:1.5px solid #e4ddd0;border-radius:8px;padding:10px 14px;font-size:13px;font-family:'DM Sans',sans-serif;width:100%;"
+                        style="border:1.5px solid #e4ddd0;border-radius:8px;padding:10px 14px;font-size:13px;font-family: var(--font-body);width:100%;"
                         placeholder="e.g. Light in Room B keeps flickering">{{ old('description') }}</textarea>
                     @if ($reportErrors->has('description'))
                         <div style="color:#dc2626;font-size:13px;margin-top:6px;">{{ $reportErrors->first('description') }}</div>
                     @endif
 
-                    <p style="font-size:13px;color:#6B7A8D;margin:12px 0 16px;">
+                    <p style="font-size:13px;color:var(--muted);margin:12px 0 16px;">
                         It's logged on this frontdesk and the admin is notified.
                     </p>
                     <button type="submit"
-                        style="background:#dc2626;color:#fff;border:none;border-radius:9px;padding:13px;font-size:14px;font-weight:600;cursor:pointer;width:100%;font-family:'DM Sans',sans-serif;">
+                        style="background:#dc2626;color:#fff;border:none;border-radius:9px;padding:13px;font-size:14px;font-weight:600;cursor:pointer;width:100%;font-family: var(--font-body);">
                         <i class="bi bi-send me-2"></i> Submit Report
                     </button>
                 </div>
@@ -1320,17 +1322,17 @@
                 <div class="modal-body">
                     <!-- Balance Info -->
                     <div
-                        style="background:#f8fafc;border-radius:10px;padding:12px 16px;margin-bottom:18px;display:flex;justify-content:space-between;align-items:center;">
-                        <span style="font-size:13px;color:#6B7A8D;">Balance Due</span>
-                        <span style="font-family:'Playfair Display',serif;font-size:20px;font-weight:700;color:#dc2626;"
+                        style="background:var(--cream);border-radius:10px;padding:12px 16px;margin-bottom:18px;display:flex;justify-content:space-between;align-items:center;">
+                        <span class="note-text">Balance Due</span>
+                        <span style="font-family: var(--font-display);font-size:20px;font-weight:700;color:#dc2626;"
                             id="modalBalance">₱0.00</span>
                     </div>
                     <!-- Amount -->
-                    <div style="margin-bottom:14px;">
+                    <div class="mb-14">
                         <label for="modalAmount"
-                            style="font-size: 14px;font-weight:600;color:#374151;display:block;margin-bottom:6px;">Amount</label>
+                            class="field-label">Amount</label>
                         <input type="number" name="amount" id="modalAmount" required min="1" step="0.01"
-                            style="border:1.5px solid #e4ddd0;border-radius:8px;padding:10px 14px;font-size:14px;font-family:'DM Sans',sans-serif;width:100%;transition:border-color .2s;"
+                            style="border:1.5px solid #e4ddd0;border-radius:8px;padding:10px 14px;font-size:14px;font-family: var(--font-body);width:100%;transition:border-color .2s;"
                             placeholder="Enter amount" onfocus="this.style.borderColor='#2c2416'"
                             onblur="this.style.borderColor='#e4ddd0'">
                     </div>
@@ -1338,18 +1340,18 @@
                     <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px;">
                         <div>
                             <label for="f_payment_method"
-                                style="font-size: 14px;font-weight:600;color:#374151;display:block;margin-bottom:6px;">Method</label>
+                                class="field-label">Method</label>
                             <select id="f_payment_method" name="payment_method" required
-                                style="border:1.5px solid #e4ddd0;border-radius:8px;padding:10px 14px;font-size:13px;font-family:'DM Sans',sans-serif;width:100%;background:#fff;">
+                                class="input-plain">
                                 <option value="cash">Cash</option>
                                 <option value="qrph">QR Ph (GCash / Maya / bank app)</option>
                             </select>
                         </div>
                         <div>
                             <label for="f_payment_type"
-                                style="font-size: 14px;font-weight:600;color:#374151;display:block;margin-bottom:6px;">Type</label>
+                                class="field-label">Type</label>
                             <select id="f_payment_type" name="payment_type" required
-                                style="border:1.5px solid #e4ddd0;border-radius:8px;padding:10px 14px;font-size:13px;font-family:'DM Sans',sans-serif;width:100%;background:#fff;">
+                                class="input-plain">
                                 <option value="balance">Balance Payment</option>
                                 <option value="full_payment">Full Payment</option>
                                 <option value="partial">Partial</option>
@@ -1358,24 +1360,24 @@
                     </div>
                     <!-- Notes -->
                     <div style="margin-bottom:18px;">
-                        <label for="f_notes" style="font-size: 14px;font-weight:600;color:#374151;display:block;margin-bottom:6px;">Notes
-                            <span style="color:#6B7A8D;font-weight:400;">(optional)</span></label>
+                        <label for="f_notes" class="field-label">Notes
+                            <span style="color:var(--muted);font-weight:400;">(optional)</span></label>
                         <input id="f_notes" type="text" name="notes"
-                            style="border:1.5px solid #e4ddd0;border-radius:8px;padding:10px 14px;font-size:13px;font-family:'DM Sans',sans-serif;width:100%;"
+                            class="input-plain"
                             placeholder="e.g. Cash received at frontdesk">
                     </div>
                     <!-- Kailangan lang kapag may kamukhang bayad na naitala
                          ngayong araw para sa booking na ito — hinaharangan ang
                          pagtatala hangga't hindi ito nakatik. -->
                     <label
-                        style="display:flex;align-items:flex-start;gap:8px;font-size:13px;color:#4b5563;margin-bottom:18px;">
+                        style="display:flex;align-items:flex-start;gap:8px;font-size:13px;color:var(--muted);margin-bottom:18px;">
                         <input type="checkbox" name="confirm_duplicate" value="1" style="margin-top:3px;">
                         <span>This is a <strong>separate</strong> payment — tick only if the guest really paid this
                             amount again today.</span>
                     </label>
                     <!-- Submit -->
                     <button type="submit"
-                        style="background:#2c2416;color:#fff;border:none;border-radius:9px;padding:13px;font-size:14px;font-weight:600;cursor:pointer;width:100%;font-family:'DM Sans',sans-serif;transition:all .2s;"
+                        style="background:#2c2416;color:#fff;border:none;border-radius:9px;padding:13px;font-size:14px;font-weight:600;cursor:pointer;width:100%;font-family: var(--font-body);transition:all .2s;"
                         onmouseover="this.style.background='#b8943f';this.style.color='#2c2416'"
                         onmouseout="this.style.background='#2c2416';this.style.color='#fff'">
                         <i class="bi bi-check-circle me-2"></i> Record Payment
@@ -1402,17 +1404,17 @@
                 <div
                     style="background:#fef2f2;border:1px solid #fecaca;border-radius:10px;padding:12px 16px;margin-bottom:18px;display:flex;justify-content:space-between;align-items:center;">
                     <span style="font-size:13px;color:#991b1b;">Balance Due</span>
-                    <span style="font-family:'Playfair Display',serif;font-size:20px;font-weight:700;color:#dc2626;"
+                    <span style="font-family: var(--font-display);font-size:20px;font-weight:700;color:#dc2626;"
                         id="ccBalance">₱0.00</span>
                 </div>
 
-                <p style="font-size:12.5px;color:#6B7A8D;margin-bottom:16px;line-height:1.6;">
+                <p style="font-size:12.5px;color:var(--muted);margin-bottom:16px;line-height:1.6;">
                     Choose what to do before proceeding with this guest's check-in:
                 </p>
 
                 <!-- Option A: Pay Now -->
                 <button type="button" onclick="ccPayNow()"
-                    style="width:100%;text-align:left;background:#f0fdf4;border:1.5px solid #bbf7d0;border-radius:10px;padding:14px 16px;margin-bottom:10px;cursor:pointer;font-family:'DM Sans',sans-serif;">
+                    style="width:100%;text-align:left;background:#f0fdf4;border:1.5px solid #bbf7d0;border-radius:10px;padding:14px 16px;margin-bottom:10px;cursor:pointer;font-family: var(--font-body);">
                     <div class="d-flex-gap-10">
                         <div
                             style="width:32px;height:32px;border-radius:8px;background:#16a34a;color:#fff;display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0;">
@@ -1420,7 +1422,7 @@
                         </div>
                         <div>
                             <div style="font-size:13px;font-weight:600;color:#15803d;">Pay Now</div>
-                            <div style="font-size:11.5px;color:#6B7A8D;margin-top:1px;">Open the Payment form to record the
+                            <div style="font-size: 12px;color:var(--muted);margin-top:1px;">Open the Payment form to record the
                                 full balance</div>
                         </div>
                     </div>
@@ -1428,24 +1430,24 @@
 
                 <!-- Option B: Defer -->
                 <div style="background:#fffbeb;border:1.5px solid #fde68a;border-radius:10px;padding:14px 16px;">
-                    <div class="d-flex-gap-10" style="margin-bottom:10px;">
+                    <div class="d-flex-gap-10 mb-10">
                         <div
                             style="width:32px;height:32px;border-radius:8px;background:#d97706;color:#fff;display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0;">
                             <i class="bi bi-clock-history"></i>
                         </div>
                         <div>
                             <div style="font-size:13px;font-weight:600;color:#92400e;">Defer (Deferred)</div>
-                            <div style="font-size:11.5px;color:#6B7A8D;margin-top:1px;">To be paid before check-out</div>
+                            <div style="font-size: 12px;color:var(--muted);margin-top:1px;">To be paid before check-out</div>
                         </div>
                     </div>
                     <label
-                        style="display:flex;align-items:flex-start;gap:8px;font-size: 14px;color:#374151;cursor:pointer;margin-bottom:10px;">
+                        style="display:flex;align-items:flex-start;gap:8px;font-size: 14px;color:var(--stone);cursor:pointer;margin-bottom:10px;">
                         <input type="checkbox" id="ccDeferCheckbox" style="margin-top:2px;">
                         <span>I confirm that I will allow this guest to check in now and that the outstanding balance will
                             be settled before check-out. This is recorded in the staff log.</span>
                     </label>
                     <button type="button" id="ccConfirmBtn" onclick="ccConfirmDeferred()" disabled
-                        style="width:100%;background:#d97706;color:#fff;border:none;border-radius:8px;padding:10px;font-size:13px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif;opacity:.5;">
+                        style="width:100%;background:#d97706;color:#fff;border:none;border-radius:8px;padding:10px;font-size:13px;font-weight:600;cursor:pointer;font-family: var(--font-body);opacity:.5;">
                         <i class="bi bi-box-arrow-in-right me-1"></i> Confirm and Check In
                     </button>
                 </div>
@@ -1504,8 +1506,23 @@
 
         function handleCheckInSubmit(event, bookingId, guestName, balanceDue) {
             if (balanceDue <= 0) {
-                // Walang balance — direktang tuloy, katulad ng dati.
-                return confirm('Check in ' + guestName + '?');
+                // Walang balance — isang tanong lang, tapos tuloy. Ang form ang
+                // may hawak ng `data-confirmed` para hindi na muling magtanong
+                // ang ikalawang submit.
+                const form = event.target;
+                if (form.dataset.confirmed === '1') return true;
+                event.preventDefault();
+                const submitter = event.submitter;
+                confirmDialog('Check in ' + guestName + '?', {
+                    confirmLabel: 'Check in',
+                    tone: 'neutral'
+                }).then(function(ok) {
+                    if (!ok) return;
+                    form.dataset.confirmed = '1';
+                    form.requestSubmit(submitter || undefined);
+                    delete form.dataset.confirmed;
+                });
+                return false;
             }
             // May natitirang balance — hadlangan muna ang submit at patukuyin
             // si staff kung babayaran ngayon o ipagpapaliban (confirmed).

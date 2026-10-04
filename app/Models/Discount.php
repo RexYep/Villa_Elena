@@ -327,6 +327,12 @@ class Discount extends Model
      */
     public static function returningTeaserFor(?User $viewer = null): ?array
     {
+        // Staff and admin never book as guests, so "You're N stays away"
+        // means nothing to them.
+        if ($viewer !== null && $viewer->role !== 'customer') {
+            return null;
+        }
+
         $live = static::query()
             ->where('is_active', 1)
             ->where('is_public', 1)

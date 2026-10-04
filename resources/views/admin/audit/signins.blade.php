@@ -34,9 +34,9 @@
         }
 
         .stat-val {
-            font-size: 24px;
+            font-size: 21px;
             font-weight: 700;
-            font-family: 'Cormorant Garamond', serif;
+            font-family: var(--font-display);
             color: var(--stone);
             line-height: 1;
         }
@@ -89,11 +89,11 @@
 
         .form-select-sm,
         .form-control-sm {
-            border: 1.5px solid var(--border);
+            border: 1.5px solid var(--border-strong);
             border-radius: 7px;
             padding: 7px 12px;
             font-size: 14px;
-            font-family: 'DM Sans', sans-serif;
+            font-family: var(--font-body);
             background: #fff;
             color: var(--text-main);
             width: 100%;
@@ -106,7 +106,7 @@
         }
 
         .btn-filter {
-            background: var(--terracotta);
+            background: var(--btn-primary);
             color: #fff;
             border: none;
             border-radius: 7px;
@@ -155,7 +155,7 @@
 
         .audit-table th {
             text-align: left;
-            font-size: 11px;
+            font-size: 12px;
             text-transform: uppercase;
             letter-spacing: .5px;
             color: var(--muted);
@@ -209,11 +209,11 @@
             display: inline-block;
             padding: 2px 8px;
             border-radius: 20px;
-            font-size: 11px;
+            font-size: 12px;
             font-weight: 600;
             text-transform: capitalize;
-            background: #f1f5f9;
-            color: #475569;
+            background: var(--sand);
+            color: var(--muted);
         }
 
         .role-tag.admin {
@@ -230,7 +230,7 @@
             display: inline-block;
             padding: 2px 8px;
             border-radius: 20px;
-            font-size: 11px;
+            font-size: 12px;
             font-weight: 600;
             background: #dbeafe;
             color: #1d4ed8;
@@ -279,7 +279,7 @@
 
     <div class="stats-row">
         <div class="stat-card">
-            <div class="stat-icon" style="background:#f1f5f9;color:#475569;"><i class="bi bi-box-arrow-in-right"></i></div>
+            <div class="stat-icon tag-neutral"><i class="bi bi-box-arrow-in-right"></i></div>
             <div class="stat-val">{{ number_format($stats['total']) }}</div>
             <div class="stat-lbl">Sign-ins Recorded</div>
         </div>
@@ -289,7 +289,7 @@
             <div class="stat-lbl">Today</div>
         </div>
         <div class="stat-card">
-            <div class="stat-icon" style="background:#dbeafe;color:#1d4ed8;"><i class="bi bi-phone"></i></div>
+            <div class="stat-icon tag-blue"><i class="bi bi-phone"></i></div>
             <div class="stat-val">{{ number_format($stats['new_device']) }}</div>
             <div class="stat-lbl">New Devices (7d)</div>
         </div>
@@ -354,7 +354,7 @@
         <div class="empty-state">
             <i class="bi bi-box-arrow-in-right"></i>
             <p style="font-size:15px;font-weight:500;margin-bottom:4px;">No sign-ins match those filters</p>
-            <p style="font-size:13px;">Try widening the date range, or clear the filters to see everything.</p>
+            <p class="fs-13">Try widening the date range, or clear the filters to see everything.</p>
         </div>
     @else
         <table class="audit-table">
@@ -401,7 +401,7 @@
             </tbody>
         </table>
 
-        <div style="margin-top:20px;">{{ $signIns->links() }}</div>
+        <div class="mt-20">{{ $signIns->links() }}</div>
     @endif
 
     <p class="readonly-note">

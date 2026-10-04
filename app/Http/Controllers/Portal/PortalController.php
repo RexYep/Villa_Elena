@@ -16,6 +16,7 @@ use App\Models\Setting;
 use App\Models\StaffLog;
 use App\Rules\SlotOfferedOnDate;
 use Carbon\Carbon;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
@@ -283,6 +284,31 @@ class PortalController extends Controller
         abort_unless($property->type === 'villa', 404);
     }
 
+    /**
+     * Only a customer account may book through the public portal.
+     *
+     * Both the form and the submit call this: the submit route is `auth` +
+     * `verified` with no role in it, so hiding the button on the villa page is
+     * an affordance only and this is the barrier. An admin or staff account is
+     * sent to the form built for booking on someone else's behalf; the message
+     * goes out as a validation error because that is what both of those pages
+     * render.
+     */
+    private function redirectNonGuestToBookingTool(): ?RedirectResponse
+    {
+        $user = Auth::user();
+
+        if ($user->isCustomer()) {
+            return null;
+        }
+
+        $message = 'Guest bookings can only be made from a guest account. Use this form to book on a guest\'s behalf.';
+
+        return ($tool = $user->bookingToolRouteName())
+            ? redirect()->route($tool)->withErrors(['booking' => $message])
+            : redirect()->route('home');
+    }
+
     // ── Single Property Detail ─────────────────────────────────────
     public function propertyDetail(Property $property, Request $request)
     {
@@ -435,6 +461,10 @@ class PortalController extends Controller
                 ->with('info', 'Please log in or create an account to complete your booking.');
         }
 
+        if ($redirect = $this->redirectNonGuestToBookingTool()) {
+            return $redirect;
+        }
+
         $request->validate([
             'checkin' => 'required|date|after_or_equal:today|'.Booking::advanceLimitRule(),
             'slot' => ['required', new SlotOfferedOnDate('checkin', $property)],
@@ -513,6 +543,10 @@ class PortalController extends Controller
 
         if (! Auth::check()) {
             return redirect()->route('login');
+        }
+
+        if ($redirect = $this->redirectNonGuestToBookingTool()) {
+            return $redirect;
         }
 
         // Anti-abuse: hindi papayagan ang bagong booking kung may

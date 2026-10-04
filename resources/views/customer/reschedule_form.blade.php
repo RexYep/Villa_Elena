@@ -70,7 +70,7 @@
         }
 
         .form-card-head h3 {
-            font-family: 'Playfair Display', serif;
+            font-family: var(--font-display);
             font-size: 17px;
             font-weight: 600;
         }
@@ -82,7 +82,7 @@
         .form-label {
             font-size: 14px;
             font-weight: 600;
-            color: #374151;
+            color: var(--stone);
             display: block;
             margin-bottom: 8px;
             letter-spacing: .2px;
@@ -220,7 +220,7 @@
             border: 1px solid var(--border);
             border-radius: 20px;
             padding: 8px 14px;
-            font-family: 'Jost', sans-serif;
+            font-family: var(--font-body);
             font-size: 13px;
             font-weight: 600;
             color: var(--stone);
@@ -264,7 +264,7 @@
         }
 
         .btn-submit {
-            background: var(--stone);
+            background: var(--btn-primary);
             color: #fff;
             border: none;
             border-radius: 10px;
@@ -273,7 +273,7 @@
             font-size: 15px;
             font-weight: 600;
             cursor: pointer;
-            font-family: 'Jost', sans-serif;
+            font-family: var(--font-body);
             margin-top: 8px;
             transition: all .2s;
             display: flex;
@@ -283,8 +283,8 @@
         }
 
         .btn-submit:hover {
-            background: var(--gold);
-            color: var(--stone);
+            background: var(--btn-primary-hover);
+            color: #fff;
         }
 
         .btn-back {
@@ -349,13 +349,13 @@
         <i class="bi bi-info-circle me-1"></i>
         Choose a new check-in date and slot — Day (8:00 AM–5:00 PM) or Night (7:00 PM–6:00 AM).
         If the new date costs more, the difference is added to your balance. If it costs less than what you've
-        already paid, the difference is <strong style="color:var(--stone);">not refunded</strong> — payments are
+        already paid, the difference is <strong class="text-stone">not refunded</strong> — payments are
         non-refundable — and we'll ask you to confirm before moving the booking.
         <br><br>
-        <strong style="color:var(--stone);">Reschedule policy:</strong>
+        <strong class="text-stone">Reschedule policy:</strong>
         Each booking may be rescheduled up to {{ \App\Models\Booking::MAX_RESCHEDULES }} times, and only up to
         {{ \App\Models\Booking::RESCHEDULE_CUTOFF_DAYS }} days before check-in.
-        You have <strong style="color:var(--stone);">{{ $booking->reschedulesRemaining() }}</strong> left for this booking.
+        You have <strong class="text-stone">{{ $booking->reschedulesRemaining() }}</strong> left for this booking.
     </div>
 
     <form method="POST" action="{{ route('customer.bookings.reschedule.update', $booking) }}">
@@ -413,7 +413,7 @@
                     </div>
                 </div>
                 @error('dates')
-                    <div class="field-error" style="margin-bottom:12px;">{{ $message }}</div>
+                    <div class="field-error mb-12">{{ $message }}</div>
                 @enderror
 
                 {{-- Lumalabas lang matapos tanggihan ng server ang isang

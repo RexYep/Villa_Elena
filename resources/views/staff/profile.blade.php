@@ -27,7 +27,7 @@
         }
 
         .account-card-header h3 {
-            font-family: 'Playfair Display', serif;
+            font-family: var(--font-display);
             font-size: 17px;
             font-weight: 600;
             color: var(--text-main);

@@ -5,7 +5,7 @@
 @push('styles')
     <style>
         body {
-            font-family: 'Inter', sans-serif;
+            font-family: var(--font-body);
             background: var(--cream);
             color: var(--stone);
             line-height: 1.6;
@@ -18,16 +18,16 @@
         }
 
         .section-eyebrow {
-            font-size: 14px;
-            letter-spacing: 3px;
-            text-transform: uppercase;
-            color: var(--gold);
-            font-weight: 500;
-            margin-bottom: 10px;
+            font-family: var(--font-display);
+            font-style: italic;
+            font-size: 18px;
+            color: var(--gold-text);
+            font-weight: 400;
+            margin-bottom: 8px;
         }
 
         .section-title {
-            font-family: 'Playfair Display', serif;
+            font-family: var(--font-display);
             font-size: clamp(30px, 4vw, 44px);
             font-weight: 600;
             color: var(--stone);
@@ -45,7 +45,7 @@
         }
 
         .reviews-stats strong {
-            color: var(--gold);
+            color: var(--gold-text);
             font-size: 18px;
         }
 
@@ -88,7 +88,7 @@
         .testimonial-quote {
             font-size: 52px;
             color: var(--gold);
-            font-family: 'Playfair Display', serif;
+            font-family: var(--font-display);
             line-height: 1;
             margin-bottom: 12px;
             opacity: 0.5;
@@ -125,7 +125,7 @@
             justify-content: center;
             font-size: 18px;
             color: var(--gold);
-            font-family: 'Playfair Display', serif;
+            font-family: var(--font-display);
             font-weight: 700;
             flex-shrink: 0;
             overflow: hidden;
@@ -159,7 +159,7 @@
         }
 
         .reply-note strong {
-            color: var(--gold);
+            color: var(--gold-text);
             display: block;
             margin-bottom: 3px;
             font-size: 12px;
@@ -196,7 +196,7 @@
         <a href="{{ route('home') }}" class="back-link"><i class="bi bi-arrow-left"></i> Back to Villa Elena</a>
 
         <div class="reviews-header">
-            <div class="section-eyebrow">Guest Voices</div>
+            <div class="section-eyebrow">Guest voices</div>
             <div class="section-title">All Guest Reviews</div>
             @if ($totalReviews > 0)
                 <div class="reviews-stats"><strong>{{ $avgRating }}★</strong> average from {{ $totalReviews }}
@@ -207,7 +207,7 @@
         @if ($reviews->isEmpty())
             <div class="empty-state">
                 <i class="bi bi-star" style="font-size:40px;opacity:.3;"></i>
-                <p style="margin-top:12px;">No reviews yet — be the first to share your experience at Villa Elena!</p>
+                <p class="mt-12">No reviews yet — be the first to share your experience at Villa Elena!</p>
             </div>
         @else
             <div class="testimonials-grid">

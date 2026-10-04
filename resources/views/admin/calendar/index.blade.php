@@ -23,7 +23,7 @@
     @vite(['resources/js/admin-calendar.js'])
     <style>
         .btn-navy {
-            background: var(--terracotta);
+            background: var(--btn-primary);
             color: #fff;
             border: none;
             border-radius: 10px;
@@ -39,7 +39,7 @@
         }
 
         .btn-navy:hover {
-            background: #b55a31;
+            background: var(--btn-primary-hover);
             color: #fff;
         }
 
@@ -99,7 +99,7 @@
         }
 
         .filter-bar select {
-            border: 1.5px solid var(--border);
+            border: 1.5px solid var(--border-strong);
             background: white;
             color: var(--stone);
             border-radius: 10px;
@@ -123,13 +123,13 @@
 
         /* FULLCALENDAR */
         .fc {
-            font-family: 'DM Sans', sans-serif;
+            font-family: var(--font-body);
         }
 
         .fc .fc-toolbar-title {
-            font-family: 'Cormorant Garamond', serif;
+            font-family: var(--font-display);
             color: var(--stone);
-            font-size: 26px;
+            font-size: 23px;
         }
 
         .fc .fc-button {
@@ -277,7 +277,7 @@
         }
 
         .form-control-sm2 {
-            border: 1.5px solid var(--border);
+            border: 1.5px solid var(--border-strong);
             border-radius: 10px;
             padding: 9px 12px;
             font-size: 13px;
@@ -326,7 +326,7 @@
         .btn-danger-sm {
             background: #fff2f2;
             border: 1px solid #f5c7c7;
-            color: #dc2626;
+            color: #b91c1c;
             border-radius: 10px;
             padding: 10px 16px;
             font-size: 13px;
@@ -350,7 +350,7 @@
             display: inline-block;
             padding: 4px 12px;
             border-radius: 999px;
-            font-size: 11.5px;
+            font-size: 12px;
             font-weight: 600;
         }
 
@@ -370,8 +370,8 @@
         }
 
         .s-checked_out {
-            background: #e5e7eb;
-            color: #374151;
+            background: var(--border);
+            color: var(--stone);
         }
 
         .s-no_show {
@@ -455,7 +455,7 @@
                 padding: 10px 12px;
             }
 
-            /* 26px Cormorant pushes the wrapped toolbar to three tall rows. */
+            /* Large display type pushes the wrapped toolbar to three tall rows. */
             .fc .fc-toolbar-title {
                 font-size: 20px;
             }
@@ -534,7 +534,7 @@
             <div class="legend-dot" style="background:#10b981;"></div> Checked In
         </div>
         <div class="legend-item">
-            <div class="legend-dot" style="background:#6b7280;"></div> Checked Out
+            <div class="legend-dot" style="background:var(--muted);"></div> Checked Out
         </div>
         <div class="legend-item">
             <div class="legend-dot" style="background:#ef4444;"></div> No Show
@@ -627,7 +627,7 @@
     {{-- BLOCK DATES MODAL --}}
     <div class="modal-overlay" id="blockModal">
         <div class="modal-box">
-            <div class="modal-head" style="background:#374151;">
+            <div class="modal-head" style="background:var(--stone);">
                 <div class="modal-title">Block Dates</div>
                 <button class="modal-close" onclick="closeModal('blockModal')">✕</button>
             </div>
@@ -749,7 +749,7 @@
     {{-- BLOCK DETAIL MODAL --}}
     <div class="modal-overlay" id="blockDetailModal">
         <div class="modal-box">
-            <div class="modal-head" style="background:#374151;">
+            <div class="modal-head" style="background:var(--stone);">
                 <div class="modal-title">Blocked Period</div>
                 <button class="modal-close" onclick="closeModal('blockDetailModal')">✕</button>
             </div>
@@ -1217,7 +1217,7 @@
             const notes = document.getElementById('blockNotes').value;
 
             if (!start || !end) {
-                alert('Please fill in all required fields.');
+                showToast('Please fill in all required fields.', true);
                 return;
             }
 

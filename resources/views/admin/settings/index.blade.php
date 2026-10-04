@@ -30,7 +30,7 @@
         }
 
         .tab-nav-header h3 {
-            font-family: 'Cormorant Garamond', serif;
+            font-family: var(--font-display);
             font-size: 16px;
             font-weight: 600;
             color: var(--text-main);
@@ -109,8 +109,8 @@
         }
 
         .settings-card-header h3 {
-            font-family: 'Cormorant Garamond', serif;
-            font-size: 17px;
+            font-family: var(--font-display);
+            font-size: 16px;
             font-weight: 600;
             color: var(--text-main);
         }
@@ -178,7 +178,7 @@
             position: absolute;
             cursor: pointer;
             inset: 0;
-            background: #d1d5db;
+            background: var(--border);
             border-radius: 100px;
             transition: .3s;
         }
@@ -223,7 +223,7 @@
            narrowest (425px at a 993px viewport) the button was squeezed to 159px
            and "Save Settings" broke across two lines, making it 64px tall. */
         .btn-save {
-            background: var(--terracotta);
+            background: var(--btn-primary);
             color: #fff;
             border: none;
             border-radius: 9px;
@@ -233,7 +233,7 @@
             font-size: 14px;
             font-weight: 600;
             cursor: pointer;
-            font-family: 'DM Sans', sans-serif;
+            font-family: var(--font-body);
             display: flex;
             align-items: center;
             gap: 8px;
@@ -241,7 +241,7 @@
         }
 
         .btn-save:hover {
-            background: var(--gold);
+            background: var(--btn-primary-hover); color: #fff;
         }
 
         .submit-info {
@@ -280,7 +280,7 @@
         .btn-remove-amenity:hover {
             background: #fee2e2;
             border-color: #fecaca;
-            color: #dc2626;
+            color: #b91c1c;
         }
 
         /* Same declarations this button carried as an inline style attribute; it
@@ -456,7 +456,7 @@
                 <div class="settings-section" id="tab-booking">
                     <div class="settings-card">
                         <div class="settings-card-header">
-                            <div class="icon" style="background:#dcfce7;color:#16a34a;"><i
+                            <div class="icon tag-green"><i
                                     class="bi bi-calendar-check"></i></div>
                             <div>
                                 <h3>Booking Rules</h3>
@@ -494,7 +494,7 @@
                                          Hindi setting ang patakaran: nakasulat
                                          ito sa Booking::CANCELLATION_POLICY. --}}
                                     <label class="form-label">Cancellation Policy</label>
-                                    <div class="form-control" style="height:auto;background:#f8fafc;font-size:13px;line-height:1.5;">
+                                    <div class="form-control" style="height:auto;background:var(--cream);font-size:13px;line-height:1.5;">
                                         {{ \App\Models\Booking::CANCELLATION_POLICY }}
                                     </div>
                                     <span class="hint">Fixed by the booking policy — not editable here.</span>
@@ -688,7 +688,7 @@
                 <div class="settings-section" id="tab-amenities">
                     <div class="settings-card">
                         <div class="settings-card-header">
-                            <div class="icon" style="background:#dcfce7;color:#15803d;"><i class="bi bi-stars"></i>
+                            <div class="icon tag-green"><i class="bi bi-stars"></i>
                             </div>
                             <div>
                                 <h3>Property Amenities</h3>
@@ -707,7 +707,7 @@
                                             value="{{ $amenity }}">
                                         <button type="button" class="btn-remove-amenity"
                                             onclick="this.parentElement.remove()"
-                                            style="background:#fee2e2;color:#dc2626;border:none;border-radius:8px;padding:0 14px;cursor:pointer;">
+                                            style="background:#fee2e2;color:#b91c1c;border:none;border-radius:8px;padding:0 14px;cursor:pointer;">
                                             <i class="bi bi-trash"></i>
                                         </button>
                                     </div>
@@ -717,7 +717,7 @@
                                             placeholder="e.g. WiFi">
                                         <button type="button" class="btn-remove-amenity"
                                             onclick="this.parentElement.remove()"
-                                            style="background:#fee2e2;color:#dc2626;border:none;border-radius:8px;padding:0 14px;cursor:pointer;">
+                                            style="background:#fee2e2;color:#b91c1c;border:none;border-radius:8px;padding:0 14px;cursor:pointer;">
                                             <i class="bi bi-trash"></i>
                                         </button>
                                     </div>
@@ -779,7 +779,7 @@
                         <div class="settings-card-body">
                             <div class="toggle-row">
                                 <div class="toggle-info">
-                                    <div class="toggle-title" style="color:#dc2626;">⚠️ Maintenance Mode</div>
+                                    <div class="toggle-title text-red"><i class="bi bi-exclamation-triangle-fill" aria-hidden="true"></i> Maintenance Mode</div>
                                     <div class="toggle-desc">Hides the guest-facing portal and shows a maintenance page to
                                         visitors. Admin access still works.</div>
                                 </div>
@@ -794,7 +794,7 @@
 
                     <div class="settings-card">
                         <div class="settings-card-header">
-                            <div class="icon" style="background:#f1f5f9;color:#475569;"><i
+                            <div class="icon tag-neutral"><i
                                     class="bi bi-info-circle"></i></div>
                             <div>
                                 <h3>System Info</h3>
@@ -862,7 +862,7 @@
             wrap.innerHTML = `
         <input type="text" name="amenities[]" class="form-control" placeholder="e.g. WiFi">
         <button type="button" class="btn-remove-amenity" onclick="this.parentElement.remove()"
-            style="background:#fee2e2;color:#dc2626;border:none;border-radius:8px;padding:0 14px;cursor:pointer;">
+            style="background:#fee2e2;color:#b91c1c;border:none;border-radius:8px;padding:0 14px;cursor:pointer;">
             <i class="bi bi-trash"></i>
         </button>
     `;

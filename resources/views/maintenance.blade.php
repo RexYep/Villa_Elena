@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Villa Elena — Under Maintenance</title>
     @include('partials.favicon')
-    <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@600;700&family=DM+Sans:wght@400;500&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=DM+Sans:wght@400;500&display=swap" rel="stylesheet">
     <style>
         * { box-sizing: border-box; }
         body {
@@ -29,7 +29,7 @@
             margin-bottom: 16px;
         }
         h1 {
-            font-family: 'Cormorant Garamond', serif;
+            font-family: 'Playfair Display', serif;
             font-size: 32px;
             font-weight: 700;
             margin: 0 0 12px;

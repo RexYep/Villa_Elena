@@ -50,11 +50,11 @@
         }
 
         .booking-link:hover {
-            color: var(--gold);
+            color: var(--gold-text);
         }
 
         .type-pill {
-            background: #f1f5f9;
+            background: var(--sand);
             padding: 2px 8px;
             border-radius: 10px;
             font-size: 12px;
@@ -79,7 +79,7 @@
 
         .s-failed {
             background: #fee2e2;
-            color: #dc2626;
+            color: #b91c1c;
         }
 
         .s-refunded {
@@ -180,12 +180,12 @@
 
 @section('content')
     <div class="page-title">My Payments</div>
-    <div class="page-sub" style="margin-bottom:20px;">Payment history across all your bookings</div>
+    <div class="page-sub mb-20">Payment history across all your bookings</div>
 
     @if ($payments->isEmpty())
         <div class="empty-state">
             <i class="bi bi-receipt" style="font-size:40px;opacity:.3;"></i>
-            <p style="margin-top:12px;">No payments recorded yet.</p>
+            <p class="mt-12">No payments recorded yet.</p>
         </div>
     @else
         <div style="overflow-x:auto;">
@@ -209,7 +209,7 @@
                                     <a href="{{ route('customer.bookings.show', $payment->booking) }}" class="booking-link">
                                         {{ $payment->booking->booking_ref }}
                                     </a>
-                                    <div class="text-muted-theme" style="font-size: 13px;">
+                                    <div class="text-muted-theme fs-13">
                                         {{ $payment->booking->property->property_name ?? '' }}</div>
                                 @else
                                     —
@@ -229,7 +229,7 @@
             </table>
         </div>
 
-        <div style="margin-top:20px;">{{ $payments->links() }}</div>
+        <div class="mt-20">{{ $payments->links() }}</div>
     @endif
 @endsection
 

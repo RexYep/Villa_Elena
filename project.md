@@ -1,7 +1,7 @@
 # Villa Elena Private Rental Resort
 ## Resort Management System — Project Documentation
 
-**Version:** 7.53
+**Version:** 7.55
 **Stack:** PHP 8.2 / Laravel 12 / MySQL 8 / Bootstrap 5
 **Local URL:** `http://127.0.0.1:8000` (`php artisan serve`) or `http://localhost:8000` (Docker — see v5.3)
 **Live URL:** `https://villa-elena.onrender.com` (Render, free tier — testing only, not yet handed to real guests)
@@ -188,7 +188,115 @@ is the natural moment to remove them rather than a migration of their own.
 
 ---
 
-## What Changed in v7.53 (Read This First)
+## What Changed in v7.55 (Read This First)
+
+### Only a guest account can book through the public portal
+
+`POST /book/{property}` was `auth` + `verified` with no role in it, and
+`PortalController` only ever asked `Auth::check()`. A signed-in admin or staff
+account could therefore submit the guest booking form: a real `pending` booking
+with `user_id` set to the admin, holding the slot, a confirmation email to the
+admin address, and no way to open it afterwards (`/my/` is `role:customer`).
+This was never a regression; it dates from the first commit.
+
+- **`PortalController::redirectNonGuestToBookingTool()` is the barrier**, called
+  by both `bookingForm()` and `submitBooking()`. Admin goes to
+  `admin.bookings.create`, staff to `staff.walkin`, with the reason sent through
+  `withErrors()` because that is what both of those pages render.
+- `User::bookingToolRouteName()` / `bookingToolLabel()` hold that mapping; both
+  are NULL for a customer. The villa page swaps the Reserve button for a link to
+  that form, and the three Book buttons on the landing page (hero, showcase,
+  closing CTA) point there too. The views are an affordance only.
+- The chatbot's "Book Now" card is built in JS and is not changed; it lands on
+  the same server check.
+
+### A signed-in user who opens `/login` goes to their own portal
+
+The `guest` middleware redirects before the controller runs, and with no
+`redirectUsersTo()` the framework falls back to the route named `home`, the
+landing page, for every role. The `redirectByRole()` inside
+`AuthController::showLogin()` was never reached. `bootstrap/app.php` now sets
+`redirectUsersTo()` from `User::homeRouteName()`. This covers the whole `guest`
+group and all three roles: a customer now lands on `/my` rather than `/`.
+
+**The landing page itself stays open to admin and staff, on purpose** (owner's
+decision): it is how they preview the public site, and `home()` has no role
+redirect. Closing a tab does not sign anyone out (`SESSION_EXPIRE_ON_CLOSE` is
+false), so typing the bare site address while signed in still shows it.
+
+---
+
+## What Changed in v7.54
+
+### One set of UI tokens for every section
+
+A UI review measured the palette and found the most-used text colour failing
+contrast on every background, five font families across four portals, and the
+primary button coming out terracotta, stone or gold depending on the page.
+The fixes all go through `resources/css/base.css`, so the next page inherits
+them instead of re-deciding.
+
+| Token | Value | Why |
+|---|---|---|
+| `--muted` | `#746a59` (was `#8a7f6e`) | 4.7:1 on `--sand`; the old value was 3.5 |
+| `--terracotta` | `#b55a31` (was `#c4673a`) | 4.7:1 under white button text; was 3.9 |
+| `--gold-text` | `#86691f` | Gold **as text on a light surface**. `--gold` is 2.8:1 there; keep `--gold` for icon tiles and anything on `--stone` |
+| `--gold` / `--gold-light` | `#c9a84c` / `#e8c97a` (were `#b8943f` / `#d4aa5a`) | The values public pages already showed; see the chatbot note below |
+| `--border-strong` | `#9c917d` | The edge of a form field. `--border` stays the hairline between cards |
+| `--font-display` / `--font-body` | Playfair Display / DM Sans | Replaces Cormorant Garamond, Jost and Inter. Loaded once by `partials/fonts.blade.php` |
+| `--btn-primary` / `--btn-primary-hover` | `--stone` / `--terracotta` | The one primary action colour. Hover is never gold: white on gold is 2.9:1 |
+
+- Admin display sizes were stepped down (22→20, 17→16, 26→23 …) because
+  Playfair sets larger than the Cormorant it replaced. Admin and staff use
+  `font-variant-numeric: lining-nums`; Playfair's default figures are old-style.
+- Text has a 12px floor. The exceptions are icon glyphs and the slot pills in
+  the villa calendar's phone breakpoints, where a 7-column grid cannot fit it.
+- The old slate/navy greys (`#f1f5f9`, `#94a3b8`, `#0d1b2a` …) were replaced by
+  the warm tokens inside `<style>` blocks and `style=""` attributes. Chart.js
+  colours are hex literals on purpose: a canvas cannot read a CSS variable.
+- Repeated inline styles became helper classes in `base.css` (`.field-label`,
+  `.field-hint`, `.note-text`, `.section-divider`, `.text-red`, `.mt-12` …),
+  774 → 560 attributes. They carry `!important` because each stands in for an
+  inline style. What remains is one-offs and styles with Blade inside the tag.
+- `:where(input, select, textarea):focus-visible` draws a focus ring for the
+  pages that set `outline: none` on their fields.
+- Each layout now has one `<h1>`: the admin and staff topbar title and the
+  auth/error card heading. The auth brand wordmark is `.auth-brand-name`.
+- `partials/chatbot.blade.php` used to redefine `--gold` / `--gold-light` on
+  `:root`, so every public page showed a brighter gold (`#c9a84c` / `#e8c97a`)
+  than `base.css` declared (`#b8943f` / `#d4aa5a`). `base.css` now holds the
+  public values and the override is gone: one gold for every section, and
+  the landing page is unchanged.
+- **Admin tables on a phone.** Below 640px a table in a `.table-card` (and
+  `table.audit-table`) becomes one block per row, each cell a label above its
+  value, two to a line. The labels are the column headings, copied to
+  `data-label` by a script in `layouts/admin.blade.php`; a `MutationObserver`
+  covers rows from a live refetch. The audit pages were overflowing the
+  viewport to 888px before this. Topbar buttons that carry an icon drop to the
+  icon alone below 600px.
+- **No native `alert()` / `confirm()` left.** Staff check-in and check-out use
+  `partials/confirm_dialog` (now included by the staff layout, with a neutral
+  tone); the property photo delete failure shows an inline message. The dialog
+  itself was pinned to the top-left corner in every section, because each
+  section stylesheet resets `* { margin: 0 }`; it now sets `margin: auto`.
+- **Walk-in form.** From 1200px the Payment card and the submit button sit in
+  a sticky right column beside Guest and Stay details.
+- **Landing section labels** are sentence case in the italic display face
+  instead of tracked-out capitals.
+- **`errors/403.blade.php` rendered as raw Blade.** Its title was
+  `'You can't open this page …'`, an apostrophe inside a single-quoted
+  directive argument, so the page printed `@section(...)` as text. It compiles
+  without error; only looking at the page shows it.
+
+**Bugs fixed in the same pass:** the front desk villa strip showed a slot that
+is not offered on that date as "Booked" (it now skips `unoffered` like `past`);
+`resort_email` was seeded as `villaelenareosrt.com`; the walk-in breakdown said
+"oras"; and `Discount::returningTeaserFor()` showed staff and admin the
+"You're N stays away" teaser.
+
+---
+
+## What Changed in v7.53
 
 ### Guest pages say which slot was booked, and when to arrive
 

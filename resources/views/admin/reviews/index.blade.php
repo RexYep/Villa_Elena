@@ -35,9 +35,9 @@
         }
 
         .stat-val {
-            font-size: 24px;
+            font-size: 21px;
             font-weight: 700;
-            font-family: 'Cormorant Garamond', serif;
+            font-family: var(--font-display);
             color: var(--stone);
             line-height: 1;
         }
@@ -69,11 +69,11 @@
 
         .form-select-sm,
         .form-control-sm {
-            border: 1.5px solid var(--border);
+            border: 1.5px solid var(--border-strong);
             border-radius: 7px;
             padding: 7px 12px;
             font-size: 14px;
-            font-family: 'DM Sans', sans-serif;
+            font-family: var(--font-body);
             background: #fff;
             color: var(--text-main);
         }
@@ -85,7 +85,7 @@
         }
 
         .btn-filter {
-            background: var(--terracotta);
+            background: var(--btn-primary);
             color: #fff;
             border: none;
             border-radius: 7px;
@@ -261,7 +261,7 @@
             font-size: 13px;
             font-weight: 600;
             cursor: pointer;
-            font-family: 'DM Sans', sans-serif;
+            font-family: var(--font-body);
             transition: all .2s;
         }
 
@@ -272,14 +272,14 @@
 
         .btn-reject {
             background: #fee2e2;
-            color: #dc2626;
+            color: #b91c1c;
             border: none;
             border-radius: 7px;
             padding: 6px 14px;
             font-size: 13px;
             font-weight: 600;
             cursor: pointer;
-            font-family: 'DM Sans', sans-serif;
+            font-family: var(--font-body);
             transition: all .2s;
         }
 
@@ -297,7 +297,7 @@
             font-size: 13px;
             font-weight: 600;
             cursor: pointer;
-            font-family: 'DM Sans', sans-serif;
+            font-family: var(--font-body);
             transition: all .2s;
         }
 
@@ -318,7 +318,7 @@
         }
 
         .btn-delete:hover {
-            color: #dc2626;
+            color: #b91c1c;
             background: #fee2e2;
         }
 
@@ -334,7 +334,7 @@
 
         .admin-reply-label {
             font-size: 12px;
-            color: var(--gold);
+            color: var(--gold-text);
             font-weight: 700;
             text-transform: uppercase;
             letter-spacing: .5px;
@@ -347,11 +347,11 @@
         }
 
         .reply-input {
-            border: 1.5px solid var(--border);
+            border: 1.5px solid var(--border-strong);
             border-radius: 8px;
             padding: 9px 12px;
             font-size: 13px;
-            font-family: 'DM Sans', sans-serif;
+            font-family: var(--font-body);
             width: 100%;
             resize: none;
             transition: border-color .2s;
@@ -365,7 +365,7 @@
         }
 
         .btn-submit-reply {
-            background: var(--terracotta);
+            background: var(--btn-primary);
             color: #fff;
             border: none;
             border-radius: 7px;
@@ -373,13 +373,13 @@
             font-size: 14px;
             font-weight: 600;
             cursor: pointer;
-            font-family: 'DM Sans', sans-serif;
+            font-family: var(--font-body);
             margin-top: 6px;
             transition: background .2s;
         }
 
         .btn-submit-reply:hover {
-            background: var(--gold);
+            background: var(--btn-primary-hover); color: #fff;
         }
 
         /* Modals */
@@ -464,7 +464,7 @@
     {{-- Stats --}}
     <div class="stats-row">
         <div class="stat-card">
-            <div class="stat-icon" style="background:#f1f5f9;color:#475569;"><i class="bi bi-chat-square-text"></i></div>
+            <div class="stat-icon tag-neutral"><i class="bi bi-chat-square-text"></i></div>
             <div class="stat-val">{{ $stats['total'] }}</div>
             <div class="stat-lbl">Total Reviews</div>
         </div>
@@ -474,7 +474,7 @@
             <div class="stat-lbl">Pending Approval</div>
         </div>
         <div class="stat-card">
-            <div class="stat-icon" style="background:#dcfce7;color:#16a34a;"><i class="bi bi-check-circle"></i></div>
+            <div class="stat-icon tag-green"><i class="bi bi-check-circle"></i></div>
             <div class="stat-val">{{ $stats['approved'] }}</div>
             <div class="stat-lbl">Published</div>
         </div>
@@ -509,7 +509,7 @@
                         <option value="">All Ratings</option>
                         @for ($i = 5; $i >= 1; $i--)
                             <option value="{{ $i }}" {{ request('rating') == $i ? 'selected' : '' }}>
-                                {{ $i }} ⭐</option>
+                                {{ $i }} ★</option>
                         @endfor
                     </select>
                 </div>
@@ -528,7 +528,7 @@
         <div class="empty-state">
             <i class="bi bi-star"></i>
             <p style="font-size:15px;font-weight:500;margin-bottom:4px;">No reviews found</p>
-            <p style="font-size:13px;">Reviews will appear here once guests submit them after checkout.</p>
+            <p class="fs-13">Reviews will appear here once guests submit them after checkout.</p>
         </div>
     @else
         <div class="reviews-grid">
@@ -561,7 +561,7 @@
                         {{-- Auto-Moderation Flag --}}
                         @if ($review->status === 'pending' && $review->flag_reason)
                             <div class="admin-reply-box" style="border-left-color:#dc2626;background:#fef2f2;">
-                                <div class="admin-reply-label" style="color:#dc2626;"><i
+                                <div class="admin-reply-label text-red"><i
                                         class="bi bi-shield-exclamation me-1"></i>Auto-Moderation</div>
                                 <div style="font-size:13px;color:var(--text-main);">{{ $review->flag_reason }}</div>
                             </div>
@@ -622,7 +622,7 @@
         </div>
 
         @if ($reviews->hasPages())
-            <div style="margin-top:20px;">{{ $reviews->links() }}</div>
+            <div class="mt-20">{{ $reviews->links() }}</div>
         @endif
     @endif
 @endsection
@@ -637,9 +637,9 @@
             </div>
             <form id="rejectForm" method="POST" class="modal-body">
                 @csrf @method('PATCH')
-                <div style="margin-bottom:14px;">
-                    <label for="f_reject_reason" class="form-label">Reason for Rejection <span class="text-muted-theme"
-                            style="font-weight:400;">(optional)</span></label>
+                <div class="mb-14">
+                    <label for="f_reject_reason" class="form-label">Reason for Rejection <span class="text-muted-theme fw-400"
+                           >(optional)</span></label>
                     <textarea id="f_reject_reason" name="reject_reason" class="form-control" rows="3"
                         placeholder="e.g. Contains inappropriate language, false information..."></textarea>
                 </div>

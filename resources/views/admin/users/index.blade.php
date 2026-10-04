@@ -35,8 +35,8 @@
         }
 
         .stat-chip .val {
-            font-family: 'Cormorant Garamond', serif;
-            font-size: 26px;
+            font-family: var(--font-display);
+            font-size: 23px;
             font-weight: 700;
             color: var(--text-main);
             line-height: 1;
@@ -69,11 +69,11 @@
         }
 
         .filter-input {
-            border: 1.5px solid var(--border);
+            border: 1.5px solid var(--border-strong);
             border-radius: 8px;
             padding: 8px 12px;
             font-size: 13px;
-            font-family: 'DM Sans', sans-serif;
+            font-family: var(--font-body);
             background: #fff;
             color: var(--text-main);
         }
@@ -84,7 +84,7 @@
         }
 
         .btn-filter {
-            background: var(--terracotta);
+            background: var(--btn-primary);
             color: #fff;
             border: none;
             border-radius: 8px;
@@ -92,12 +92,12 @@
             font-size: 13px;
             font-weight: 500;
             cursor: pointer;
-            font-family: 'DM Sans', sans-serif;
+            font-family: var(--font-body);
             transition: background .2s;
         }
 
         .btn-filter:hover {
-            background: var(--gold);
+            background: var(--btn-primary-hover); color: #fff;
         }
 
         .btn-clear {
@@ -108,7 +108,7 @@
             padding: 8px 14px;
             font-size: 13px;
             cursor: pointer;
-            font-family: 'DM Sans', sans-serif;
+            font-family: var(--font-body);
             text-decoration: none;
         }
 
@@ -116,7 +116,7 @@
             display: flex;
             align-items: center;
             gap: 7px;
-            background: var(--terracotta);
+            background: var(--btn-primary);
             color: #fff;
             border: none;
             border-radius: 9px;
@@ -129,7 +129,7 @@
         }
 
         .btn-add:hover {
-            background: var(--gold);
+            background: var(--btn-primary-hover);
             color: #fff;
         }
 
@@ -258,17 +258,17 @@
         </a>
         <a href="{{ route('admin.users.index', ['role' => 'admin']) }}"
             class="stat-chip {{ request('role') == 'admin' ? 'active' : '' }}">
-            <div class="val" style="color:#a16207;">{{ $stats['admins'] }}</div>
+            <div class="val text-amber">{{ $stats['admins'] }}</div>
             <div class="lbl">Admins</div>
         </a>
         <a href="{{ route('admin.users.index', ['status' => '1']) }}"
             class="stat-chip {{ request('status') === '1' ? 'active' : '' }}">
-            <div class="val" style="color:#15803d;">{{ $stats['active'] }}</div>
+            <div class="val text-green">{{ $stats['active'] }}</div>
             <div class="lbl">Active</div>
         </a>
         <a href="{{ route('admin.users.index', ['status' => '0']) }}"
             class="stat-chip {{ request('status') === '0' ? 'active' : '' }}">
-            <div class="val" style="color:#dc2626;">{{ $stats['inactive'] }}</div>
+            <div class="val text-red">{{ $stats['inactive'] }}</div>
             <div class="lbl">Inactive</div>
         </a>
     </div>
@@ -346,7 +346,7 @@
                                             style="font-weight:600;color:var(--stone);text-decoration:none;">
                                             {{ $user->full_name }}
                                         </a>
-                                        <div style="font-size: 13px;color:#94a3b8;">{{ $user->email }}</div>
+                                        <div class="note-text">{{ $user->email }}</div>
                                     </div>
                                 </div>
                             </td>
@@ -355,7 +355,7 @@
                                 <span class="role-badge role-{{ $user->role }}">{{ ucfirst($user->role) }}</span>
                             </td>
                             <td style="text-align:center;font-weight:500;">{{ $user->bookings_count }}</td>
-                            <td class="text-muted-theme" style="font-size: 14px;">
+                            <td class="text-muted-theme fs-14">
                                 {{ $user->last_login ? $user->last_login->diffForHumans() : 'Never' }}
                             </td>
                             <td>
@@ -406,17 +406,17 @@
     {{-- Delete Modal --}}
     <div class="modal fade" id="deleteModal" tabindex="-1">
         <div class="modal-dialog modal-sm modal-dialog-centered">
-            <div class="modal-content" style="border-radius:14px;border:none;">
+            <div class="modal-content modal-soft">
                 <div class="modal-body text-center p-4">
                     <div
-                        style="width:52px;height:52px;background:#fee2e2;border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 14px;font-size:22px;color:#ef4444;">
+                        style="width:52px;height:52px;background:#fee2e2;border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 14px;font-size:22px;color:#b91c1c;">
                         <i class="bi bi-person-x"></i>
                     </div>
-                    <h5 style="font-family:'Cormorant Garamond',serif;font-size:19px;margin-bottom:8px;">Delete User?</h5>
-                    <p style="font-size:13px;color:#64748b;margin-bottom:20px;" id="deleteMsg"></p>
+                    <h5 style="font-family: var(--font-display);font-size: 18px;margin-bottom:8px;">Delete User?</h5>
+                    <p style="font-size:13px;color:var(--muted);margin-bottom:20px;" id="deleteMsg"></p>
                     <form id="deleteForm" method="POST">
                         @csrf @method('DELETE')
-                        <div style="display:flex;gap:8px;">
+                        <div class="flex-gap-8">
                             <button type="button" class="btn btn-light w-50" data-bs-dismiss="modal">Cancel</button>
                             <button type="submit" class="btn btn-danger w-50">Delete</button>
                         </div>

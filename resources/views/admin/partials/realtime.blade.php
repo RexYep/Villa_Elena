@@ -17,7 +17,7 @@
     }
 
     .rt-toast {
-        background: #0d1b2a;
+        background: var(--stone);
         color: #fff;
         border-radius: 14px;
         padding: 14px 16px;
@@ -26,7 +26,7 @@
         gap: 12px;
         box-shadow: 0 8px 32px rgba(0, 0, 0, .25);
         animation: rtSlideIn .35s cubic-bezier(.34, 1.56, .64, 1);
-        border-left: 4px solid #c9a84c;
+        border-left: 4px solid var(--gold);
         cursor: pointer;
         transition: opacity .3s, transform .3s;
         min-width: 300px;
@@ -70,12 +70,12 @@
 
     .rt-icon.property {
         background: rgba(201, 168, 76, .2);
-        color: #c9a84c;
+        color: var(--gold);
     }
 
     .rt-icon.generic {
         background: rgba(201, 168, 76, .2);
-        color: #c9a84c;
+        color: var(--gold);
     }
 
     .rt-body {
@@ -418,7 +418,7 @@
             showToast({
                 type: 'booking',
                 icon: 'bi-calendar-check',
-                title: '🎉 New Booking — ' + data.booking_ref,
+                title: 'New Booking — ' + data.booking_ref,
                 sub: data.guest + ' · ' + data.property + '<br>' + data.check_in + ' → ' + data
                     .check_out,
                 time: data.created_at,
@@ -447,7 +447,7 @@
             showToast({
                 type: isRefund ? 'refund' : 'payment',
                 icon: isRefund ? 'bi-arrow-counterclockwise' : 'bi-cash-stack',
-                title: (isRefund ? '↩️ Refund — ' : '💳 Payment — ') + amountText,
+                title: (isRefund ? 'Refund — ' : 'Payment — ') + amountText,
                 sub: data.guest + ' · ' + data.booking_ref + ' · ' + data.payment_method
                     .toUpperCase(),
                 time: data.created_at,

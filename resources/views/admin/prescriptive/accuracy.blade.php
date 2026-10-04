@@ -47,8 +47,8 @@
         .caveat strong { color: #7c2d12; }
 
         .section-head {
-            font-family: 'Cormorant Garamond', serif;
-            font-size: 20px;
+            font-family: var(--font-display);
+            font-size: 18px;
             font-weight: 700;
             color: var(--text-main);
             margin: 30px 0 6px;
@@ -115,8 +115,8 @@
         }
 
         .score-tile .value {
-            font-family: 'Cormorant Garamond', serif;
-            font-size: 26px;
+            font-family: var(--font-display);
+            font-size: 23px;
             font-weight: 700;
             color: var(--stone);
             line-height: 1.1;
@@ -146,14 +146,14 @@
         .table-scroll { overflow-x: auto; }
 
         .status-pill {
-            font-size: 11.5px;
+            font-size: 12px;
             font-weight: 600;
             padding: 2px 9px;
             border-radius: 20px;
         }
 
         .status-pill.applied { background: #dcfce7; color: #15803d; }
-        .status-pill.dismissed { background: #e2e8f0; color: #475569; }
+        .status-pill.dismissed { background: var(--border); color: var(--muted); }
         .status-pill.expired { background: #fef3c7; color: #92400e; }
 
         /* Recommendation titles are full sentences, and at a narrow viewport the

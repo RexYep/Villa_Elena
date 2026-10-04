@@ -17,7 +17,7 @@
  */
 :root {
     --stone-mid: #4a3d2a;
-    --terracotta-dark: #b55a31;
+    --terracotta-dark: #9a4a26;
     --gold-dim: rgba(184, 148, 63, 0.15);
     --text-main: #2c2416;
     --sidebar-w: 260px;
@@ -27,10 +27,13 @@
 * { margin: 0; padding: 0; }
 
 body {
-    font-family: 'DM Sans', sans-serif;
+    font-family: var(--font-body);
     background: var(--sand);
     color: var(--text-main);
     overflow-x: hidden;
+    /* Playfair's default figures are old-style and dip below the baseline;
+       money and counts in a back-office screen read better lining. */
+    font-variant-numeric: lining-nums;
 }
 
 /* ── SIDEBAR ─────────────────────────────────────────────── */
@@ -67,9 +70,9 @@ body {
 }
 .sidebar-brand { padding: 28px 24px 20px; border-bottom: 1px solid var(--sb-line); }
 .sidebar-brand h1 {
-    font-family: 'Cormorant Garamond', serif;
+    font-family: var(--font-display);
     color: var(--gold-light);
-    font-size: 22px;
+    font-size: 20px;
     font-weight: 700;
     letter-spacing: 0.3px;
     line-height: 1.2;
@@ -171,8 +174,10 @@ body {
     z-index: 900;
 }
 .topbar-left { display: flex; align-items: center; gap: 14px; min-width: 0; }
-.topbar-left h2 { font-family: 'Cormorant Garamond', serif; font-size: 22px; font-weight: 600; color: var(--text-main); }
-.topbar-left p { font-size: 14px; color: var(--muted); margin-top: 1px; }
+.topbar-left h1 { font-family: var(--font-display); font-size: 20px; font-weight: 600; line-height: 1.2; margin: 0; color: var(--text-main); }
+/* margin: Bootstrap's reboot puts 1rem under every <p>, which made this
+   block taller than the bar and pushed the title against its top edge. */
+.topbar-left p { font-size: 14px; color: var(--muted); margin: 1px 0 0; }
 .topbar-right { display: flex; align-items: center; gap: 12px; }
 
 /* ── TOPBAR BUTTONS (search / notification bell) ─────────────
@@ -282,7 +287,7 @@ body {
     border-bottom: 1px solid var(--border);
     display: flex; align-items: center; justify-content: space-between;
 }
-.table-header h3 { font-family: 'Cormorant Garamond', serif; font-size: 17px; font-weight: 600; color: var(--text-main); }
+.table-header h3 { font-family: var(--font-display); font-size: 16px; font-weight: 600; color: var(--text-main); }
 table { width: 100%; border-collapse: collapse; font-size: 13px; }
 th {
     font-size: 13px; font-weight: 600;
@@ -345,7 +350,7 @@ tr:hover td { background: var(--sand); }
 /* ── ALERT ───────────────────────────────────────────────── */
 .alert { border-radius: 10px; font-size: 13px; padding: 12px 16px; margin-bottom: 20px; border: none; }
 .alert-success { background: #dcfce7; color: #15803d; }
-.alert-danger { background: #fee2e2; color: #dc2626; }
+.alert-danger { background: #fee2e2; color: #b91c1c; }
 .alert-warning { background: #fef3c7; color: #92400e; }
 
 /* ── FORM CONTROLS ───────────────────────────────────────── */
@@ -359,17 +364,17 @@ tr:hover td { background: var(--sand); }
     background: var(--gold-dim);
     color: var(--gold);
 }
-.form-card-header h3 { font-family: 'Cormorant Garamond', serif; font-size: 17px; font-weight: 600; color: var(--text-main); }
+.form-card-header h3 { font-family: var(--font-display); font-size: 16px; font-weight: 600; color: var(--text-main); }
 .form-card-body { padding: 24px; }
 .form-label { font-size: 13px; font-weight: 600; color: var(--text-main); margin-bottom: 6px; display: block; }
-.req { color: #ef4444; margin-left: 2px; }
+.req { color: #dc2626; margin-left: 2px; }
 .hint { font-size: 13px; color: var(--muted); margin-top: 4px; display: block; }
 .form-control, .form-select {
-    border: 1.5px solid var(--border);
+    border: 1.5px solid var(--border-strong);
     border-radius: 8px;
     padding: 10px 14px;
     font-size: 14px;
-    font-family: 'DM Sans', sans-serif;
+    font-family: var(--font-body);
     width: 100%;
     transition: border-color .2s;
     background: #fff;
@@ -378,21 +383,21 @@ tr:hover td { background: var(--sand); }
 .form-control:focus, .form-select:focus {
     outline: none;
     border-color: var(--terracotta);
-    box-shadow: 0 0 0 3px rgba(196, 103, 58, 0.08);
+    box-shadow: 0 0 0 3px rgba(181, 90, 49, 0.3);
 }
 .is-invalid { border-color: #ef4444 !important; }
-.invalid-feedback { font-size: 14px; color: #ef4444; margin-top: 4px; display: block; }
+.invalid-feedback { font-size: 14px; color: #dc2626; margin-top: 4px; display: block; }
 .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
 .input-group .form-control { border-right: none; }
 .input-group .btn-outline-secondary {
-    border: 1.5px solid var(--border);
+    border: 1.5px solid var(--border-strong);
     border-left: none;
     border-radius: 0 8px 8px 0;
     background: #fff;
     color: var(--muted);
 }
 .btn-submit {
-    background: var(--terracotta);
+    background: var(--btn-primary);
     color: #fff;
     border: none;
     border-radius: 9px;
@@ -400,10 +405,10 @@ tr:hover td { background: var(--sand); }
     font-size: 14px;
     font-weight: 600;
     cursor: pointer;
-    font-family: 'DM Sans', sans-serif;
+    font-family: var(--font-body);
     transition: background .2s;
 }
-.btn-submit:hover { background: var(--gold); }
+.btn-submit:hover { background: var(--btn-primary-hover); color: #fff; }
 .btn-cancel-link { color: var(--muted); font-size: 13px; text-decoration: none; margin-left: 16px; }
 .btn-cancel-link:hover { color: var(--stone); }
 
@@ -429,7 +434,7 @@ tr:hover td { background: var(--sand); }
     border-bottom: 1px solid var(--border);
     display: flex; align-items: center; justify-content: space-between;
 }
-.modal-title, .modal-head h3 { font-family: 'Cormorant Garamond', serif; font-size: 17px; font-weight: 600; color: var(--text-main); }
+.modal-title, .modal-head h3 { font-family: var(--font-display); font-size: 16px; font-weight: 600; color: var(--text-main); }
 .modal-close {
     background: var(--sand);
     border: none;
@@ -458,7 +463,7 @@ tr:hover td { background: var(--sand); }
        the bar. The dashboard's greeting ("Good Morning, <first name> 👋") already
        took two lines at 390px and would overflow outright with a longer name —
        one truncated line always fits. */
-    .topbar-left h2 {
+    .topbar-left h1 {
         font-size: 18px;
         white-space: nowrap;
         overflow: hidden;
@@ -489,4 +494,80 @@ tr:hover td { background: var(--sand); }
 @media (max-width: 600px) {
     .table-header { flex-direction: column; align-items: flex-start; gap: 10px; }
     .form-card-body { padding: 18px; }
+}
+
+/* ── TABLES ON A PHONE ────────────────────────────────────────────
+   Below 640px a table in a .table-card stops being a grid that scrolls
+   sideways and becomes one block per row: each cell is a label above its
+   value, two to a line. The labels come from the column headings, copied
+   onto each cell as data-label by the script in layouts/admin.blade.php,
+   which also adds .is-stacked. Keyed on that class so a table the script
+   has not labelled keeps the sideways scroll instead of losing its
+   headings. */
+@media (max-width: 640px) {
+    /* .main-content prefix: pages such as bookings set their own wider
+       min-width on `.main-content .table-card table`. */
+    .main-content .table-card table.is-stacked { min-width: 0; }
+    table.is-stacked thead {
+        position: absolute;
+        width: 1px; height: 1px;
+        overflow: hidden;
+        clip-path: inset(50%);
+    }
+    table.is-stacked,
+    table.is-stacked tbody { display: block; width: 100%; }
+    table.is-stacked tr {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+        gap: 12px 16px;
+        padding: 14px 16px;
+        border-bottom: 1px solid var(--border);
+    }
+    table.is-stacked tr:last-child { border-bottom: none; }
+    table.is-stacked td {
+        display: block;
+        min-width: 0;
+        padding: 0;
+        border: none;
+        white-space: normal;
+        overflow-wrap: anywhere;
+        text-align: left;
+    }
+    table.is-stacked tr:hover td { background: transparent; }
+    table.is-stacked td::before {
+        content: attr(data-label);
+        display: block;
+        margin-bottom: 3px;
+        font-size: 12px;
+        font-weight: 600;
+        color: var(--muted);
+    }
+    table.is-stacked td[data-label=""]::before,
+    table.is-stacked td[colspan]::before { content: none; }
+    /* Buttons and "no results" rows take the full width. */
+    table.is-stacked td[colspan],
+    table.is-stacked td:has(.action-btns),
+    table.is-stacked td:has(.btn-icon) { grid-column: 1 / -1; }
+    table.is-stacked td[colspan] { text-align: center; }
+    /* A pill or a no-wrap value is wider than half a phone; let it wrap
+       inside its cell instead of running under the next one. */
+    table.is-stacked td > * { max-width: 100%; white-space: normal; }
+}
+/* Phone topbar: a page action ("Record Payment", "Back") plus the bell,
+   search and Logout do not fit beside the title in 390px, and the action
+   wrapped onto two lines over the heading. Buttons that carry an icon drop
+   to the icon alone; the text stays in the markup as the accessible name. */
+@media (max-width: 600px) {
+    .topbar-right .logout-btn,
+    .topbar-right > :is(a, button):has(> i):not(.topbar-btn) {
+        font-size: 0;
+        gap: 0;
+        padding: 10px 11px;
+        white-space: nowrap;
+    }
+    .topbar-right .logout-btn i,
+    .topbar-right > :is(a, button):has(> i):not(.topbar-btn) > i {
+        font-size: 16px;
+        margin: 0;
+    }
 }

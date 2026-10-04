@@ -24,12 +24,12 @@
             font-size: 13px;
             letter-spacing: 2px;
             text-transform: uppercase;
-            color: var(--gold);
+            color: var(--gold-text);
             margin-bottom: 8px;
         }
 
         .prop-name {
-            font-family: 'Playfair Display', serif;
+            font-family: var(--font-display);
             font-size: 36px;
             font-weight: 700;
             margin-bottom: 12px;
@@ -133,7 +133,7 @@
         }
 
         .section-title {
-            font-family: 'Playfair Display', serif;
+            font-family: var(--font-display);
             font-size: 20px;
             font-weight: 600;
             margin-bottom: 6px;
@@ -195,7 +195,7 @@
         }
 
         .fc {
-            font-family: 'Jost', sans-serif;
+            font-family: var(--font-body);
         }
 
         /* Ang mga araw at header ng FullCalendar ay <a> — kung hindi ito
@@ -213,7 +213,7 @@
         }
 
         .fc .fc-toolbar-title {
-            font-family: 'Playfair Display', serif;
+            font-family: var(--font-display);
             font-size: 16px;
             color: var(--stone);
         }
@@ -309,8 +309,8 @@
             border: 1px solid transparent;
             border-radius: 5px;
             padding: 2px 5px;
-            font-family: 'Jost', sans-serif;
-            font-size: 11px;
+            font-family: var(--font-body);
+            font-size: 12px;
             font-weight: 600;
             line-height: 1.5;
             text-align: left;
@@ -403,7 +403,7 @@
            mas mabilis kaysa dalawang nagsisimula sa magkaibang puwesto. */
         .legend-group-label {
             min-width: 86px;
-            font-size: 10.5px;
+            font-size: 12px;
             font-weight: 700;
             letter-spacing: 1px;
             text-transform: uppercase;
@@ -478,7 +478,7 @@
         }
 
         .booking-price {
-            font-family: 'Playfair Display', serif;
+            font-family: var(--font-display);
             font-size: 28px;
             font-weight: 700;
             margin-bottom: 4px;
@@ -488,12 +488,12 @@
             font-size: 15px;
             font-weight: 400;
             color: var(--muted);
-            font-family: 'Jost', sans-serif;
+            font-family: var(--font-body);
         }
 
         .price-weekend {
             font-size: 14px;
-            color: var(--gold);
+            color: var(--gold-text);
             margin-bottom: 18px;
         }
 
@@ -544,14 +544,14 @@
         }
 
         .btn-book-now {
-            background: var(--stone);
+            background: var(--btn-primary);
             color: #fff;
             border: none;
             border-radius: 10px;
             padding: 14px;
             font-size: 15px;
             font-weight: 700;
-            font-family: 'Jost', sans-serif;
+            font-family: var(--font-body);
             width: 100%;
             cursor: pointer;
             transition: all .2s;
@@ -565,8 +565,8 @@
         }
 
         .btn-book-now:hover {
-            background: var(--gold);
-            color: var(--stone);
+            background: var(--btn-primary-hover);
+            color: #fff;
         }
 
         .btn-book-now:disabled {
@@ -586,14 +586,14 @@
         }
 
         .login-prompt a {
-            color: var(--gold);
+            color: var(--gold-text);
             font-weight: 600;
             text-decoration: none;
         }
 
         .unavail-banner {
             background: #fee2e2;
-            color: #dc2626;
+            color: #b91c1c;
             border-radius: 10px;
             padding: 12px;
             text-align: center;
@@ -629,7 +629,7 @@
         .duration-note.warn {
             display: block;
             background: #fee2e2;
-            color: #dc2626;
+            color: #b91c1c;
         }
 
         .slot-options {
@@ -749,13 +749,13 @@
             }
 
             .fc .fc-col-header-cell-cushion {
-                font-size: 11px;
+                font-size: 12px;
                 letter-spacing: 0;
                 padding: 6px 2px;
             }
 
             .fc .fc-daygrid-day-number {
-                font-size: 11px;
+                font-size: 12px;
                 padding: 4px 5px 2px;
             }
 
@@ -769,7 +769,7 @@
             }
 
             .slot-pill {
-                font-size: 10px;
+                font-size: 11px;
                 padding: 2px 3px;
                 gap: 3px;
                 letter-spacing: 0;
@@ -837,7 +837,7 @@
             }
 
             .slot-pill {
-                font-size: 9.5px;
+                font-size: 10.5px;
                 padding: 2px;
                 justify-content: center;
             }
@@ -856,7 +856,7 @@
 
     @if ($errors->any())
         <div
-            style="background:#fee2e2;color:#dc2626;border-radius:10px;padding:12px 16px;margin-bottom:20px;font-size:13px;">
+            style="background:#fee2e2;color:#b91c1c;border-radius:10px;padding:12px 16px;margin-bottom:20px;font-size:13px;">
             <i class="bi bi-exclamation-circle me-2"></i>{{ $errors->first() }}
         </div>
     @endif
@@ -864,7 +864,6 @@
     {{-- Header muna, tapos gallery: dapat mabasa ng bisita kung ano ang
          property bago siya salubungin ng mga larawan. --}}
     <div class="prop-header">
-        <div class="prop-type">{{ ucfirst($property->type) }}</div>
         <div class="prop-name">{{ $property->property_name }}</div>
         <div class="prop-meta">
             <span><i class="bi bi-people"></i> Up to {{ $property->max_capacity }} guests</span>
@@ -1070,9 +1069,21 @@
                         </div>
 
                         @auth
-                            <button type="submit" class="btn-book-now" id="bookBtn">
-                                Reserve Now →
-                            </button>
+                            {{-- Admin at staff: walang Reserve button. Ang
+                                 PortalController ang tunay na harang; ito ay
+                                 para hindi sila alukin ng hindi nila magagamit. --}}
+                            @if ($staffBookingTool = auth()->user()->bookingToolRouteName())
+                                <a href="{{ route($staffBookingTool) }}" class="btn-book-now btn-book-link">
+                                    {{ auth()->user()->bookingToolLabel() }}
+                                </a>
+                                <div class="login-prompt">
+                                    Guest bookings can only be made from a guest account.
+                                </div>
+                            @else
+                                <button type="submit" class="btn-book-now" id="bookBtn">
+                                    Reserve Now →
+                                </button>
+                            @endif
                         @else
                             <a href="{{ route('login') }}" class="btn-book-now btn-book-link">
                                 Sign In to Book

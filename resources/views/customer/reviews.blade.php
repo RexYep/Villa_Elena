@@ -44,7 +44,7 @@
         }
 
         .review-property {
-            font-family: 'Playfair Display', serif;
+            font-family: var(--font-display);
             font-size: 16px;
             font-weight: 600;
         }
@@ -62,7 +62,7 @@
         }
 
         .review-booking-link:hover {
-            color: var(--gold);
+            color: var(--gold-text);
             border-bottom-color: var(--gold);
         }
 
@@ -80,7 +80,7 @@
 
         .review-content {
             font-size: 14px;
-            color: #374151;
+            color: var(--stone);
             line-height: 1.6;
         }
 
@@ -98,7 +98,7 @@
             font-size: 14px;
             font-weight: 600;
             cursor: pointer;
-            font-family: 'Jost', sans-serif;
+            font-family: var(--font-body);
             text-decoration: none;
             display: inline-flex;
             align-items: center;
@@ -106,17 +106,17 @@
         }
 
         .btn-edit {
-            background: #f1f5f9;
-            color: #374151;
+            background: var(--sand);
+            color: var(--stone);
         }
 
         .btn-edit:hover {
-            background: #e2e8f0;
+            background: var(--border);
         }
 
         .btn-delete {
             background: #fef2f2;
-            color: #dc2626;
+            color: #b91c1c;
         }
 
         .btn-delete:hover {
@@ -147,7 +147,7 @@
 
 @section('content')
     <div class="page-title">My Reviews</div>
-    <div class="page-sub" style="margin-bottom:20px;">Reviews you've submitted for past stays</div>
+    <div class="page-sub mb-20">Reviews you've submitted for past stays</div>
 
     @if (session('success'))
         <div class="alert alert-success"><i class="bi bi-check-circle me-2"></i>{{ session('success') }}</div>
@@ -188,7 +188,7 @@
 
             @if ($review->status === 'rejected' && $review->admin_note)
                 <div class="admin-reply" style="background:#fef2f2;">
-                    <strong style="color:#dc2626;">Why this was rejected:</strong>
+                    <strong class="text-red">Why this was rejected:</strong>
                     {{ $review->admin_note }}
                 </div>
             @endif
@@ -215,7 +215,7 @@
     @empty
         <div class="empty-state">
             <i class="bi bi-star" style="font-size:40px;opacity:.3;"></i>
-            <p style="margin-top:12px;">You haven't written any reviews yet.</p>
+            <p class="mt-12">You haven't written any reviews yet.</p>
         </div>
     @endforelse
 @endsection

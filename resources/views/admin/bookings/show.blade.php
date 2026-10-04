@@ -51,8 +51,8 @@
         }
 
         .card-header-custom h3 {
-            font-family: 'Cormorant Garamond', serif;
-            font-size: 17px;
+            font-family: var(--font-display);
+            font-size: 16px;
             font-weight: 600;
             color: var(--text-main);
         }
@@ -75,9 +75,9 @@
         }
 
         .booking-ref {
-            font-family: 'Cormorant Garamond', serif;
-            color: var(--gold-light);
-            font-size: 28px;
+            font-family: var(--font-display);
+            color: #fff;
+            font-size: 25px;
             font-weight: 700;
         }
 
@@ -96,8 +96,8 @@
 
         .booking-dates strong {
             display: block;
-            font-size: 20px;
-            font-family: 'Cormorant Garamond', serif;
+            font-size: 18px;
+            font-family: var(--font-display);
         }
 
         .bh-cell {
@@ -116,8 +116,8 @@
 
         .bh-duration-value {
             color: #fff;
-            font-family: 'Cormorant Garamond', serif;
-            font-size: 28px;
+            font-family: var(--font-display);
+            font-size: 25px;
             font-weight: 700;
             margin: 4px 0;
         }
@@ -239,7 +239,7 @@
             font-size: 13px;
             font-weight: 500;
             cursor: pointer;
-            font-family: 'DM Sans', sans-serif;
+            font-family: var(--font-body);
             transition: opacity .2s;
             display: flex;
             align-items: center;
@@ -261,7 +261,7 @@
         }
 
         .btn-checkout {
-            background: #475569;
+            background: var(--muted);
             color: #fff;
         }
 
@@ -357,11 +357,11 @@
         }
 
         .form-control-sm-custom {
-            border: 1.5px solid var(--border);
+            border: 1.5px solid var(--border-strong);
             border-radius: 7px;
             padding: 8px 12px;
             font-size: 13px;
-            font-family: 'DM Sans', sans-serif;
+            font-family: var(--font-body);
             width: 100%;
             background: #fff;
             color: var(--text-main);
@@ -394,7 +394,7 @@
             font-weight: 600;
             width: 100%;
             cursor: pointer;
-            font-family: 'DM Sans', sans-serif;
+            font-family: var(--font-body);
             margin-top: 4px;
             transition: background .2s;
         }
@@ -681,7 +681,7 @@
                         <h3>Extend Stay</h3>
                     </div>
                     <div class="card-body-custom">
-                        <p class="text-muted-theme mb-12" style="font-size: 14px;">
+                        <p class="text-muted-theme mb-12 fs-14">
                             Current check-out: <strong>{{ $booking->check_out_date->format('M d, Y') }}
                                 @if ($booking->check_out_time)
                                     — {{ \Carbon\Carbon::parse($booking->check_out_time)->format('g:i A') }}
@@ -757,7 +757,7 @@
                     </div>
                     @if ($booking->special_requests)
                         <div class="text-muted-theme"
-                            style="margin-top:16px;padding:12px 14px;background:#f8fafc;border-radius:8px;font-size:13px;">
+                            style="margin-top:16px;padding:12px 14px;background:var(--cream);border-radius:8px;font-size:13px;">
                             <strong style="color:var(--text-main);display:block;margin-bottom:4px;">Special
                                 Requests:</strong>
                             {{ $booking->special_requests }}
@@ -765,10 +765,10 @@
                     @endif
                     @if ($booking->cancellation_reason)
                         <div
-                            style="margin-top:16px;padding:12px 14px;background:#fef2f2;border-radius:8px;font-size:13px;color:#dc2626;">
+                            style="margin-top:16px;padding:12px 14px;background:#fef2f2;border-radius:8px;font-size:13px;color:#b91c1c;">
                             <strong style="display:block;margin-bottom:4px;">Cancellation Reason:</strong>
                             {{ $booking->cancellation_reason }}
-                            <span style="color:#94a3b8;font-size: 13px;margin-left:8px;">
+                            <span style="color:var(--muted);font-size: 13px;margin-left:8px;">
                                 {{ $booking->cancelled_at?->format('M d, Y h:i A') }}
                             </span>
                         </div>
@@ -778,7 +778,7 @@
                          dalawang field na ito lang. Bukas na agad kapag
                          bumalik mula sa validation error. --}}
                     <details style="margin-top:16px;" @if ($errors->has('num_guests')) open @endif>
-                        <summary style="cursor:pointer;font-size:14px;color:#2e5fa3;font-weight:500;">
+                        <summary style="cursor:pointer;font-size:14px;color:var(--terracotta);font-weight:500;">
                             <i class="bi bi-pencil"></i> Edit guests &amp; special requests
                         </summary>
                         <form method="POST" action="{{ route('admin.bookings.update', $booking) }}"
@@ -864,7 +864,7 @@
                                         <td class="text-muted-theme">{{ $payment->payment_date?->format('M d, Y') }}</td>
                                         <td>{{ $payment->method_label }}</td>
                                         <td><span
-                                                style="font-size: 13px;background:#f1f5f9;padding:2px 8px;border-radius:10px;">{{ $payment->type_label }}</span>
+                                                style="font-size: 13px;background:var(--sand);padding:2px 8px;border-radius:10px;">{{ $payment->type_label }}</span>
                                             {{-- Dito hinahanap ng admin ang refund ng booking, kaya
                                                  dito rin dapat ang daan papunta sa pagsasara nito. --}}
                                             @if ($payment->isAwaitingPayout())
@@ -915,7 +915,7 @@
                                         <td>
                                             {{ $extra->item_name }}
                                             @if ($extra->description)
-                                                <div class="text-muted-theme" style="font-size: 13px;">
+                                                <div class="text-muted-theme fs-13">
                                                     {{ $extra->description }}</div>
                                             @endif
                                         </td>
@@ -945,7 +945,7 @@
 
                     <form method="POST" action="{{ route('admin.bookings.extras.store', $booking) }}">
                         @csrf
-                        <div class="field-pair" style="margin-bottom:10px;">
+                        <div class="field-pair mb-10">
                             <div>
                                 <label for="f_item_name" class="form-label-sm">Item / Amenity Name *</label>
                                 <input id="f_item_name" type="text" name="item_name" class="form-control-sm-custom"
@@ -957,7 +957,7 @@
                                     placeholder="Detalye (opsyonal)">
                             </div>
                         </div>
-                        <div class="field-pair" style="margin-bottom:10px;">
+                        <div class="field-pair mb-10">
                             <div>
                                 <label for="f_quantity" class="form-label-sm">Quantity *</label>
                                 <input id="f_quantity" type="number" name="quantity" class="form-control-sm-custom" value="1"
@@ -1000,15 +1000,15 @@
                     @endif
                     @if ($booking->discount_amount > 0)
                         <div class="pay-row">
-                            <span style="color:#15803d;">Discount</span>
-                            <span style="color:#15803d;">-₱{{ number_format($booking->discount_amount, 2) }}</span>
+                            <span class="text-green">Discount</span>
+                            <span class="text-green">-₱{{ number_format($booking->discount_amount, 2) }}</span>
                         </div>
                     @endif
                     <div class="pay-row total">
                         <span>Total</span>
                         <span>₱{{ number_format($booking->total_amount, 2) }}</span>
                     </div>
-                    <div class="pay-row" style="color:#15803d;">
+                    <div class="pay-row text-green">
                         <span>Amount Paid</span>
                         <span>₱{{ number_format($booking->amount_paid, 2) }}</span>
                     </div>
@@ -1056,7 +1056,7 @@
                                     <a href="{{ route('admin.payments.index', ['search' => $booking->booking_ref]) }}">Payments page</a>.
                                 </div>
                             </div>
-                            <div style="margin-bottom:14px;">
+                            <div class="mb-14">
                                 <label for="f_notes" class="form-label-sm">Notes (optional)</label>
                                 <input id="f_notes" type="text" name="notes" class="form-control-sm-custom"
                                     placeholder="e.g. QR Ph ref #123456">
@@ -1064,7 +1064,7 @@
                             {{-- Kailangan lang kapag may kamukhang bayad na
                                  naitala ngayong araw para sa booking na ito. --}}
                             <label
-                                style="display:flex; align-items:flex-start; gap:8px; font-size:13px; color:#475569; margin-bottom:14px;">
+                                style="display:flex; align-items:flex-start; gap:8px; font-size:13px; color:var(--muted); margin-bottom:14px;">
                                 <input type="checkbox" name="confirm_duplicate" value="1" style="margin-top:3px;">
                                 <span>This is a <strong>separate</strong> payment — tick only if the guest really
                                     paid this amount again today.</span>
@@ -1082,7 +1082,7 @@
                 <div class="card-header-custom">
                     <h3>Property</h3>
                     <a href="{{ route('admin.properties.show', $booking->property_id) }}"
-                        style="font-size: 14px;color:#2e5fa3;text-decoration:none;">View →</a>
+                        style="font-size: 14px;color:var(--terracotta);text-decoration:none;">View →</a>
                 </div>
                 <div class="card-body-custom">
                     @if ($booking->property->primaryImage)
@@ -1107,21 +1107,21 @@
     {{-- Cancel Modal --}}
     <div class="modal fade" id="cancelModal" tabindex="-1">
         <div class="modal-dialog modal-dialog-centered" style="max-width:400px;">
-            <div class="modal-content" style="border-radius:14px;border:none;">
+            <div class="modal-content modal-soft">
                 <div class="modal-body p-4">
-                    <h5 style="font-family:'Cormorant Garamond',serif;font-size:20px;margin-bottom:6px;">Cancel Booking?
+                    <h5 style="font-family: var(--font-display);font-size: 18px;margin-bottom:6px;">Cancel Booking?
                     </h5>
-                    <p style="font-size:13px;color:#64748b;margin-bottom:16px;">
+                    <p style="font-size:13px;color:var(--muted);margin-bottom:16px;">
                         This will cancel booking <strong>{{ $booking->booking_ref }}</strong> and free up the property.
                     </p>
                     <form method="POST" action="{{ route('admin.bookings.status', $booking) }}">
                         @csrf @method('PATCH')
                         <input type="hidden" name="status" value="cancelled">
-                        <div style="margin-bottom:14px;">
+                        <div class="mb-14">
                             <label for="f_cancellation_reason" style="font-size:13px;font-weight:600;display:block;margin-bottom:6px;">Reason for
                                 cancellation *</label>
                             <textarea id="f_cancellation_reason" name="cancellation_reason" rows="3"
-                                style="width:100%;border:1.5px solid var(--border);border-radius:8px;padding:10px;font-size:13px;font-family:'DM Sans',sans-serif;resize:none;"
+                                style="width:100%;border:1.5px solid var(--border);border-radius:8px;padding:10px;font-size:13px;font-family: var(--font-body);resize:none;"
                                 placeholder="Enter reason..." required></textarea>
                         </div>
                         {{-- Ang refund ay nakadepende sa kung SINO ang
@@ -1137,19 +1137,19 @@
                                 <label style="display:flex;gap:8px;align-items:flex-start;font-size:13px;padding:10px;border:1.5px solid var(--border);border-radius:8px;margin-bottom:6px;cursor:pointer;">
                                     <input type="radio" name="cancel_initiator" value="guest" required style="margin-top:3px;">
                                     <span><strong>The guest asked to cancel</strong><br>
-                                        <span style="color:#64748b;">No refund. The
+                                        <span style="color:var(--muted);">No refund. The
                                             ₱{{ number_format($booking->amount_paid, 2) }} paid is non-refundable.</span></span>
                                 </label>
                                 <label style="display:flex;gap:8px;align-items:flex-start;font-size:13px;padding:10px;border:1.5px solid var(--border);border-radius:8px;cursor:pointer;">
                                     <input type="radio" name="cancel_initiator" value="resort" required style="margin-top:3px;">
                                     <span><strong>The resort is cancelling</strong><br>
-                                        <span style="color:#64748b;">Full refund of
+                                        <span style="color:var(--muted);">Full refund of
                                             ₱{{ number_format($booking->amount_paid, 2) }} is recorded, to be sent from
                                             the Payments page.</span></span>
                                 </label>
                             </div>
                         @endif
-                        <div style="display:flex;gap:8px;">
+                        <div class="flex-gap-8">
                             <button type="button" class="btn btn-light w-50" data-bs-dismiss="modal">Keep
                                 Booking</button>
                             <button type="submit" class="btn btn-danger w-50">Cancel Booking</button>
@@ -1163,11 +1163,11 @@
     {{-- Balance Confirm Modal (may Natitirang Balance) --}}
     <div class="modal fade" id="balanceConfirmModal" tabindex="-1">
         <div class="modal-dialog modal-dialog-centered" style="max-width:420px;">
-            <div class="modal-content" style="border-radius:14px;border:none;">
+            <div class="modal-content modal-soft">
                 <div class="modal-body p-4">
-                    <h5 style="font-family:'Cormorant Garamond',serif;font-size:20px;margin-bottom:6px;">Outstanding
+                    <h5 style="font-family: var(--font-display);font-size: 18px;margin-bottom:6px;">Outstanding
                         Balance</h5>
-                    <p style="font-size:13px;color:#64748b;margin-bottom:10px;">
+                    <p style="font-size:13px;color:var(--muted);margin-bottom:10px;">
                         This booking has a balance of
                         <strong style="color:#b45309;">₱{{ number_format($booking->balance_due ?? 0, 2) }}</strong>.
                         Would you like to record the payment now, or check in with deferred payment (to be paid upon
@@ -1181,7 +1181,7 @@
                     </div>
                     <div style="border-top:1px solid var(--border);padding-top:14px;">
                         <label
-                            style="display:flex;align-items:flex-start;gap:8px;font-size:12.5px;color:#64748b;cursor:pointer;">
+                            style="display:flex;align-items:flex-start;gap:8px;font-size:12.5px;color:var(--muted);cursor:pointer;">
                             <input type="checkbox" id="adminDeferCheckbox" style="margin-top:2px;">
                             I confirm that I will defer the payment of this balance until check-out. I take full
                             responsibility for this decision.

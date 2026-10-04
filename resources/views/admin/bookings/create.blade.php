@@ -72,7 +72,7 @@
         }
 
         .price-preview h4 {
-            font-family: 'Cormorant Garamond', serif;
+            font-family: var(--font-display);
             font-size: 16px;
             color: var(--gold-light);
             margin-bottom: 14px;
@@ -192,7 +192,7 @@
                             <span class="invalid-feedback">{{ $message }}</span>
                         @enderror
                         <div class="text-muted-theme" style="margin-top:10px;font-size: 14px;">
-                            Guest not in the list? <a href="{{ route('admin.users.create') }}" style="color:#2e5fa3;">Create
+                            Guest not in the list? <a href="{{ route('admin.users.create') }}" style="color:var(--terracotta);">Create
                                 new guest account →</a>
                         </div>
                     </div>

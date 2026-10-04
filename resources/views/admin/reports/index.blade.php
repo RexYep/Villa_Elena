@@ -13,7 +13,7 @@
 .period-btn:hover{border-color:var(--terracotta);color:var(--terracotta);}
 .period-btn.active{background:var(--terracotta);color:#fff;border-color:var(--terracotta);}
 .custom-range{display:flex;gap:8px;align-items:center;margin-left:8px;}
-.date-input{border:1.5px solid var(--border);border-radius:8px;padding:7px 10px;font-size: 14px;font-family:'DM Sans',sans-serif;background:#fff;color:var(--text-main);}
+.date-input{border:1.5px solid var(--border);border-radius:8px;padding:7px 10px;font-size: 14px;font-family: var(--font-body);background:#fff;color:var(--text-main);}
 
 /* KPI Grid — top accent bars are semantic per-metric colors, unchanged except gold updated to new hex */
 .kpi-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:24px;}
@@ -24,7 +24,7 @@
 .kpi-gold::before{background:linear-gradient(90deg,var(--gold),var(--gold-light));}
 .kpi-purple::before{background:linear-gradient(90deg,#7c3aed,#c084fc);}
 .kpi-icon{width:40px;height:40px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:18px;margin-bottom:12px;}
-.kpi-val{font-family:'Cormorant Garamond',serif;font-size:28px;font-weight:700;line-height:1;color:var(--text-main);}
+.kpi-val{font-family: var(--font-display);font-size: 25px;font-weight:700;line-height:1;color:var(--text-main);}
 .kpi-label{font-size: 14px;color:var(--muted);margin-top:4px;}
 .kpi-sub{font-size: 13px;margin-top:6px;}
 
@@ -32,7 +32,7 @@
 .charts-row{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:20px;}
 .chart-card{background:var(--cream);border-radius:14px;border:1px solid var(--border);overflow:hidden;}
 .chart-header{padding:16px 22px;border-bottom:1px solid var(--border);}
-.chart-header h3{font-family:'Cormorant Garamond',serif;font-size:17px;font-weight:600;color:var(--text-main);}
+.chart-header h3{font-family: var(--font-display);font-size: 16px;font-weight:600;color:var(--text-main);}
 .chart-header p{font-size: 14px;color:var(--muted);margin-top:2px;}
 .chart-body{padding:20px;position:relative;}
 .chart-full{grid-column:1/-1;}
@@ -116,7 +116,7 @@ td{padding:13px 20px;}
                 <input type="date" name="from" class="date-input"
                     value="{{ $period === 'custom' ? $from->toDateString() : '' }}"
                     placeholder="From">
-                <span class="text-muted-theme" style="font-size:13px;">—</span>
+                <span class="text-muted-theme fs-13">—</span>
                 <input type="date" name="to" class="date-input"
                     value="{{ $period === 'custom' ? $to->toDateString() : '' }}"
                     placeholder="To">
@@ -133,7 +133,7 @@ td{padding:13px 20px;}
             Showing data from <strong>{{ $from->format('M d, Y') }}</strong>
             to <strong>{{ $to->format('M d, Y') }}</strong>
         </span>
-        <span style="display:flex;gap:8px;">
+        <span class="flex-gap-8">
             <a href="{{ route('admin.reports.export.pdf', request()->query()) }}" class="period-btn">
                 <i class="bi bi-file-earmark-pdf"></i> Export PDF
             </a>
@@ -146,11 +146,11 @@ td{padding:13px 20px;}
     {{-- KPI Cards --}}
     <div class="kpi-grid">
         <div class="kpi-card kpi-green">
-            <div class="kpi-icon" style="background:#dcfce7;color:#16a34a;"><i class="bi bi-cash-stack"></i></div>
+            <div class="kpi-icon tag-green"><i class="bi bi-cash-stack"></i></div>
             <div class="kpi-val">₱{{ number_format($netRevenue, 0) }}</div>
             <div class="kpi-label">Net Revenue</div>
             @if($totalRefunds > 0)
-            <div class="kpi-sub" style="color:#dc2626;">-₱{{ number_format($totalRefunds, 0) }} refunds</div>
+            <div class="kpi-sub text-red">-₱{{ number_format($totalRefunds, 0) }} refunds</div>
             @endif
         </div>
         <div class="kpi-card kpi-blue">
@@ -158,14 +158,14 @@ td{padding:13px 20px;}
             <div class="kpi-val">{{ $confirmedBookings }}</div>
             <div class="kpi-label">Confirmed Bookings</div>
             @if($cancelledBookings > 0)
-            <div class="kpi-sub" style="color:#dc2626;">{{ $cancelledBookings }} cancelled</div>
+            <div class="kpi-sub text-red">{{ $cancelledBookings }} cancelled</div>
             @endif
         </div>
         <div class="kpi-card kpi-gold">
             <div class="kpi-icon" style="background:var(--gold-dim);color:var(--gold);"><i class="bi bi-percent"></i></div>
             <div class="kpi-val">{{ $occupancyRate }}%</div>
             <div class="kpi-label">Occupancy Rate</div>
-            <div class="progress-bar-wrap" style="margin-top:8px;">
+            <div class="progress-bar-wrap mt-8">
                 <div class="progress-bar-fill" style="width:{{ min(100,$occupancyRate) }}%;background:linear-gradient(90deg,var(--gold),var(--gold-light));"></div>
             </div>
         </div>
@@ -178,7 +178,7 @@ td{padding:13px 20px;}
     </div>
 
     {{-- Revenue Over Time (full width) --}}
-    <div class="table-card chart-full" style="margin-bottom:20px;">
+    <div class="table-card chart-full mb-20">
         <div class="chart-header" style="padding:16px 22px;border-bottom:1px solid var(--border);">
             <h3>Revenue — Last 12 Months</h3>
             <p class="text-muted-theme" style="font-size: 14px;margin-top:2px;">Monthly collected payments (excl. refunds)</p>
@@ -238,7 +238,7 @@ td{padding:13px 20px;}
     <div class="table-card">
         <div class="table-header">
             <h3>Revenue by Property</h3>
-            <span class="text-muted-theme" style="font-size: 14px;">Selected period</span>
+            <span class="text-muted-theme fs-14">Selected period</span>
         </div>
         @if($topProperties->isEmpty())
             <div class="text-muted-theme" style="text-align:center;padding:40px;font-size:13px;">
@@ -261,7 +261,7 @@ td{padding:13px 20px;}
                 @foreach($topProperties as $i => $row)
                 <tr>
                     <td class="text-muted-theme" style="font-weight:700;">{{ $i+1 }}</td>
-                    <td style="font-weight:600;">{{ $row->property->property_name ?? 'N/A' }}</td>
+                    <td class="fw-600">{{ $row->property->property_name ?? 'N/A' }}</td>
                     <td class="text-center">{{ $row->bookings }}</td>
                     <td style="font-weight:600;color:#15803d;">₱{{ number_format($row->revenue, 2) }}</td>
                     <td class="text-muted-theme">₱{{ number_format($row->bookings > 0 ? $row->revenue / $row->bookings : 0, 2) }}</td>
@@ -285,7 +285,7 @@ td{padding:13px 20px;}
 @push('scripts')
 <script>
 document.addEventListener('DOMContentLoaded', function () {
-const NAVY   = '#0d1b2a';
+const NAVY   = '#2c2416'; // --stone; canvas colours can't read CSS variables
 const GOLD   = '#c9a84c';
 const BLUE   = '#1d4ed8';
 const GREEN  = '#16a34a';
@@ -294,8 +294,8 @@ const PURPLE = '#7c3aed';
 const SLATE  = '#475569';
 const ORANGE = '#ea580c';
 
-Chart.defaults.font.family = "'DM Sans', sans-serif";
-Chart.defaults.color = '#6b7a8d';
+Chart.defaults.font.family = "'DM Sans', sans-serif"; // keep in step with --font-body
+Chart.defaults.color = '#746a59';
 
 // Revenue Bar Chart
 const revData = @json($revenueByMonth);
@@ -315,7 +315,7 @@ new Chart(document.getElementById('revenueChart'), {
         maintainAspectRatio: false,
         plugins: { legend: { display: false } },
         scales: {
-            y: { ticks: { callback: v => '₱' + (v >= 1000 ? (v/1000).toFixed(0)+'k' : v) }, grid: { color: '#f1f5f9' } },
+            y: { ticks: { callback: v => '₱' + (v >= 1000 ? (v/1000).toFixed(0)+'k' : v) }, grid: { color: '#e4ddd0' } },
             x: { grid: { display: false } }
         }
     }
@@ -343,7 +343,7 @@ new Chart(document.getElementById('bookingsChart'), {
         maintainAspectRatio: false,
         plugins: { legend: { display: false } },
         scales: {
-            y: { ticks: { stepSize: 1 }, grid: { color: '#f1f5f9' } },
+            y: { ticks: { stepSize: 1 }, grid: { color: '#e4ddd0' } },
             x: { grid: { display: false } }
         }
     }
@@ -382,7 +382,7 @@ new Chart(document.getElementById('dailyChart'), {
         maintainAspectRatio: false,
         plugins: { legend: { display: false } },
         scales: {
-            y: { ticks: { callback: v => '₱' + (v >= 1000 ? (v/1000).toFixed(0)+'k' : v) }, grid: { color: '#f1f5f9' } },
+            y: { ticks: { callback: v => '₱' + (v >= 1000 ? (v/1000).toFixed(0)+'k' : v) }, grid: { color: '#e4ddd0' } },
             x: { grid: { display: false }, ticks: { maxTicksLimit: 10 } }
         }
     }

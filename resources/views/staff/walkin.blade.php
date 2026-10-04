@@ -10,6 +10,47 @@
             max-width: 900px;
         }
 
+        /* Wide screens: payment and the submit button sit beside the guest and
+           stay details instead of below them, and stay in view while the
+           longer left column scrolls. */
+        @media (min-width: 1200px) {
+            .main {
+                max-width: 1280px;
+            }
+
+            .walkin-grid {
+                display: grid;
+                grid-template-columns: minmax(0, 1.55fr) minmax(320px, 1fr);
+                gap: 20px;
+                align-items: start;
+            }
+
+            .walkin-side {
+                position: sticky;
+                top: calc(var(--topbar-h) + 28px);
+            }
+
+            .walkin-side .two-col {
+                grid-template-columns: minmax(0, 1fr);
+            }
+
+            .walkin-side .walkin-actions {
+                flex-direction: column-reverse;
+                align-items: stretch;
+            }
+
+            .walkin-side .walkin-actions > * {
+                justify-content: center;
+                text-align: center;
+            }
+        }
+
+        .walkin-actions {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+        }
+
         /* Form */
         .section-card {
             background: #fff;
@@ -39,7 +80,7 @@
         }
 
         .section-head h3 {
-            font-family: 'Playfair Display', serif;
+            font-family: var(--font-display);
             font-size: 16px;
             font-weight: 600;
         }
@@ -51,7 +92,7 @@
         .form-label {
             font-size: 14px;
             font-weight: 600;
-            color: #374151;
+            color: var(--stone);
             margin-bottom: 6px;
             display: block;
             letter-spacing: .2px;
@@ -59,11 +100,11 @@
 
         .form-control,
         .form-select {
-            border: 1.5px solid var(--border);
+            border: 1.5px solid var(--border-strong);
             border-radius: 8px;
             padding: 10px 14px;
             font-size: 13px;
-            font-family: 'DM Sans', sans-serif;
+            font-family: var(--font-body);
             width: 100%;
             background: #fff;
             transition: border-color .2s;
@@ -118,7 +159,7 @@
             font-size: 13px;
             font-weight: 500;
             cursor: pointer;
-            font-family: 'DM Sans', sans-serif;
+            font-family: var(--font-body);
             color: var(--muted);
             transition: all .2s;
             text-align: center;
@@ -132,7 +173,7 @@
 
         /* Price preview */
         .price-preview {
-            background: #f8fafc;
+            background: var(--cream);
             border-radius: 10px;
             border: 1px solid var(--border);
             padding: 16px;
@@ -144,7 +185,7 @@
             justify-content: space-between;
             font-size: 13px;
             padding: 5px 0;
-            border-bottom: 1px solid #f1f5f9;
+            border-bottom: 1px solid var(--sand);
         }
 
         .price-row:last-child {
@@ -170,7 +211,7 @@
 
         /* Buttons */
         .btn-submit {
-            background: var(--navy);
+            background: var(--btn-primary);
             color: #fff;
             border: none;
             border-radius: 9px;
@@ -178,7 +219,7 @@
             font-size: 14px;
             font-weight: 600;
             cursor: pointer;
-            font-family: 'DM Sans', sans-serif;
+            font-family: var(--font-body);
             display: flex;
             align-items: center;
             gap: 8px;
@@ -186,8 +227,8 @@
         }
 
         .btn-submit:hover {
-            background: var(--gold);
-            color: var(--navy);
+            background: var(--btn-primary-hover);
+            color: #fff;
         }
 
         .availability-status {
@@ -199,7 +240,7 @@
             padding: 9px 13px;
             border-radius: 8px;
             margin-top: 10px;
-            background: #f1f5f9;
+            background: var(--sand);
             color: var(--muted);
         }
 
@@ -214,8 +255,8 @@
         }
 
         .btn-submit:disabled {
-            background: #cbd5e1;
-            color: #64748b;
+            background: var(--border);
+            color: var(--muted);
             cursor: not-allowed;
         }
 
@@ -228,7 +269,7 @@
             font-size: 14px;
             font-weight: 500;
             cursor: pointer;
-            font-family: 'DM Sans', sans-serif;
+            font-family: var(--font-body);
             text-decoration: none;
             display: inline-flex;
             align-items: center;
@@ -281,6 +322,9 @@
 
     <form method="POST" action="{{ route('staff.walkin.store') }}" id="walkinForm">
         @csrf
+
+        <div class="walkin-grid">
+        <div class="walkin-main">
 
         {{-- Guest Information --}}
         <div class="section-card">
@@ -383,7 +427,7 @@
         {{-- Stay Details --}}
         <div class="section-card">
             <div class="section-head">
-                <div class="section-icon" style="background:#dcfce7;color:#16a34a;"><i class="bi bi-calendar3"></i></div>
+                <div class="section-icon tag-green"><i class="bi bi-calendar3"></i></div>
                 <h3>Stay Details</h3>
             </div>
             <div class="section-body">
@@ -393,13 +437,13 @@
                         @php($villa = $availableProperties->first())
                         <input type="hidden" name="property_id" value="{{ old('property_id', $villa->id) }}">
                         <div class="form-control"
-                            style="background:#f8fafc;display:flex;align-items:center;justify-content:space-between;"
+                            style="background:var(--cream);display:flex;align-items:center;justify-content:space-between;"
                             data-base="{{ $villa->base_price }}"
                             data-weekend="{{ $villa->weekend_price ?? $villa->base_price }}"
                             data-max="{{ $villa->max_capacity }}" id="propertySelect">
-                            <span><i class="bi bi-house-heart-fill me-2"
-                                    style="color:var(--gold);"></i>{{ $villa->property_name }}</span>
-                            <span class="text-muted-theme" style="font-size: 14px;">Max {{ $villa->max_capacity }}
+                            <span><i class="bi bi-house-heart-fill me-2 text-gold"
+                                   ></i>{{ $villa->property_name }}</span>
+                            <span class="text-muted-theme fs-14">Max {{ $villa->max_capacity }}
                                 guests</span>
                         </div>
                     @else
@@ -500,11 +544,15 @@
             </div>
         </div>
 
+        </div>{{-- /.walkin-main --}}
+
+        <div class="walkin-side">
+
         {{-- Payment --}}
         <div class="section-card">
             <div class="section-head">
                 <div class="section-icon tag-amber"><i class="bi bi-cash-stack"></i></div>
-                <h3>Payment <span class="optional-tag" style="font-size:13px;font-family:'DM Sans',sans-serif;">(optional
+                <h3>Payment <span class="optional-tag" style="font-size:13px;font-family: var(--font-body);">(optional
                         — can be recorded later)</span></h3>
             </div>
             <div class="section-body">
@@ -537,7 +585,7 @@
                     <label class="form-label">Payment Type <span class="optional-tag"></span></label>
                     <input type="hidden" name="payment_type" id="paymentTypeHidden"
                         value="{{ old('payment_type', 'partial') }}">
-                    <div class="form-control text-muted-theme" id="paymentTypeDisplay" style="background:#f8fafc;">
+                    <div class="form-control text-muted-theme" id="paymentTypeDisplay" style="background:var(--cream);">
                         No payment received yet
                     </div>
                 </div>
@@ -552,7 +600,7 @@
         </div>
 
         {{-- Actions --}}
-        <div style="display:flex;gap:12px;align-items:center;">
+        <div class="walkin-actions">
             <a href="{{ route('staff.frontdesk') }}" class="btn-back">
                 <i class="bi bi-arrow-left"></i> Back to Frontdesk
             </a>
@@ -560,6 +608,9 @@
                 <i class="bi bi-calendar-check"></i> Create Walk-in Booking
             </button>
         </div>
+
+        </div>{{-- /.walkin-side --}}
+        </div>{{-- /.walkin-grid --}}
     </form>
 @endsection
 
@@ -733,7 +784,7 @@
             const scopeNote = data.promo_scope ? ` — ${data.promo_scope}` : '';
             const promoRow = data.discount > 0 ? `
     <div class="price-row" style="color:#15803d;font-weight:600;">
-        <span><i class="bi bi-tag-fill" style="font-size: 13px;"></i> ${data.promo_label} (${data.promo_value})${scopeNote}</span>
+        <span><i class="bi bi-tag-fill fs-13"></i> ${data.promo_label} (${data.promo_value})${scopeNote}</span>
         <span>−${peso(data.discount)}</span>
     </div>` : '';
 
@@ -744,8 +795,8 @@
         <span class="text-muted-theme">${data.day_label} check-in${data.is_peak ? ' <span style="color:#b8943f;">★</span>' : ''}</span>
         <span>${peso(data.base)}</span>
     </div>
-    <div class="price-row text-muted-theme" style="font-size: 13px;">
-        <span>Flat package rate (${data.hours.toFixed(1)} oras)</span>
+    <div class="price-row text-muted-theme fs-13">
+        <span>Flat package rate (${data.hours.toFixed(1)} hrs)</span>
     </div>
     ${promoRow}
     </div>
@@ -774,7 +825,7 @@
             if (overpaid) {
                 paidInput.classList.add('is-invalid');
                 typeDisplay.textContent =
-                    `⚠️ Exceeds the total (₱${calculatedTotal.toLocaleString('en-PH',{minimumFractionDigits:2})}). If there is change, just type the net amount received..`;
+                    `Exceeds the total (₱${calculatedTotal.toLocaleString('en-PH',{minimumFractionDigits:2})}). If there is change, just type the net amount received..`;
                 typeDisplay.style.color = '#dc2626';
                 summary.style.display = 'none';
                 return;
@@ -794,11 +845,11 @@
             // staff — iwas human error.
             if (paid >= calculatedTotal) {
                 typeHidden.value = 'full_payment';
-                typeDisplay.textContent = '✅ Full Payment';
+                typeDisplay.textContent = 'Full Payment';
                 typeDisplay.style.color = '#16a34a';
             } else {
                 typeHidden.value = 'partial';
-                typeDisplay.textContent = '💰 Partial Payment';
+                typeDisplay.textContent = 'Partial Payment';
                 typeDisplay.style.color = '#a16207';
             }
 

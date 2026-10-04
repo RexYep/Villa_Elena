@@ -14,7 +14,7 @@
 
 /* ── Reset ───────────────────────────────────────────────────────── */
 body {
-    font-family: 'Inter', sans-serif;
+    font-family: var(--font-body);
     margin: 0;
     padding: 0;
     min-height: 100vh;
@@ -61,8 +61,8 @@ body {
     animation: authFadeUp 0.8s ease-out both;
 }
 
-.auth-image-content h1 {
-    font-family: 'Playfair Display', serif;
+.auth-image-content .auth-brand-name {
+    font-family: var(--font-display);
     font-size: 36px;
     font-weight: 700;
     margin: 0 0 4px;
@@ -112,8 +112,8 @@ body {
     display: none;
 }
 
-.auth-logo-mobile h1 {
-    font-family: 'Playfair Display', serif;
+.auth-logo-mobile .auth-brand-name {
+    font-family: var(--font-display);
     color: var(--stone);
     font-size: 28px;
     font-weight: 700;
@@ -121,7 +121,7 @@ body {
 }
 
 .auth-logo-mobile p {
-    color: var(--gold);
+    color: var(--gold-text);
     font-size: 12px;
     margin: 4px 0 0;
     letter-spacing: 2px;
@@ -137,8 +137,8 @@ body {
     box-shadow: 0 20px 50px rgba(44, 36, 22, 0.08);
 }
 
-.auth-card h2 {
-    font-family: 'Playfair Display', serif;
+.auth-card h1 {
+    font-family: var(--font-display);
     font-size: 26px;
     color: var(--stone);
     margin-bottom: 6px;
@@ -185,7 +185,7 @@ body {
 
 
 .form-control {
-    border: 1.5px solid var(--border);
+    border: 1.5px solid var(--border-strong);
     border-radius: 10px;
     padding: 12px 14px;
     font-size: 14px;
@@ -195,7 +195,7 @@ body {
 
 .form-control:focus {
     border-color: var(--terracotta);
-    box-shadow: 0 0 0 3px rgba(196, 103, 58, 0.15);
+    box-shadow: 0 0 0 3px rgba(181, 90, 49, 0.3);
 }
 
 .input-group .form-control {
@@ -203,7 +203,7 @@ body {
 }
 
 .input-group .btn-outline-secondary {
-    border: 1.5px solid var(--border);
+    border: 1.5px solid var(--border-strong);
     border-left: none;
     border-radius: 0 10px 10px 0;
     color: var(--muted);
@@ -212,7 +212,7 @@ body {
 
 /* ── Primary Button ──────────────────────────────────────────────── */
 .btn-primary-custom {
-    background: linear-gradient(135deg, var(--terracotta), var(--gold));
+    background: var(--btn-primary);
     color: #fff;
     border: none;
     border-radius: 10px;
@@ -224,7 +224,7 @@ body {
 }
 
 .btn-primary-custom:hover {
-    opacity: 0.95;
+    background: var(--btn-primary-hover);
     transform: translateY(-1px);
     box-shadow: 0 6px 20px rgba(196, 103, 58, 0.25);
     color: #fff;
@@ -358,7 +358,7 @@ body {
         padding: 28px;
     }
 
-    .auth-image-content h1 {
+    .auth-image-content .auth-brand-name {
         font-size: 28px;
     }
 
@@ -374,7 +374,7 @@ body {
         padding: 20px;
     }
 
-    .auth-image-content h1 {
+    .auth-image-content .auth-brand-name {
         font-size: 24px;
     }
 

@@ -39,7 +39,7 @@
         }
 
         .chart-panel h3 {
-            font-family: 'Cormorant Garamond', serif;
+            font-family: var(--font-display);
             font-size: 16px;
             color: var(--stone);
             margin-bottom: 4px;
@@ -60,9 +60,9 @@
         }
 
         .panel-header .title {
-            font-family: 'Cormorant Garamond', serif;
+            font-family: var(--font-display);
             color: #fff;
-            font-size: 18px;
+            font-size: 17px;
             font-weight: 600;
         }
 
@@ -130,7 +130,7 @@
         .forecast-text h1,
         .forecast-text h2,
         .forecast-text h3 {
-            font-family: 'Cormorant Garamond', serif;
+            font-family: var(--font-display);
             color: var(--terracotta);
             font-weight: 700;
             margin: 28px 0 10px;
@@ -197,7 +197,7 @@
         }
 
         .btn-refresh {
-            background: var(--terracotta);
+            background: var(--btn-primary);
             color: #fff;
             border: none;
             padding: 9px 20px;
@@ -212,7 +212,7 @@
         }
 
         .btn-refresh:hover {
-            background: #b95a31;
+            background: var(--btn-primary-hover);
             color: #fff;
         }
 
@@ -310,7 +310,7 @@
     {{-- Forecast --}}
     <div class="panel">
         <div class="panel-header">
-            <i class="bi bi-graph-up-arrow fs-5" style="color:var(--gold);"></i>
+            <i class="bi bi-graph-up-arrow fs-5 text-gold"></i>
             <span class="title">Forecast — Next 3 Months</span>
             <span class="panel-badge">LIVE</span>
         </div>
@@ -382,7 +382,7 @@
                         y: {
                             beginAtZero: true,
                             grid: {
-                                color: '#f1f5f9'
+                                color: '#e4ddd0'
                             },
                             ticks: {
                                 font: {
@@ -438,7 +438,7 @@
                         y: {
                             beginAtZero: true,
                             grid: {
-                                color: '#f1f5f9'
+                                color: '#e4ddd0'
                             },
                             ticks: {
                                 callback: v => '₱' + v.toLocaleString(),

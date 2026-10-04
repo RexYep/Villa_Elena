@@ -40,7 +40,7 @@
                         <div class="issue-error">{{ $issueErrors->first('category') }}</div>
                     @endif
 
-                    <label for="issueDescription" class="issue-label" style="margin-top:16px;">
+                    <label for="issueDescription" class="issue-label mt-16">
                         Tell us a bit more <span class="issue-optional">(required for "Other")</span>
                     </label>
                     <textarea name="description" id="issueDescription" class="form-control" rows="3"
@@ -102,7 +102,7 @@
             }
 
             .issue-modal-head h2 {
-                font-family: 'Playfair Display', serif;
+                font-family: var(--font-display);
                 font-size: 20px;
                 font-weight: 600;
                 margin: 0;
@@ -212,8 +212,8 @@
 
             .btn-issue-cancel {
                 flex: 1;
-                background: #f1f5f9;
-                color: #374151;
+                background: var(--sand);
+                color: var(--stone);
                 border: none;
                 border-radius: 10px;
                 padding: 12px;

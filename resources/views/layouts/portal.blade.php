@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>@yield('title', 'Villa Elena Resort')</title>
     @include('partials.favicon')
-    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400&family=Jost:wght@300;400;500;600&display=swap" rel="stylesheet">
+    @include('partials.fonts')
     @vite(['resources/js/portal.js'])
     @stack('styles')
 </head>
@@ -34,6 +34,10 @@
                         <a href="{{ route($portalHomeRoute) }}"
                             class="nav-btn nav-btn-ghost">{{ auth()->user()->homeLabel() }}</a>
                     @endif
+                    <form method="POST" action="{{ route('logout') }}" class="m-0">
+                        @csrf
+                        <button type="submit" class="nav-btn nav-btn-ghost">Sign Out</button>
+                    </form>
                 @else
                     <a href="{{ route('login') }}" class="nav-btn nav-btn-ghost">Sign In</a>
                     <a href="{{ route('register') }}" class="nav-btn nav-btn-gold">Register</a>

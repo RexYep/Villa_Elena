@@ -2,7 +2,7 @@
              bilang, kaya ang ipinapakita ay ang mismong guest at ang
              kailangang gawin, hindi ang bilang. --}}
         <div class="stat-card">
-            <div class="stat-icon" style="background:#dcfce7;color:#16a34a;"><i class="bi bi-box-arrow-in-right"></i></div>
+            <div class="stat-icon tag-green"><i class="bi bi-box-arrow-in-right"></i></div>
             <div class="stat-lbl stat-lbl-top">Next Arrival</div>
             @if ($nextArrival)
                 @php

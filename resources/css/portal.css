@@ -28,7 +28,7 @@
 * { margin: 0; padding: 0; }
 
 body {
-    font-family: 'Jost', sans-serif;
+    font-family: var(--font-body);
     background: var(--sand);
     color: var(--stone);
     min-height: 100vh;
@@ -140,7 +140,7 @@ body {
     border-radius: 9px;
     background: none;
     color: rgba(255,255,255,.65);
-    font-family: 'Jost', sans-serif;
+    font-family: var(--font-body);
     font-size: 13px;
     cursor: pointer;
     transition: color .2s, border-color .2s;
@@ -189,7 +189,7 @@ body.cust-shell .main { margin-top: 0; }
 }
 
 .nav-brand {
-    font-family: 'Playfair Display', serif;
+    font-family: var(--font-display);
     color: var(--gold-light);
     font-size: 20px;
     letter-spacing: 1px;
@@ -277,7 +277,12 @@ body.cust-shell .main { margin-top: 0; }
     justify-content: space-between;
     padding: 0 40px;
 }
-.nav .nav-brand em { color: var(--gold-light); font-style: italic; }
+/* Same wordmark as the landing page's own nav (portal/home.blade.php), so
+   the brand doesn't change weight between the home page and the pages
+   behind it. */
+.nav .nav-brand { font-size: 24px; font-weight: 700; color: #fff; letter-spacing: -0.5px; }
+.nav .nav-brand em { color: var(--gold-light); font-style: italic; font-weight: 400; }
+.nav-right form { margin: 0; }
 .nav-right { display: flex; align-items: center; gap: 10px; }
 .nav-btn {
     padding: 8px 18px;
@@ -285,7 +290,7 @@ body.cust-shell .main { margin-top: 0; }
     font-size: 13px;
     font-weight: 500;
     text-decoration: none;
-    font-family: 'Jost', sans-serif;
+    font-family: var(--font-body);
     transition: all .2s;
     border: none;
     cursor: pointer;
@@ -307,13 +312,13 @@ body.cust-shell .main { margin-top: 0; }
 .breadcrumb-row a:hover { color: var(--stone); }
 
 /* ── SHARED PAGE HEADER ──────────────────────────────────────────── */
-.page-title { font-family: 'Playfair Display', serif; font-size: 28px; font-weight: 600; margin-bottom: 6px; }
+.page-title { font-family: var(--font-display); font-size: 28px; font-weight: 600; margin-bottom: 6px; }
 .page-sub { color: var(--muted); font-size: 14px; margin-bottom: 28px; }
 
 /* ── SHARED ALERT ────────────────────────────────────────────────── */
 .alert { border-radius: 10px; font-size: 13px; padding: 12px 16px; margin-bottom: 20px; border: none; }
 .alert-success { background: #dcfce7; color: #15803d; }
-.alert-error, .alert-danger { background: #fee2e2; color: #dc2626; }
+.alert-error, .alert-danger { background: #fee2e2; color: #b91c1c; }
 
 /* ── SHARED STATUS BADGES (booking status vocabulary) ───────────── */
 .badge { padding: 3px 10px; border-radius: 20px; font-size: 12px; font-weight: 600; white-space: nowrap; letter-spacing: .3px; text-transform: uppercase; }
@@ -321,7 +326,7 @@ body.cust-shell .main { margin-top: 0; }
 .b-confirmed  { background: #dcfce7; color: #15803d; }
 .b-checked_in { background: #dbeafe; color: #1d4ed8; }
 .b-checked_out{ background: #f1f5f9; color: #475569; }
-.b-cancelled  { background: #fee2e2; color: #dc2626; }
+.b-cancelled  { background: #fee2e2; color: #b91c1c; }
 
 /* ── SHARED PAGINATION (Bootstrap-5 view) ───────────────────────── */
 .pagination { display: flex; justify-content: center; flex-wrap: wrap; gap: 6px; margin-top: 30px; }
@@ -345,18 +350,18 @@ body.cust-shell .main { margin-top: 0; }
 /* ── SHARED CARD PRIMITIVE ───────────────────────────────────────── */
 .card { background: #fff; border-radius: 16px; border: 1px solid var(--border); overflow: hidden; margin-bottom: 16px; }
 .card-head { padding: 16px 22px; border-bottom: 1px solid var(--border); }
-.card-head h3 { font-family: 'Playfair Display', serif; font-size: 16px; font-weight: 600; }
+.card-head h3 { font-family: var(--font-display); font-size: 16px; font-weight: 600; }
 .card-body { padding: 20px 22px; }
 
 /* ── SHARED FORM CONTROL ─────────────────────────────────────────── */
 .form-control, .form-select {
-    border: 1.5px solid var(--border);
+    border: 1.5px solid var(--border-strong);
     border-radius: 8px;
     padding: 11px 14px;
     font-size: 14px;
-    font-family: 'Jost', sans-serif;
+    font-family: var(--font-body);
     width: 100%;
     background: #fff;
     transition: border-color .2s;
 }
-.form-control:focus, .form-select:focus { outline: none; border-color: var(--stone); }
+.form-control:focus, .form-select:focus { outline: none; border-color: var(--stone); box-shadow: 0 0 0 3px rgba(44, 36, 22, .18); }

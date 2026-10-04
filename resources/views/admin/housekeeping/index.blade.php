@@ -41,7 +41,7 @@
             display: inline-flex;
             align-items: center;
             gap: 7px;
-            background: var(--terracotta);
+            background: var(--btn-primary);
             color: #fff;
             border: none;
             border-radius: 9px;
@@ -53,7 +53,7 @@
         }
 
         .btn-add:hover {
-            background: var(--gold);
+            background: var(--btn-primary-hover); color: #fff;
         }
 
         .stats-row {
@@ -71,8 +71,8 @@
         }
 
         .stat-val {
-            font-family: 'Cormorant Garamond', serif;
-            font-size: 28px;
+            font-family: var(--font-display);
+            font-size: 25px;
             font-weight: 700;
             color: var(--stone);
             line-height: 1;
@@ -98,7 +98,7 @@
         .table-header .count {
             font-size: 13px;
             color: var(--muted);
-            font-family: 'DM Sans', sans-serif;
+            font-family: var(--font-body);
             font-weight: 400;
         }
 
@@ -128,7 +128,7 @@
 
         .hk-icon.guest {
             background: #fee2e2;
-            color: #dc2626;
+            color: #b91c1c;
         }
 
         .hk-main {
@@ -220,7 +220,7 @@
         .ws-pending { background: #fef3c7; color: #92400e; }
         .ws-in-progress { background: #dbeafe; color: #1d4ed8; }
         .ws-completed { background: #dcfce7; color: #15803d; }
-        .ws-cancelled { background: #e2e8f0; color: #475569; }
+        .ws-cancelled { background: var(--border); color: var(--muted); }
         .tag-urgent { background: #fee2e2; color: #b91c1c; }
         .tag-source { background: var(--sand); color: var(--stone); }
 
@@ -427,11 +427,11 @@
     @php $taskErrors = $errors->newTask; @endphp
     <div class="modal fade" id="newTaskModal" tabindex="-1" aria-labelledby="newTaskTitle" aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered">
-            <div class="modal-content" style="border-radius:14px;border:none;">
+            <div class="modal-content modal-soft">
                 <form method="POST" action="{{ route('admin.housekeeping.tasks.store') }}">
                     @csrf
                     <div class="modal-body" style="padding:24px;">
-                        <h5 id="newTaskTitle" style="font-family:'Cormorant Garamond',serif;font-size:22px;margin-bottom:4px;">
+                        <h5 id="newTaskTitle" style="font-family: var(--font-display);font-size: 20px;margin-bottom:4px;">
                             New task for staff</h5>
                         <p style="font-size:13px;color:var(--muted);margin-bottom:18px;">
                             It appears on the staff frontdesk right away.
@@ -504,7 +504,7 @@
                                 placeholder="Anything staff should know">{{ old('notes') }}</textarea>
                         </div>
 
-                        <div class="d-flex gap-2" style="margin-top:20px;">
+                        <div class="d-flex gap-2 mt-20">
                             <button type="button" class="btn btn-light w-50" data-bs-dismiss="modal">Cancel</button>
                             <button type="submit" class="btn-add w-50" style="justify-content:center;">
                                 <i class="bi bi-send"></i> Send to staff

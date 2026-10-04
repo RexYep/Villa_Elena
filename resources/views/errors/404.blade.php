@@ -7,7 +7,7 @@
 
 @section('content')
 
-    <h2>Page not found</h2>
+    <h1>Page not found</h1>
 
     <p class="subtitle">
         We couldn't find the page you were looking for. The link may be old, or the address may have a typo.

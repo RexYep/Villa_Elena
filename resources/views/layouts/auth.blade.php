@@ -8,7 +8,7 @@
     @include('partials.favicon')
 
     <!-- Google Fonts -->
-    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@500;700&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+    @include('partials.fonts')
     @vite(['resources/js/auth.js'])
 </head>
 <body>
@@ -23,7 +23,7 @@
                      "back" link that would compete with its own ("Back to
                      login", which points somewhere else entirely). --}}
                 <a href="{{ route('home') }}" class="auth-brand-link">
-                    <h1><img src="{{ asset('images/logo.png') }}" alt="" class="brand-mark"> Villa Elena</h1>
+                    <div class="auth-brand-name"><img src="{{ asset('images/logo.png') }}" alt="" class="brand-mark"> Villa Elena</div>
                     <p>Private Rental Resort</p>
                 </a>
                 <span class="auth-image-tagline">@yield('auth_tagline', 'Your dream getaway awaits')</span>
@@ -39,7 +39,7 @@
                      the image panel is gone, so this is the only wordmark there is. --}}
                 <div class="auth-logo-mobile">
                     <a href="{{ route('home') }}" class="auth-brand-link">
-                        <h1><img src="{{ asset('images/logo.png') }}" alt="" class="brand-mark"> Villa Elena</h1>
+                        <div class="auth-brand-name"><img src="{{ asset('images/logo.png') }}" alt="" class="brand-mark"> Villa Elena</div>
                         <p>Private Rental Resort</p>
                     </a>
                 </div>

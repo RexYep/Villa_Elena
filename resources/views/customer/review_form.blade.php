@@ -67,7 +67,7 @@
         }
 
         .form-card-head h3 {
-            font-family: 'Playfair Display', serif;
+            font-family: var(--font-display);
             font-size: 17px;
             font-weight: 600;
         }
@@ -79,7 +79,7 @@
         .form-label {
             font-size: 14px;
             font-weight: 600;
-            color: #374151;
+            color: var(--stone);
             display: block;
             margin-bottom: 8px;
             letter-spacing: .2px;
@@ -119,7 +119,7 @@
             cursor: pointer;
             font-size: 32px;
             line-height: 1;
-            color: #d1d5db;
+            color: var(--border);
             transition: color .15s, transform .15s;
             padding: 0;
         }
@@ -142,7 +142,7 @@
 
         /* Submit */
         .btn-submit {
-            background: var(--stone);
+            background: var(--btn-primary);
             color: #fff;
             border: none;
             border-radius: 10px;
@@ -151,7 +151,7 @@
             font-size: 15px;
             font-weight: 600;
             cursor: pointer;
-            font-family: 'Jost', sans-serif;
+            font-family: var(--font-body);
             margin-top: 8px;
             transition: all .2s;
             display: flex;
@@ -161,8 +161,8 @@
         }
 
         .btn-submit:hover {
-            background: var(--gold);
-            color: var(--stone);
+            background: var(--btn-primary-hover);
+            color: #fff;
         }
 
         .btn-back {
@@ -246,7 +246,7 @@
                     <input type="hidden" name="rating" id="ratingInput"
                         value="{{ old('rating', $review->rating ?? '') }}">
                     @error('rating')
-                        <div style="font-size: 13px;color:#dc2626;margin-top:4px;">{{ $message }}</div>
+                        <div class="field-error">{{ $message }}</div>
                     @enderror
                 </div>
 
@@ -258,7 +258,7 @@
                         value="{{ old('title', $review->title ?? '') }}"
                         placeholder="Summarize your experience (e.g. Amazing stay, beautiful property!)" maxlength="100">
                     @error('title')
-                        <div style="font-size: 13px;color:#dc2626;margin-top:4px;">{{ $message }}</div>
+                        <div class="field-error">{{ $message }}</div>
                     @enderror
                 </div>
 
@@ -271,7 +271,7 @@
                         oninput="updateCharCount()">{{ old('content', $review->content ?? '') }}</textarea>
                     <div class="char-count"><span id="charCount">0</span>/1000 characters (min. 20)</div>
                     @error('content')
-                        <div style="font-size: 13px;color:#dc2626;margin-top:4px;">{{ $message }}</div>
+                        <div class="field-error">{{ $message }}</div>
                     @enderror
                 </div>
 

@@ -7,7 +7,7 @@
     <title>@yield('title', 'Villa Elena Admin')</title>
     @include('partials.favicon')
 
-    <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;500;600;700&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+    @include('partials.fonts')
     @vite(['resources/js/admin.js'])
     @stack('styles')
 </head>
@@ -22,7 +22,7 @@
             <i class="bi bi-list"></i>
         </button>
         <div>
-            <h2>@yield('page-title')</h2>
+            <h1>@yield('page-title')</h1>
             <p>@yield('page-subtitle')</p>
         </div>
     </div>
@@ -101,6 +101,48 @@
 
 @yield('modals')
 
+{{-- Phone layout for tables: copy each column heading onto its cells so
+     admin.css can show a row as labelled blocks (see "TABLES ON A PHONE").
+     The observer covers rows that arrive later from a live refetch. --}}
+<script>
+    (function() {
+        function label(table) {
+            const heads = Array.from(table.querySelectorAll('thead th')).map(function(th) {
+                return th.textContent.trim();
+            });
+            if (!heads.length) return;
+            table.querySelectorAll('tbody tr').forEach(function(tr) {
+                Array.from(tr.children).forEach(function(td, i) {
+                    if (td.tagName === 'TD' && !td.hasAttribute('colspan') && !td.hasAttribute('data-label')) {
+                        td.setAttribute('data-label', heads[i] || '');
+                    }
+                });
+            });
+            table.classList.add('is-stacked');
+        }
+
+        function run() {
+            document.querySelectorAll('.table-card table, table.audit-table').forEach(label);
+        }
+        run();
+
+        const main = document.querySelector('.main-content');
+        if (main && 'MutationObserver' in window) {
+            let queued = false;
+            new MutationObserver(function() {
+                if (queued) return;
+                queued = true;
+                requestAnimationFrame(function() {
+                    queued = false;
+                    run();
+                });
+            }).observe(main, {
+                childList: true,
+                subtree: true
+            });
+        }
+    })();
+</script>
 @include('partials.confirm_dialog')
 @stack('scripts')
 @include('admin.partials.realtime')

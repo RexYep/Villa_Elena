@@ -7,7 +7,7 @@
 
 @section('content')
 
-    <h2>Set new password</h2>
+    <h1>Set new password</h1>
     <p class="subtitle">Choose a strong password for your account</p>
 
     <form method="POST" action="{{ route('password.update') }}">

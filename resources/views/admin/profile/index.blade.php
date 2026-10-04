@@ -43,8 +43,8 @@
         }
 
         .settings-card-header h3 {
-            font-family: 'Cormorant Garamond', serif;
-            font-size: 17px;
+            font-family: var(--font-display);
+            font-size: 16px;
             font-weight: 600;
             color: var(--text-main);
         }
@@ -64,7 +64,7 @@
         }
 
         .btn-save {
-            background: var(--terracotta);
+            background: var(--btn-primary);
             color: #fff;
             border: none;
             border-radius: 9px;
@@ -72,7 +72,7 @@
             font-size: 14px;
             font-weight: 600;
             cursor: pointer;
-            font-family: 'DM Sans', sans-serif;
+            font-family: var(--font-body);
             display: flex;
             align-items: center;
             gap: 8px;
@@ -80,7 +80,7 @@
         }
 
         .btn-save:hover {
-            background: var(--gold);
+            background: var(--btn-primary-hover); color: #fff;
         }
 
         .account-identity {
@@ -100,9 +100,9 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 22px;
+            font-size: 20px;
             font-weight: 600;
-            font-family: 'Cormorant Garamond', serif;
+            font-family: var(--font-display);
             flex-shrink: 0;
         }
 
@@ -189,7 +189,7 @@
 
             <div class="settings-card">
                 <div class="settings-card-header">
-                    <div class="icon" style="background:#fee2e2;color:#dc2626;"><i class="bi bi-shield-lock"></i>
+                    <div class="icon tag-red"><i class="bi bi-shield-lock"></i>
                     </div>
                     <div>
                         <h3>Change Password</h3>

@@ -7,7 +7,7 @@
 
 @section('content')
 
-    <h2>Check your email</h2>
+    <h1>Check your email</h1>
 
     {{--
         THIS PAGE MUST NOT KNOW WHICH BRANCH SENT IT HERE.

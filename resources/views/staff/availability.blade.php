@@ -12,11 +12,11 @@
 .range-bar{display:flex;align-items:center;justify-content:space-between;gap:12px;
     background:#fff;border:1px solid var(--border);border-radius:12px;
     padding:12px 18px;margin-bottom:18px;}
-.range-label{font-family:'Playfair Display',serif;font-size:16px;font-weight:600;color:var(--navy);}
+.range-label{font-family: var(--font-display);font-size:16px;font-weight:600;color:var(--navy);}
 .range-btns{display:flex;gap:8px;}
 .range-btn{background:#fff;border:1.5px solid var(--border);border-radius:8px;padding:8px 14px;
     font-size: 14px;font-weight:600;color:var(--muted);text-decoration:none;
-    font-family:'DM Sans',sans-serif;display:inline-flex;align-items:center;gap:6px;transition:all .2s;}
+    font-family: var(--font-body);display:inline-flex;align-items:center;gap:6px;transition:all .2s;}
 .range-btn:hover{border-color:var(--navy);color:var(--navy);}
 .range-btn.disabled{opacity:.4;pointer-events:none;}
 
@@ -28,27 +28,27 @@
 .dot-free{background:#16a34a;}
 .dot-booked{background:#dc2626;}
 .dot-blocked{background:#d97706;}
-.dot-past{background:#cbd5e1;}
+.dot-past{background:var(--border);}
 
 /* ── Grid ── */
 .grid-card{background:#fff;border-radius:14px;border:1px solid var(--border);overflow:hidden;}
 .grid-head{display:grid;grid-template-columns:150px repeat(var(--slot-cols,2),1fr);
-    border-bottom:1px solid var(--border);background:#f8fafc;}
+    border-bottom:1px solid var(--border);background:var(--cream);}
 .grid-head div{padding:12px 16px;font-size: 13px;font-weight:700;text-transform:uppercase;
     letter-spacing:.5px;color:var(--muted);}
-.grid-row{display:grid;grid-template-columns:150px repeat(var(--slot-cols,2),1fr);border-bottom:1px solid #f1f5f9;}
+.grid-row{display:grid;grid-template-columns:150px repeat(var(--slot-cols,2),1fr);border-bottom:1px solid var(--sand);}
 .grid-row:last-child{border-bottom:none;}
 .grid-row.today{background:#fffdf5;}
 
 .date-cell{padding:12px 16px;display:flex;flex-direction:column;justify-content:center;
-    border-right:1px solid #f1f5f9;}
+    border-right:1px solid var(--sand);}
 .date-day{font-weight:700;font-size:14px;color:var(--navy);}
 .date-dow{font-size: 13px;color:var(--muted);margin-top:1px;}
-.today-tag{display:inline-block;background:var(--gold);color:#fff;font-size: 11px;font-weight:700;
+.today-tag{display:inline-block;background:var(--gold);color:#fff;font-size: 12px;font-weight:700;
     padding:1px 7px;border-radius:10px;margin-top:4px;width:fit-content;
     text-transform:uppercase;letter-spacing:.4px;}
 
-.slot-cell{padding:10px 14px;border-right:1px solid #f1f5f9;display:flex;align-items:center;}
+.slot-cell{padding:10px 14px;border-right:1px solid var(--sand);display:flex;align-items:center;}
 .slot-cell:last-child{border-right:none;}
 
 .slot-box{display:flex;align-items:center;gap:9px;width:100%;border-radius:9px;
@@ -66,7 +66,7 @@
 .slot-box.free .slot-sub{color:#4d7c0f;}
 
 .slot-box.booked{background:#fef2f2;border-color:#fecaca;}
-.slot-box.booked .slot-icon{background:#fee2e2;color:#dc2626;}
+.slot-box.booked .slot-icon{background:#fee2e2;color:#b91c1c;}
 .slot-box.booked .slot-state{color:#dc2626;}
 .slot-box.booked .slot-sub{color:#b91c1c;}
 
@@ -75,25 +75,25 @@
 .slot-box.blocked .slot-state{color:#a16207;}
 .slot-box.blocked .slot-sub{color:#a16207;}
 
-.slot-box.past{background:#f8fafc;border-color:#e2e8f0;}
-.slot-box.past .slot-icon{background:#e2e8f0;color:#94a3b8;}
-.slot-box.past .slot-state{color:#94a3b8;}
+.slot-box.past{background:var(--cream);border-color:var(--border);}
+.slot-box.past .slot-icon{background:var(--border);color:var(--muted);}
+.slot-box.past .slot-state{color:var(--muted);}
 
 /* Hindi inaalok sa petsang ito — mas mapurol pa kaysa "past", dahil ito
    ang cell na dapat hindi tumatawag ng pansin. Dashed ang border para
    maiba agad sa isang tunay na estado (bakante / booked / sarado). */
-.slot-box.unoffered{background:#fcfcfd;border-style:dashed;border-color:#e2e8f0;}
-.slot-box.unoffered .slot-icon{background:#f1f5f9;color:#cbd5e1;}
-.slot-box.unoffered .slot-state{color:#b6c2cf;}
-.slot-box.unoffered .slot-sub{color:#cbd5e1;font-style:italic;}
+.slot-box.unoffered{background:var(--cream);border-style:dashed;border-color:var(--border);}
+.slot-box.unoffered .slot-icon{background:var(--sand);color:var(--muted);opacity:.6;}
+.slot-box.unoffered .slot-state{color:var(--muted);opacity:.8;}
+.slot-box.unoffered .slot-sub{color:var(--muted);opacity:.8;font-style:italic;}
 
 .hint{font-size: 14px;color:var(--muted);margin-top:14px;text-align:center;}
 
 @media (max-width:640px){
     .grid-head{display:none;}
     .grid-row{grid-template-columns:1fr;}
-    .date-cell{border-right:none;border-bottom:1px solid #f1f5f9;flex-direction:row;
-        align-items:center;gap:8px;background:#f8fafc;}
+    .date-cell{border-right:none;border-bottom:1px solid var(--sand);flex-direction:row;
+        align-items:center;gap:8px;background:var(--cream);}
     .date-dow{margin-top:0;}
     .today-tag{margin-top:0;}
     .slot-cell{border-right:none;}

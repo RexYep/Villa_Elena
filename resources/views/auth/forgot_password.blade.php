@@ -11,7 +11,7 @@
 
 @section('content')
 
-    <h2>Reset your password</h2>
+    <h1>Reset your password</h1>
     <p class="subtitle">Enter your email and we'll send you a reset link</p>
 
     <form method="POST" action="{{ route('password.email') }}">

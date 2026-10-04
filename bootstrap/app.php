@@ -59,6 +59,17 @@ return Application::configure(basePath: dirname(__DIR__))
         'throttle' => \App\Http\Middleware\ThrottleRequestsWithMonitoring::class,
     ]);
 
+    // Where the `guest` middleware sends someone who is ALREADY signed in and
+    // opens /login, /register and the rest of that group. Without this the
+    // framework falls back to the route named `home` — the public landing page
+    // — for every role, and it does so before the controller runs, so the
+    // redirectByRole() inside AuthController::showLogin() was never reached.
+    // An admin who closed the tab and came back through /login landed on the
+    // guest booking page instead of the dashboard.
+    $middleware->redirectUsersTo(
+        fn (\Illuminate\Http\Request $request) => route($request->user()?->homeRouteName() ?? 'home')
+    );
+
     // Global, not `web`-only: routes/cron.php is deliberately outside the web
     // group (see the comment in withRouting above), and a security header
     // that skips a route because of how that route is grouped is the same

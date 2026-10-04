@@ -15,7 +15,7 @@
         max-height: calc(100vh - var(--topbar-h) - 24px);
         background: #fff;
         border-radius: 16px;
-        border: 1px solid #E2E8F0;
+        border: 1px solid var(--border);
         box-shadow: 0 16px 48px rgba(13, 27, 42, .15);
         z-index: 9999;
         display: none;
@@ -46,32 +46,32 @@
     .notif-header {
         flex-shrink: 0;
         padding: 14px 18px;
-        border-bottom: 1px solid #E2E8F0;
+        border-bottom: 1px solid var(--border);
         display: flex;
         align-items: center;
         justify-content: space-between;
     }
 
     .notif-header-title {
-        font-family: 'Cormorant Garamond', serif;
+        font-family: var(--font-display);
         font-size: 15px;
         font-weight: 600;
-        color: #0D1B2A;
+        color: var(--stone);
     }
 
     .notif-mark-read {
         font-size: 13px;
-        color: #C9A84C;
+        color: var(--gold);
         cursor: pointer;
         background: none;
         border: none;
-        font-family: 'DM Sans', sans-serif;
+        font-family: var(--font-body);
         font-weight: 600;
         transition: color .2s;
     }
 
     .notif-mark-read:hover {
-        color: #0D1B2A;
+        color: var(--stone);
     }
 
     .notif-list {
@@ -88,7 +88,7 @@
     }
 
     .notif-list::-webkit-scrollbar-thumb {
-        background: #E2E8F0;
+        background: var(--border);
         border-radius: 4px;
     }
 
@@ -96,7 +96,7 @@
         display: flex;
         gap: 12px;
         padding: 13px 18px;
-        border-bottom: 1px solid #f8fafc;
+        border-bottom: 1px solid var(--cream);
         transition: background .15s;
         text-decoration: none;
         color: inherit;
@@ -107,7 +107,7 @@
     }
 
     .notif-item:hover {
-        background: #f8fafc;
+        background: var(--cream);
     }
 
     .notif-item.unread {
@@ -133,7 +133,7 @@
     .notif-item-title {
         font-size: 13px;
         font-weight: 600;
-        color: #1e293b;
+        color: var(--stone);
         overflow-wrap: anywhere;
     }
 
@@ -144,7 +144,7 @@
     .notif-item-msg {
         font-size: 13px;
         line-height: 1.45;
-        color: #6B7A8D;
+        color: var(--muted);
         margin-top: 2px;
         display: -webkit-box;
         -webkit-line-clamp: 2;
@@ -156,7 +156,7 @@
 
     .notif-item-time {
         font-size: 13px;
-        color: #94a3b8;
+        color: var(--muted);
         margin-top: 3px;
     }
 
@@ -164,7 +164,7 @@
         width: 7px;
         height: 7px;
         border-radius: 50%;
-        background: #C9A84C;
+        background: var(--gold);
         flex-shrink: 0;
         margin-top: 5px;
     }
@@ -172,13 +172,13 @@
     .notif-footer {
         flex-shrink: 0;
         padding: 11px 18px;
-        border-top: 1px solid #E2E8F0;
+        border-top: 1px solid var(--border);
         text-align: center;
     }
 
     .notif-footer a {
         font-size: 14px;
-        color: #C9A84C;
+        color: var(--gold);
         text-decoration: none;
         font-weight: 600;
     }
@@ -186,7 +186,7 @@
     .notif-empty {
         padding: 40px;
         text-align: center;
-        color: #94a3b8;
+        color: var(--muted);
     }
 
     .notif-empty i {
@@ -268,12 +268,12 @@
         align-items: center;
         gap: 12px;
         padding: 16px 20px;
-        border-bottom: 1px solid #E2E8F0;
+        border-bottom: 1px solid var(--border);
     }
 
     .search-input-row i {
         font-size: 18px;
-        color: #6B7A8D;
+        color: var(--muted);
         flex-shrink: 0;
     }
 
@@ -282,24 +282,24 @@
         border: none;
         outline: none;
         font-size: 16px;
-        font-family: 'DM Sans', sans-serif;
-        color: #1e293b;
+        font-family: var(--font-body);
+        color: var(--stone);
         background: transparent;
     }
 
     .search-input::placeholder {
-        color: #94a3b8;
+        color: var(--muted);
     }
 
     .search-close {
-        background: #f1f5f9;
+        background: var(--sand);
         border: none;
         border-radius: 7px;
         padding: 5px 10px;
         font-size: 14px;
-        color: #6B7A8D;
+        color: var(--muted);
         cursor: pointer;
-        font-family: 'DM Sans', sans-serif;
+        font-family: var(--font-body);
         flex-shrink: 0;
     }
 
@@ -314,7 +314,7 @@
     }
 
     .search-results::-webkit-scrollbar-thumb {
-        background: #E2E8F0;
+        background: var(--border);
         border-radius: 4px;
     }
 
@@ -322,7 +322,7 @@
         padding: 8px 20px 4px;
         font-size: 12px;
         font-weight: 700;
-        color: #94a3b8;
+        color: var(--muted);
         text-transform: uppercase;
         letter-spacing: 1px;
     }
@@ -339,7 +339,7 @@
     }
 
     .search-result-item:hover {
-        background: #f8fafc;
+        background: var(--cream);
     }
 
     .result-icon {
@@ -361,12 +361,12 @@
     .result-title {
         font-size: 13px;
         font-weight: 600;
-        color: #1e293b;
+        color: var(--stone);
     }
 
     .result-sub {
         font-size: 14px;
-        color: #6B7A8D;
+        color: var(--muted);
         margin-top: 1px;
     }
 
@@ -382,41 +382,41 @@
     .search-empty {
         padding: 40px;
         text-align: center;
-        color: #94a3b8;
+        color: var(--muted);
         font-size: 14px;
     }
 
     .search-hints {
         padding: 12px 20px;
-        border-top: 1px solid #f1f5f9;
+        border-top: 1px solid var(--sand);
         display: flex;
         gap: 8px;
         flex-wrap: wrap;
     }
 
     .search-hint {
-        background: #f8fafc;
+        background: var(--cream);
         font-family: inherit;
-        border: 1px solid #E2E8F0;
+        border: 1px solid var(--border);
         border-radius: 7px;
         padding: 5px 12px;
         font-size: 14px;
-        color: #6B7A8D;
+        color: var(--muted);
         cursor: pointer;
         transition: all .2s;
     }
 
     .search-hint:hover {
-        background: #0D1B2A;
+        background: var(--stone);
         color: #fff;
-        border-color: #0D1B2A;
+        border-color: var(--stone);
     }
 
     /* Loading spinner */
     .search-spinner {
         padding: 30px;
         text-align: center;
-        color: #94a3b8;
+        color: var(--muted);
         font-size: 13px;
     }
 
@@ -441,9 +441,9 @@
         </div>
         <div class="search-results" id="searchResults">
             <div class="search-hints">
-                <button type="button" class="search-hint" onclick="quickSearch('pending')">⏳ Pending bookings</button>
-                <button type="button" class="search-hint" onclick="quickSearch('checked_in')">🏠 Checked in</button>
-                <button type="button" class="search-hint" onclick="quickSearch('VE-')">🔖 Booking ref</button>
+                <button type="button" class="search-hint" onclick="quickSearch('pending')"><i class="bi bi-hourglass-split" aria-hidden="true"></i> Pending bookings</button>
+                <button type="button" class="search-hint" onclick="quickSearch('checked_in')"><i class="bi bi-house-door" aria-hidden="true"></i> Checked in</button>
+                <button type="button" class="search-hint" onclick="quickSearch('VE-')"><i class="bi bi-bookmark" aria-hidden="true"></i> Booking ref</button>
             </div>
         </div>
     </div>
@@ -568,14 +568,14 @@
         let html = '';
 
         if (data.bookings?.length) {
-            html += `<div class="search-section-label">📅 Bookings</div>`;
+            html += `<div class="search-section-label"><i class="bi bi-calendar3" aria-hidden="true"></i> Bookings</div>`;
             data.bookings.forEach(b => {
                 const statusColors = {
                     pending: '#fef9c3;color:#a16207',
                     confirmed: '#dcfce7;color:#15803d',
                     checked_in: '#dbeafe;color:#1d4ed8',
                     checked_out: '#f1f5f9;color:#475569',
-                    cancelled: '#fee2e2;color:#dc2626'
+                    cancelled: '#fee2e2;color:#b91c1c'
                 };
                 const sc = statusColors[b.status] || '#f1f5f9;color:#475569';
                 html += `<a href="${baseUrl}/admin/bookings/${encodeURIComponent(b.id)}" class="search-result-item">
@@ -590,7 +590,7 @@
         }
 
         if (data.guests?.length) {
-            html += `<div class="search-section-label">👤 Guests</div>`;
+            html += `<div class="search-section-label"><i class="bi bi-person" aria-hidden="true"></i> Guests</div>`;
             data.guests.forEach(g => {
                 html += `<a href="${baseUrl}/admin/users/${encodeURIComponent(g.id)}" class="search-result-item">
                 <div class="result-icon tag-amber"><i class="bi bi-person"></i></div>
@@ -598,17 +598,17 @@
                     <div class="result-title">${escapeHtml(g.name)}</div>
                     <div class="result-sub">${escapeHtml(g.email)}</div>
                 </div>
-                <span class="result-badge" style="background:#f1f5f9;color:#475569;">${escapeHtml(g.bookings)} booking${g.bookings!=1?'s':''}</span>
+                <span class="result-badge tag-neutral">${escapeHtml(g.bookings)} booking${g.bookings!=1?'s':''}</span>
             </a>`;
             });
         }
 
         if (data.properties?.length) {
-            html += `<div class="search-section-label">🏠 Properties</div>`;
+            html += `<div class="search-section-label"><i class="bi bi-house-door" aria-hidden="true"></i> Villa &amp; rooms</div>`;
             data.properties.forEach(p => {
                 const sc = p.status === 'available' ? '#dcfce7;color:#15803d' : '#fee2e2;color:#dc2626';
                 html += `<a href="${baseUrl}/admin/properties/${encodeURIComponent(p.id)}/edit" class="search-result-item">
-                <div class="result-icon" style="background:#f0fdf4;color:#16a34a;"><i class="bi bi-house"></i></div>
+                <div class="result-icon" style="background:#f0fdf4;color:#15803d;"><i class="bi bi-house"></i></div>
                 <div class="result-main">
                     <div class="result-title">${escapeHtml(p.name)}</div>
                     <div class="result-sub">${escapeHtml(p.type)} · Max ${escapeHtml(p.capacity)} guests</div>

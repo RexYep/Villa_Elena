@@ -18,7 +18,7 @@
         }
 
         .hero-ref {
-            font-family: 'Playfair Display', serif;
+            font-family: var(--font-display);
             color: var(--gold-light);
             font-size: 26px;
             font-weight: 600;
@@ -45,7 +45,7 @@
         }
 
         .hero-date-val {
-            font-family: 'Playfair Display', serif;
+            font-family: var(--font-display);
             color: #fff;
             font-size: 18px;
             font-weight: 600;
@@ -120,7 +120,7 @@
         }
 
         .hero-nights-val {
-            font-family: 'Playfair Display', serif;
+            font-family: var(--font-display);
             font-size: 26px;
             font-weight: 700;
             white-space: nowrap;
@@ -218,7 +218,7 @@
         .price-row.total {
             font-weight: 700;
             font-size: 16px;
-            font-family: 'Playfair Display', serif;
+            font-family: var(--font-display);
             border-top: 2px solid var(--border);
             padding-top: 12px;
             margin-top: 4px;
@@ -262,8 +262,8 @@
         /* Manage Booking */
         .btn-manage {
             display: block;
-            background: #f1f5f9;
-            color: #374151;
+            background: var(--sand);
+            color: var(--stone);
             border-radius: 10px;
             padding: 13px;
             text-align: center;
@@ -274,8 +274,8 @@
         }
 
         .btn-manage:hover {
-            background: #e2e8f0;
-            color: #374151;
+            background: var(--border);
+            color: var(--stone);
         }
 
         .manage-note {
@@ -287,7 +287,7 @@
         }
 
         .manage-blocked {
-            background: #f8fafc;
+            background: var(--cream);
             border-radius: 10px;
             padding: 13px;
             text-align: center;
@@ -423,7 +423,7 @@
             font-size: 13px;
             font-weight: 600;
             cursor: pointer;
-            font-family: 'Jost', sans-serif;
+            font-family: var(--font-body);
             width: 100%;
             margin-top: 10px;
             transition: opacity .2s;
@@ -450,7 +450,7 @@
 
         .btn-pay-now {
             display: block;
-            background: #2c2416;
+            background: var(--btn-primary);
             color: #fff;
             border-radius: 10px;
             padding: 13px;
@@ -464,7 +464,7 @@
 
         .btn-pay-now:hover,
         .btn-pay-now:focus-visible {
-            background: #b8943f;
+            background: var(--gold);
             color: #2c2416;
         }
 
@@ -474,7 +474,7 @@
             padding: 14px 18px;
             margin-bottom: 16px;
             font-size: 13px;
-            color: #dc2626;
+            color: #b91c1c;
         }
 
         .cancelled-banner strong {
@@ -697,11 +697,11 @@
             @endphp
             @if (!$myReview)
                 <a href="{{ route('customer.reviews.create', $booking) }}" class="hero-cta hero-cta-review">
-                    ⭐ Write a Review
+                    <i class="bi bi-star-fill" aria-hidden="true"></i> Write a Review
                 </a>
             @else
                 <a href="{{ route('customer.reviews.edit', $myReview) }}" class="hero-cta hero-cta-reviewed">
-                    <i class="bi bi-check-circle me-1" style="color:#16a34a;"></i>
+                    <i class="bi bi-check-circle me-1 text-green"></i>
                     You already reviewed this stay — view or edit it
                 </a>
             @endif
@@ -786,7 +786,7 @@
                                             {{ $payment->payment_date?->format('M d, Y') }}</td>
                                         <td data-label="Method">{{ $payment->method_label }}</td>
                                         <td data-label="Type"><span
-                                                style="background:#f1f5f9;padding:2px 8px;border-radius:10px;font-size: 12px;">{{ $payment->type_label }}</span>
+                                                style="background:var(--sand);padding:2px 8px;border-radius:10px;font-size: 12px;">{{ $payment->type_label }}</span>
                                         </td>
                                         <td data-label="Amount"
                                             style="text-align:right;font-weight:600;color:{{ $payment->payment_type === 'refund' ? '#dc2626' : '#15803d' }};">
@@ -826,8 +826,8 @@
                         </div>
                     @endif
                     @if ($booking->discount_amount > 0)
-                        <div class="price-row"><span style="color:#15803d;">Discount</span><span
-                                style="color:#15803d;">-₱{{ number_format($booking->discount_amount, 2) }}</span></div>
+                        <div class="price-row"><span class="text-green">Discount</span><span
+                                class="text-green">-₱{{ number_format($booking->discount_amount, 2) }}</span></div>
                     @endif
                     <div class="price-row total">
                         <span>Total</span><span>₱{{ number_format($booking->total_amount, 2) }}</span></div>
@@ -840,7 +840,7 @@
 
                     @if ($booking->balance_due > 0 && !in_array($booking->status, ['cancelled', 'checked_out']))
                         <a href="{{ route('payment.page', $booking) }}" class="btn-pay-now">
-                            💳 Pay Now — ₱{{ number_format($booking->balance_due, 2) }}
+                            <i class="bi bi-credit-card" aria-hidden="true"></i> Pay Now — ₱{{ number_format($booking->balance_due, 2) }}
                         </a>
                     @endif
                 </div>

@@ -14,14 +14,14 @@
         }
 
         .brand {
-            font-family: 'Playfair Display', serif;
+            font-family: var(--font-display);
             color: var(--gold-light);
             font-size: 18px;
             margin-bottom: 16px;
         }
 
         .booking-ref-label {
-            font-size: 10px;
+            font-size: 12px;
             color: rgba(255, 255, 255, .4);
             text-transform: uppercase;
             letter-spacing: 1.5px;
@@ -29,7 +29,7 @@
         }
 
         .booking-ref {
-            font-family: 'Playfair Display', serif;
+            font-family: var(--font-display);
             color: #fff;
             font-size: 22px;
             font-weight: 700;
@@ -65,7 +65,7 @@
         .summary-row.total {
             font-weight: 700;
             font-size: 16px;
-            font-family: 'Playfair Display', serif;
+            font-family: var(--font-display);
             border-top: 2px solid var(--border);
             padding-top: 12px;
             margin-top: 4px;
@@ -120,14 +120,14 @@
         }
 
         .pay-option-amount {
-            font-family: 'Playfair Display', serif;
+            font-family: var(--font-display);
             font-size: 20px;
             font-weight: 700;
             color: var(--stone);
         }
 
         .pay-option-label {
-            font-size: 11px;
+            font-size: 12px;
             color: var(--muted);
             margin-top: 3px;
             text-transform: uppercase;
@@ -137,10 +137,10 @@
         .pay-option-badge {
             display: inline-block;
             background: rgba(184, 148, 63, .15);
-            color: var(--gold);
+            color: var(--gold-text);
             padding: 2px 8px;
             border-radius: 10px;
-            font-size: 10px;
+            font-size: 12px;
             font-weight: 600;
             margin-top: 5px;
         }
@@ -157,7 +157,7 @@
             display: none;
             align-items: center;
             justify-content: center;
-            font-size: 11px;
+            font-size: 12px;
         }
 
         .pay-option.selected .check-icon {
@@ -166,7 +166,7 @@
 
         /* Payment methods */
         .methods-label {
-            font-size: 11px;
+            font-size: 12px;
             color: var(--muted);
             text-transform: uppercase;
             letter-spacing: 1px;
@@ -217,7 +217,7 @@
 
         /* Submit */
         .btn-pay {
-            background: var(--stone);
+            background: var(--btn-primary);
             color: #fff;
             border: none;
             border-radius: 12px;
@@ -226,7 +226,7 @@
             font-size: 15px;
             font-weight: 700;
             cursor: pointer;
-            font-family: 'Jost', sans-serif;
+            font-family: var(--font-body);
             display: flex;
             align-items: center;
             justify-content: center;
@@ -236,8 +236,8 @@
         }
 
         .btn-pay:hover {
-            background: var(--gold);
-            color: var(--stone);
+            background: var(--btn-primary-hover);
+            color: #fff;
         }
 
         .btn-back {
@@ -258,7 +258,7 @@
             align-items: center;
             justify-content: center;
             gap: 6px;
-            font-size: 11px;
+            font-size: 12px;
             color: var(--muted);
             margin-top: 14px;
         }
@@ -268,7 +268,7 @@
             color: #fff;
             padding: 3px 10px;
             border-radius: 6px;
-            font-size: 10px;
+            font-size: 12px;
             font-weight: 700;
             letter-spacing: .5px;
         }
@@ -283,7 +283,7 @@
 
         .alert-error {
             background: #fee2e2;
-            color: #dc2626;
+            color: #b91c1c;
         }
 
         .alert-success {
@@ -325,7 +325,7 @@
         }
 
         .ck-done-title {
-            font-family: 'Playfair Display', serif;
+            font-family: var(--font-display);
             font-size: 19px;
             font-weight: 700;
             margin: 8px 0 4px;
@@ -338,7 +338,7 @@
         }
 
         .ck-done-amount {
-            font-family: 'Playfair Display', serif;
+            font-family: var(--font-display);
             font-size: 26px;
             font-weight: 700;
             margin-top: 10px;
@@ -362,7 +362,7 @@
             @endif
 
             {{-- Booking Summary --}}
-            <div style="margin-bottom:20px;">
+            <div class="mb-20">
                 <div class="summary-row"><span class="lbl">Check-in</span><span
                         class="val">{{ $booking->check_in_date->format('M d, Y') }} ·
                         {{ $booking->check_in_time_label }}</span></div>
@@ -395,7 +395,7 @@
                 <input type="hidden" name="payment_type" id="selectedPaymentType" value="deposit">
 
                 @if ($isDepositOnly)
-                    <div class="section-label" style="font-size:12px;color:#374151;margin-bottom:10px;">Choose Payment
+                    <div class="section-label" style="font-size:12px;color:var(--stone);margin-bottom:10px;">Choose Payment
                         Option</div>
 
                     @if ($forceFullPayment)
@@ -410,9 +410,9 @@
                         <div
                             style="background:var(--sand);border-radius:12px;padding:16px;margin-bottom:20px;text-align:center;">
                             <div class="text-muted-theme"
-                                style="font-size:11px;text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;">Full
+                                style="font-size: 12px;text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;">Full
                                 Payment Required</div>
-                            <div style="font-family:'Playfair Display',serif;font-size:28px;font-weight:700;">
+                            <div style="font-family: var(--font-display);font-size:28px;font-weight:700;">
                                 ₱{{ number_format($booking->total_amount, 2) }}</div>
                             <input type="hidden" name="payment_type" value="full_payment">
                         </div>
@@ -441,9 +441,9 @@
                     <div
                         style="background:var(--sand);border-radius:12px;padding:16px;margin-bottom:20px;text-align:center;">
                         <div class="text-muted-theme"
-                            style="font-size:11px;text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;">Paying
+                            style="font-size: 12px;text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;">Paying
                             Remaining Balance</div>
-                        <div style="font-family:'Playfair Display',serif;font-size:28px;font-weight:700;">
+                        <div style="font-family: var(--font-display);font-size:28px;font-weight:700;">
                             ₱{{ number_format($booking->balance_due, 2) }}</div>
                         <input type="hidden" name="payment_type" value="full_payment">
                     </div>
@@ -490,7 +490,7 @@
             </a>
 
             <div class="secure-note">
-                <i class="bi bi-shield-check" style="color:#16a34a;"></i>
+                <i class="bi bi-shield-check text-green"></i>
                 Secured by <span class="paymongo-badge">PayMongo</span>
             </div>
         </div>

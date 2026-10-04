@@ -45,7 +45,7 @@
         }
 
         .briefing-label {
-            font-size: 11.5px;
+            font-size: 12px;
             text-transform: uppercase;
             letter-spacing: .07em;
             color: var(--muted);
@@ -120,8 +120,8 @@
         }
 
         .summary-tile .value {
-            font-family: 'Cormorant Garamond', serif;
-            font-size: 26px;
+            font-family: var(--font-display);
+            font-size: 23px;
             font-weight: 700;
             color: var(--terracotta);
             line-height: 1.1;
@@ -157,8 +157,8 @@
         }
 
         .rec-title {
-            font-family: 'Cormorant Garamond', serif;
-            font-size: 21px;
+            font-family: var(--font-display);
+            font-size: 19px;
             font-weight: 700;
             color: var(--text-main);
             line-height: 1.25;
@@ -172,15 +172,15 @@
         }
 
         .rec-impact .amount {
-            font-family: 'Cormorant Garamond', serif;
-            font-size: 28px;
+            font-family: var(--font-display);
+            font-size: 25px;
             font-weight: 700;
             color: var(--terracotta);
             line-height: 1;
         }
 
         .rec-impact .caption {
-            font-size: 11px;
+            font-size: 12px;
             text-transform: uppercase;
             letter-spacing: .06em;
             color: var(--muted);
@@ -195,12 +195,12 @@
         }
 
         .tag {
-            font-size: 11.5px;
+            font-size: 12px;
             font-weight: 600;
             padding: 3px 10px;
             border-radius: 20px;
-            background: #e2e8f0;
-            color: #475569;
+            background: var(--border);
+            color: var(--muted);
         }
 
         .tag.promo { background: #fef3c7; color: #92400e; }
@@ -225,7 +225,7 @@
         }
 
         .rec-why h4 {
-            font-size: 11.5px;
+            font-size: 12px;
             text-transform: uppercase;
             letter-spacing: .07em;
             color: var(--muted);

@@ -7,7 +7,7 @@
 
 @section('content')
 
-    <h2>Something went wrong</h2>
+    <h1>Something went wrong</h1>
 
     <p class="subtitle">
         That's a problem on our side, not yours. Please try again in a moment. If it keeps happening, contact the resort.

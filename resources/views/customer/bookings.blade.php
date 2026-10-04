@@ -45,7 +45,7 @@
         }
 
         .booking-card:hover .bc-ref {
-            color: var(--gold);
+            color: var(--gold-text);
         }
 
         .booking-card:hover {
@@ -122,7 +122,7 @@
             margin-top: 7px;
             font-weight: 700;
             font-size: 15px;
-            font-family: 'Playfair Display', serif;
+            font-family: var(--font-display);
             white-space: nowrap;
         }
 
@@ -265,7 +265,7 @@
                     <div class="bc-ref">{{ $booking->booking_ref }}</div>
                     <div class="bc-property">{{ $booking->property->property_name ?? 'N/A' }}</div>
                     <div class="bc-dates">
-                        <i class="bi bi-calendar3" style="font-size: 13px;"></i>
+                        <i class="bi bi-calendar3 fs-13"></i>
                         {{ $booking->check_in_date->format('M d, Y') }} &rarr;
                         {{ $booking->check_out_date->format('M d, Y') }}
                         @if ($booking->slot_name)
@@ -289,12 +289,12 @@
         <div class="empty-state">
             <i class="bi bi-calendar-x"></i>
             <p style="font-size:15px;margin-bottom:6px;">No bookings found</p>
-            <a href="{{ route('home') }}" style="color:var(--gold);font-size:13px;">Book the villa →</a>
+            <a href="{{ route('home') }}" style="color:var(--gold-text);font-size:13px;">Book the villa →</a>
         </div>
     @endforelse
 
     @if ($bookings->hasPages())
-        <div style="margin-top:20px;">{{ $bookings->links() }}</div>
+        <div class="mt-20">{{ $bookings->links() }}</div>
     @endif
 @endsection
 

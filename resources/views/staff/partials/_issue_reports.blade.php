@@ -1,7 +1,7 @@
         <div class="card mb-3">
             <div class="card-head">
-                <h3><i class="bi bi-exclamation-octagon me-2" style="color:#dc2626;"></i>Issue Reports</h3>
-                <span class="text-muted-theme" style="font-size: 14px;">{{ $openReports->count() }} open</span>
+                <h3><i class="bi bi-exclamation-octagon me-2 text-red"></i>Issue Reports</h3>
+                <span class="text-muted-theme fs-14">{{ $openReports->count() }} open</span>
             </div>
             <div class="card-body">
                 @forelse ($openReports as $report)

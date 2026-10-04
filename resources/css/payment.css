@@ -10,7 +10,7 @@
  */
 
 body {
-    font-family: 'Jost', sans-serif;
+    font-family: var(--font-body);
     background: var(--sand);
     min-height: 100vh;
     display: flex;

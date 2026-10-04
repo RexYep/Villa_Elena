@@ -118,12 +118,12 @@
         <div class="empty-state">
             <i class="bi bi-bell-slash"></i>
             <p style="font-size:15px;margin-bottom:4px;">No notifications yet</p>
-            <p style="font-size:13px;">Booking, payment, and guest activity will show up here.</p>
+            <p class="fs-13">Booking, payment, and guest activity will show up here.</p>
         </div>
     @endforelse
 
     @if ($notifications->hasPages())
-        <div style="margin-top:20px;">{{ $notifications->links() }}</div>
+        <div class="mt-20">{{ $notifications->links() }}</div>
     @endif
 @endsection
 

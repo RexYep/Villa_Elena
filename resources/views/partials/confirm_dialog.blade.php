@@ -5,6 +5,10 @@
         Opsyonal: `data-confirm-label="Delete"` para sa teksto ng butones.
      2. Script: `if (!await confirmDialog('Remove this block?')) return;`
 
+     Pula ang butones bilang default dahil karamihan ng tanong ay tungkol sa
+     pagbura. Para sa hindi nakakasira (check-in, check-out):
+     `data-confirm-tone="neutral"` o `{ tone: 'neutral' }`.
+
      `<dialog>` + showModal() ang gamit, hindi Bootstrap modal: nasa "top
      layer" ito ng browser, kaya lumalabas ito sa ibabaw ng mga sariling
      modal ng mga pahina (calendar, payments) anuman ang z-index nila, at
@@ -20,11 +24,15 @@
 <style>
     .confirm-dialog {
         width: min(420px, calc(100vw - 32px));
+        /* Every section stylesheet resets `* { margin: 0 }`, which removes the
+           browser's own `margin: auto` on a modal dialog and pins it to the
+           top-left corner. */
+        margin: auto;
         padding: 24px;
         border: none;
         border-radius: 14px;
         background: #fff;
-        color: #1f2937;
+        color: var(--stone);
         box-shadow: 0 20px 50px rgba(0, 0, 0, .25);
         overscroll-behavior: contain;
     }
@@ -49,10 +57,10 @@
     .confirm-dialog-btn {
         min-height: 40px;
         padding: 9px 18px;
-        border: 1px solid #d1d5db;
+        border: 1px solid var(--border);
         border-radius: 9px;
         background: #fff;
-        color: #374151;
+        color: var(--stone);
         font: inherit;
         font-size: 14px;
         font-weight: 600;
@@ -60,7 +68,7 @@
     }
 
     .confirm-dialog-btn:hover {
-        background: #f3f4f6;
+        background: var(--sand);
     }
 
     .confirm-dialog-btn.is-primary {
@@ -71,6 +79,16 @@
 
     .confirm-dialog-btn.is-primary:hover {
         background: #b91c1c;
+    }
+
+    .confirm-dialog-btn.is-primary.is-neutral {
+        border-color: var(--btn-primary);
+        background: var(--btn-primary);
+    }
+
+    .confirm-dialog-btn.is-primary.is-neutral:hover {
+        border-color: var(--btn-primary-hover);
+        background: var(--btn-primary-hover);
     }
 
     .confirm-dialog-btn:focus-visible {
@@ -95,6 +113,7 @@
 
             msg.textContent = message;
             okBtn.textContent = (options && options.confirmLabel) || 'Confirm';
+            okBtn.classList.toggle('is-neutral', !!(options && options.tone === 'neutral'));
             dlg.returnValue = '';
             dlg.showModal();
             // Sa Cancel ang focus, hindi sa Confirm: ang Enter sa isang
@@ -133,7 +152,8 @@
             const submitter = e.submitter;
 
             window.confirmDialog(message, {
-                confirmLabel: form.dataset.confirmLabel
+                confirmLabel: form.dataset.confirmLabel,
+                tone: form.dataset.confirmTone
             }).then(function(ok) {
                 if (!ok) return;
                 form.dataset.confirmed = '1';

@@ -41,7 +41,7 @@ class AdminSeeder extends Seeder
         // Seed default system settings
         $settings = [
             ['setting_key' => 'resort_name',        'setting_value' => 'Villa Elena Private Rental Resort', 'data_type' => 'string',  'description' => 'Resort display name'],
-            ['setting_key' => 'resort_email',        'setting_value' => 'info@villaelenareosrt.com',         'data_type' => 'string',  'description' => 'Main contact email'],
+            ['setting_key' => 'resort_email',        'setting_value' => 'info@villaelenaresort.com',         'data_type' => 'string',  'description' => 'Main contact email'],
             ['setting_key' => 'resort_phone',        'setting_value' => '09000000000',                      'data_type' => 'string',  'description' => 'Main contact phone'],
             ['setting_key' => 'resort_address',      'setting_value' => 'Villa Elena, Philippines',         'data_type' => 'string',  'description' => 'Resort address'],
             ['setting_key' => 'booking_hold_minutes','setting_value' => '15',                               'data_type' => 'integer', 'description' => 'Minutes to hold a pending booking'],

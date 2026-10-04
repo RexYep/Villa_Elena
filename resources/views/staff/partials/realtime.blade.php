@@ -8,18 +8,18 @@
     display: flex; flex-direction: column-reverse; gap: 10px; max-width: 360px;
 }
 .rt-fd-toast {
-    background: #0d1b2a; color: #fff; border-radius: 14px; padding: 14px 16px;
+    background: var(--stone); color: #fff; border-radius: 14px; padding: 14px 16px;
     display: flex; align-items: flex-start; gap: 12px;
     box-shadow: 0 8px 32px rgba(0,0,0,.25);
     animation: rtFdSlideIn .35s cubic-bezier(.34,1.56,.64,1);
-    border-left: 4px solid #c9a84c; min-width: 300px;
+    border-left: 4px solid var(--gold); min-width: 300px;
     transition: opacity .3s, transform .3s;
 }
 .rt-fd-toast.removing { opacity: 0; transform: translateX(40px); }
 .rt-fd-icon {
     width: 34px; height: 34px; border-radius: 9px; flex-shrink: 0;
     display: flex; align-items: center; justify-content: center;
-    font-size: 15px; background: rgba(201,168,76,.2); color: #c9a84c;
+    font-size: 15px; background: rgba(201,168,76,.2); color: var(--gold);
 }
 .rt-fd-body { flex: 1; min-width: 0; font-size: 12.5px; line-height: 1.5; }
 .rt-fd-sticky { border-left-color: #ef4444; }
@@ -43,10 +43,10 @@
 #rt-fd-banner button {
     background: #d97706; color: #fff; border: none; border-radius: 7px;
     padding: 6px 14px; font-size: 14px; font-weight: 600; cursor: pointer;
-    font-family: 'DM Sans', sans-serif;
+    font-family: var(--font-body);
 }
 .rt-fd-handled {
-    font-size: 13px; color: #6B7A8D; font-style: italic;
+    font-size: 13px; color: var(--muted); font-style: italic;
 }
 </style>
 

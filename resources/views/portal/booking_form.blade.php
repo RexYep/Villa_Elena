@@ -105,7 +105,7 @@
         }
 
         .form-card-head h3 {
-            font-family: 'Playfair Display', serif;
+            font-family: var(--font-display);
             font-size: 17px;
             font-weight: 600;
         }
@@ -117,7 +117,7 @@
         .form-label {
             font-size: 14px;
             font-weight: 600;
-            color: #374151;
+            color: var(--stone);
             margin-bottom: 6px;
             display: block;
             letter-spacing: .3px;
@@ -175,7 +175,7 @@
         }
 
         .summary-name {
-            font-family: 'Playfair Display', serif;
+            font-family: var(--font-display);
             font-size: 18px;
             font-weight: 600;
             margin-bottom: 4px;
@@ -241,7 +241,7 @@
         .deposit-amount {
             font-size: 18px;
             font-weight: 700;
-            font-family: 'Playfair Display', serif;
+            font-family: var(--font-display);
             display: block;
             margin: 4px 0;
         }
@@ -260,19 +260,19 @@
         }
 
         .night-row.weekend {
-            color: var(--gold);
+            color: var(--gold-text);
         }
 
         /* Submit */
         .btn-submit {
-            background: var(--stone);
+            background: var(--btn-primary);
             color: #fff;
             border: none;
             border-radius: 10px;
             padding: 14px;
             font-size: 15px;
             font-weight: 700;
-            font-family: 'Jost', sans-serif;
+            font-family: var(--font-body);
             width: 100%;
             cursor: pointer;
             transition: all .2s;
@@ -284,8 +284,8 @@
         }
 
         .btn-submit:hover {
-            background: var(--gold);
-            color: var(--stone);
+            background: var(--btn-primary-hover);
+            color: #fff;
         }
 
         .btn-submit:disabled,
@@ -404,16 +404,16 @@
         }
 
         .policy-modal-eyebrow {
-            font-size: 10.5px;
+            font-size: 12px;
             letter-spacing: 2px;
             text-transform: uppercase;
-            color: var(--gold);
+            color: var(--gold-text);
             font-weight: 600;
             margin-bottom: 7px;
         }
 
         .policy-modal-head h2 {
-            font-family: 'Playfair Display', serif;
+            font-family: var(--font-display);
             font-size: 23px;
             font-weight: 600;
             color: var(--stone);
@@ -506,7 +506,7 @@
         }
 
         .policy-modal-foot a:hover {
-            color: var(--gold);
+            color: var(--gold-text);
         }
 
         .policy-agree {
@@ -518,7 +518,7 @@
             border: none;
             border-radius: 9px;
             padding: 11px 20px;
-            font-family: 'Jost', sans-serif;
+            font-family: var(--font-body);
             font-size: 13.5px;
             font-weight: 600;
             cursor: pointer;
@@ -671,7 +671,7 @@
                 {{-- Stay Details --}}
                 <div class="form-card">
                     <div class="form-card-head">
-                        <div class="icon" style="background:#dcfce7;color:#16a34a;"><i class="bi bi-calendar3"></i></div>
+                        <div class="icon tag-green"><i class="bi bi-calendar3"></i></div>
                         <h3>Stay Details</h3>
                     </div>
                     <div class="form-card-body">
@@ -700,8 +700,8 @@
                             </div>
                         </div>
                         <div>
-                            <label for="f_special_requests" class="form-label">Special Requests <span class="text-muted-theme"
-                                    style="font-weight:400;">(optional)</span></label>
+                            <label for="f_special_requests" class="form-label">Special Requests <span class="text-muted-theme fw-400"
+                                   >(optional)</span></label>
                             <textarea id="f_special_requests" name="special_requests" class="form-control" rows="3"
                                 placeholder="Early check-in, dietary requirements, celebrations, etc.">{{ old('special_requests') }}</textarea>
                         </div>
@@ -738,7 +738,7 @@
                         @if ($discountAmount > 0)
                             <div class="price-row promo">
                                 <span>
-                                    <i class="bi bi-tag-fill" style="font-size: 13px;"></i>
+                                    <i class="bi bi-tag-fill fs-13"></i>
                                     {{ $promo->label }}
                                     <span class="promo-chip">{{ $promo->value_label }}</span>
                                 </span>

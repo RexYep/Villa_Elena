@@ -22,7 +22,7 @@
         }
 
         body {
-            font-family: 'Inter', sans-serif;
+            font-family: var(--font-body);
             background: var(--cream);
             color: var(--stone);
             line-height: 1.6;
@@ -68,7 +68,7 @@
         }
 
         .nav-brand {
-            font-family: 'Playfair Display', serif;
+            font-family: var(--font-display);
             font-size: 26px;
             font-weight: 700;
             color: #fff;
@@ -391,7 +391,7 @@
             flex-shrink: 0;
             background: var(--gold);
             color: var(--stone);
-            font-family: 'Playfair Display', serif;
+            font-family: var(--font-display);
             font-size: 19px;
             font-weight: 700;
             line-height: 1;
@@ -402,7 +402,7 @@
         }
 
         .promo-card h4 {
-            font-family: 'Playfair Display', serif;
+            font-family: var(--font-display);
             font-size: 21px;
             color: #fff;
             margin: 0 0 5px;
@@ -418,13 +418,13 @@
 
         .promo-card .promo-meta {
             color: var(--gold-light);
-            font-size: 11.5px;
+            font-size: 12px;
             letter-spacing: .6px;
             text-transform: uppercase;
         }
 
         .hero-title {
-            font-family: 'Playfair Display', serif;
+            font-family: var(--font-display);
             font-size: clamp(48px, 8vw, 92px);
             font-weight: 700;
             line-height: 1.05;
@@ -499,16 +499,16 @@
         }
 
         .section-eyebrow {
-            font-size: 14px;
-            letter-spacing: 3px;
-            text-transform: uppercase;
-            color: var(--gold);
-            font-weight: 500;
-            margin-bottom: 10px;
+            font-family: var(--font-display);
+            font-style: italic;
+            font-size: 18px;
+            color: var(--gold-text);
+            font-weight: 400;
+            margin-bottom: 8px;
         }
 
         .section-title {
-            font-family: 'Playfair Display', serif;
+            font-family: var(--font-display);
             font-size: clamp(34px, 4vw, 48px);
             font-weight: 600;
             color: var(--stone);
@@ -617,7 +617,7 @@
 
         .status-occupied {
             background: #fee2e2;
-            color: #ef4444;
+            color: #b91c1c;
         }
 
         .prop-body {
@@ -625,7 +625,7 @@
         }
 
         .prop-name {
-            font-family: 'Playfair Display', serif;
+            font-family: var(--font-display);
             font-size: 22px;
             font-weight: 600;
             margin-bottom: 8px;
@@ -660,7 +660,7 @@
             padding: 5px 10px;
             border-radius: 50px;
             font-size: 13px;
-            font-family: 'Jost', sans-serif;
+            font-family: var(--font-body);
             letter-spacing: .3px;
             font-weight: 500;
             text-align: center;
@@ -675,7 +675,7 @@
         }
 
         .prop-price-val {
-            font-family: 'Playfair Display', serif;
+            font-family: var(--font-display);
             font-size: 26px;
             font-weight: 700;
             color: var(--stone);
@@ -778,7 +778,7 @@
         }
 
         .villa-showcase-name {
-            font-family: 'Playfair Display', serif;
+            font-family: var(--font-display);
             font-size: 32px;
             font-weight: 700;
             line-height: 1.1;
@@ -881,7 +881,7 @@
         }
 
         .villa-showcase-price {
-            font-family: 'Playfair Display', serif;
+            font-family: var(--font-display);
             font-size: 30px;
             font-weight: 700;
         }
@@ -890,7 +890,7 @@
             font-size: 14px;
             font-weight: 400;
             color: var(--muted);
-            font-family: 'Jost', sans-serif;
+            font-family: var(--font-body);
         }
 
         .btn-book-showcase {
@@ -1012,7 +1012,7 @@
         }
 
         .amenity-name {
-            font-family: 'Playfair Display', serif;
+            font-family: var(--font-display);
             font-size: 17px;
             font-weight: 600;
             color: #fff;
@@ -1109,7 +1109,7 @@
             position: absolute;
             top: 14px;
             right: 14px;
-            font-size: 11.5px;
+            font-size: 12px;
             font-weight: 600;
             letter-spacing: .3px;
             padding: 6px 13px;
@@ -1145,7 +1145,7 @@
         }
 
         .room-card-name {
-            font-family: 'Playfair Display', serif;
+            font-family: var(--font-display);
             font-size: 19px;
             font-weight: 600;
             color: var(--stone);
@@ -1293,7 +1293,7 @@
 
         .gallery-caption {
             margin-top: 12px;
-            font-family: 'Playfair Display', serif;
+            font-family: var(--font-display);
             font-size: clamp(22px, 2.6vw, 32px);
             font-weight: 600;
             line-height: 1.15;
@@ -1494,7 +1494,7 @@
         }
 
         .about-badge strong {
-            font-family: 'Playfair Display', serif;
+            font-family: var(--font-display);
             font-size: 28px;
             display: block;
         }
@@ -1518,7 +1518,7 @@
         .stat-item {}
 
         .stat-num {
-            font-family: 'Playfair Display', serif;
+            font-family: var(--font-display);
             font-size: 36px;
             font-weight: 700;
             color: var(--stone);
@@ -1568,7 +1568,7 @@
         .testimonial-quote {
             font-size: 52px;
             color: var(--gold);
-            font-family: 'Playfair Display', serif;
+            font-family: var(--font-display);
             line-height: 1;
             margin-bottom: 12px;
             opacity: 0.5;
@@ -1626,7 +1626,7 @@
             justify-content: center;
             font-size: 18px;
             color: var(--gold);
-            font-family: 'Playfair Display', serif;
+            font-family: var(--font-display);
             font-weight: 700;
             flex-shrink: 0;
             overflow: hidden;
@@ -1710,7 +1710,7 @@
             align-items: center;
             gap: 8px;
             margin-top: 8px;
-            color: var(--gold);
+            color: var(--gold-text);
             font-size: 13px;
             font-weight: 600;
             text-decoration: none;
@@ -1904,7 +1904,7 @@
         }
 
         .footer-brand {
-            font-family: 'Playfair Display', serif;
+            font-family: var(--font-display);
             color: var(--gold-light);
             font-size: 30px;
             margin-bottom: 14px;
@@ -1983,13 +1983,13 @@
         /* ════════════════════════════════════════
                                                    ANIMATIONS & SCROLL REVEAL
                                                 ════════════════════════════════════════ */
-        .reveal {
+        .reveal-on .reveal {
             opacity: 0;
-            transform: translateY(30px);
-            transition: opacity 0.7s ease, transform 0.7s ease;
+            transform: translateY(16px);
+            transition: opacity 0.45s ease, transform 0.45s ease;
         }
 
-        .reveal.visible {
+        .reveal-on .reveal.visible {
             opacity: 1;
             transform: translateY(0);
         }
@@ -2332,7 +2332,7 @@
         }
 
         .final-cta-title {
-            font-family: 'Playfair Display', serif;
+            font-family: var(--font-display);
             font-size: clamp(30px, 3.4vw, 44px);
             font-weight: 600;
             line-height: 1.15;
@@ -2356,7 +2356,7 @@
         }
 
         .final-cta-price {
-            font-family: 'Playfair Display', serif;
+            font-family: var(--font-display);
             font-size: 14.5px;
             color: var(--gold-light);
         }
@@ -2736,6 +2736,16 @@
         // bakit hindi na "My Bookings" ang inaalok sa lahat ng naka-login.
         $portalHomeRoute = auth()->user()?->homeRouteName();
         $portalHomeLabel = auth()->user()?->homeLabel();
+
+        // Admin at staff: ang tatlong "Book" na button sa ibaba (hero,
+        // showcase, closing CTA) ay tumuturo sa sarili nilang booking form.
+        // Tingnan ang User::bookingToolRouteName() — ang PortalController ang
+        // tunay na harang, ito ay para hindi sila alukin ng guest booking.
+        $staffBookingTool = auth()->user()?->bookingToolRouteName();
+        $staffBookingLabel = auth()->user()?->bookingToolLabel();
+        if ($staffBookingTool) {
+            $heroBookUrl = route($staffBookingTool);
+        }
     @endphp
 
     {{-- ══════════════════════════════════
@@ -2831,7 +2841,7 @@
 
             <div class="hero-cta-row">
                 <a href="{{ $heroBookUrl }}" class="btn-hero-primary">
-                    {{ $allowOnlineBooking ? 'Book the villa' : 'See rates' }}
+                    {{ $staffBookingLabel ?? ($allowOnlineBooking ? 'Book the villa' : 'See rates') }}
                 </a>
                 <a href="#room-tour" class="btn-hero-ghost">Look inside</a>
             </div>
@@ -3070,7 +3080,7 @@
         <div class="section">
             <div class="section-header">
                 <div>
-                    <div class="section-eyebrow reveal">One Villa. One Group</div>
+                    <div class="section-eyebrow reveal">One villa, one group</div>
                     <div class="section-title reveal reveal-delay-1">Your Own Private Escape</div>
                     <p class="section-desc reveal reveal-delay-2">A private pool resort in Pansol, Calamba. Perfect for
                         family days, barkada getaways and small celebrations.</p>
@@ -3081,7 +3091,7 @@
             @if (request()->hasAny(['checkin', 'guests']) && request()->filled('checkin'))
                 <div
                     style="background:rgba(184,148,63,0.08);border:1px solid rgba(184,148,63,0.2);border-radius:16px;padding:14px 20px;margin-bottom:40px;display:flex;align-items:center;gap:12px;font-size:14px;flex-wrap:wrap;">
-                    <i class="bi bi-funnel-fill" style="color:var(--gold);"></i>
+                    <i class="bi bi-funnel-fill text-gold"></i>
                     <span>Availability for</span>
                     <strong>{{ \Carbon\Carbon::parse(request('checkin'))->format('M j, Y') }} ·
                         {{ $heroSlot ? $bookableSlotDefs[$heroSlot]['label'] : '' }}</strong>
@@ -3101,7 +3111,7 @@
                     <p class="mb-12" style="font-size:20px;font-weight:500;color:var(--stone);">Villa Elena is not
                         available on the selected date.</p>
                     <p>Try a different date, or check the calendar on the Villa's page.</p>
-                    <a href="{{ route('home') }}" style="color:var(--gold);margin-top:20px;display:inline-block;">Clear
+                    <a href="{{ route('home') }}" style="color:var(--gold-text);margin-top:20px;display:inline-block;">Clear
                         the filter →</a>
                 </div>
             @else
@@ -3159,7 +3169,7 @@
                             <div class="villa-showcase-price">
                                 ₱{{ number_format($villa->base_price, 0) }} <span>/ package</span>
                                 <div
-                                    style="font-size:12px;font-family:'Jost',sans-serif;font-weight:400;margin-top:6px;line-height:1.7;color:var(--muted);">
+                                    style="font-size:12px;font-family: var(--font-body);font-weight:400;margin-top:6px;line-height:1.7;color:var(--muted);">
                                     <div>&#x2022; <strong style="color:var(--stone);font-weight:600;">Regular:</strong>
                                         Mon–Thu &amp; Sun after 6PM</div>
                                     @if ($villa->weekend_price && $villa->weekend_price != $villa->base_price)
@@ -3171,7 +3181,11 @@
                                     @endif
                                 </div>
                             </div>
-                            @if ($villa->status !== 'maintenance' && $allowOnlineBooking)
+                            @if ($staffBookingTool)
+                                <a href="{{ route($staffBookingTool) }}" class="btn-book-showcase">
+                                    <i class="bi bi-calendar-check"></i> {{ $staffBookingLabel }}
+                                </a>
+                            @elseif ($villa->status !== 'maintenance' && $allowOnlineBooking)
                                 <a href="{{ route('portal.property', $villa) }}?checkin={{ $checkin }}&slot={{ $slot }}&guests={{ $guests }}"
                                     class="btn-book-showcase">
                                     <i class="bi bi-calendar-check"></i>
@@ -3197,7 +3211,7 @@
         <div class="section">
             <div class="section-header">
                 <div>
-                    <div class="section-eyebrow reveal">Villa Features</div>
+                    <div class="section-eyebrow reveal">Villa features</div>
                     <div class="section-title reveal reveal-delay-1">Everything is<br>Yours</div>
                     <p class="section-desc reveal reveal-delay-2" style="color:rgba(255,255,255,0.5);">From the private
                         pool to the kitchen and entertainment spaces, everything comes with your whole-villa booking.</p>
@@ -3257,7 +3271,7 @@
             <div class="section">
                 <div class="section-header">
                     <div>
-                        <div class="section-eyebrow reveal">Inside the Villa</div>
+                        <div class="section-eyebrow reveal">Inside the villa</div>
                         <div class="section-title reveal reveal-delay-1">Explore the<br>Rooms</div>
                         <p class="section-desc reveal reveal-delay-2">A closer look at each room inside Villa Elena — all
                             included in your one whole-villa booking.</p>
@@ -3300,7 +3314,7 @@
         <div class="section">
             <div class="section-header">
                 <div>
-                    <div class="section-eyebrow reveal">Visual Journey</div>
+                    <div class="section-eyebrow reveal">Visual journey</div>
                     <div class="section-title reveal reveal-delay-1">Captured Moments</div>
                     <p class="section-desc reveal reveal-delay-2">A glimpse into the beauty that awaits you at Villa Elena.
                     </p>
@@ -3415,7 +3429,7 @@
                 </div>
 
                 <div class="about-text">
-                    <div class="section-eyebrow reveal">Our Story</div>
+                    <div class="section-eyebrow reveal">Our story</div>
                     <div class="section-title reveal reveal-delay-1">The Whole Villa,<br>Just for You</div>
                     <p class="reveal reveal-delay-2 text-muted-theme"
                         style="font-size:16px;line-height:1.8;font-weight:300;margin-bottom:18px;">
@@ -3457,7 +3471,7 @@
     <section id="testimonials">
         <div class="section">
             <div style="text-align:center;margin-bottom:0;">
-                <div class="section-eyebrow reveal">Guest Voices</div>
+                <div class="section-eyebrow reveal">Guest voices</div>
                 <div class="section-title reveal reveal-delay-1">What Our Guests Say</div>
                 <p style="font-size:16px;max-width:500px;margin:14px auto 0;font-weight:300;line-height:1.7;"
                     class="reveal reveal-delay-2 text-muted-theme">
@@ -3513,7 +3527,7 @@
     <section id="location">
         <div class="section">
             <div>
-                <div class="section-eyebrow reveal">Find Us</div>
+                <div class="section-eyebrow reveal">Find us</div>
                 <div class="section-title reveal reveal-delay-1">Getting Here</div>
             </div>
 
@@ -3581,7 +3595,7 @@
     <section id="contact">
         <div class="section">
             <div>
-                <div class="section-eyebrow reveal">Get In Touch</div>
+                <div class="section-eyebrow reveal">Get in touch</div>
                 <div class="section-title reveal reveal-delay-1">We'd Love<br>to Hear From You</div>
                 <p class="section-desc reveal reveal-delay-2" style="color:rgba(255,255,255,0.5);">
                     Whether you're planning a romantic escape or a grand celebration — our team is ready to craft your
@@ -3700,7 +3714,7 @@
 
                 @if ($allowOnlineBooking && $featuredVilla)
                     <a href="{{ $heroBookUrl }}" class="btn-final">
-                        <i class="bi bi-calendar-check"></i> Book the villa
+                        <i class="bi bi-calendar-check"></i> {{ $staffBookingLabel ?? 'Book the villa' }}
                     </a>
                 @else
                     <a href="#contact" class="btn-final">
@@ -3820,9 +3834,13 @@
                 }
             });
         }, {
-            threshold: 0.12
+            // Start a little before the element scrolls in, so a section is
+            // never sitting blank in view while it waits for its fade.
+            rootMargin: '0px 0px 12% 0px',
+            threshold: 0
         });
 
+        document.documentElement.classList.add('reveal-on');
         document.querySelectorAll('.reveal').forEach(el => observer.observe(el));
 
         /* ── Gallery slideshow (one photo at a time) ──

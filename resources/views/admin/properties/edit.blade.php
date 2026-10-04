@@ -187,7 +187,7 @@
             left: 4px;
             background: var(--gold);
             color: #fff;
-            font-size: 11px;
+            font-size: 12px;
             font-weight: 700;
             padding: 2px 6px;
             border-radius: 4px;
@@ -415,7 +415,7 @@
                             <div>
                                 {{-- Hindi "/ Night" — flat package kada slot. --}}
                                 <label class="form-label">Regular Rate <span class="req">*</span></label>
-                                <small style="font-size: 13px; color:#94a3b8; margin-bottom:4px; display:block;">
+                                <small class="field-caption">
                                     Mon–Thu, and Sun after 6PM
                                 </small>
                                 <div class="input-prefix">
@@ -427,7 +427,7 @@
                             </div>
                             <div>
                                 <label class="form-label">Peak Rate</label>
-                                <small style="font-size: 13px; color:#94a3b8; margin-bottom:4px; display:block;">
+                                <small class="field-caption">
                                     Fri/Sat, and Sun before 6PM
                                 </small>
                                 <div class="input-prefix">
@@ -439,7 +439,7 @@
                             </div>
                             <div>
                                 <label class="form-label">22-Hour Regular Rate</label>
-                                <small style="font-size: 13px; color:#94a3b8; margin-bottom:4px; display:block;">
+                                <small class="field-caption">
                                     {{ \App\Models\Booking::SLOTS['stay22']['label'] }} — blank means the slot
                                     is not offered anywhere
                                 </small>
@@ -452,7 +452,7 @@
                             </div>
                             <div>
                                 <label class="form-label">22-Hour Peak Rate</label>
-                                <small style="font-size: 13px; color:#94a3b8; margin-bottom:4px; display:block;">
+                                <small class="field-caption">
                                     Falls back to the 22-hour regular rate if blank
                                 </small>
                                 <div class="input-prefix">
@@ -483,7 +483,7 @@
                                     <span>{{ $amenity }}</span>
                                 </label>
                             @empty
-                                <p class="text-muted-theme" style="font-size:13px;">
+                                <p class="text-muted-theme fs-13">
                                     No amenities configured yet — add some in Settings → Amenities.
                                 </p>
                             @endforelse
@@ -505,9 +505,10 @@
                     <div class="form-card-body">
 
                         @if ($property->images->count() > 0)
-                            <p class="text-muted-theme mb-12" style="font-size: 14px;">
+                            <p class="text-muted-theme mb-12 fs-14">
                                 Current photos — click ✕ to remove
                             </p>
+                            <div class="alert alert-danger" id="imageDeleteError" role="alert" hidden></div>
                             <div class="existing-images" id="existingImages">
                                 @foreach ($property->images as $image)
                                     <div class="existing-img-item" data-image-id="{{ $image->id }}">
@@ -670,6 +671,15 @@
 
             const imageContainer = btn.closest('.existing-img-item');
             const imageId = imageContainer.getAttribute('data-image-id');
+            const errorBox = document.getElementById('imageDeleteError');
+            if (errorBox) errorBox.hidden = true;
+
+            function showImageDeleteError(message) {
+                if (!errorBox) return;
+                errorBox.textContent = message;
+                errorBox.hidden = false;
+                errorBox.scrollIntoView({ block: 'nearest' });
+            }
 
             fetch(deleteImageUrlTemplate.replace('__IMAGE_ID__', imageId), {
                     method: 'DELETE',
@@ -696,12 +706,12 @@
                         }, 300);
                     } else {
                         console.error('Delete image failed:', response.status, response.type);
-                        alert('Failed to delete the image (HTTP ' + response.status + '). Please try again.');
+                        showImageDeleteError('The photo was not deleted (HTTP ' + response.status + '). Try again.');
                     }
                 })
                 .catch(error => {
                     console.error('Error:', error);
-                    alert('An error occurred while deleting the image.');
+                    showImageDeleteError('The photo was not deleted. Check your connection and try again.');
                 });
         }
     </script>

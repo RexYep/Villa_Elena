@@ -8,7 +8,7 @@
 
 @section('content')
 
-    <h2>Create your account</h2>
+    <h1>Create your account</h1>
     <p class="subtitle">Book your dream getaway at Villa Elena</p>
 
     <form method="POST" action="{{ route('register') }}">

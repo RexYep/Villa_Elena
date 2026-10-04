@@ -58,12 +58,12 @@
             font-weight: 600;
             letter-spacing: 1.2px;
             text-transform: uppercase;
-            color: var(--gold);
+            color: var(--gold-text);
         }
 
         .villa-name {
-            font-family: 'Cormorant Garamond', serif;
-            font-size: 30px;
+            font-family: var(--font-display);
+            font-size: 26px;
             font-weight: 700;
             color: var(--text-main);
             line-height: 1.1;
@@ -79,8 +79,8 @@
         }
 
         .villa-rate-val {
-            font-family: 'Cormorant Garamond', serif;
-            font-size: 26px;
+            font-family: var(--font-display);
+            font-size: 23px;
             font-weight: 700;
             color: var(--text-main);
             line-height: 1;
@@ -125,8 +125,8 @@
         }
 
         .rooms-head h2 {
-            font-family: 'Cormorant Garamond', serif;
-            font-size: 22px;
+            font-family: var(--font-display);
+            font-size: 20px;
             font-weight: 600;
             color: var(--text-main);
             margin: 0;
@@ -211,7 +211,7 @@
             display: flex;
             align-items: center;
             gap: 8px;
-            background: var(--terracotta);
+            background: var(--btn-primary);
             color: #fff;
             border: none;
             border-radius: 9px;
@@ -224,7 +224,7 @@
         }
 
         .btn-add:hover {
-            background: var(--gold);
+            background: var(--btn-primary-hover);
             color: #fff;
         }
 
@@ -423,18 +423,18 @@
     {{-- Delete Confirmation Modal --}}
     <div class="modal fade" id="deleteModal" tabindex="-1">
         <div class="modal-dialog modal-sm modal-dialog-centered">
-            <div class="modal-content" style="border-radius:14px; border:none;">
+            <div class="modal-content modal-soft">
                 <div class="modal-body text-center p-4">
                     <div
-                        style="width:56px;height:56px;background:#fee2e2;border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 16px;font-size:24px;color:#ef4444;">
+                        style="width:56px;height:56px;background:#fee2e2;border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 16px;font-size:24px;color:#b91c1c;">
                         <i class="bi bi-trash"></i>
                     </div>
-                    <h5 style="font-family:'Cormorant Garamond',serif;font-size:20px;margin-bottom:8px;">Delete Property?
+                    <h5 style="font-family: var(--font-display);font-size: 18px;margin-bottom:8px;">Delete Property?
                     </h5>
-                    <p style="font-size:13px;color:#64748b;margin-bottom:20px;" id="deleteMsg"></p>
+                    <p style="font-size:13px;color:var(--muted);margin-bottom:20px;" id="deleteMsg"></p>
                     <form id="deleteForm" method="POST">
                         @csrf @method('DELETE')
-                        <div style="display:flex;gap:8px;">
+                        <div class="flex-gap-8">
                             <button type="button" class="btn btn-light w-50" data-bs-dismiss="modal">Cancel</button>
                             <button type="submit" class="btn btn-danger w-50">Delete</button>
                         </div>

@@ -57,8 +57,8 @@
         }
 
         .card-header-custom h3 {
-            font-family: 'Cormorant Garamond', serif;
-            font-size: 17px;
+            font-family: var(--font-display);
+            font-size: 16px;
             font-weight: 600;
             color: var(--text-main);
         }
@@ -90,9 +90,9 @@
         }
 
         .profile-name {
-            font-family: 'Cormorant Garamond', serif;
+            font-family: var(--font-display);
             color: #fff;
-            font-size: 20px;
+            font-size: 18px;
             font-weight: 700;
         }
 
@@ -142,8 +142,8 @@
         }
 
         .mini-stat .val {
-            font-family: 'Cormorant Garamond', serif;
-            font-size: 26px;
+            font-family: var(--font-display);
+            font-size: 23px;
             font-weight: 700;
             color: var(--text-main);
         }
@@ -241,7 +241,7 @@
 
         .btn-toggle-inactive {
             background: #fee2e2;
-            color: #dc2626;
+            color: #b91c1c;
             border: 1px solid #fecaca;
         }
 
@@ -356,7 +356,7 @@
                     <div class="profile-email">{{ $user->email }}</div>
                     <span class="role-badge role-{{ $user->role }}">{{ ucfirst($user->role) }}</span>
                     @if (!$user->status)
-                        <div style="margin-top:8px;">
+                        <div class="mt-8">
                             <span class="tag-red"
                                 style="padding:3px 10px;border-radius:20px;font-size: 13px;font-weight:600;">Inactive</span>
                         </div>
@@ -442,7 +442,7 @@
                 <div class="card-header-custom">
                     <h3>Booking History</h3>
                     <a href="{{ route('admin.bookings.index', ['search' => $user->email]) }}"
-                        style="font-size: 14px;color:#2e5fa3;text-decoration:none;font-weight:500;">
+                        style="font-size: 14px;color:var(--terracotta);text-decoration:none;font-weight:500;">
                         View all <i class="bi bi-arrow-right"></i>
                     </a>
                 </div>
@@ -476,7 +476,7 @@
                                             </a>
                                         </td>
                                         <td>{{ $booking->property->property_name ?? 'N/A' }}</td>
-                                        <td class="text-muted-theme" style="font-size: 14px;">
+                                        <td class="text-muted-theme fs-14">
                                             {{ $booking->check_in_date->format('M d, Y') }}
                                         </td>
                                         <td class="text-center">{{ $booking->slot_name ?? '—' }}</td>

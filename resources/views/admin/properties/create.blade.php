@@ -200,7 +200,7 @@
             left: 4px;
             background: var(--gold);
             color: #fff;
-            font-size: 11px;
+            font-size: 12px;
             font-weight: 700;
             padding: 2px 6px;
             border-radius: 4px;
@@ -402,7 +402,7 @@
                 {{-- Pricing (Villa only) --}}
                 <div class="form-card" id="villaOnlyPricing" style="display:{{ $initialIsVilla ? 'block' : 'none' }};">
                     <div class="form-card-header">
-                        <div class="card-icon" style="background:#fef9c3; color:#a16207;"><i class="bi bi-tag"></i></div>
+                        <div class="card-icon tag-amber"><i class="bi bi-tag"></i></div>
                         <h3>Pricing</h3>
                     </div>
                     <div class="form-card-body">
@@ -412,7 +412,7 @@
                                      singil (Day 9 oras, Night 11 oras), hindi
                                      kada gabi. --}}
                                 <label class="form-label">Regular Rate <span class="req">*</span></label>
-                                <small style="font-size: 13px; color:#94a3b8; margin-bottom:4px; display:block;">
+                                <small class="field-caption">
                                     Mon–Thu, and Sun after 6PM
                                 </small>
                                 <div class="input-prefix">
@@ -438,7 +438,7 @@
                                      Fri/Sat AT Sun bago mag-6PM; ang Sun pagkatapos
                                      ng 6PM ay regular. Tingnan ang
                                      Property::getPackagePrice(). --}}
-                                <small style="font-size: 13px; color:#94a3b8; margin-top:4px; display:block;">
+                                <small class="field-hint d-block">
                                     Fri/Sat, and Sun before 6PM
                                 </small>
                             </div>
@@ -450,7 +450,7 @@
                                         value="{{ old('base_price_22h') }}" min="0" step="0.01"
                                         placeholder="Leave blank to hide the slot">
                                 </div>
-                                <small style="font-size: 13px; color:#94a3b8; margin-top:4px; display:block;">
+                                <small class="field-hint d-block">
                                     {{ \App\Models\Booking::SLOTS['stay22']['label'] }} — leave blank and the
                                     slot is not offered anywhere.
                                 </small>
@@ -463,7 +463,7 @@
                                         value="{{ old('weekend_price_22h') }}" min="0" step="0.01"
                                         placeholder="0.00">
                                 </div>
-                                <small style="font-size: 13px; color:#94a3b8; margin-top:4px; display:block;">
+                                <small class="field-hint d-block">
                                     Falls back to the 22-hour regular rate if blank
                                 </small>
                             </div>
@@ -474,7 +474,7 @@
                 {{-- Amenities (Villa only) --}}
                 <div class="form-card" id="villaOnlyAmenities" style="display:{{ $initialIsVilla ? 'block' : 'none' }};">
                     <div class="form-card-header">
-                        <div class="card-icon" style="background:#dcfce7; color:#15803d;"><i class="bi bi-stars"></i>
+                        <div class="card-icon tag-green"><i class="bi bi-stars"></i>
                         </div>
                         <h3>Amenities</h3>
                     </div>
@@ -489,7 +489,7 @@
                                     <span>{{ $amenity }}</span>
                                 </label>
                             @empty
-                                <p class="text-muted-theme" style="font-size:13px;">
+                                <p class="text-muted-theme fs-13">
                                     No amenities configured yet — add some in Settings → Amenities.
                                 </p>
                             @endforelse
@@ -505,7 +505,7 @@
                 {{-- Image Upload --}}
                 <div class="form-card">
                     <div class="form-card-header">
-                        <div class="card-icon" style="background:#f3e8ff; color:#7c3aed;"><i class="bi bi-images"></i>
+                        <div class="card-icon tag-purple"><i class="bi bi-images"></i>
                         </div>
                         <h3>Photos</h3>
                     </div>
@@ -528,7 +528,7 @@
                 {{-- Settings --}}
                 <div class="form-card">
                     <div class="form-card-header">
-                        <div class="card-icon" style="background:#fef9c3; color:#a16207;"><i class="bi bi-sliders"></i>
+                        <div class="card-icon tag-amber"><i class="bi bi-sliders"></i>
                         </div>
                         <h3>Settings</h3>
                     </div>
