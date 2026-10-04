@@ -38,16 +38,17 @@
                     id="password"
                     name="password"
                     class="form-control @error('password') is-invalid @enderror"
-                    placeholder="Min. 8 characters"
+                    autocomplete="new-password" 
                     required
                 >
-                <button type="button" class="btn btn-outline-secondary" onclick="togglePassword('password', this)">
-                    <i class="bi bi-eye"></i>
+                <button type="button" class="btn btn-outline-secondary" data-pw-toggle="password" aria-label="Show password">
+                    <i class="bi bi-eye" aria-hidden="true"></i>
                 </button>
                 @error('password')
                     <div class="invalid-feedback">{{ $message }}</div>
                 @enderror
             </div>
+            @include('partials.password_rules', ['for' => 'password'])
         </div>
 
         <div class="mb-4">
@@ -58,11 +59,11 @@
                     id="password_confirmation"
                     name="password_confirmation"
                     class="form-control"
-                    placeholder="Repeat your new password"
+                    autocomplete="new-password"
                     required
                 >
-                <button type="button" class="btn btn-outline-secondary" onclick="togglePassword('password_confirmation', this)">
-                    <i class="bi bi-eye"></i>
+                <button type="button" class="btn btn-outline-secondary" data-pw-toggle="password_confirmation" aria-label="Show password">
+                    <i class="bi bi-eye" aria-hidden="true"></i>
                 </button>
             </div>
         </div>

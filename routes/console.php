@@ -30,3 +30,8 @@ Schedule::command('prescriptive:generate')->dailyAt('01:30');
 // `withoutOverlapping()` because this is driven by an HTTP ping: a slow run and
 // the next ping arriving would otherwise have two pruners deleting the same rows.
 Schedule::command('staff-logs:prune')->dailyAt('03:20')->withoutOverlapping();
+
+// Self-registered accounts never verified within 48 hours. Hourly rather than
+// daily so "48 hours" means 48–49, not 48–72. What it refuses to touch is
+// documented on the command.
+Schedule::command('users:prune-unverified')->hourlyAt(40)->withoutOverlapping();

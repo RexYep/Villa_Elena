@@ -588,7 +588,7 @@ class PortalController extends Controller
             'policies_accepted' => 'accepted',
         ], [
             'checkin.before_or_equal' => Booking::advanceLimitMessage(),
-            'policies_accepted.accepted' => 'Please confirm that you have read the booking policies before continuing.',
+            'policies_accepted.accepted' => 'Please read and agree to the booking policies before continuing.',
         ]);
 
         [$checkin, $checkout] = Booking::slotDateTimes($request->slot, $request->checkin);

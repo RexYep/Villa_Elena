@@ -60,7 +60,7 @@ class UserController extends Controller
             'email'     => 'required|email|unique:users,email',
             'phone'     => 'required|string|max:20',
             'role'      => 'required|in:customer,staff,admin',
-            'password'  => 'required|string|min:8|confirmed',
+            'password'  => ['required', 'string', 'confirmed', \Illuminate\Validation\Rules\Password::defaults()],
             'address'   => 'nullable|string',
         ]);
 
@@ -113,7 +113,7 @@ class UserController extends Controller
             'phone'     => 'required|string|max:20',
             'role'      => 'required|in:customer,staff,admin',
             'address'   => 'nullable|string',
-            'password'  => 'nullable|string|min:8|confirmed',
+            'password'  => ['nullable', 'string', 'confirmed', \Illuminate\Validation\Rules\Password::defaults()],
         ]);
 
         $data = [

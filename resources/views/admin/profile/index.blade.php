@@ -199,24 +199,39 @@
                 <div class="settings-card-body">
                     <div class="mb-16">
                         <label for="f_current_password" class="form-label">Current Password <span class="req">*</span></label>
-                        <input id="f_current_password" type="password" name="current_password"
+                        <div class="pw-field">
+                            <input id="f_current_password" type="password" autocomplete="current-password" name="current_password"
                             class="form-control @error('current_password') is-invalid @enderror" required>
+                            <button type="button" class="pw-toggle" data-pw-toggle="f_current_password" aria-label="Show password">
+                                <i class="bi bi-eye" aria-hidden="true"></i>
+                            </button>
+                        </div>
                         @error('current_password')
                             <span class="invalid-feedback">{{ $message }}</span>
                         @enderror
                     </div>
                     <div class="mb-16">
                         <label for="f_password" class="form-label">New Password <span class="req">*</span></label>
-                        <input id="f_password" type="password" name="password"
+                        <div class="pw-field">
+                            <input id="f_password" type="password" autocomplete="new-password" name="password"
                             class="form-control @error('password') is-invalid @enderror" required>
+                            <button type="button" class="pw-toggle" data-pw-toggle="f_password" aria-label="Show password">
+                                <i class="bi bi-eye" aria-hidden="true"></i>
+                            </button>
+                        </div>
                         @error('password')
                             <span class="invalid-feedback">{{ $message }}</span>
                         @enderror
-                        <span class="hint">At least 8 characters.</span>
+                        @include('partials.password_rules', ['for' => 'f_password'])
                     </div>
                     <div>
                         <label for="f_password_confirmation" class="form-label">Confirm New Password <span class="req">*</span></label>
-                        <input id="f_password_confirmation" type="password" name="password_confirmation" class="form-control" required>
+                        <div class="pw-field">
+                            <input id="f_password_confirmation" type="password" autocomplete="new-password" name="password_confirmation" class="form-control" required>
+                            <button type="button" class="pw-toggle" data-pw-toggle="f_password_confirmation" aria-label="Show password">
+                                <i class="bi bi-eye" aria-hidden="true"></i>
+                            </button>
+                        </div>
                     </div>
                 </div>
             </div>

@@ -224,6 +224,40 @@ decision): it is how they preview the public site, and `home()` has no role
 redirect. Closing a tab does not sign anyone out (`SESSION_EXPIRE_ON_CLOSE` is
 false), so typing the bare site address while signed in still shows it.
 
+### The booking policies must be opened before payment
+
+The booking form asked the guest to tick "I have read the booking policies",
+but the policies were only inside a popup, and the checkbox (and its whole row)
+could be ticked without opening it. A guest could agree to the non-refundable
+rule without it ever being on screen.
+
+- **There is no checkbox any more (owner's decision).** The card has one
+  button, "Read the booking policies" (`#policyOpen`), which opens the popup.
+  The popup's **"I've read and agree"** button is the only thing that enables
+  "Proceed to Payment": it writes `1` into the hidden `policies_accepted` field.
+  The open button then turns into a green "Booking policies read — view again"
+  and still reopens the popup.
+- **The server contract is unchanged:** `submitBooking()` still requires
+  `policies_accepted` to be `accepted`, and that is still the real barrier. The
+  server cannot prove the popup was opened — that was equally true of the
+  checkbox.
+- **The policy sentence is not printed on the form itself.** It was added there
+  briefly as a red box while the checkbox could still be ticked blind; with the
+  popup now mandatory it would only be a third copy. `CANCELLATION_POLICY`
+  appears in the popup and on the payment page.
+- **The payment page's reminder stays.** It is not a duplicate of the popup: it
+  is the one rule that costs money, repeated at the last moment before the guest
+  pays. It is `.policy-notice` at 14px (was inline-styled 12px), with the policy
+  sentence in bold above the "you can reschedule instead" line.
+- **"Check-in time" and "Check-out time" left the popup.** They are details of
+  the booking, already in Stay Details on the same page, not policies. The popup
+  is now Deposit, Cancellation, Rescheduling.
+- **The disabled "Proceed to Payment" button says why:** "Read the booking
+  policies to continue." (`#submitHint`, hidden by the same `sync()` that enables
+  the button, and wired to it with `aria-describedby`).
+- The Brave warning still applies to the new button: no class or id containing
+  `consent` (Easylist-Cookie hides it).
+
 ---
 
 ## What Changed in v7.54
@@ -281,6 +315,19 @@ them instead of re-deciding.
   section stylesheet resets `* { margin: 0 }`; it now sets `margin: auto`.
 - **Walk-in form.** From 1200px the Payment card and the submit button sit in
   a sticky right column beside Guest and Stay details.
+- **Passwords need a special character, and the forms say so.** The rule is
+  now `min(8)->letters()->numbers()->symbols()`, in `App\Support\PasswordPolicy`
+  together with the wording that describes it. `partials/password_rules`
+  prints that wording as a checklist under every new-password field
+  (register, reset, the three profile pages, admin create/edit user), and
+  `partials/password_ui` ticks each line as the person types. Before this the
+  rule sat in a placeholder on four forms, and the staff and admin profile
+  pages said only "At least 8 characters" while the server also wanted a
+  number. Existing passwords are untouched: the rule runs only when a password
+  is set, and login still checks `min:6`. Laravel's `symbols()` counts a space
+  as a symbol, and the checklist's pattern does the same on purpose.
+  Every password field also has a labelled show/hide button and an
+  `autocomplete` of `current-password` or `new-password`.
 - **Landing section labels** are sentence case in the italic display face
   instead of tracked-out capitals.
 - **`errors/403.blade.php` rendered as raw Blade.** Its title was
@@ -3992,6 +4039,7 @@ succeed. New actions in `AuthController`:
 | `login_rejected_inactive` | Correct password on a deactivated account — not a guess |
 | `two_factor_failed` | Wrong or expired 2FA code |
 | `two_factor_exhausted` | Code cancelled after 5 wrong guesses |
+| `two_factor_locked` | 15 wrong guesses in an hour across codes — verification locked for the account |
 
 Two things here are load-bearing. **The browser's answer is unchanged** — both
 failure branches still return the identical generic `Invalid email or password.`,
@@ -4997,11 +5045,11 @@ An audit of every route found the same problem worse elsewhere. The limits were 
 | `booking-submit` | `POST /book/{property}` | 10 per 10 min per user |
 | `login` | `POST /login` | 30/min per IP (flood guard only; see lockout below) |
 | `register` | `POST /register` | 3/min, 10/hour, 20/day per IP |
-| `password-email` | `POST /forgot-password` | 3/min and 10/hour per IP, **3/hour per address** |
+| `password-email` | `POST /forgot-password` | 3/min and 10/hour per IP, **3/hour and 5/day per address** |
 | `password-reset` | `POST /reset-password` | 5/min per IP |
 | `two-factor-verify` | `POST /two-factor/verify` | 10/min per IP |
 | `two-factor-resend` | `POST /two-factor/resend` | 2/min and 6/hour per pending login, 20/hour per IP |
-| `verification-send` | `POST /email/verification-notification` | 2/min, 6/hour per user |
+| `verification-send` | `POST /email/verification-notification` | 2/min, 6/hour, 10/day per user |
 | `chatbot` | `POST /chatbot` | 10/min, 60/hour, 150/day per user or IP |
 | `password-confirm` | `PUT my/profile/password`, `PUT my/profile/2fa`, `DELETE my/profile` | 5/min per user |
 | `review-write` | `POST my/bookings/{booking}/review`, `PUT my/reviews/{review}` | 10/min per user |
@@ -5030,6 +5078,42 @@ Rules that must survive edits:
 ### 2FA: a code is cancelled after 5 wrong guesses
 
 The route throttle is per IP, so a 6-digit code could be guessed from many IPs within its 10 minutes. `verifyTwoFactor()` counts wrong guesses in `2fa_attempts_{id}`; the 5th cancels the code. `issueTwoFactorCode()` (used by both login and resend) resets the counter.
+
+### 2FA: per-account budgets across codes
+
+The per-code cancel alone was resettable: a correct password on an untrusted device issues a fresh code with five fresh guesses, and that login path was bounded only by `throttle:login` (30/min per IP) — the `two-factor-resend` limiter never saw it. Anyone holding the password could flood the owner's inbox and guess at roughly 10 codes a minute per IP. Three `RateLimiter` budgets in `AuthController`, all keyed by **user id** (any IP, any session), close that:
+
+| Key | Limit | Counts |
+|---|---|---|
+| `2fa-issue:h:{id}` | 6 per hour | every code issued, login and resend together |
+| `2fa-issue:d:{id}` | 12 per day | the same |
+| `2fa-wrong:{id}` | 15 per hour | wrong guesses against a live code, whichever code |
+
+- **Both issuing paths call `twoFactorIssueProblem()` before `issueTwoFactorCode()`**; a new path that issues a code must too. Over budget, login answers on the `email` field and resend on the `error` flash.
+- At 15 wrong guesses the live code is cancelled, `two_factor_locked` is written to `staff_logs`, and until the window ends `verifyTwoFactor()` refuses **even a correct code** and no new code is issued.
+- A submission with no live code (expired) is not counted, and a successful verify does not clear the wrong-guess counter — the owner and a guesser can be active at the same time.
+- Accepted cost: someone who knows the password can use up the owner's codes for the day. A trusted device skips 2FA, so the owner's usual browser is unaffected.
+
+### Forgot password: three more ways it revealed a registered address
+
+The request form already gave one answer for every address. Three other channels still told them apart, and are closed:
+
+- **The reset form echoed the broker's status.** `back()->withErrors(['email' => __($status)])` returned "We can't find a user with that email address." for an unknown address and "This password reset token is invalid." for a known one, so a made-up token was a membership check at 5/min. `resetPassword()` now returns one message for every failure and logs the real status.
+- **Response time.** `Password::sendResetLink()` ran inside the request, so a registered address took as long as sending an email and an unknown one answered at once. It now runs in `defer()`, after the response is sent; the request does validation and nothing else. **Don't move it back inline**, and don't use `app()->terminating()` for it — those callbacks accumulate on a long-lived application instance, which is how the test caught a second send.
+- **The mail-failure error.** "The password reset link cannot be sent right now" could only be reached by a registered address. Because the send is deferred there is no such branch any more; a failure goes to the log.
+
+Also: the `password-email` limiter gained **5 per day per address** (3/hour alone allowed 72 emails a day to one inbox), and a completed reset now sends the account an in-app *Your Password Was Changed* notification — the audit row is for admins, and the owner would otherwise learn of a reset they didn't make only when their login failed.
+
+### Registration: planted accounts, floods, input rules, bots
+
+**The verification link alone no longer verifies.** It proved the clicker reads the inbox, not that they chose the password — so anyone could register a stranger's address with their own password, and the stranger, clicking a genuine "verify your account" email, handed over a verified account. `verifyEmail()` now completes only in a session signed in as **that** account: signed out, it stores the URL in the session (`pending_verification_url`) and sends the visitor to login, and `afterLoginRedirect()` (both login completions: plain and 2FA) returns them to it; signed in as someone else, it refuses. Verified now means *knows the password and reads the inbox*.
+
+- **Rejected: overwriting an unverified account with a newer sign-up.** The link is tied to id + email, not to a password, so an attacker registering *second* would replace the first person's password and the first person's own link would then verify it. Never add this.
+- **A completed password reset sets `email_verified_at`.** The reset link proves the inbox and the holder has just chosen the password. It is also how the real owner takes back a squatted address. Walk-in guests given an account get verified this way too.
+- **`users:prune-unverified`** (hourly) deletes customer accounts unverified for 48 hours. It keeps anything with a booking (trashed included — every walk-in account has one), rows with no email, non-customers, and admin-created accounts. The last has no column to test, only the `created_user` audit row (kept 365 days), so the command never looks at accounts older than 30 days. `AdminSeeder` marks its accounts verified for the same reason. This is housekeeping; the barrier is the rule above.
+- **The duplicate-sign-up notice is sent once per address per day**, silently. Because a capped attempt sends nothing, all mail and the admin notification in `register()` now run in `defer()` — inline, the taken branch became fast on the second try and timing gave the answer away.
+- **Input rules:** name is letters, spaces and `. ' -`; phone is digits, spaces, `-` and a leading `+` (7–19 characters); password needs 8 characters with a letter, a number and a special character (v7.54; see `App\Support\PasswordPolicy`). **The password rule is `Password::defaults()`, defined once in `AppServiceProvider::boot()`**, and every form that sets a password uses it: registration, reset, the admin/staff/customer profile pages and the admin's create/edit user forms. Don't type a `min:8` rule into a controller — registration alone being strict let anyone swap a good password for `12345678` on the reset form. Existing passwords are not affected; the rule applies when one is set.
+- **Bot checks (`registrationBotResponse()`, before validation):** a filled `fax_number` honeypot gets the normal "check your email" redirect and creates nothing; a missing or under-3-second `form_token` (encrypted render time) is sent back with a visible `error`, because a real guest can trip that one.
 
 ### Chatbot
 

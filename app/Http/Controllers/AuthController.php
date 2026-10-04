@@ -30,7 +30,15 @@ class AuthController extends Controller
     // route throttle is per network only, so without this a 6-digit code
     // could be guessed from many IPs inside its 10-minute life.
     private const OTP_MAX_ATTEMPTS      = 5;
-    private const LOGIN_MAX_FAILURES    = 5;   // per email + IP, per minute
+    // Per ACCOUNT, across every code and every IP. A correct password issues a
+    // fresh code with a fresh five guesses, so without these two budgets the
+    // per-code limit above could be reset by simply logging in again.
+    private const OTP_MAX_ISSUED_PER_HOUR = 6;  // login-issued and resent codes together
+    private const OTP_MAX_ISSUED_PER_DAY  = 12;
+    private const OTP_MAX_WRONG_PER_HOUR  = 15; // wrong guesses, whichever code they were against
+    private const PENDING_VERIFICATION_URL = 'pending_verification_url'; // session key
+    private const REGISTER_MIN_SECONDS = 3;    // faster than this from render to submit is a script
+    private const LOGIN_MAX_FAILURES   = 5;   // per email + IP, per minute
     private const LOGIN_MAX_FAILURES_PER_ACCOUNT = 15; // per email, any IP, per 15 minutes
 
     /**
@@ -224,6 +232,10 @@ class AuthController extends Controller
         // a device we haven't seen before — a matching, unexpired
         // trusted_devices row skips straight to a normal login.
         if ($user->two_factor_enabled && !$this->isTrustedDevice($user, $request)) {
+            if ($problem = $this->twoFactorIssueProblem($user)) {
+                return back()->withErrors(['email' => $problem])->withInput($request->only('email', 'remember'));
+            }
+
             $code = $this->issueTwoFactorCode($user);
 
             try {
@@ -241,7 +253,7 @@ class AuthController extends Controller
 
         if (Auth::attempt($credentials, $remember)) {
             $this->completeLogin($user, trustDevice: false);
-            return $this->redirectByRole($user);
+            return $this->afterLoginRedirect($user);
         }
 
         // Hash::check() already passed above, so arriving here means the
@@ -280,9 +292,30 @@ class AuthController extends Controller
             return redirect()->route('login');
         }
 
+        $wrongKey = $this->twoFactorWrongKey($user);
+
+        // Checked before the code is even read: while the account is locked a
+        // correct guess must not get in either.
+        if (RateLimiter::tooManyAttempts($wrongKey, self::OTP_MAX_WRONG_PER_HOUR)) {
+            return back()->withErrors(['code' => 'Too many incorrect codes. Please try again in '
+                .$this->waitText(RateLimiter::availableIn($wrongKey)).'.']);
+        }
+
         $hashedCode = $this->otpStore()->get("2fa_otp_{$user->id}");
 
         if (!$hashedCode || !Hash::check($request->code, $hashedCode)) {
+            // Only a guess against a live code counts; submitting an expired
+            // code is not guessing and must not lock the owner out.
+            if ($hashedCode && RateLimiter::hit($wrongKey, 3600) >= self::OTP_MAX_WRONG_PER_HOUR) {
+                $this->otpStore()->forget("2fa_otp_{$user->id}");
+
+                StaffLog::record('two_factor_locked', 'users', $user->id,
+                    "2FA verification locked for {$user->email} after ".self::OTP_MAX_WRONG_PER_HOUR.' incorrect codes within an hour');
+
+                return back()->withErrors(['code' => 'Too many incorrect codes. Please try again in '
+                    .$this->waitText(RateLimiter::availableIn($wrongKey)).'.']);
+            }
+
             if ($hashedCode && $this->otpAttemptsExhausted($user)) {
                 $this->otpStore()->forget("2fa_otp_{$user->id}");
 
@@ -312,7 +345,7 @@ class AuthController extends Controller
         Auth::login($user, $remember);
         $this->completeLogin($user, trustDevice: true);
 
-        return $this->redirectByRole($user)->with('success', 'Device verified! Welcome back.');
+        return $this->afterLoginRedirect($user)->with('success', 'Device verified! Welcome back.');
     }
 
     // ── Two-Factor: Resend Code ──────────────────────────────────────
@@ -323,6 +356,10 @@ class AuthController extends Controller
 
         if (!$user) {
             return redirect()->route('login');
+        }
+
+        if ($problem = $this->twoFactorIssueProblem($user)) {
+            return back()->with('error', $problem);
         }
 
         $code = $this->issueTwoFactorCode($user);
@@ -364,7 +401,69 @@ class AuthController extends Controller
         $this->otpStore()->put("2fa_otp_{$user->id}", Hash::make($code), now()->addMinutes(self::OTP_TTL_MINUTES));
         $this->otpStore()->forget("2fa_attempts_{$user->id}");
 
+        foreach ($this->twoFactorIssueLimits($user) as $key => [, $decaySeconds]) {
+            RateLimiter::hit($key, $decaySeconds);
+        }
+
         return $code;
+    }
+
+    // ── Two-Factor: Per-Account Budgets For Issuing A Code ──────────
+    private function twoFactorIssueLimits(User $user): array
+    {
+        return [
+            "2fa-issue:h:{$user->id}" => [self::OTP_MAX_ISSUED_PER_HOUR, 3600],
+            "2fa-issue:d:{$user->id}" => [self::OTP_MAX_ISSUED_PER_DAY, 86400],
+        ];
+    }
+
+    private function twoFactorWrongKey(User $user): string
+    {
+        return "2fa-wrong:{$user->id}";
+    }
+
+    /**
+     * Why a new code may not be issued right now, or null when it may.
+     *
+     * Both issuing paths (login and resend) must ask this first. The login
+     * path used to be bounded only by the 30/min route throttle, so anyone
+     * holding the password could mail the owner a code on every request and
+     * collect five fresh guesses each time.
+     */
+    private function twoFactorIssueProblem(User $user): ?string
+    {
+        $wrongKey = $this->twoFactorWrongKey($user);
+
+        if (RateLimiter::tooManyAttempts($wrongKey, self::OTP_MAX_WRONG_PER_HOUR)) {
+            return 'Too many incorrect verification codes were entered for this account. Please try again in '
+                .$this->waitText(RateLimiter::availableIn($wrongKey)).'.';
+        }
+
+        foreach ($this->twoFactorIssueLimits($user) as $key => [$max]) {
+            if (RateLimiter::tooManyAttempts($key, $max)) {
+                return 'Too many verification codes were requested for this account. Please try again in '
+                    .$this->waitText(RateLimiter::availableIn($key)).'.';
+            }
+        }
+
+        return null;
+    }
+
+    private function waitText(int $seconds): string
+    {
+        if ($seconds < 60) {
+            return $seconds.' '.Str::plural('second', $seconds);
+        }
+
+        if ($seconds < 3600) {
+            $minutes = (int) ceil($seconds / 60);
+
+            return $minutes.' '.Str::plural('minute', $minutes);
+        }
+
+        $hours = (int) ceil($seconds / 3600);
+
+        return $hours.' '.Str::plural('hour', $hours);
     }
 
     // ── Two-Factor: Count A Wrong Guess; True Once The Code Is Burnt ─
@@ -478,15 +577,23 @@ class AuthController extends Controller
         // The uniqueness itself has not gone anywhere: `users.email` carries a
         // UNIQUE index, and the duplicate branch below is what enforces it at
         // this layer.
+        if ($botResponse = $this->registrationBotResponse($request)) {
+            return $botResponse;
+        }
+
         $request->validate([
-            'full_name'             => 'required|string|max:150',
+            // Letters (any script), spaces and . ' - only. A name is echoed
+            // into the admins' "New Guest Registered" notification, so a free
+            // text field here was a way to post links at them.
+            'full_name'             => ['required', 'string', 'min:2', 'max:150', "regex:/^[\\pL\\pM][\\pL\\pM .'’-]*$/u"],
             'email'                 => 'required|email|max:100',
-            'phone'                 => 'required|string|max:20',
-            'password'              => 'required|string|min:8|confirmed',
+            'phone'                 => ['required', 'string', 'max:20', 'regex:/^\+?[0-9][0-9 -]{6,18}$/'],
+            'password'              => ['required', 'string', 'confirmed', \Illuminate\Validation\Rules\Password::defaults()],
             'password_confirmation' => 'required',
         ], [
-            'password.confirmed'        => 'Passwords do not match.',
-            'password.min'              => 'Password must be at least 8 characters.',
+            'full_name.regex'    => 'Please enter your name using letters only.',
+            'phone.regex'        => 'Please enter a valid phone number, for example 0917-123-4567.',
+            'password.confirmed' => 'Passwords do not match.',
         ]);
 
         // Hashed BEFORE the branch, and used by only one of them.
@@ -501,8 +608,13 @@ class AuthController extends Controller
 
         $existing = User::where('email', $request->email)->first();
 
+        // Everything slow — mail, and the Pusher call behind the admin
+        // notification — runs in defer(), after the response has gone. The
+        // duplicate notice is capped per address (see below), so a capped
+        // attempt sends nothing; done inline, that made the taken branch fast
+        // on the second try and the clock gave the answer the words withhold.
         if ($existing) {
-            $this->announceDuplicateRegistration($existing);
+            defer(fn () => $this->announceDuplicateRegistration($existing));
         } else {
             try {
                 $user = User::create([
@@ -514,17 +626,23 @@ class AuthController extends Controller
                     'status'    => 1,
                 ]);
 
-                NotificationHelper::newGuestRegistered($user);
+                defer(function () use ($user) {
+                    try {
+                        NotificationHelper::newGuestRegistered($user);
+                    } catch (\Throwable $e) {
+                        Log::error('Failed to notify admins of a new registration: ' . $e->getMessage());
+                    }
 
-                // Sends Laravel's built-in VerifyEmail notification. A failure
-                // here no longer needs flagging to the page: the answer is the
-                // same either way now, and the guest can ask for another link
-                // from the verification notice once they sign in.
-                try {
-                    $user->sendEmailVerificationNotification();
-                } catch (\Exception $e) {
-                    Log::error('Failed to send verification email: ' . $e->getMessage());
-                }
+                    // Sends Laravel's built-in VerifyEmail notification. A
+                    // failure here is not flagged to the page: the answer is
+                    // the same either way, and the guest can ask for another
+                    // link from the verification notice once they sign in.
+                    try {
+                        $user->sendEmailVerificationNotification();
+                    } catch (\Throwable $e) {
+                        Log::error('Failed to send verification email: ' . $e->getMessage());
+                    }
+                });
             } catch (\Illuminate\Database\UniqueConstraintViolationException $e) {
                 // Dalawang sabay na pagpaparehistro sa iisang address. Nauna
                 // ang isa; ang natalo ay tinatrato na parang nakita niya ang
@@ -533,7 +651,7 @@ class AuthController extends Controller
                 $duplicate = User::where('email', $request->email)->first();
 
                 if ($duplicate) {
-                    $this->announceDuplicateRegistration($duplicate);
+                    defer(fn () => $this->announceDuplicateRegistration($duplicate));
                 }
             }
         }
@@ -567,6 +685,18 @@ class AuthController extends Controller
      */
     private function announceDuplicateRegistration(User $user): void
     {
+        // Once per address per day, from any network. The route throttle is
+        // per IP, so without this a handful of IPs could fill the owner's
+        // inbox with this notice. Skipped silently: the form's answer does
+        // not depend on whether it was sent.
+        $key = 'register-notice:'.sha1(mb_strtolower((string) $user->email));
+
+        if (RateLimiter::tooManyAttempts($key, 1)) {
+            return;
+        }
+
+        RateLimiter::hit($key, 86400);
+
         try {
             Mail::to($user->email)->send(new RegistrationAttemptMail(
                 recipientName: $user->full_name,
@@ -575,6 +705,43 @@ class AuthController extends Controller
         } catch (\Throwable $e) {
             Log::error('Failed to send duplicate-registration notice: ' . $e->getMessage());
         }
+    }
+
+    /**
+     * Cheap bot checks, run before validation so a bot learns nothing from
+     * the validation errors. Returns the response to send, or null for a human.
+     *
+     * 1. Honeypot — `fax_number` is in the form but hidden from people. A
+     *    script that fills every input fills it. Answered with the SAME
+     *    redirect a real sign-up gets, so the bot has nothing to adapt to.
+     * 2. Fill time — `form_token` is the encrypted time the form was rendered.
+     *    Nobody types a name, email, phone and two passwords in under
+     *    REGISTER_MIN_SECONDS. This one answers with a visible message,
+     *    because a real guest can trip it (a fast resubmit after a validation
+     *    error) and must not be told an account was created when it wasn't.
+     */
+    private function registrationBotResponse(Request $request): ?\Illuminate\Http\RedirectResponse
+    {
+        if (filled($request->input('fax_number'))) {
+            Log::warning('Registration honeypot filled.', ['ip' => $request->ip()]);
+
+            return redirect()->route('register.pending')
+                ->with('success', 'Almost there — check your email to finish setting up your account.');
+        }
+
+        try {
+            $renderedAt = (int) decrypt((string) $request->input('form_token'));
+        } catch (\Throwable $e) {
+            $renderedAt = null;
+        }
+
+        if ($renderedAt === null || time() - $renderedAt < self::REGISTER_MIN_SECONDS) {
+            return back()
+                ->withInput($request->except(['password', 'password_confirmation', 'form_token', 'fax_number']))
+                ->with('error', 'That was a little too quick. Please check your details and submit again.');
+        }
+
+        return null;
     }
 
     // ── "Check your email" — ang iisang sagot ng register() ────────
@@ -628,25 +795,36 @@ class AuthController extends Controller
      * that address is registered" rather than claiming an email went out.
      * A status other than "sent" still goes to the log, so the diagnostic
      * information is kept — just not handed to the browser.
+     *
+     * The wording was only half of it. The broker ran INSIDE the request, so
+     * a registered address took as long as sending an email (seconds) while
+     * an unknown one answered at once, and a mail outage produced its own
+     * "cannot be sent right now" error that only a registered address could
+     * ever reach. Both told the browser what the message refuses to. The
+     * broker now runs after the response has been sent, so the request does
+     * the same work — validation and nothing else — for every address.
      */
     public function sendResetLink(Request $request)
     {
         $request->validate(['email' => 'required|email']);
 
-        $sameAnswer = 'If that address is registered, a password reset link is on its way. Please check your inbox and spam folder.';
+        $credentials = $request->only('email');
 
-        try {
-            $status = Password::sendResetLink($request->only('email'));
-        } catch (\Exception $e) {
-            Log::error('Failed to send password reset link: ' . $e->getMessage());
-            return back()->withErrors(['email' => 'The password reset link cannot be sent right now. Please try again later.']);
-        }
+        defer(function () use ($credentials) {
+            try {
+                $status = Password::sendResetLink($credentials);
+            } catch (\Throwable $e) {
+                Log::error('Failed to send password reset link: ' . $e->getMessage());
 
-        if ($status !== Password::RESET_LINK_SENT) {
-            Log::info('Password reset link not sent.', ['status' => $status]);
-        }
+                return;
+            }
 
-        return back()->with('success', $sameAnswer);
+            if ($status !== Password::RESET_LINK_SENT) {
+                Log::info('Password reset link not sent.', ['status' => $status]);
+            }
+        });
+
+        return back()->with('success', 'If that address is registered, a password reset link is on its way. Please check your inbox and spam folder.');
     }
 
     // ── Show Reset Password Page ───────────────────────────────────
@@ -664,7 +842,7 @@ class AuthController extends Controller
         $request->validate([
             'token'                 => 'required',
             'email'                 => 'required|email',
-            'password'              => 'required|string|min:8|confirmed',
+            'password'              => ['required', 'string', 'confirmed', \Illuminate\Validation\Rules\Password::defaults()],
             'password_confirmation' => 'required',
         ]);
 
@@ -674,6 +852,12 @@ class AuthController extends Controller
                 $user->forceFill([
                     'password'       => Hash::make($password),
                     'remember_token' => Str::random(60),
+                    // The emailed reset link is proof of the inbox, and the
+                    // person holding it has just chosen the password — the
+                    // same two things verifyEmail() requires. This is also how
+                    // the real owner takes back an address somebody else
+                    // registered: reset, and the account is theirs, verified.
+                    'email_verified_at' => $user->email_verified_at ?? now(),
                 ])->save();
 
                 // The reason this flow exists is "someone else is in my
@@ -692,12 +876,35 @@ class AuthController extends Controller
                 // why they are worth having on this particular event.
                 StaffLog::record('password_reset_completed', 'users', $user->id,
                     "Password reset completed for {$user->email} — all other sessions and trusted devices revoked");
+
+                // The audit row above is for admins. The account holder is the
+                // one who needs to know if this was not them, and they would
+                // otherwise find out only when their own login stops working.
+                try {
+                    NotificationHelper::notifyGuest(
+                        $user->id,
+                        'Your Password Was Changed',
+                        'Your password was reset on '.now()->format('M d, Y g:i A').' using the emailed reset link, and all other devices were signed out.'
+                            .' If this was not you, reset your password again right away and contact the resort.'
+                    );
+                } catch (\Throwable $e) {
+                    Log::error('Failed to notify user of password reset: ' . $e->getMessage());
+                }
             }
         );
 
-        return $status === Password::PASSWORD_RESET
-            ? redirect()->route('login')->with('success', 'Password reset successful. You can now log in.')
-            : back()->withErrors(['email' => __($status)]);
+        if ($status === Password::PASSWORD_RESET) {
+            return redirect()->route('login')->with('success', 'Password reset successful. You can now log in.');
+        }
+
+        // ONE message for every failure. The broker's own strings differ —
+        // "We can't find a user with that email address." for an unknown
+        // address, "This password reset token is invalid." for a known one —
+        // so echoing `__($status)` let anyone submit a made-up token and read
+        // off whether an address is registered. The real status is logged.
+        Log::info('Password reset refused.', ['status' => $status]);
+
+        return back()->withErrors(['email' => 'This password reset link is invalid or has expired. Please request a new one.']);
     }
 
     // ── Email Verification: Notice Page ────────────────────────────
@@ -710,11 +917,10 @@ class AuthController extends Controller
     }
 
     // ── Email Verification: Handle Link Click ──────────────────────
-    // This route is intentionally outside the 'auth' middleware so it
-    // works when the user clicks the link from Gmail without an active
-    // session. We validate the signed URL (handled by Laravel's 'signed'
-    // middleware), then look up the user by id, check the hash, mark
-    // them verified, log them in, and redirect to their dashboard.
+    // This route is intentionally outside the 'auth' middleware so a click
+    // from Gmail without an active session gets a friendly trip through the
+    // login page instead of losing the link. The signed URL is validated by
+    // Laravel's 'signed' middleware; the link never signs anyone in.
     public function verifyEmail(Request $request, $id, $hash)
     {
         $user = User::findOrFail($id);
@@ -724,34 +930,56 @@ class AuthController extends Controller
             abort(403, 'Invalid verification link.');
         }
 
+        // THE LINK ALONE NO LONGER VERIFIES. It proves the clicker can read
+        // the inbox; it does not prove they are the person who chose the
+        // password. Anyone could register with a stranger's address and their
+        // own password, and the stranger — receiving a genuine "verify your
+        // account" email — would click it and hand over a verified account
+        // the other person can log in to. Requiring a session for THIS account
+        // means verified = knows the password AND reads the inbox: the
+        // stranger lacks the first, whoever planted the account lacks the
+        // second.
+        if (! Auth::check()) {
+            // Remembered server-side, so nothing a visitor supplies decides
+            // where the login lands. afterLoginRedirect() sends them back
+            // here, and the signature is checked again on that request.
+            $request->session()->put(self::PENDING_VERIFICATION_URL, $request->fullUrl());
+
+            return redirect()->route('login')
+                ->with('success', 'Please sign in to finish verifying your email.');
+        }
+
+        if (Auth::id() !== $user->id) {
+            // Signed in as SOMEBODY ELSE — never redirect by the verified
+            // user's role, it would hand a guest an admin landing page.
+            return $this->redirectByRole(Auth::user())
+                ->with('error', 'That verification link belongs to a different account. Sign out, then open the link again.');
+        }
+
         if (!$user->hasVerifiedEmail()) {
             $user->markEmailAsVerified();
         }
 
-        // This used to `Auth::login($user)` when nobody was signed in, which
-        // made a 60-minute emailed URL a complete login: it was the ONLY path
-        // in this app that produced an authenticated session without a
-        // password, the only one that skipped the 2FA code entirely, and the
-        // only one that never checked isActive(). A forwarded message or a
-        // shared inbox was enough. Verifying an address proves the address
-        // works; it does not prove whoever opened the link is the account
-        // holder, and it certainly is not a second factor.
-        //
-        // The link is still signed, so it cannot be forged — this only
-        // removes the free session it used to hand out.
-        if (Auth::check() && Auth::id() === $user->id) {
-            // Already signed in as this very user (the common case: they
-            // registered a moment ago in this browser). Nothing is granted
-            // that they don't already have.
-            return $this->redirectByRole($user)
-                ->with('success', 'Email verified! Welcome to Villa Elena.');
+        return $this->redirectByRole($user)
+            ->with('success', 'Email verified! Welcome to Villa Elena.');
+    }
+
+    /**
+     * Where a completed login goes: back to a verification link that was
+     * opened while signed out, otherwise the role's landing page.
+     */
+    private function afterLoginRedirect(User $user)
+    {
+        $pending = request()->session()->pull(self::PENDING_VERIFICATION_URL);
+
+        // Only for the account the link is for. Signing in as someone else
+        // drops it rather than bouncing them to a page that will refuse them.
+        if ($pending && ! $user->hasVerifiedEmail()
+            && str_contains((string) parse_url($pending, PHP_URL_PATH), "/email/verify/{$user->id}/")) {
+            return redirect()->to($pending);
         }
 
-        // Nobody signed in, or signed in as SOMEBODY ELSE — never redirect by
-        // the verified user's role in that case, it would hand a guest an
-        // admin landing page.
-        return redirect()->route('login')
-            ->with('success', 'Email verified! Please log in to continue.');
+        return $this->redirectByRole($user);
     }
 
     // ── Email Verification: Resend Link ────────────────────────────

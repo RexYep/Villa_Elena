@@ -71,7 +71,7 @@
         }
 
         .btn-account-save {
-            background: var(--terracotta);
+            background: var(--btn-primary);
             color: #fff;
             border: none;
             border-radius: 9px;
@@ -83,7 +83,7 @@
         }
 
         .btn-account-save:hover {
-            background: var(--gold);
+            background: var(--btn-primary-hover); color: #fff;
         }
 
         @media (max-width: 900px) {
@@ -147,26 +147,41 @@
                 <div class="account-card-body">
                     <div class="account-field">
                         <label for="current_password">Current Password</label>
-                        <input type="password" name="current_password" id="current_password"
+                        <div class="pw-field">
+                            <input type="password" name="current_password" id="current_password"
                             autocomplete="current-password"
                             class="form-control @error('current_password') is-invalid @enderror" required>
+                            <button type="button" class="pw-toggle" data-pw-toggle="current_password" aria-label="Show password">
+                                <i class="bi bi-eye" aria-hidden="true"></i>
+                            </button>
+                        </div>
                         @error('current_password')
                             <span class="account-error">{{ $message }}</span>
                         @enderror
                     </div>
                     <div class="account-field">
                         <label for="password">New Password</label>
-                        <input type="password" name="password" id="password" autocomplete="new-password"
+                        <div class="pw-field">
+                            <input type="password" name="password" id="password" autocomplete="new-password"
                             class="form-control @error('password') is-invalid @enderror" required minlength="8">
+                            <button type="button" class="pw-toggle" data-pw-toggle="password" aria-label="Show password">
+                                <i class="bi bi-eye" aria-hidden="true"></i>
+                            </button>
+                        </div>
                         @error('password')
                             <span class="account-error">{{ $message }}</span>
                         @enderror
-                        <span class="account-hint">At least 8 characters.</span>
+                        @include('partials.password_rules', ['for' => 'password'])
                     </div>
                     <div class="account-field">
                         <label for="password_confirmation">Confirm New Password</label>
-                        <input type="password" name="password_confirmation" id="password_confirmation"
+                        <div class="pw-field">
+                            <input type="password" name="password_confirmation" id="password_confirmation"
                             autocomplete="new-password" class="form-control" required>
+                            <button type="button" class="pw-toggle" data-pw-toggle="password_confirmation" aria-label="Show password">
+                                <i class="bi bi-eye" aria-hidden="true"></i>
+                            </button>
+                        </div>
                     </div>
                 </div>
             </div>

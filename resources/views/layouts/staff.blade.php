@@ -81,6 +81,7 @@
 @yield('modals')
 
 @include('partials.confirm_dialog')
+@include('partials.password_ui')
 @stack('scripts')
 @include('staff.partials.realtime')
 </body>

@@ -77,7 +77,7 @@ class ProfileController extends Controller
         // all three light up together.
         $request->validateWithBag('updatePassword', [
             'current_password' => 'required|string',
-            'password' => 'required|string|min:8|confirmed',
+            'password' => ['required', 'string', 'confirmed', \Illuminate\Validation\Rules\Password::defaults()],
             'password_confirmation' => 'required',
         ], [
             'password.confirmed' => 'Passwords do not match.',

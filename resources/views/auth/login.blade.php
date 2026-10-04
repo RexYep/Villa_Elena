@@ -42,10 +42,11 @@
                     name="password"
                     class="form-control @error('password') is-invalid @enderror"
                     placeholder="Enter your password"
+                    autocomplete="current-password"
                     required
                 >
-                <button type="button" class="btn btn-outline-secondary" onclick="togglePassword('password', this)">
-                    <i class="bi bi-eye"></i>
+                <button type="button" class="btn btn-outline-secondary" data-pw-toggle="password" aria-label="Show password">
+                    <i class="bi bi-eye" aria-hidden="true"></i>
                 </button>
                 @error('password')
                     <div class="invalid-feedback">{{ $message }}</div>

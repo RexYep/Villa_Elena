@@ -304,88 +304,58 @@
             line-height: 1.5;
         }
 
-        /* ── Booking policies: agree row + modal ──
+        /* ── Booking policies: open button + modal ──
            DO NOT put the word "consent" back into this class or id. Brave
            ships Easylist-Cookie enabled by default ("Block cookie consent
            notices"), whose cosmetic filters hide elements whose class/id
            contains `consent` — they are aimed at cookie banners, and this
            row looked exactly like one. The result: in Brave the whole row
-           vanished, taking the required checkbox with it, so the booking
-           could not be completed at all. Chrome showed it fine, which is
+           vanished, taking the (then) required checkbox with it, so the
+           booking could not be completed at all. The same applies to the
+           button that replaced it. Chrome showed it fine, which is
            why it read as a responsiveness bug at first. The input's
            name="policies_accepted" is a server contract
            (PortalController::submitBooking) and is unaffected — filters
            match class/id, not name. */
-        .policy-agree-row {
+        /* Ang butones na nagbubukas ng booking policies. Ito ang
+           pangunahing aksyon ng card hangga't hindi pa pumapayag ang
+           guest; pagkatapos ay tahimik na itong "tapos na" at ang
+           Proceed to Payment na ang nangunguna. */
+        .policy-open {
             display: flex;
-            align-items: flex-start;
-            gap: 12px;
-            margin: 14px 0 4px;
-            padding: 13px 14px;
-            background: #ffffff;
-            border: 1.5px solid rgba(184, 148, 63, .45);
-            border-radius: 12px;
-            box-shadow: 0 2px 6px rgba(44, 36, 22, .04);
-            cursor: pointer;
-            transition: border-color .2s, background .2s, box-shadow .2s;
-        }
-
-        .policy-agree-row:hover {
-            border-color: var(--gold);
-            box-shadow: 0 3px 10px rgba(184, 148, 63, .12);
-        }
-
-        .policy-agree-row.is-checked {
-            background: rgba(184, 148, 63, .07);
-            border-color: var(--gold);
-        }
-
-        .policy-agree-row.is-invalid {
-            border-color: var(--tag-red-fg);
-            background: var(--tag-red-bg);
-            box-shadow: none;
-        }
-
-        .policy-agree-row input[type="checkbox"] {
-            width: 18px;
-            height: 18px;
-            margin-top: 1px;
-            flex-shrink: 0;
-            accent-color: var(--gold);
-            cursor: pointer;
-        }
-
-        .policy-agree-text {
-            font-size: 13px;
-            line-height: 1.55;
-            color: var(--stone);
-            flex: 1;
-        }
-
-        .policy-agree-text label {
-            cursor: pointer;
-            margin: 0;
-            font-weight: 500;
-        }
-
-        .policy-link {
-            background: rgba(184, 148, 63, .16);
-            border: none;
-            border-bottom: 1.5px solid var(--gold);
-            border-radius: 4px;
-            padding: 2px 7px;
-            font: inherit;
-            font-weight: 700;
-            color: var(--stone);
-            cursor: pointer;
-            transition: background .2s, color .2s;
-            display: inline-block;
-        }
-
-        .policy-link:hover,
-        .policy-link:focus-visible {
-            background: var(--gold);
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            width: 100%;
+            margin-top: 16px;
+            padding: 14px;
+            border: 2px solid var(--btn-primary);
+            border-radius: 10px;
+            background: var(--btn-primary);
             color: #fff;
+            font-family: var(--font-body);
+            font-size: 15px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: background-color .2s, border-color .2s, color .2s;
+        }
+
+        .policy-open:hover {
+            background: var(--btn-primary-hover);
+            border-color: var(--btn-primary-hover);
+        }
+
+        .policy-open.is-done {
+            background: var(--tag-green-bg);
+            border-color: var(--tag-green-fg);
+            color: var(--tag-green-fg);
+            font-size: 14px;
+            padding: 11px 14px;
+        }
+
+        .policy-open.is-invalid {
+            border-color: var(--tag-red-fg);
+            box-shadow: 0 0 0 3px var(--tag-red-bg);
         }
 
         .policy-modal {
@@ -540,37 +510,9 @@
                 margin-bottom: 75px;
             }
 
-            .policy-agree-row {
-                padding: 14px 15px;
-                gap: 12px;
-                margin: 16px 0 6px;
-                border: 2px solid rgba(184, 148, 63, .55);
-                background: #fdfbf7;
-                border-radius: 12px;
-            }
-
-            .policy-agree-row input[type="checkbox"] {
-                width: 20px;
-                height: 20px;
-                margin-top: 1px;
-            }
-
-            .policy-agree-text {
-                font-size: 13.5px;
-            }
         }
 
         @media (max-width: 480px) {
-            .policy-agree-row {
-                padding: 14px 12px;
-                gap: 10px;
-            }
-
-            .policy-agree-row input[type="checkbox"] {
-                width: 22px;
-                height: 22px;
-            }
-
             .policy-modal-head,
             .policy-modal-body,
             .policy-modal-foot {
@@ -756,25 +698,37 @@
                             Payable on the next step
                         </div>
 
-                        {{-- Kailangang basahin muna ang policies bago makapagbayad.
-                             Ang "booking policies" ay isang button, hindi label —
-                             kung nakabalot ito sa <label>, ang pag-click sa link ay
-                             magta-tick din ng checkbox, na siya mismong hindi natin
-                             gusto: dapat sadyain ng guest ang pag-tick. --}}
-                        <div class="policy-agree-row {{ $errors->has('policies_accepted') ? 'is-invalid' : '' }}"
-                            id="policyAgreeRow">
-                            <input type="checkbox" id="policiesAccepted" name="policies_accepted" value="1" required
-                                {{ old('policies_accepted') ? 'checked' : '' }}>
-                            <span class="policy-agree-text">
-                                <label for="policiesAccepted">I have read the</label>
-                                <button type="button" class="policy-link" data-bs-toggle="modal"
-                                    data-bs-target="#policiesModal">booking policies</button>
-                            </span>
-                        </div>
+                        {{-- Walang checkbox. Ang tanging daan papunta sa
+                             bayad ay ang "I've read and agree" sa LOOB ng
+                             popup — kaya hindi na maaaring pumayag ang guest
+                             sa mga patakarang hindi lumabas sa screen niya
+                             (ang dating checkbox ay natitiktikan nang hindi
+                             binubuksan ang popup). Ang butones na iyon ang
+                             naglalagay ng `1` sa nakatagong field; ang
+                             `accepted` rule sa submitBooking() pa rin ang
+                             tunay na harang. --}}
+                        <input type="hidden" name="policies_accepted" id="policiesAccepted"
+                            value="{{ old('policies_accepted') ? '1' : '' }}">
 
-                        <button type="submit" class="btn-submit" id="submitBooking">
+                        <button type="button"
+                            class="policy-open {{ $errors->has('policies_accepted') ? 'is-invalid' : '' }}"
+                            id="policyOpen" data-bs-toggle="modal" data-bs-target="#policiesModal">
+                            <i class="bi bi-file-text" id="policyOpenIcon" aria-hidden="true"></i>
+                            <span id="policyOpenLabel">Read the booking policies</span>
+                        </button>
+                        @error('policies_accepted')
+                            <div class="field-error">{{ $message }}</div>
+                        @enderror
+
+                        <button type="submit" class="btn-submit" id="submitBooking"
+                            aria-describedby="submitHint">
                             <i class="bi bi-credit-card"></i> Proceed to Payment
                         </button>
+                        {{-- Kung bakit naka-disable ang butones. Itinatago ng
+                             script sa ibaba kapag pumayag na ang guest. --}}
+                        <div class="terms-note" id="submitHint">
+                            Read the booking policies to continue.
+                        </div>
                         <div class="terms-note">
                             You'll be taken to secure payment via PayMongo next.
                         </div>
@@ -823,24 +777,10 @@
                         </div>
                     </div>
 
-                    <div class="policy-item">
-                        <div class="icon tag-green"><i class="bi bi-box-arrow-in-right"></i></div>
-                        <div>
-                            <h4>Check-in time</h4>
-                            <p><strong>{{ $checkin->format('g:i A') }}</strong> on
-                                {{ $checkin->format('l, M d, Y') }}</p>
-                        </div>
-                    </div>
-
-                    <div class="policy-item">
-                        <div class="icon tag-blue"><i class="bi bi-box-arrow-right"></i></div>
-                        <div>
-                            <h4>Check-out time</h4>
-                            <p><strong>{{ $checkout->format('g:i A') }}</strong> on
-                                {{ $checkout->format('l, M d, Y') }}</p>
-                        </div>
-                    </div>
-
+                    {{-- Walang "Check-in time" / "Check-out time" dito: detalye
+                         iyon ng booking na ito (nasa Stay Details na ng
+                         pahina), hindi patakaran, at pinalalabo lang nila ang
+                         tatlong totoong tuntunin. --}}
                     <div class="policy-item">
                         <div class="icon tag-red"><i class="bi bi-x-circle"></i></div>
                         <div>
@@ -868,7 +808,7 @@
                         <i class="bi bi-file-text"></i> Read the full Terms of Service
                     </a>
                     <button type="button" class="policy-agree" id="policyAgree" data-bs-dismiss="modal">
-                        <i class="bi bi-check2"></i> I've read these
+                        <i class="bi bi-check2"></i> I've read and agree
                     </button>
                 </div>
             </div>
@@ -879,48 +819,52 @@
 @push('scripts')
     <script>
         /* Hindi maaaring pindutin ang "Proceed to Payment" hangga't hindi
-           naka-tick ang policies checkbox.
+           pumapayag ang guest sa loob ng policies popup.
 
            Sa JS ginagawa ang pag-disable, hindi sa markup: kung mabigong
-           tumakbo ang script na ito, gumagana pa rin ang form — sasaluhin
-           pa rin ng `required` sa checkbox at ng `accepted` rule sa
-           PortalController::submitBooking() ang hindi nakatiking guest.
+           tumakbo ang script na ito, napipindot pa rin ang butones — at
+           tatanggihan ng `accepted` rule sa
+           PortalController::submitBooking() ang guest na hindi pumayag.
            Ang server ang tunay na nagpapatupad; UX affordance lang ito. */
         (function () {
-            const check = document.getElementById('policiesAccepted');
+            const accepted = document.getElementById('policiesAccepted');
             const submit = document.getElementById('submitBooking');
-            const consent = document.getElementById('policyAgreeRow');
+            const open = document.getElementById('policyOpen');
+            const openLabel = document.getElementById('policyOpenLabel');
+            const openIcon = document.getElementById('policyOpenIcon');
             const agree = document.getElementById('policyAgree');
+            const hint = document.getElementById('submitHint');
 
-            if (!check || !submit) return;
+            if (!accepted || !submit) return;
 
             function sync() {
-                submit.disabled = !check.checked;
-                if (check.checked) {
-                    consent?.classList.remove('is-invalid');
-                    consent?.classList.add('is-checked');
-                } else {
-                    consent?.classList.remove('is-checked');
+                const done = accepted.value === '1';
+                submit.disabled = !done;
+                if (hint) hint.hidden = done;
+                if (!open) return;
+
+                open.classList.toggle('is-done', done);
+                if (done) open.classList.remove('is-invalid');
+                // Nabubuksan pa rin ang popup pagkatapos, para mabasa ulit.
+                if (openLabel) {
+                    openLabel.textContent = done ? 'Booking policies read — view again' :
+                        'Read the booking policies';
+                }
+                if (openIcon) {
+                    openIcon.className = done ? 'bi bi-check-circle-fill' : 'bi bi-file-text';
                 }
             }
 
-            check.addEventListener('change', sync);
-
-            // Clicking anywhere on the agree box toggles the checkbox for easy mobile tap,
-            // while clicking the modal link button opens the modal without prematurely toggling.
-            consent?.addEventListener('click', (e) => {
-                if (e.target.closest('.policy-link') || e.target === check || e.target.closest('label')) return;
-                check.checked = !check.checked;
-                sync();
-            });
-
-            // Ang "I've read these" sa modal ang siya nang nagta-tick —
+            // Ang "I've read and agree" sa popup ang TANGING nagtatakda nito —
             // ang mismong pag-dismiss ay hawak ng data-bs-dismiss, kaya
             // hindi tayo umaasa sa Bootstrap JS API dito (na-load pa lang
             // iyon bilang module pagkatapos ng inline script na ito).
             agree?.addEventListener('click', () => {
-                check.checked = true;
+                accepted.value = '1';
                 sync();
+                // Ibalik ang focus sa susunod na hakbang, hindi sa butones
+                // na kakatapos lang gamitin.
+                setTimeout(() => submit.focus(), 0);
             });
 
             sync();

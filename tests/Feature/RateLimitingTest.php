@@ -79,6 +79,25 @@ class RateLimitingTest extends TestCase
             ->assertOk();
     }
 
+    public function test_password_email_is_capped_at_five_a_day_per_address(): void
+    {
+        $send = fn () => $this->post('/_limit/password-email', ['email' => 'victim@example.test']);
+
+        foreach (range(1, 3) as $_) {
+            $send()->assertOk();
+        }
+
+        // A new hour reopens the hourly three, but only two of the day's
+        // five are left.
+        $this->travel(61)->minutes();
+        $send()->assertOk();
+        $send()->assertOk();
+        $send()->assertRedirect()->assertSessionHas('error');
+
+        $this->travel(61)->minutes();
+        $send()->assertRedirect()->assertSessionHas('error');
+    }
+
     public function test_two_factor_resend_is_capped_per_pending_login(): void
     {
         $this->withSession(['2fa_user_id' => 7]);
@@ -313,6 +332,88 @@ class RateLimitingTest extends TestCase
 
         $issue();
         $this->assertFalse($exhausted(), 'A new code must reset the wrong-guess counter.');
+    }
+
+    public function test_two_factor_codes_are_capped_per_account_per_hour_and_per_day(): void
+    {
+        $controller = app(AuthController::class);
+        $user = (new User)->forceFill(['id' => 10]);
+        $problem = fn () => (fn ($u) => $this->twoFactorIssueProblem($u))->call($controller, $user);
+        $issue = fn () => (fn ($u) => $this->issueTwoFactorCode($u))->call($controller, $user);
+
+        foreach (range(1, 6) as $_) {
+            $this->assertNull($problem());
+            $issue();
+        }
+        $this->assertStringContainsString('Too many verification codes were requested', $problem());
+
+        // A new hour reopens the hourly budget, but the day's 12 still holds.
+        $this->travel(61)->minutes();
+
+        foreach (range(1, 6) as $_) {
+            $this->assertNull($problem());
+            $issue();
+        }
+
+        $this->travel(61)->minutes();
+        $this->assertStringContainsString('hour', $problem(), 'The daily cap must outlast the hourly one.');
+
+        $other = (new User)->forceFill(['id' => 11]);
+        $this->assertNull((fn ($u) => $this->twoFactorIssueProblem($u))->call($controller, $other),
+            'One account running out must not affect another.');
+    }
+
+    public function test_two_factor_locks_the_account_after_fifteen_wrong_codes_across_codes(): void
+    {
+        $this->makeUsersTable();
+        \Illuminate\Support\Facades\Schema::create('staff_logs', function ($table) {
+            $table->id();
+            $table->unsignedBigInteger('user_id')->nullable();
+            $table->string('action');
+            $table->string('target_table')->nullable();
+            $table->unsignedBigInteger('target_id')->nullable();
+            $table->text('description')->nullable();
+            $table->text('old_values')->nullable();
+            $table->text('new_values')->nullable();
+            $table->string('ip_address')->nullable();
+            $table->text('user_agent')->nullable();
+            $table->timestamps();
+        });
+
+        $user = User::forceCreate(['full_name' => 'G', 'email' => 'otp@example.test', 'password' => 'right-pass', 'two_factor_enabled' => true]);
+        $controller = app(AuthController::class);
+        $issue = fn () => (fn ($u) => $this->issueTwoFactorCode($u))->call($controller, $user);
+        $store = \Illuminate\Support\Facades\Cache::store(config('cache.limiter'));
+
+        // Three codes, five wrong guesses each: the per-code cancel alone
+        // would allow this forever.
+        foreach (range(1, 3) as $round) {
+            $issue();
+            // Known code, so the wrong guesses below are certain to be wrong.
+            $store->put("2fa_otp_{$user->id}", \Illuminate\Support\Facades\Hash::make('123456'), now()->addMinutes(10));
+
+            foreach (range(1, 5) as $_) {
+                // Own IP per round: the route throttle is 10/min per network.
+                $this->withServerVariables(['REMOTE_ADDR' => "10.0.1.{$round}"])
+                    ->withSession(['2fa_user_id' => $user->id])
+                    ->post('/two-factor/verify', ['code' => '000000'])
+                    ->assertSessionHasErrors('code');
+            }
+        }
+
+        // Locked: a fresh code may not be issued, and the right code is refused.
+        $this->assertStringContainsString('Too many incorrect verification codes',
+            (fn ($u) => $this->twoFactorIssueProblem($u))->call($controller, $user));
+
+        $store->put("2fa_otp_{$user->id}", \Illuminate\Support\Facades\Hash::make('123456'), now()->addMinutes(10));
+
+        $this->withServerVariables(['REMOTE_ADDR' => '10.0.1.9'])
+            ->withSession(['2fa_user_id' => $user->id])
+            ->post('/two-factor/verify', ['code' => '123456'])
+            ->assertSessionHasErrors('code');
+
+        $this->assertGuest();
+        $this->assertStringContainsString('Too many incorrect codes', session('errors')->first('code'));
     }
 
     public function test_chatbot_history_is_clamped_not_rejected(): void
@@ -578,6 +679,40 @@ class RateLimitingTest extends TestCase
 
         $this->assertSame($answers[0], $answers[1], 'The two answers must be byte-identical or the form is a membership check.');
         $this->assertStringContainsString('If that address is registered', (string) $answers[0]);
+    }
+
+    public function test_a_mail_failure_does_not_change_the_forgot_password_answer(): void
+    {
+        // Only a registered address can reach a send, so a different answer
+        // here is a membership check that works whenever mail is down.
+        Password::shouldReceive('sendResetLink')->once()->andThrow(new \RuntimeException('smtp down'));
+
+        $this->from('/forgot-password')->post('/forgot-password', ['email' => 'someone@example.test'])
+            ->assertRedirect('/forgot-password')
+            ->assertSessionHasNoErrors()
+            ->assertSessionHas('success', fn ($m) => str_contains($m, 'If that address is registered'));
+    }
+
+    public function test_the_reset_form_answers_the_same_for_an_unknown_address_and_a_bad_token(): void
+    {
+        $answers = [];
+
+        foreach ([Password::INVALID_USER, Password::INVALID_TOKEN] as $status) {
+            Password::shouldReceive('reset')->once()->andReturn($status);
+
+            $this->from('/reset-password/abc')->post('/reset-password', [
+                'token' => 'abc',
+                'email' => 'someone@example.test',
+                'password' => 'new-password-1',
+                'password_confirmation' => 'new-password-1',
+            ])->assertRedirect('/reset-password/abc');
+
+            $answers[] = session('errors')->first('email');
+            $this->flushSession();
+        }
+
+        $this->assertSame($answers[0], $answers[1], 'Different answers here reveal which addresses are registered.');
+        $this->assertStringContainsString('invalid or has expired', $answers[0]);
     }
 
     public function test_each_ai_report_has_its_own_refresh_cooldown(): void

@@ -144,6 +144,7 @@
     })();
 </script>
 @include('partials.confirm_dialog')
+@include('partials.password_ui')
 @stack('scripts')
 @include('admin.partials.realtime')
 @include('admin.partials.topbar_features')

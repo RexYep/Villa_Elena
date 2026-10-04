@@ -194,6 +194,30 @@
             gap: 5px;
         }
 
+        /* Ang huling paalala bago magbayad. 14px, hindi 12px: ito ang
+           pinakamahalagang pangungusap sa pahina. */
+        .policy-notice {
+            display: flex;
+            align-items: flex-start;
+            gap: 8px;
+            margin-bottom: 14px;
+            padding: 12px 14px;
+            border-radius: 10px;
+            background: var(--tag-red-bg);
+            color: var(--tag-red-fg);
+            font-size: 14px;
+            line-height: 1.6;
+        }
+
+        .policy-notice strong {
+            display: block;
+        }
+
+        .policy-notice a {
+            color: inherit;
+            text-decoration: underline;
+        }
+
         .qr-hint {
             display: flex;
             align-items: flex-start;
@@ -469,13 +493,14 @@
 
                 {{-- Ito ang huling sandali bago gumalaw ang pera, kaya dito
                      dapat makita ang patakaran — hindi lang sa Terms. --}}
-                <div
-                    style="background:#fef2f2;border:1px solid #fecaca;border-radius:10px;padding:12px 14px;margin-bottom:14px;font-size:12px;color:#991b1b;line-height:1.6;">
-                    <i class="bi bi-exclamation-circle me-1"></i>
-                    {{ \App\Models\Booking::CANCELLATION_POLICY }}
-                    If your plans change you can reschedule instead —
-                    <a href="{{ route('portal.terms') }}#cancellation" target="_blank" rel="noopener"
-                        style="color:#991b1b;text-decoration:underline;">see the terms</a>.
+                <div class="policy-notice">
+                    <i class="bi bi-exclamation-circle" aria-hidden="true"></i>
+                    <div>
+                        <strong>{{ \App\Models\Booking::CANCELLATION_POLICY }}</strong>
+                        If your plans change you can reschedule instead —
+                        <a href="{{ route('portal.terms') }}#cancellation" target="_blank" rel="noopener">see the
+                            terms</a>.
+                    </div>
                 </div>
 
                 <button type="submit" class="btn-pay" id="payBtn">

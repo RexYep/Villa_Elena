@@ -158,15 +158,15 @@ class RegistrationEnumerationTest extends TestCase
 
         $this->post('/register', $this->form(
             self::TAKEN,
-            name: 'CLICK http://evil.example/now',
-            phone: '0917-ATTACKER',
+            name: 'Impostor Persona',
+            phone: '0999-000-1234',
         ));
 
         Mail::assertSent(RegistrationAttemptMail::class, function ($mail) {
             $rendered = $mail->render();
 
-            $this->assertStringNotContainsString('evil.example', $rendered);
-            $this->assertStringNotContainsString('ATTACKER', $rendered);
+            $this->assertStringNotContainsString('Impostor', $rendered);
+            $this->assertStringNotContainsString('0999', $rendered);
             $this->assertStringContainsString('Existing Guest', $rendered);
 
             return true;
@@ -211,6 +211,176 @@ class RegistrationEnumerationTest extends TestCase
         );
     }
 
+    // ── Notice cap, input rules, bots ──────────────────────────────
+
+    /** Several networks must not be able to fill the owner's inbox. */
+    public function test_the_attempt_notice_is_sent_once_per_address_per_day(): void
+    {
+        Mail::fake();
+
+        foreach (['10.1.0.1', '10.1.0.2', '10.1.0.3'] as $ip) {
+            $this->withServerVariables(['REMOTE_ADDR' => $ip])
+                ->post('/register', $this->form(self::TAKEN))
+                ->assertRedirect(route('register.pending'));
+        }
+
+        Mail::assertSent(RegistrationAttemptMail::class, 1);
+    }
+
+    public function test_a_name_or_phone_carrying_a_link_is_refused(): void
+    {
+        Mail::fake();
+
+        $this->post('/register', $this->form('brand-new@example.test', name: 'CLICK http://evil.example/now'))
+            ->assertSessionHasErrors('full_name');
+
+        $this->post('/register', $this->form('brand-new@example.test', phone: '0917-ATTACKER'))
+            ->assertSessionHasErrors('phone');
+
+        $this->assertNull(User::where('email', 'brand-new@example.test')->first());
+    }
+
+    public function test_ordinary_names_and_phone_numbers_are_accepted(): void
+    {
+        Mail::fake();
+
+        foreach ([['María-José O’Neil Jr.', '+63 917 123 4567'], ['Juan dela Cruz', '0917-123-4567']] as $i => [$name, $phone]) {
+            $this->post('/register', $this->form("ok{$i}@example.test", name: $name, phone: $phone))
+                ->assertSessionHasNoErrors()
+                ->assertRedirect(route('register.pending'));
+        }
+    }
+
+    public function test_a_password_needs_letters_and_numbers(): void
+    {
+        Mail::fake();
+
+        foreach (['12345678', 'onlyletters'] as $weak) {
+            $this->post('/register', ['password' => $weak, 'password_confirmation' => $weak] + $this->form('brand-new@example.test'))
+                ->assertSessionHasErrors('password');
+        }
+    }
+
+    /**
+     * One rule for every form that sets a password. Registration alone being
+     * strict let anyone swap a good password for `12345678` on the reset form.
+     */
+    public function test_every_password_form_uses_the_shared_rule(): void
+    {
+        $validates = fn (string $password) => validator(
+            ['password' => $password],
+            ['password' => \Illuminate\Validation\Rules\Password::defaults()]
+        )->passes();
+
+        $this->assertFalse($validates('12345678'));
+        $this->assertFalse($validates('onlyletters'));
+        $this->assertFalse($validates('ab1'));
+        $this->assertTrue($validates('letters-and-1'));
+
+        foreach (['AuthController', 'Admin/UserController', 'Admin/ProfileController', 'Staff/ProfileController', 'Customer/ProfileController'] as $controller) {
+            $source = file_get_contents(app_path("Http/Controllers/{$controller}.php"));
+
+            $this->assertStringNotContainsString('min:8|confirmed', $source, "{$controller} still has its own password rule.");
+            $this->assertStringContainsString('Password::defaults()', $source, "{$controller} must use the shared password rule.");
+        }
+    }
+
+    /** A filled honeypot gets the usual answer and creates nothing. */
+    public function test_a_filled_honeypot_creates_no_account_and_looks_like_success(): void
+    {
+        Mail::fake();
+
+        $this->post('/register', ['fax_number' => '555-0100'] + $this->form('bot@example.test'))
+            ->assertRedirect(route('register.pending'))
+            ->assertSessionHasNoErrors();
+
+        $this->assertNull(User::where('email', 'bot@example.test')->first());
+        Mail::assertNothingSent();
+    }
+
+    public function test_a_form_submitted_too_fast_or_without_its_token_is_sent_back(): void
+    {
+        Mail::fake();
+
+        foreach ([encrypt(time()), 'not-a-token', null] as $token) {
+            $this->from('/register')
+                ->post('/register', ['form_token' => $token] + $this->form('fast@example.test'))
+                ->assertRedirect('/register')
+                ->assertSessionHas('error')
+                ->assertSessionMissing('_old_input.password');
+        }
+
+        $this->assertNull(User::where('email', 'fast@example.test')->first());
+    }
+
+    public function test_the_register_page_renders_with_the_bot_fields(): void
+    {
+        $this->get('/register')
+            ->assertOk()
+            ->assertSee('name="form_token"', false)
+            ->assertSee('name="fax_number"', false);
+    }
+
+    // ── Cleanup of accounts that never verified ────────────────────
+
+    public function test_the_cleanup_deletes_only_stale_self_registered_accounts(): void
+    {
+        Schema::create('bookings', function ($t) {
+            $t->id();
+            $t->unsignedBigInteger('user_id');
+            $t->softDeletes();
+            $t->timestamps();
+        });
+        Schema::create('staff_logs', function ($t) {
+            $t->id();
+            $t->unsignedBigInteger('user_id')->nullable();
+            $t->string('action');
+            $t->string('target_table')->nullable();
+            $t->unsignedBigInteger('target_id')->nullable();
+            $t->text('description')->nullable();
+            $t->text('old_values')->nullable();
+            $t->text('new_values')->nullable();
+            $t->string('ip_address')->nullable();
+            $t->text('user_agent')->nullable();
+            $t->timestamps();
+        });
+
+        $make = function (string $email, array $extra = [], int $ageHours = 72) {
+            $user = User::create($extra + ['full_name' => 'X', 'email' => $email, 'password' => 'x', 'role' => 'customer', 'status' => 1]);
+            $user->forceFill(['created_at' => now()->subHours($ageHours)])->save();
+
+            return $user;
+        };
+
+        $stale = $make('stale@example.test');
+        $fresh = $make('fresh@example.test', ageHours: 5);
+        $verified = $make('verified@example.test');
+        $verified->markEmailAsVerified();
+        $staff = $make('staff@example.test', ['role' => 'staff']);
+        $ancient = $make('ancient@example.test', ageHours: 24 * 90);
+
+        $walkIn = $make('walkin@example.test');
+        // Soft-deleted on purpose: a trashed booking still means "a real guest".
+        \Illuminate\Support\Facades\DB::table('bookings')->insert(['user_id' => $walkIn->id, 'deleted_at' => now()]);
+
+        $adminMade = $make('admin-made@example.test');
+        \Illuminate\Support\Facades\DB::table('staff_logs')->insert([
+            'action' => 'created_user', 'target_table' => 'users', 'target_id' => $adminMade->id, 'created_at' => now(),
+        ]);
+
+        // The seeded "Existing Guest" in setUp() is unverified and seconds old.
+        $this->artisan('users:prune-unverified', ['--dry-run' => true])->assertSuccessful();
+        $this->assertNotNull($stale->fresh(), 'A dry run must delete nothing.');
+
+        $this->artisan('users:prune-unverified')->assertSuccessful();
+
+        $this->assertNull($stale->fresh());
+
+        foreach ([$fresh, $verified, $staff, $ancient, $walkIn, $adminMade] as $kept) {
+            $this->assertNotNull($kept->fresh(), "{$kept->email} must be kept.");
+        }
+    }
+
     // ── The landing page ───────────────────────────────────────────
 
     /**
@@ -244,8 +414,10 @@ class RegistrationEnumerationTest extends TestCase
             'full_name' => $name,
             'email' => $email,
             'phone' => $phone,
-            'password' => 'a-good-password',
-            'password_confirmation' => 'a-good-password',
+            'password' => 'a-good-password-1',
+            'password_confirmation' => 'a-good-password-1',
+            // Rendered ten seconds ago: a person, not a script.
+            'form_token' => encrypt(time() - 10),
         ];
     }
 

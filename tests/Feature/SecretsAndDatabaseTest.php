@@ -621,6 +621,7 @@ class SecretsAndDatabaseTest extends TestCase
             $table->string('role')->default('customer');
             $table->string('phone')->nullable();
             $table->tinyInteger('status')->default(1);
+            $table->timestamp('email_verified_at')->nullable();
             $table->timestamps();
         });
 

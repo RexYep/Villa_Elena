@@ -117,6 +117,13 @@ class AdminSeeder extends Seeder
             );
         }
 
-        User::create($attributes + ['email' => $email, 'password' => Hash::make($password)]);
+        $user = User::create($attributes + ['email' => $email, 'password' => Hash::make($password)]);
+
+        // Seeded accounts are created on purpose, and the sample addresses
+        // cannot receive a verification email. Without this the sample
+        // customer is an unverified sign-up with no bookings, which is exactly
+        // what `users:prune-unverified` deletes after 48 hours.
+        // (`email_verified_at` is deliberately not fillable.)
+        $user->markEmailAsVerified();
     }
 }

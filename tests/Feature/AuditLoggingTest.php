@@ -266,8 +266,8 @@ class AuditLoggingTest extends TestCase
 
         $this->actingAs($user)->put('/my/profile/password', [
             'current_password' => 'the-real-password',
-            'password' => 'a-brand-new-password',
-            'password_confirmation' => 'a-brand-new-password',
+            'password' => 'a-brand-new-password-1',
+            'password_confirmation' => 'a-brand-new-password-1',
         ]);
 
         $entry = StaffLog::where('action', 'password_changed')->first();
@@ -275,7 +275,7 @@ class AuditLoggingTest extends TestCase
         $this->assertNotNull($entry);
         $this->assertSame($user->id, $entry->user_id);
         $this->assertSame($user->id, $entry->target_id);
-        $this->assertStringNotContainsString('a-brand-new-password', (string) $entry->description,
+        $this->assertStringNotContainsString('a-brand-new-password-1', (string) $entry->description,
             'The audit row must never carry the credential itself.');
     }
 
@@ -285,8 +285,8 @@ class AuditLoggingTest extends TestCase
 
         $this->actingAs($admin)->put('/admin/profile/password', [
             'current_password' => 'the-real-password',
-            'password' => 'a-brand-new-password',
-            'password_confirmation' => 'a-brand-new-password',
+            'password' => 'a-brand-new-password-1',
+            'password_confirmation' => 'a-brand-new-password-1',
         ]);
 
         $this->assertSame(1, StaffLog::where('action', 'password_changed')->where('user_id', $admin->id)->count());
@@ -298,8 +298,8 @@ class AuditLoggingTest extends TestCase
 
         $this->actingAs($user)->put('/my/profile/password', [
             'current_password' => 'not-the-current-one',
-            'password' => 'a-brand-new-password',
-            'password_confirmation' => 'a-brand-new-password',
+            'password' => 'a-brand-new-password-1',
+            'password_confirmation' => 'a-brand-new-password-1',
         ]);
 
         $this->assertSame(0, StaffLog::where('action', 'password_changed')->count(),
@@ -368,8 +368,8 @@ class AuditLoggingTest extends TestCase
         $this->post('/reset-password', [
             'token' => $token,
             'email' => 'resetme@example.test',
-            'password' => 'a-brand-new-password',
-            'password_confirmation' => 'a-brand-new-password',
+            'password' => 'a-brand-new-password-1',
+            'password_confirmation' => 'a-brand-new-password-1',
         ]);
 
         $entry = StaffLog::where('action', 'password_reset_completed')->first();
@@ -552,8 +552,8 @@ class AuditLoggingTest extends TestCase
             'phone' => '09170000000',
             'role' => $victim->role,
             'address' => null,
-            'password' => 'a-brand-new-password',
-            'password_confirmation' => 'a-brand-new-password',
+            'password' => 'a-brand-new-password-1',
+            'password_confirmation' => 'a-brand-new-password-1',
         ]);
 
         $entry = StaffLog::where('action', 'updated_user')->first();
@@ -564,7 +564,7 @@ class AuditLoggingTest extends TestCase
 
         // ...but never the credential itself, in any form.
         $payload = json_encode([$entry->old_values, $entry->new_values]);
-        $this->assertStringNotContainsString('a-brand-new-password', $payload);
+        $this->assertStringNotContainsString('a-brand-new-password-1', $payload);
         $this->assertStringNotContainsString('$2y$', $payload, 'Not the hash either.');
         $this->assertSame('[redacted]', $entry->old_values['password']);
     }

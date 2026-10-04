@@ -69,6 +69,7 @@
 </main>
 
 @include('partials.confirm_dialog')
+@include('partials.password_ui')
 @stack('scripts')
 
 {{-- Live notification bell: lights up the moment a new Notification row

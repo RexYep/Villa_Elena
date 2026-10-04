@@ -170,25 +170,26 @@
                             <div class="input-group">
                                 <input type="password" id="password" name="password"
                                     class="form-control @error('password') is-invalid @enderror"
-                                    placeholder="Min. 8 characters" {{ !isset($user) ? 'required' : '' }}>
+                                    autocomplete="new-password" {{ !isset($user) ? 'required' : '' }}>
                                 <button type="button" class="btn btn-outline-secondary"
-                                    onclick="togglePw('password',this)">
-                                    <i class="bi bi-eye"></i>
+                                    data-pw-toggle="password" aria-label="Show password">
+                                    <i class="bi bi-eye" aria-hidden="true"></i>
                                 </button>
                                 @error('password')
                                     <span class="invalid-feedback">{{ $message }}</span>
                                 @enderror
                             </div>
+                            @include('partials.password_rules', ['for' => 'password'])
                         </div>
                         <div>
                             <label class="form-label">Confirm Password {{ !isset($user) ? '*' : '' }}</label>
                             <div class="input-group">
                                 <input type="password" id="password_confirmation" name="password_confirmation"
-                                    class="form-control" placeholder="Repeat password"
+                                    class="form-control" autocomplete="new-password"
                                     {{ !isset($user) ? 'required' : '' }}>
                                 <button type="button" class="btn btn-outline-secondary"
-                                    onclick="togglePw('password_confirmation',this)">
-                                    <i class="bi bi-eye"></i>
+                                    data-pw-toggle="password_confirmation" aria-label="Show password">
+                                    <i class="bi bi-eye" aria-hidden="true"></i>
                                 </button>
                             </div>
                         </div>
@@ -211,15 +212,4 @@
 
 @endsection
 
-@push('scripts')
-    <script>
-        function togglePw(id, btn) {
-            const input = document.getElementById(id);
-            const icon = btn.querySelector('i');
-            input.type = input.type === 'password' ? 'text' : 'password';
-            icon.classList.toggle('bi-eye');
-            icon.classList.toggle('bi-eye-slash');
-        }
-    </script>
-@endpush
 

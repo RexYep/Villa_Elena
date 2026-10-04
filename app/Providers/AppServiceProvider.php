@@ -131,6 +131,17 @@ class AppServiceProvider extends ServiceProvider
         $this->guardDestructiveMigrations();
         $this->registerHealthCheck();
 
+        // The ONE password rule. Every form that sets a password uses
+        // `Password::defaults()` — registration, reset, the three profile
+        // pages and the admin's user forms. A rule typed into each controller
+        // is how registration ended up stricter than the reset form, which
+        // let anyone trade a strong password for `12345678`. The rule itself
+        // and the words that describe it to the guest both come from
+        // PasswordPolicy, so the forms cannot state a different rule.
+        \Illuminate\Validation\Rules\Password::defaults(
+            fn () => \App\Support\PasswordPolicy::rule()
+        );
+
         // Brevo's HTTPS API is the PRODUCTION transport: Render's free
         // plan blocks outbound SMTP ports entirely, so the live site
         // can't use an SMTP mailer at all. Local dev uses MAIL_MAILER=smtp
@@ -408,6 +419,7 @@ class AppServiceProvider extends ServiceProvider
                 Limit::perMinute(3)->by('m:'.$request->ip())->response($respond),
                 Limit::perHour(10)->by('h:'.$request->ip())->response($respond),
                 Limit::perHour(3)->by('e:'.strtolower(trim((string) $request->input('email'))))->response($respond),
+                Limit::perDay(5)->by('ed:'.strtolower(trim((string) $request->input('email'))))->response($respond),
             ];
         });
 
@@ -443,6 +455,10 @@ class AppServiceProvider extends ServiceProvider
             return [
                 Limit::perMinute(2)->by('m:'.$this->throttleIdentity($request))->response($respond),
                 Limit::perHour(6)->by('h:'.$this->throttleIdentity($request))->response($respond),
+                // The address was typed at sign-up and is not yet proven to
+                // be the clicker's own, so the hourly cap alone let one
+                // account send 144 emails a day to someone else's inbox.
+                Limit::perDay(10)->by('d:'.$this->throttleIdentity($request))->response($respond),
             ];
         });
 

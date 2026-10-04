@@ -28,7 +28,12 @@ class AuthenticationSecurityTest extends TestCase
 
     // ── Finding 1: the verification link is not a login ────────────
 
-    public function test_the_verification_link_verifies_but_does_not_sign_anyone_in(): void
+    /**
+     * The planted-account case: someone registers a stranger's address with
+     * their own password, and the stranger clicks the genuine email. The click
+     * proves the inbox, not the password, so on its own it must do nothing.
+     */
+    public function test_the_verification_link_alone_neither_verifies_nor_signs_anyone_in(): void
     {
         $user = $this->makeUser(verified: false);
 
@@ -36,9 +41,39 @@ class AuthenticationSecurityTest extends TestCase
             ->assertRedirect(route('login'))
             ->assertSessionHas('success');
 
-        $this->assertTrue($user->fresh()->hasVerifiedEmail(), 'The address must still get verified.');
+        $this->assertFalse($user->fresh()->hasVerifiedEmail(), 'A click without the password must not verify the account.');
         // A 60-minute emailed URL must not be a complete login.
         $this->assertGuest();
+    }
+
+    /** The real path: open the link signed out, sign in, and it completes. */
+    public function test_signing_in_after_opening_the_link_finishes_the_verification(): void
+    {
+        $user = $this->makeUser(verified: false, email: 'pending@example.test');
+        $url = $this->verificationUrl($user);
+
+        $this->get($url)->assertRedirect(route('login'));
+
+        $this->post('/login', ['email' => 'pending@example.test', 'password' => 'the-real-password'])
+            ->assertRedirect($url);
+
+        $this->get($url)->assertRedirect('/my/');
+
+        $this->assertTrue($user->fresh()->hasVerifiedEmail());
+    }
+
+    /** Signing in as a different account must not be bounced to the link. */
+    public function test_a_remembered_link_is_dropped_when_someone_else_signs_in(): void
+    {
+        $pending = $this->makeUser(verified: false);
+        $this->makeUser(email: 'other@example.test');
+
+        $this->get($this->verificationUrl($pending))->assertRedirect(route('login'));
+
+        $this->post('/login', ['email' => 'other@example.test', 'password' => 'the-real-password'])
+            ->assertRedirect('/my/');
+
+        $this->assertFalse($pending->fresh()->hasVerifiedEmail());
     }
 
     /**
@@ -85,7 +120,8 @@ class AuthenticationSecurityTest extends TestCase
 
         $this->actingAs($customer)
             ->get($this->verificationUrl($admin))
-            ->assertRedirect(route('login'));
+            ->assertRedirect('/my/')
+            ->assertSessionHas('error');
     }
 
     // ── Findings 2 & 3: a new password ends every other way in ─────

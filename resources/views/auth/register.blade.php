@@ -14,6 +14,15 @@
     <form method="POST" action="{{ route('register') }}">
         @csrf
 
+        {{-- Bot checks, see AuthController::registrationBotResponse(). The
+             first is the time this form was rendered; the second is a field
+             people never see, so anything typed into it came from a script. --}}
+        <input type="hidden" name="form_token" value="{{ encrypt(time()) }}">
+        <div class="visually-hidden" aria-hidden="true">
+            <label for="fax_number">Leave this field empty</label>
+            <input type="text" id="fax_number" name="fax_number" value="" tabindex="-1" autocomplete="off">
+        </div>
+
         {{-- Full Name --}}
         <div class="mb-3">
             <label for="full_name" class="form-label">Full Name</label>
@@ -53,9 +62,10 @@
         <div class="mb-3">
             <label for="phone" class="form-label">Phone Number</label>
             <input
-                type="text"
+                type="tel"
                 id="phone"
                 name="phone"
+                maxlength="20"
                 class="form-control @error('phone') is-invalid @enderror"
                 value="{{ old('phone') }}"
                 placeholder="09XX-XXX-XXXX"
@@ -75,16 +85,17 @@
                     id="password"
                     name="password"
                     class="form-control @error('password') is-invalid @enderror"
-                    placeholder="Min. 8 characters"
+                    autocomplete="new-password" 
                     required
                 >
-                <button type="button" class="btn btn-outline-secondary" onclick="togglePassword('password', this)">
-                    <i class="bi bi-eye"></i>
+                <button type="button" class="btn btn-outline-secondary" data-pw-toggle="password" aria-label="Show password">
+                    <i class="bi bi-eye" aria-hidden="true"></i>
                 </button>
                 @error('password')
                     <div class="invalid-feedback">{{ $message }}</div>
                 @enderror
             </div>
+            @include('partials.password_rules', ['for' => 'password'])
         </div>
 
         {{-- Confirm Password --}}
@@ -96,11 +107,11 @@
                     id="password_confirmation"
                     name="password_confirmation"
                     class="form-control"
-                    placeholder="Retype your password"
+                    autocomplete="new-password"
                     required
                 >
-                <button type="button" class="btn btn-outline-secondary" onclick="togglePassword('password_confirmation', this)">
-                    <i class="bi bi-eye"></i>
+                <button type="button" class="btn btn-outline-secondary" data-pw-toggle="password_confirmation" aria-label="Show password">
+                    <i class="bi bi-eye" aria-hidden="true"></i>
                 </button>
             </div>
         </div>

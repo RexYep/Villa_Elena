@@ -74,6 +74,7 @@ class StaffLog extends Model
         'login_rejected_inactive',
         'two_factor_failed',
         'two_factor_exhausted',
+        'two_factor_locked',
         'password_reset_completed',
     ];
 
@@ -94,6 +95,7 @@ class StaffLog extends Model
         'login_rejected_inactive',
         'two_factor_failed',
         'two_factor_exhausted',
+        'two_factor_locked',
         'two_factor_disabled',
         'two_factor_enabled',
         'password_changed',

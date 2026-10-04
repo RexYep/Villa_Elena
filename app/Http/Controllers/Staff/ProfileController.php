@@ -46,7 +46,7 @@ class ProfileController extends Controller
 
         $request->validate([
             'current_password' => 'required|string',
-            'password' => 'required|string|min:8|confirmed',
+            'password' => ['required', 'string', 'confirmed', \Illuminate\Validation\Rules\Password::defaults()],
             'password_confirmation' => 'required',
         ], [
             'password.confirmed' => 'Passwords do not match.',

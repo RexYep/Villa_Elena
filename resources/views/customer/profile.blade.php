@@ -840,8 +840,13 @@
                 <div class="form-card-body">
                     <div class="mb-16">
                         <label for="f_current_password" class="form-label">Current Password</label>
-                        <input id="f_current_password" type="password" name="current_password"
+                        <div class="pw-field">
+                            <input id="f_current_password" type="password" autocomplete="current-password" name="current_password"
                             class="form-control @error('current_password', 'updatePassword') is-invalid @enderror">
+                            <button type="button" class="pw-toggle" data-pw-toggle="f_current_password" aria-label="Show password">
+                                <i class="bi bi-eye" aria-hidden="true"></i>
+                            </button>
+                        </div>
                         @error('current_password', 'updatePassword')
                             <div class="field-error">{{ $message }}</div>
                         @enderror
@@ -849,17 +854,28 @@
                     <div class="two-col mb-16">
                         <div>
                             <label for="f_password" class="form-label">New Password</label>
-                            <input id="f_password" type="password" name="password"
+                            <div class="pw-field">
+                                <input id="f_password" type="password" name="password"
                                 class="form-control @error('password', 'updatePassword') is-invalid @enderror"
-                                placeholder="Min. 8 characters">
+                                autocomplete="new-password" >
+                                <button type="button" class="pw-toggle" data-pw-toggle="f_password" aria-label="Show password">
+                                    <i class="bi bi-eye" aria-hidden="true"></i>
+                                </button>
+                            </div>
                             @error('password', 'updatePassword')
                                 <div class="field-error">{{ $message }}</div>
                             @enderror
+                                @include('partials.password_rules', ['for' => 'f_password'])
                         </div>
                         <div>
                             <label for="f_password_confirmation" class="form-label">Confirm New Password</label>
-                            <input id="f_password_confirmation" type="password" name="password_confirmation" class="form-control"
-                                placeholder="Repeat password">
+                            <div class="pw-field">
+                                <input id="f_password_confirmation" type="password" name="password_confirmation" class="form-control"
+                                autocomplete="new-password">
+                                <button type="button" class="pw-toggle" data-pw-toggle="f_password_confirmation" aria-label="Show password">
+                                    <i class="bi bi-eye" aria-hidden="true"></i>
+                                </button>
+                            </div>
                         </div>
                     </div>
                     <button type="submit" class="btn-submit"><i class="bi bi-shield-check"></i> Update Password</button>
@@ -886,8 +902,13 @@
                     </p>
                     <div class="mb-16">
                         <label for="f_password_2" class="form-label">Confirm Password</label>
-                        <input id="f_password_2" type="password" name="password"
+                        <div class="pw-field">
+                            <input id="f_password_2" type="password" autocomplete="current-password" name="password"
                             class="form-control @error('password', 'deactivate') is-invalid @enderror">
+                            <button type="button" class="pw-toggle" data-pw-toggle="f_password_2" aria-label="Show password">
+                                <i class="bi bi-eye" aria-hidden="true"></i>
+                            </button>
+                        </div>
                         @error('password', 'deactivate')
                             <div class="field-error">{{ $message }}</div>
                         @enderror
@@ -965,9 +986,13 @@
                         style="{{ $errors->twoFactor->any() ? '' : 'display:none;' }}background:#f9f5ee;border-radius:10px;padding:14px;">
                         @csrf @method('PUT')
                         <label for="f_password_3" class="form-label">Enter your password to turn this off</label>
-                        <input id="f_password_3" type="password" name="password"
-                            class="form-control @error('password', 'twoFactor') is-invalid @enderror"
-                            style="margin-bottom:10px;">
+                        <div class="pw-field" style="margin-bottom:10px;">
+                            <input id="f_password_3" type="password" autocomplete="current-password" name="password"
+                            class="form-control @error('password', 'twoFactor') is-invalid @enderror">
+                            <button type="button" class="pw-toggle" data-pw-toggle="f_password_3" aria-label="Show password">
+                                <i class="bi bi-eye" aria-hidden="true"></i>
+                            </button>
+                        </div>
                         @error('password', 'twoFactor')
                             <div class="field-error" style="margin-bottom:8px;">{{ $message }}</div>
                         @enderror
@@ -1142,7 +1167,7 @@
                 const form = document.getElementById('disable2faForm');
                 if (form) {
                     form.style.display = 'block';
-                    const field = form.querySelector('input[type="password"]');
+                    const field = form.querySelector('input[name="password"]');
                     if (field) field.focus();
                 }
             });

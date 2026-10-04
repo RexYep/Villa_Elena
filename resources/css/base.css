@@ -170,3 +170,43 @@
     font-family: var(--font-body) !important;
     background: #fff !important;
 }
+
+/* ── Password fields ──────────────────────────────────────────────
+ * .pw-rules is the checklist from partials/password_rules.blade.php:
+ * always visible under a new-password field, each line turning green as
+ * partials/password_ui.blade.php finds it met. The rule is never put in
+ * a placeholder, which vanishes at the first keystroke.
+ * .pw-field / .pw-toggle is the show-hide button for a field that is not
+ * inside a Bootstrap .input-group. */
+.pw-rules { margin-top: 8px; font-size: 13px; color: var(--muted); text-align: left; }
+.pw-rules-title { margin: 0 0 4px; font-weight: 600; }
+.pw-rules ul { margin: 0; padding: 0; list-style: none; }
+.pw-rules li { display: flex; align-items: center; gap: 8px; padding: 2px 0; }
+.pw-rules li i { font-size: 13px; flex-shrink: 0; }
+.pw-rules li.is-met { color: #15803d; }
+/* Read out, not shown: colour alone must not carry "met". */
+.pw-rule-state {
+    position: absolute;
+    width: 1px; height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+}
+
+.pw-field { position: relative; }
+.pw-field .form-control { padding-right: 46px; }
+/* Bootstrap paints its own warning icon in the same corner. */
+.pw-field .form-control.is-invalid { background-image: none; }
+.pw-toggle {
+    position: absolute;
+    top: 0; right: 0;
+    width: 44px; height: 100%;
+    display: flex; align-items: center; justify-content: center;
+    border: none;
+    background: none;
+    color: var(--muted);
+    font-size: 16px;
+    cursor: pointer;
+    border-radius: 0 8px 8px 0;
+}
+.pw-toggle:hover { color: var(--stone); }
