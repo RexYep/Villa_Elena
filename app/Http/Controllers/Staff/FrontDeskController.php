@@ -382,9 +382,12 @@ class FrontDeskController extends Controller
         // na ito ang nag-iisang tagapagpatupad — pero kailangan pa rin
         // dito ang mismong row para sa DAHILAN na ipinapakita sa grid
         // ("Maintenance", "Owner use"), na hindi kayang ibalik ng isang
-        // boolean. Dapat manatiling katumbas ng
-        // AvailabilityBlock::coveringDate() ang pagsusuri sa ibaba —
-        // check-in date ang batayan ng dalawa.
+        // boolean. Ang pagsusuri sa ibaba ay dumadaan sa
+        // Booking::blockSpan() — ang KAPAREHONG depinisyong ginagamit
+        // ng hasConflict() — kaya hindi sila puwedeng maghiwalay. Hindi
+        // na ito basta check-in date (v7.57): ang 22 Hours ay umaabot
+        // ng 5PM kinabukasan, kaya ang block sa kinabukasan ay
+        // nagsasara rin dito.
         $rangeEnd = $start->copy()->addDays($days);
 
         $blocks = AvailabilityBlock::where('property_id', $villa->id)
@@ -411,7 +414,8 @@ class FrontDeskController extends Controller
             foreach (array_keys($slotColumns) as $slotKey) {
                 [$checkin, $checkout] = Booking::slotDateTimes($slotKey, $date->format('Y-m-d'));
 
-                $block = $blocks->first(fn ($b) => $date->betweenIncluded($b->start_date, $b->end_date));
+                [$claimFrom, $claimTo] = Booking::blockSpan($checkin, $checkout);
+                $block = $blocks->first(fn ($b) => $b->coversRange($claimFrom, $claimTo));
 
                 if (! in_array($slotKey, $offered, true)) {
                     // Hindi inaalok ang slot sa petsang ito. Nananatili ang
@@ -827,7 +831,8 @@ class FrontDeskController extends Controller
                 ->withErrors(['check_in_date' => Booking::unavailableMessage(
                     $request->property_id, $checkin,
                     'Naka-book na ang Villa sa napiling petsa/slot. Pumili ng ibang slot.',
-                    forStaff: true
+                    forStaff: true,
+                    checkOut: $checkout
                 )])
                 ->withInput();
         }

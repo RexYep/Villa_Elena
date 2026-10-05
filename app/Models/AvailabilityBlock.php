@@ -77,13 +77,43 @@ class AvailabilityBlock extends Model
      */
     public function scopeCoveringDate($query, int $propertyId, $date)
     {
-        $day = $date instanceof \Carbon\Carbon
-            ? $date->copy()->startOfDay()
-            : \Carbon\Carbon::parse($date)->startOfDay();
+        return $query->coveringRange($propertyId, $date, $date);
+    }
+
+    /**
+     * Ang mga block na tumatama sa ALINMANG petsa mula `$from` hanggang
+     * `$to` (kasama ang dalawang dulo).
+     *
+     * Ang saklaw ay hindi basta "check-in hanggang check-out": ang
+     * `Booking::blockSpan()` ang nagpapasya kung aling mga petsa ang
+     * inaangkin ng isang stay, at ito lang ang nagtatanong sa database.
+     * Huwag magpasa rito ng hilaw na check-out date — isasara niyon ang
+     * Night slot ng gabing nauna sa isang block, na sinasadyang bukas.
+     */
+    public function scopeCoveringRange($query, int $propertyId, $from, $to)
+    {
+        $first = $from instanceof \Carbon\Carbon
+            ? $from->copy()->startOfDay()
+            : \Carbon\Carbon::parse($from)->startOfDay();
+        $last = $to instanceof \Carbon\Carbon
+            ? $to->copy()->startOfDay()
+            : \Carbon\Carbon::parse($to)->startOfDay();
 
         return $query->where('property_id', $propertyId)
-            ->whereDate('start_date', '<=', $day)
-            ->whereDate('end_date', '>=', $day);
+            ->whereDate('start_date', '<=', $last)
+            ->whereDate('end_date', '>=', $first);
+    }
+
+    /**
+     * Tumatama ba ang block na ito sa saklaw na `$from`–`$to`? Ang
+     * bersyong pang-memorya ng scopeCoveringRange(), para sa mga
+     * naglo-load ng lahat ng block nang isang beses (ang staff grid, ang
+     * mapa ng guest calendar) sa halip na mag-query kada cell.
+     */
+    public function coversRange(\Carbon\Carbon $from, \Carbon\Carbon $to): bool
+    {
+        return $this->start_date->copy()->startOfDay()->lte($to->copy()->startOfDay())
+            && $this->end_date->copy()->startOfDay()->gte($from->copy()->startOfDay());
     }
 
     public function property()

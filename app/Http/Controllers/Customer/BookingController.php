@@ -31,8 +31,11 @@ class BookingController extends Controller
         // at saka lang niya nalalaman na sarado ang slot pagka-submit.
         $slotAvailability = Booking::slotAvailabilityMap($booking->property_id, $booking->id);
         $pastSlotsToday   = Booking::pastSlotsToday();
+        // Ang mga petsang ipinasara ng admin — wala sa mapa sa itaas, na
+        // booking lang ang laman.
+        $blockedSlots     = Booking::blockedSlotMap($booking->property_id);
 
-        return view('customer.reschedule_form', compact('booking', 'slotAvailability', 'pastSlotsToday'));
+        return view('customer.reschedule_form', compact('booking', 'slotAvailability', 'pastSlotsToday', 'blockedSlots'));
     }
 
     // ── Reschedule Booking ──────────────────────────────────────────
@@ -135,7 +138,8 @@ class BookingController extends Controller
 
         if ($moved === null) {
             return back()->withErrors(['dates' => Booking::unavailableMessage(
-                $booking->property_id, $checkin, 'Sorry, the Villa is not available on the selected date/slot.'
+                $booking->property_id, $checkin, 'Sorry, the Villa is not available on the selected date/slot.',
+                checkOut: $checkout
             )])->withInput();
         }
 

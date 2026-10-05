@@ -1,7 +1,7 @@
 # Villa Elena Private Rental Resort
 ## Resort Management System — Project Documentation
 
-**Version:** 7.56
+**Version:** 7.57
 **Stack:** PHP 8.2 / Laravel 12 / MySQL 8 / Bootstrap 5
 **Local URL:** `http://127.0.0.1:8000` (`php artisan serve`) or `http://localhost:8000` (Docker — see v5.3)
 **Live URL:** `https://villa-elena.onrender.com` (Render, free tier — testing only, not yet handed to real guests)
@@ -185,6 +185,54 @@ through `user_id` and nothing denormalises their name into a booking row.
 from Task 11 · F5 get dropped at the same time — they are empty and reserved
 (`users.id_type` / `users.id_number`, see v7.40), and a schema change for erasure
 is the natural moment to remove them rather than a migration of their own.
+
+---
+
+## What Changed in v7.57 (Read This First)
+
+### 22-hour dates, blocks and bookings could contradict each other
+
+Five reports from the owner, all confirmed by measurement before anything was changed, plus three more found while checking. They share one cause: a 22-hour date (`slot_windows`), a block (`availability_blocks`) and a booking are three separate records about the same date, and nothing made them agree.
+
+| Reported | What was happening | Now |
+|---|---|---|
+| A 22-hour date could be opened on a date that was already booked | The server answered "Open it anyway?" and a second press created it | Refused outright, naming the booking |
+| Two signs on a booked 22-hour date | The teal "22 Hours only" bar was always sent, beside the booking bar | Only the booking bar; the teal sign returns if the booking is cancelled |
+| Closing a booked 22-hour date returned it to Day/Night | Allowed by design; the Day slot of that date became sellable again | Refused while a live booking holds the stay |
+| Blocked dates looked open on the guest calendar | `slotAvailabilityMap()` never read blocks | Shown as "Not open", not clickable |
+| A 22-hour date could be opened on a blocked date | `addSlotWindow()` never checked for a block | Refused |
+
+**Why "Open it anyway?" never worked as a guard.** `addSlotWindow()` had two confirmations sharing one yellow box and one "press again to continue" instruction. One was real (a booking overlaps the stay). The other — *"Opening this will hide Day and Night"* — fired on **every** date, including a completely free one, because Day and Night are always offered until the window hides them. So the admin pressed twice every time, and the only warning that mattered looked exactly like the routine one. **A confirmation that always appears says nothing.** Both are gone: the real case is a refusal (`slotWindowProblem()`), and hiding Day and Night is simply what a 22-hour date means, already stated above the form.
+
+**The refusal covers a booking on the date even when the times do not overlap.** A Day booking (8AM–5PM) on the same date does not collide with a stay starting at 7PM, so `hasConflict()` alone would allow the window. The owner chose to refuse it anyway: a "22 Hours only" date carrying a Day booking is the same confusion as the two signs. The one exception is a booking of the **same** slot on that date — that is the stay the window offers, and reopening it restores consistency.
+
+### A block now closes any stay that runs through its day, not only one that checks in on it
+
+Through v7.56 the block test was **check-in date only**, which was correct while the slots were Day and Night: a Night stay ending 6AM touches the next date only before its first slot. The 22 Hours slot broke that silently — block Nov 4 for maintenance and a 22-hour stay from Nov 3 still held the villa until **5PM on Nov 4**.
+
+- **`Booking::blockSpan($checkIn, $checkOut)` is the single definition** of which dates a stay claims for the block question: the check-in date, plus any later date the stay is still in at or after that date's **first slot** (8:00 AM, read from `SLOTS`, not hardcoded). Day → its date. Night → its date only (the 6AM tail is tolerated). 22 Hours → its date **and the next**. It names no slot, so an `extendStay()` extension and any future slot follow the same rule.
+- **Three things read it and must keep reading it:** `hasConflict()` (through `blockOn()`), the staff availability grid (`buildSlotGrid()`), and `blockedSlotMap()` for the guest calendars. If one grows its own version the v7.17 bug returns — "Blocked" on one screen, sellable on another. Verified: the guest map agrees with `hasConflict()` on all nine date×slot cells around a block.
+- `AvailabilityBlock::scopeCoveringRange()` asks the database and `coversRange()` is its in-memory twin; `scopeCoveringDate()` now delegates to the range scope. **Never pass a raw check-out date to the range** — that would close the Night slot of the evening before a block, which is deliberately open.
+- `unavailableMessage()` takes `checkOut:`. Without it, a 22-hour stay refused because of the *next* day's block would be told "already booked", sending staff to look for a booking that does not exist. Staff now read *"That stay would run into Nov 4, which is blocked (Owner use)…"*.
+
+### Blocked dates on the guest calendars
+
+`slotAvailabilityMap()` documents itself as a mirror of `hasConflict()`, and it stopped being one in v7.17: that fix taught the guard about blocks and not the map, so the villa page and the customer reschedule form painted a blocked date green and only the click said otherwise. The gap was mine.
+
+- **`Booking::blockedSlotMap($propertyId)`** returns `date => [slots closed by a block]`. It is a separate payload on purpose: the booking map is `slot => booking_id`, which the live "freed" update uses to remove the right pill, and a block has no booking id — nor should a guest be told a closed date is "already booked". It carries no reason: guests do not see "Owner use".
+- When every slot offered on a date is closed, the calendar shows **one** grey, dashed "Not open" marker instead of two closed pills. The legend entry appears only when a block exists.
+- **The label is "Not open", not "Not available", for a measured reason.** "Not available" is 75px and was cut to "Not availab" in the 52px cell of a 390px phone; "Closed" (40px) still overflowed a 39px box. "Not open" is two words, each shorter than "Night", and is allowed to wrap — so it fits wherever Night fits, at every width, with no breakpoint to guess. Checked from 320px to desktop.
+- **Not live.** A block added while a guest has the page open appears on their next load; the server refuses in the meantime, as before. `AvailabilityBlock` only signals the staff grid.
+
+### The admin calendar
+
+- **One sign per date.** A window bar is skipped when `SlotWindow::holdingBooking()` finds a live booking of that slot on that date, and when the date itself is blocked (the red bar explains it; the block wins). Both return on their own when the booking is cancelled or the block removed.
+- **The exception is deliberate:** when the block is on the *next* day, the teal bar stays and reads *"22 Hours only — Not bookable while Nov 4 is blocked"*. There is no red bar on that date, so hiding the sign would leave a date that looks ordinary while offering nothing at all (Day and Night hidden, 22 Hours unsellable).
+- **Blocking over a 22-hour date is allowed** (owner's decision — a block is often urgent). `quickBlock()` returns a `note` naming any 22-hour date it closes. That note is computed **after** the block is saved, so it is wrapped in `try/catch`: an informational lookup must never turn a saved block into a 500. It did exactly that in `AuditLoggingTest` before the guard was added.
+- **Drag-move obeys the offering rule** (`moveOfferingProblem()`). `reserveSlot()` only answers "is there a collision"; it does not know a date is 22-hour-only. A Day booking could be dragged onto a 22-hour date and a 22-hour booking onto an ordinary one — both refused by every booking form, neither by the drag. It asks `slotKey()` (what was this booked as), not `exactSlotKey()` (how long is it).
+- The toast now stays up in proportion to its text, to 9s. Refusals carry a booking reference and a next step, which is not readable in a fixed 3s.
+
+**Verified** with real requests through the kernel inside rolled-back transactions (dev data unchanged, 81 bookings / 0 windows / 3 blocks before and after): 56 checks covering every row above, the refusal messages, the calendar payloads, real renders of the villa page, reschedule form, admin calendar and staff grid, and that ordinary bookings on open dates still succeed through the portal, walk-in and admin create. The guest calendar was also checked in a real browser at desktop width and through frames from 320 to 760px. `php artisan test`: 328 pass; the two failures (`ExampleTest`, and `AuthorizationTest` "the public confirmation page refuses a stranger", 404 instead of 403) fail identically on the previous commit. **Not verified in a browser:** the admin calendar and the reschedule form — both need a login.
 
 ---
 

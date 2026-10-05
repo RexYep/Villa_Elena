@@ -689,7 +689,8 @@
                 <p class="text-muted-theme" style="font-size:13px; margin:0 0 12px;">
                     Pick the <strong>check-in date</strong>. That date will offer the
                     22-hour stay <strong>only</strong> — Day and Night are hidden on it.
-                    Every other date keeps the regular slots.
+                    Every other date keeps the regular slots. A date that is blocked
+                    or already booked cannot be opened.
                 </p>
                 <div class="mb-12">
                     <label for="swDate" class="form-label-sm">Check-in Date</label>
@@ -734,9 +735,15 @@
                     <span class="detail-label">Notes</span>
                     <span class="detail-value" id="swdNotes">—</span>
                 </div>
+                {{-- Lumalabas lang kapag naka-block ang KINABUKASAN, na inaabot
+                     ng stay: ang petsang ito mismo ay walang pulang bar. --}}
+                <div id="swdClosed" hidden
+                    style="background:#fffbeb; border:1px solid #fcd34d; border-radius:8px;
+                           padding:10px 12px; font-size:13px; margin-top:12px;"></div>
                 <p class="text-muted-theme" style="font-size:12.5px; margin:12px 0 0;">
                     Closing this returns the date to the regular Day and Night slots.
-                    Bookings already made on it are not touched.
+                    A date that already has a 22-hour booking cannot be closed —
+                    cancel or move the booking first.
                 </p>
                 <button class="btn-submit" style="background:#dc2626; margin-top:14px;"
                     onclick="deleteSlotWindow()">
@@ -1102,10 +1109,6 @@
             const warn = document.getElementById('swWarn');
             warn.hidden = true;
             warn.textContent = '';
-            // Ang confirm ay umaabot lang sa PARTIKULAR na petsang binalaan.
-            // Kung hindi, ang isang "oo" sa Okt 2 ay tahimik na magpapatuloy
-            // sa Okt 9 sa susunod na pagbukas ng modal.
-            confirmedFor = null;
             document.getElementById('slotWindowModal').classList.add('open');
         }
 
@@ -1123,8 +1126,9 @@
             el.textContent = 'Stay: ' + f(start) + ' → ' + f(end);
         });
 
-        let confirmedFor = null;
-
+        // Wala nang "pindutin ulit para magpatuloy". Tahasang tinatanggihan
+        // ng server ang isang petsang naka-block o may booking na, at
+        // sinasabi kung alin ang aalisin muna — tingnan ang addSlotWindow().
         function submitSlotWindow() {
             const date = document.getElementById('swDate').value;
             const notes = document.getElementById('swNotes').value;
@@ -1146,14 +1150,11 @@
                     body: JSON.stringify({
                         slot: 'stay22',
                         check_in_date: date,
-                        notes,
-                        // Ipinapadala lang ang kumpirmasyon para sa EKSAKTONG
-                        // petsang binalaan tungkol sa server.
-                        confirm_conflict: confirmedFor === date
+                        notes
                     })
                 })
-                .then(r => r.json().then(d => ({ ok: r.ok, status: r.status, d })))
-                .then(({ status, d }) => {
+                .then(r => r.json())
+                .then(d => {
                     if (d.success) {
                         closeModal('slotWindowModal');
                         calendar.refetchEvents();
@@ -1163,15 +1164,6 @@
 
                     warn.hidden = false;
                     warn.textContent = d.message || 'Could not open that date.';
-
-                    // 409 = kaduda-duda pero pinapayagan kung sinasadya. Ang
-                    // susunod na pindot sa parehong petsa ang magpapatuloy.
-                    if (status === 409 && d.needs_confirmation) {
-                        confirmedFor = date;
-                        warn.textContent += ' — press “Open This Date” again to continue.';
-                    } else {
-                        confirmedFor = null;
-                    }
                 })
                 .catch(() => showToast('Error opening that date', true));
         }
@@ -1182,6 +1174,9 @@
             document.getElementById('swdSpan').textContent = p.span_label || '—';
             document.getElementById('swdSlot').textContent = (p.slot_name || '—') + ' only';
             document.getElementById('swdNotes').textContent = p.notes || '—';
+            const closed = document.getElementById('swdClosed');
+            closed.hidden = !p.closed_note;
+            closed.textContent = p.closed_note ? p.closed_note + '. Remove that block to sell this stay.' : '';
             document.getElementById('slotWindowDetailModal').classList.add('open');
         }
 
@@ -1200,6 +1195,15 @@
                         closeModal('slotWindowDetailModal');
                         calendar.refetchEvents();
                         showToast('That date is back to the regular slots');
+                    } else {
+                        // Dati ay walang nangyayari rito: nananatiling bukas
+                        // ang modal at walang sinasabi. Tinatanggihan na ng
+                        // server ang petsang may booking, kaya kailangang
+                        // makita ang dahilan.
+                        const box = document.getElementById('swdClosed');
+                        box.hidden = false;
+                        box.textContent = data.message || 'Could not close that date.';
+                        calendar.refetchEvents();
                     }
                 })
                 .catch(() => showToast('Error closing that date', true));
@@ -1239,7 +1243,9 @@
                     if (data.success) {
                         closeModal('blockModal');
                         calendar.refetchEvents();
-                        showToast('Dates blocked successfully');
+                        // `note`: may 22-oras na petsang hindi na mabibili
+                        // dahil sa block na ito (tingnan ang quickBlock()).
+                        showToast(data.note ? 'Dates blocked. ' + data.note : 'Dates blocked successfully');
                         document.getElementById('blockStart').value = '';
                         document.getElementById('blockEnd').value = '';
                         document.getElementById('blockNotes').value = '';
@@ -1284,7 +1290,15 @@
             document.getElementById('toastText').textContent = msg;
             toast.style.background = isError ? '#dc2626' : 'var(--terracotta)';
             toast.classList.add('show');
-            setTimeout(() => toast.classList.remove('show'), 3000);
+            // Hindi na laging 3 segundo. Ang mga pagtanggi ay may pangalan
+            // na ng booking at ng susunod na hakbang ("VE-… is already
+            // booked on Nov 3, so…"), at hindi iyon nababasa sa 3 segundo.
+            // Humahaba kasabay ng mensahe, hanggang 9 na segundo.
+            clearTimeout(toast._hideTimer);
+            toast._hideTimer = setTimeout(
+                () => toast.classList.remove('show'),
+                Math.min(9000, Math.max(3000, String(msg).length * 60))
+            );
         }
 
         // Close modals on backdrop click

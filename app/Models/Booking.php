@@ -1026,7 +1026,12 @@ class Booking extends Model
         // nakakapag-book ang guest sa isang petsang ipinasara ng admin.
         // Walang nakakasalo nito sa ilalim: ang `slot_hold` UNIQUE index
         // ay gawa sa datos ng booking, hindi ng block.
-        if (static::blockOn($propertyId, $newCheckIn) !== null) {
+        //
+        // Ipinapasa na rin ang check-OUT: ang isang stay na tumatagal
+        // hanggang sa oras ng mga slot ng isang naka-block na petsa (ang
+        // 22 Hours, na umaabot ng 5PM kinabukasan) ay hinaharangan din.
+        // Tingnan ang blockSpan() para sa eksaktong panuntunan.
+        if (static::blockOn($propertyId, $newCheckIn, $newCheckOut) !== null) {
             return true;
         }
 
@@ -1063,7 +1068,9 @@ class Booking extends Model
     }
 
     /**
-     * Ang admin block na sumasaklaw sa check-in date na ito, kung meron.
+     * Ang admin block na tumatama sa stay na ito, kung meron — sa
+     * check-in date nito, o (kapag ibinigay ang check-out) sa alinmang
+     * petsang inaangkin nito ayon sa blockSpan().
      *
      * Ibinabalik ang mismong ROW, hindi boolean, dahil dalawa ang
      * kailangan sa kanya: ang desisyon (hasConflict) at ang DAHILAN na
@@ -1073,9 +1080,152 @@ class Booking extends Model
      * sadyang ipinasarang petsa ay nagpapahanap kay staff ng isang
      * booking na wala naman.
      */
-    public static function blockOn(int $propertyId, \Carbon\Carbon $checkIn): ?AvailabilityBlock
+    public static function blockOn(
+        int $propertyId,
+        \Carbon\Carbon $checkIn,
+        ?\Carbon\Carbon $checkOut = null
+    ): ?AvailabilityBlock {
+        [$from, $to] = static::blockSpan($checkIn, $checkOut);
+
+        return AvailabilityBlock::coveringRange($propertyId, $from, $to)
+            ->orderBy('start_date')
+            ->first();
+    }
+
+    /**
+     * Ang mga PETSANG inaangkin ng isang stay para sa tanong na "may
+     * block ba rito" — unang petsa at huling petsa, kasama ang dalawa.
+     *
+     * Ang panuntunan: isinasara ng block ang isang petsa MULA SA UNANG
+     * SLOT nito (8:00 AM). Kaya:
+     *
+     *   Day    Okt 2  8AM–5PM          → Okt 2
+     *   Night  Okt 2  7PM–6AM Okt 3    → Okt 2 lang. Natatapos ito BAGO
+     *                                    ang unang slot ng Okt 3, kaya
+     *                                    hindi nito ginagalaw ang Okt 3.
+     *   22 Hrs Okt 2  7PM–5PM Okt 3    → Okt 2 AT Okt 3. Hawak nito ang
+     *                                    buong Day slot ng Okt 3.
+     *
+     * Hanggang v7.17 ay check-in date lang ang tinitingnan, at tama iyon
+     * noong Day at Night lang ang slot. Nang dumating ang 22 Hours,
+     * naging butas ito: i-block ang Okt 3 para sa maintenance, at may
+     * bisita pa ring nasa villa hanggang 5PM ng araw na iyon.
+     *
+     * Hinango sa SLOTS ang "unang slot", hindi nakasulat na 08:00 — at
+     * walang binabanggit na pangalan ng slot dito, kaya sakop din nito
+     * ang isang stay na pinahaba ng extendStay() at anumang slot na
+     * idadagdag pa.
+     *
+     * ⚠️ Ito ang IISANG depinisyon. Ang hasConflict() (sa pamamagitan ng
+     * blockOn()), ang staff availability grid at ang blockedSlotMap() ng
+     * guest calendar ay pawang dumadaan dito. Kapag may isang gumawa ng
+     * sariling bersyon, babalik ang orihinal na bug: "Blocked" sa isang
+     * screen, mabibili sa iba.
+     *
+     * @return array{0: \Carbon\Carbon, 1: \Carbon\Carbon}
+     */
+    public static function blockSpan(\Carbon\Carbon $checkIn, ?\Carbon\Carbon $checkOut = null): array
     {
-        return AvailabilityBlock::coveringDate($propertyId, $checkIn)->first();
+        $from = $checkIn->copy()->startOfDay();
+        $to = $from->copy();
+
+        if ($checkOut !== null) {
+            $last = $checkOut->copy()->startOfDay();
+
+            $firstSlot = collect(static::SLOTS)->min('check_in');
+            $firstSlotStart = \Carbon\Carbon::parse($last->format('Y-m-d').' '.$firstSlot);
+
+            // Natapos bago (o eksakto sa) unang slot ng huling petsa:
+            // buntot lang ng gabing nauna, hindi pag-angkin sa petsang iyon.
+            if ($checkOut->lte($firstSlotStart)) {
+                $last->subDay();
+            }
+
+            if ($last->gt($to)) {
+                $to = $last;
+            }
+        }
+
+        return [$from, $to];
+    }
+
+    /**
+     * Aling mga slot ang SARADO NG BLOCK, kada check-in date — para sa
+     * availability calendar ng bisita (villa page at reschedule form).
+     *
+     * Hugis: `['2026-11-02' => ['day', 'night', 'stay22'], '2026-11-01' => ['stay22']]`
+     *
+     * Hiwalay ito sa slotAvailabilityMap() at sinasadya: ang mapang iyon
+     * ay `slot => booking_id`, at ang id na iyon ang ginagamit ng live
+     * na "freed" update para alisin ang tamang pill kapag may nagkansela.
+     * Walang booking id ang block, at hindi rin "already booked" ang
+     * dapat sabihin sa bisita tungkol sa isang petsang ipinasara.
+     *
+     * Bago ito, WALANG nagsasabi sa guest calendar tungkol sa mga block:
+     * ang hasConflict() lang ang nakakaalam (v7.17), kaya berde at
+     * "Open" ang isang naka-block na petsa hanggang sa pindutin ito.
+     *
+     * Lahat ng slot sa SLOTS ang sinusuri, hindi lang ang inaalok — ang
+     * pag-aalok ay ibang tanong (slotsOfferedOn()), at sinasala iyon ng
+     * view. Walang dahilan ng block dito: hindi dapat makita ng bisita
+     * ang "Owner use".
+     *
+     * @return array<string, array<int, string>>
+     */
+    public static function blockedSlotMap(int $propertyId): array
+    {
+        $today = today();
+        // Kaparehong abot ng slotWindowDates(), o ang pinakamalayong
+        // petsang puwedeng i-book ng bisita kung mas malayo pa iyon.
+        $horizon = $today->copy()->addMonths(12)->max(static::latestBookableDate());
+
+        $blocks = AvailabilityBlock::where('property_id', $propertyId)
+            ->whereDate('end_date', '>=', $today)
+            ->whereDate('start_date', '<=', $horizon)
+            ->get(['start_date', 'end_date']);
+
+        if ($blocks->isEmpty()) {
+            return [];
+        }
+
+        // Ang mga petsang maaaring maapektuhan lang: bawat naka-block na
+        // petsa, at ang araw BAGO ang simula ng block — doon nagsisimula
+        // ang isang stay na aabot sa loob nito.
+        $candidates = [];
+        foreach ($blocks as $block) {
+            // ->copy() pagkatapos ng max()/min(): ibinabalik ng Carbon ang
+            // MISMONG instance na nanalo, at ang addDay() sa ibaba ay
+            // magbabago sana sa $today para sa lahat ng susunod na block.
+            $cursor = $block->start_date->copy()->subDay()->max($today)->copy();
+            $last = $block->end_date->copy()->min($horizon)->copy();
+
+            while ($cursor->lte($last)) {
+                $candidates[$cursor->format('Y-m-d')] = true;
+                $cursor->addDay();
+            }
+        }
+
+        $map = [];
+
+        foreach (array_keys($candidates) as $date) {
+            $closed = [];
+
+            foreach (array_keys(static::SLOTS) as $slotKey) {
+                [$from, $to] = static::blockSpan(...static::slotDateTimes($slotKey, $date));
+
+                if ($blocks->contains(fn ($block) => $block->coversRange($from, $to))) {
+                    $closed[] = $slotKey;
+                }
+            }
+
+            if ($closed) {
+                $map[$date] = $closed;
+            }
+        }
+
+        ksort($map);
+
+        return $map;
     }
 
     /**
@@ -1084,24 +1234,71 @@ class Booking extends Model
      * Iisang lugar para hindi mag-drift ang limang call site ng
      * reserveSlot(); ipinapasa ng caller ang sarili nitong "nakuha na"
      * na pananalita, dahil magkaiba ang tono ng guest at ng staff.
+     *
+     * Ipasa ang `$checkOut` kung mayroon: kung wala, ang isang 22-oras
+     * na stay na tinanggihan dahil sa block ng KINABUKASAN ay sasagutin
+     * ng "naka-book na" — at maghahanap si staff ng booking na wala.
      */
     public static function unavailableMessage(
         int $propertyId,
         \Carbon\Carbon $checkIn,
         string $takenMessage,
-        bool $forStaff = false
+        bool $forStaff = false,
+        ?\Carbon\Carbon $checkOut = null
     ): string {
-        $block = static::blockOn($propertyId, $checkIn);
+        $block = static::blockOn($propertyId, $checkIn, $checkOut);
 
         if (! $block) {
             return $takenMessage;
         }
 
-        $reason = ucfirst(str_replace('_', ' ', $block->reason));
+        if (! $forStaff) {
+            return 'That date is not open for booking. Please choose another date.';
+        }
 
-        return $forStaff
-            ? "That date is blocked ({$reason}) and cannot be booked. An admin can remove the block in Calendar → Blocked Dates."
-            : 'That date is not open for booking. Please choose another date.';
+        return static::blockRefusal($block, $checkIn)
+            .' An admin can remove the block in Calendar → Blocked Dates.';
+    }
+
+    /**
+     * "Bakit hindi puwede" para sa staff at admin, hango sa mismong block.
+     *
+     * Dalawang magkaibang pangungusap dahil dalawang magkaibang lugar
+     * ang titingnan ng admin sa calendar: ang petsang pinili niya, o ang
+     * kasunod nito.
+     */
+    public static function blockRefusal(AvailabilityBlock $block, \Carbon\Carbon $checkIn): string
+    {
+        $reason = ucfirst(str_replace('_', ' ', $block->reason));
+        $day = $checkIn->copy()->startOfDay();
+
+        if ($block->coversRange($day, $day)) {
+            return "That date is blocked ({$reason}) and cannot be booked.";
+        }
+
+        // Ang block ay nasa kasunod na petsa: ang stay ang umaabot doon.
+        $hit = $block->start_date->copy()->startOfDay()->max($day->copy()->addDay());
+
+        return "That stay would run into {$hit->format('M j')}, which is blocked ({$reason}), so it cannot be booked.";
+    }
+
+    /**
+     * Ang mga booking na TUNAY na humahawak ng slot — kaparehong sala ng
+     * hasConflict(): hindi `cancelled`/`no_show`, at hindi isang `pending`
+     * na lumagpas na sa hold window (iniwang checkout).
+     *
+     * Para sa mga bagong tanong na "may nakakuha na ba nito" sa labas ng
+     * hasConflict() — hal. kung puwede pang buksan o isara ang isang
+     * 22-oras na petsa. Kapag binago ang sala sa hasConflict(), baguhin
+     * din dito.
+     */
+    public function scopeHoldingASlot($query)
+    {
+        return $query->whereNotIn('status', ['cancelled', 'no_show'])
+            ->where(function ($q) {
+                $q->where('status', '!=', 'pending')
+                    ->orWhere('created_at', '>=', now()->subMinutes(static::pendingHoldMinutes()));
+            });
     }
 
     // ── Atomic Slot Reservation ─────────────────────────────────────

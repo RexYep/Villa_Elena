@@ -173,6 +173,12 @@
             color: var(--muted);
         }
 
+        /* Ipinasara ng resort ang petsa — hindi "booked", walang kumuha. */
+        .slot-state.is-closed {
+            background: var(--tag-slate-bg);
+            color: var(--tag-slate-fg);
+        }
+
         /* Ang saradong card ay hindi lang naka-disable — mukha rin siyang
            hindi mapipili, kung hindi ay paulit-ulit itong tatapikin. */
         .slot-option.is-unavailable {
@@ -443,6 +449,11 @@
         // ng ginagawa ng hasConflict() kapag nag-submit na.
         const BOOKED_SLOTS = @json($slotAvailability);
         const PAST_SLOTS_TODAY = @json($pastSlotsToday);
+        // Petsa → [slot] na ipinasara ng admin (Booking::blockedSlotMap).
+        // Wala ito sa BOOKED_SLOTS, na booking lang ang laman — kaya dati
+        // ay "Available" ang isang naka-block na petsa hanggang sa
+        // tanggihan ito pagka-submit.
+        const BLOCKED_SLOTS = @json((object) ($blockedSlots ?? []));
         // Ang mga bookable lang — kapareho ng listahan ng radio cards sa
         // itaas. Kung Booking::SLOTS ang ipapasa, mag-iiterate ang JS sa
         // isang slot na walang kaukulang radio sa pahina.
@@ -485,6 +496,7 @@
             // kumuha, hindi talaga ito ipinagbibili sa araw na iyon.
             if (!slotsOfferedOn(dateStr).includes(slotKey)) return 'unoffered';
             if (isPast(dateStr, slotKey)) return 'past';
+            if ((BLOCKED_SLOTS[dateStr] || []).includes(slotKey)) return 'closed';
             return isTaken(dateStr, slotKey) ? 'taken' : 'open';
         }
 
@@ -538,7 +550,8 @@
 
                 badge.className = 'slot-state is-' + (state === 'open' ? 'open' : state);
                 badge.textContent = state === 'open' ? 'Available' :
-                    (state === 'past' ? 'Already started today' : 'Already booked');
+                    (state === 'past' ? 'Already started today' :
+                        (state === 'closed' ? 'Not open for booking' : 'Already booked'));
 
                 card.classList.toggle('is-unavailable', state !== 'open');
                 radio.disabled = state !== 'open';
@@ -563,8 +576,12 @@
             alertBox.hidden = !noneOpen;
             if (noneOpen) {
                 // "Every slot", hindi "Both slots" — hindi na laging dalawa.
+                // Ipinasarang petsa: hindi "taken" — walang kumuha nito.
+                const allClosed = slotsOfferedOn(dateStr).every(k => stateOf(dateStr, k) === 'closed');
                 alertBox.innerHTML = '<i class="bi bi-exclamation-circle me-1"></i>' +
-                    'Every slot on ' + prettyDate(dateStr) + ' is taken. Pick another date.';
+                    (allClosed
+                        ? prettyDate(dateStr) + ' is not open for booking. Pick another date.'
+                        : 'Every slot on ' + prettyDate(dateStr) + ' is taken. Pick another date.');
             }
 
             const suggestions = noneOpen ? nextOpen(dateStr, 3) : [];

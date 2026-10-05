@@ -328,6 +328,11 @@ class PortalController extends Controller
         // ang umaga nito.
         $slotAvailability = Booking::slotAvailabilityMap($property->id);
 
+        // Hiwalay na mapa para sa mga petsang ipinasara ng admin. Wala ito
+        // sa itaas (booking lang ang laman niyon), kaya dati ay "Open" ang
+        // isang naka-block na petsa hanggang sa pindutin ito ng bisita.
+        $blockedSlots = Booking::blockedSlotMap($property->id);
+
         $checkin = $request->get('checkin');
         $guests = $request->get('guests', 1);
 
@@ -361,7 +366,7 @@ class PortalController extends Controller
         $allowOnlineBooking = Setting::get('allow_online_booking', '1') === '1';
 
         return view('portal.property', compact(
-            'property', 'rooms', 'slotAvailability', 'checkin', 'guests', 'slot',
+            'property', 'rooms', 'slotAvailability', 'blockedSlots', 'checkin', 'guests', 'slot',
             'reviews', 'avgRating', 'totalReviews', 'allowOnlineBooking'
         ));
     }
@@ -651,7 +656,8 @@ class PortalController extends Controller
 
         if ($booking === null) {
             return back()->withErrors(['dates' => Booking::unavailableMessage(
-                $property->id, $checkin, 'This selected date/slot is no longer available. Please choose another.'
+                $property->id, $checkin, 'This selected date/slot is no longer available. Please choose another.',
+                checkOut: $checkout
             )])->withInput();
         }
 

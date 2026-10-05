@@ -100,6 +100,38 @@ class SlotWindow extends Model
         return $in->format('g:i A M j').' – '.$out->format('g:i A M j');
     }
 
+    /**
+     * Ang booking na NAKAKUHA na ng alok na ito, kung meron: isang
+     * booking ng parehong slot na nagche-check-in sa petsa ng window at
+     * tunay na humahawak ng slot (Booking::scopeHoldingASlot()).
+     *
+     * Dalawa ang gumagamit: ang admin calendar (kapag na-book na ang
+     * 22 oras, ang booking na lang ang ipinapakita — hindi na ang
+     * "22 Hours only" na karatula sa tabi nito) at ang deleteSlotWindow()
+     * (hindi isinasara ang isang petsang may bisita na).
+     *
+     * `slotKey()` ang paghahambing, hindi ang oras: 19:00 ang check-in
+     * ng Night at ng 22 Hours pareho.
+     */
+    public function holdingBooking(): ?Booking
+    {
+        return Booking::holdingASlot()
+            ->where('property_id', $this->property_id)
+            ->whereDate('check_in_date', $this->check_in_date)
+            ->with('user')
+            ->get()
+            ->first(fn (Booking $booking) => $booking->slotKey() === $this->slot);
+    }
+
+    /**
+     * Ang block na pumipigil sa alok na ito, kung meron — sa mismong
+     * petsa, o sa kinabukasang inaabot ng stay (Booking::blockSpan()).
+     */
+    public function closingBlock(): ?AvailabilityBlock
+    {
+        return Booking::blockOn($this->property_id, ...$this->stayDateTimes());
+    }
+
     /** Lumipas na ba ang check-in ng window na ito? */
     public function isPast(): bool
     {

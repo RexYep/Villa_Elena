@@ -363,6 +363,28 @@
             text-decoration-thickness: 1px;
         }
 
+        /* Ipinasara ng resort ang petsa — IBA sa "Booked". Walang kumuha
+           nito, kaya walang pula at walang guhit: kulay-abo at putol-putol
+           na gilid, para hindi mabasa ng bisita na may nakauna sa kanya. */
+        .slot-pill.is-closed,
+        .legend-swatch.is-closed {
+            background: var(--tag-slate-bg);
+            border-color: var(--border-strong);
+            border-style: dashed;
+            color: var(--tag-slate-fg);
+        }
+
+        /* "Not open" ay DALAWANG maikling salita at pinapayagang bumaba sa
+           ikalawang linya, sa lahat ng lapad. Sinukat: ang "Not available"
+           ay 75px at napuputol sa "Not availab" sa 52px na cell ng
+           telepono, at kahit ang "Closed" (40px) ay sobra ng 1px doon. Ang
+           bawat salita rito ay mas maikli pa sa "Night", kaya kasya ito
+           saanman kasya ang Night — walang breakpoint na kailangang hulaan. */
+        .slot-pill.is-closed .slot-pill-txt {
+            white-space: normal;
+            line-height: 1.25;
+        }
+
         .slot-pill.is-selected,
         .legend-swatch.is-selected {
             background: var(--stone);
@@ -1008,6 +1030,12 @@
                     <span class="legend-group-label">Availability</span>
                     <span class="legend-state"><i class="legend-swatch is-open"></i> Open</span>
                     <span class="legend-state"><i class="legend-swatch is-taken"></i> Booked</span>
+                    {{-- Ipinapakita lang kapag may naka-block na petsa: kung
+                         wala, isa itong susi para sa isang bagay na hindi
+                         makikita ng bisita sa calendar. --}}
+                    @if (! empty($blockedSlots))
+                        <span class="legend-state"><i class="legend-swatch is-closed"></i> Not open</span>
+                    @endif
                     @if ($canBookOnline)
                         <span class="legend-state"><i class="legend-swatch is-selected"></i> Your pick</span>
                     @endif
@@ -1221,6 +1249,12 @@
         // Petsa → { slot: booking_id } ng mga SARADONG slot. Ito lang ang
         // state ng calendar; pinapatch ito ng Pusher updates sa ibaba.
         const bookedSlots = @json($slotAvailability);
+        // Petsa → [slot] na ipinasara ng admin (Booking::blockedSlotMap).
+        // Hiwalay sa bookedSlots at sinasadya: hindi ito pinapatch ng
+        // Pusher updates (walang booking id ang block), at hindi "already
+        // booked" ang dapat sabihin tungkol dito. Object ang pilit na hugis
+        // — ang walang-lamang PHP array ay nagiging `[]` sa JSON.
+        const blockedSlots = @json((object) ($blockedSlots ?? []));
         const BOOKING_ENABLED = @json($property->status !== 'maintenance' && $allowOnlineBooking);
 
         function getSelectedSlot() {
@@ -1419,9 +1453,14 @@
             return Object.prototype.hasOwnProperty.call(bookedSlots[dateStr] || {}, slotKey);
         }
 
+        function isBlocked(dateStr, slotKey) {
+            return (blockedSlots[dateStr] || []).includes(slotKey);
+        }
+
         function openSlots(dateStr) {
-            // Ang inaalok sa petsang iyon, bawas ang mga nakuha na.
-            return slotsOfferedOn(dateStr).filter(k => !isTaken(dateStr, k));
+            // Ang inaalok sa petsang iyon, bawas ang mga nakuha na at ang
+            // mga ipinasara ng resort.
+            return slotsOfferedOn(dateStr).filter(k => !isTaken(dateStr, k) && !isBlocked(dateStr, k));
         }
 
         function paintDay(dateStr, frame) {
@@ -1432,11 +1471,35 @@
             const wrap = document.createElement('div');
             wrap.className = 'slot-pills';
 
+            const offered = slotsOfferedOn(dateStr);
+
+            // Sarado ng resort ang LAHAT ng inaalok sa petsang ito: iisang
+            // "Not open" sa halip na dalawang pill na parehong sarado.
+            // Dati ay "Open" ang mga ito at ang pagpindot lang ang
+            // nagsasabing hindi puwede.
+            if (offered.length && offered.every(k => isBlocked(dateStr, k))) {
+                const closed = document.createElement('span');
+                closed.className = 'slot-pill is-closed';
+                const icon = document.createElement('i');
+                icon.className = 'bi bi-slash-circle';
+                icon.setAttribute('aria-hidden', 'true');
+                const label = document.createElement('span');
+                label.className = 'slot-pill-txt';
+                label.textContent = 'Not open';
+                closed.append(icon, label);
+                closed.title = 'Not open for booking on this date';
+                closed.setAttribute('aria-label', dateStr + ' — not open for booking');
+                wrap.appendChild(closed);
+                frame.appendChild(wrap);
+                return;
+            }
+
             // Ang mga slot na INAALOK sa petsang ito, hindi lahat ng slot: sa
             // isang 22-oras na petsa ay isang pill lang, at sa ordinaryong
             // petsa ay hindi lumilitaw ang 22-oras.
-            slotsOfferedOn(dateStr).forEach(key => {
-                const taken = isTaken(dateStr, key);
+            offered.forEach(key => {
+                const blocked = isBlocked(dateStr, key);
+                const taken = blocked || isTaken(dateStr, key);
                 const canPick = !taken && BOOKING_ENABLED;
                 const pill = document.createElement(canPick ? 'button' : 'span');
 
@@ -1447,7 +1510,7 @@
                 }
 
                 const isSelected = !taken && selected.date === dateStr && selected.slot === key;
-                pill.className = 'slot-pill ' + (taken ? 'is-taken' : 'is-open') +
+                pill.className = 'slot-pill ' + (blocked ? 'is-closed' : (taken ? 'is-taken' : 'is-open')) +
                     (isSelected ? ' is-selected' : '');
 
                 // Icon + label. Sa pinakamaliit na screen ay tinatago ng CSS
@@ -1461,7 +1524,7 @@
                 label.textContent = SLOT_SHORT[key] || key;
                 pill.append(icon, label);
 
-                const state = taken ? ' — already booked' : ' — available';
+                const state = blocked ? ' — not open for booking' : (taken ? ' — already booked' : ' — available');
                 pill.title = SLOT_DEFS[key].label + state;
                 pill.setAttribute('aria-label', dateStr + ' ' + (SLOT_SHORT[key] || key) + state);
 
