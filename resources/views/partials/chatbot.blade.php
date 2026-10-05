@@ -504,6 +504,19 @@
        at the same specificity, so source order is what decides the
        winner. Placed above the base rule it would silently lose. */
     @media (max-width: 480px) {
+        /* Still a floating card, anchored to both edges with the launcher
+           below it. Kept a DEFINITE height rather than auto + max-height so
+           the flex column inside (scrolling message list) still resolves:
+           everything above the launcher (92px) less a 12px gap at the top. */
+        #chat-window {
+            left: 12px;
+            right: 12px;
+            width: auto;
+            bottom: 92px;
+            height: min(560px, calc(100vh - 104px));
+            height: min(560px, calc(100dvh - 104px));
+        }
+
         #chat-bubble {
             bottom: 20px;
             right: 20px;
@@ -517,63 +530,33 @@
             opacity: 0;
             pointer-events: none;
         }
-    }
 
-    /* ── Phones: the chat is the whole screen ─────────────────────────
-       As a floating card it was 336px wide on a 360px phone, minus 140px
-       of height for the offset and the launcher, and then the keyboard
-       took half of what was left: about two lines of conversation. A
-       phone has no room to show the page and a chat at once, so the chat
-       takes the screen and the header's × gives it back.
-
-       The second condition is a phone on its side (short, not narrow).
-
-       `--chat-vv-h` / `--chat-vv-top` come from the script below, which
-       copies window.visualViewport: on Android and iOS the on-screen
-       keyboard covers a fixed element instead of resizing it, so without
-       them the input sits under the keyboard. The `dvh` value is the
-       fallback before the script has run. */
-    @media (max-width: 480px), (max-height: 520px) {
-        #chat-window {
-            top: var(--chat-vv-top, 0px);
-            left: 0;
-            right: 0;
-            bottom: auto;
-            width: auto;
-            height: 100vh;
-            height: var(--chat-vv-h, 100dvh);
-            border: none;
-            border-radius: 0;
-            box-shadow: none;
-            /* The overshooting slide-up of the desktop card shows the page
-               through the gap at the bottom of a full-screen sheet. */
-            animation: chatFadeIn .18s ease-out;
-        }
-
-        /* Nothing behind a full-screen chat should scroll or be tapped,
-           and the launcher has nothing left to toggle: × closes it. */
-        html.chat-open,
-        html.chat-open body {
-            overflow: hidden;
-        }
-
-        html.chat-open #chat-bubble {
-            display: none;
-        }
-
+        /* What made the card cramped was not its size but what it spent
+           the size on. A shorter header, and the four suggestions on one
+           row that scrolls sideways instead of two or three wrapped rows,
+           give that height back to the conversation. */
         .chat-header {
             padding: 12px 16px;
-            padding-top: calc(12px + env(safe-area-inset-top, 0px));
+            gap: 10px;
         }
 
-        /* One row that scrolls sideways. Wrapped, the four suggestions took
-           two or three rows off the top of the conversation. */
+        /* On a 320px phone "AI Booking Assistant · Online" wrapped to a
+           second line and made the header 20px taller. */
+        .chat-avatar {
+            width: 36px;
+            height: 36px;
+            font-size: 16px;
+        }
+
+        .chat-header-info .status {
+            white-space: nowrap;
+        }
+
         .quick-replies {
             flex-wrap: nowrap;
             overflow-x: auto;
             padding: 10px 14px;
             scrollbar-width: none;
-            -webkit-overflow-scrolling: touch;
         }
 
         .quick-replies::-webkit-scrollbar {
@@ -589,28 +572,49 @@
             overscroll-behavior: contain;
         }
 
-        .msg-bubble {
-            font-size: 14.5px;
-        }
-
         .chat-input-area {
             padding: 10px 12px;
-            padding-bottom: calc(10px + env(safe-area-inset-bottom, 0px));
-        }
-
-        .chat-send {
-            width: 44px;
-            height: 44px;
         }
     }
 
-    @keyframes chatFadeIn {
-        from {
-            opacity: 0;
+    /* ── Keyboard up, or a phone on its side ──────────────────────────
+       `html.chat-kb` is set by syncChatViewport() below while the chat is
+       open and the on-screen keyboard is showing. There is then about
+       300px of screen left, and the card cannot also spend it on the
+       launcher's 92px and a row of suggestions: the card takes the
+       visible area (still inset, still a card), the launcher hides, and
+       the suggestions come back when the keyboard goes away.
+
+       It is positioned from the TOP with the visualViewport numbers
+       because Android and iOS lay the keyboard over a fixed element
+       instead of resizing it: `bottom` would put the input underneath. */
+    html.chat-kb #chat-window {
+        top: calc(var(--chat-vv-top, 0px) + 8px);
+        bottom: auto;
+        height: calc(var(--chat-vv-h, 100dvh) - 16px);
+    }
+
+    html.chat-kb #chat-bubble,
+    html.chat-kb .quick-replies {
+        display: none;
+    }
+
+    /* The same squeeze without a keyboard: a phone held sideways, or an
+       old browser that shrinks the page for the keyboard instead. */
+    @media (max-height: 520px) {
+        #chat-window {
+            bottom: 12px;
+            height: calc(100vh - 24px);
+            height: calc(100dvh - 24px);
         }
 
-        to {
-            opacity: 1;
+        html.chat-open #chat-bubble,
+        html.chat-open .quick-replies {
+            display: none;
+        }
+
+        .chat-header {
+            padding: 10px 16px;
         }
     }
 
@@ -707,8 +711,8 @@
     let isLoading = false;
 
     // ── Toggle ─────────────────────────────────────────────────────────
-    // `chat-open` on <html> is what the phone layout keys off: it locks the
-    // page behind the full-screen chat and hides the launcher.
+    // `chat-open` on <html> lets the short-screen layout hide the launcher
+    // while the chat is showing.
     function setChatOpen(open) {
         chatWin.classList.toggle('open', open);
         document.documentElement.classList.toggle('chat-open', open);
@@ -728,20 +732,26 @@
 
     // The on-screen keyboard covers a fixed element on Android and iOS; it
     // does not resize it. visualViewport is the part of the screen actually
-    // visible, so the chat is sized to that and the input stays above the
-    // keyboard. Only the phone layout reads these two properties.
+    // visible. While the keyboard is up (the visible part is well short of
+    // the window) `chat-kb` switches the card to fill that part, so the
+    // input stays above the keyboard. 150px is more than any browser
+    // toolbar and less than any keyboard.
     function syncChatViewport() {
         const vv = window.visualViewport;
-        const root = document.documentElement.style;
+        const html = document.documentElement;
+        const keyboardUp = !!vv && chatWin.classList.contains('open') &&
+            window.innerHeight - vv.height > 150;
 
-        if (!vv || !chatWin.classList.contains('open')) {
-            root.removeProperty('--chat-vv-h');
-            root.removeProperty('--chat-vv-top');
+        html.classList.toggle('chat-kb', keyboardUp);
+
+        if (!keyboardUp) {
+            html.style.removeProperty('--chat-vv-h');
+            html.style.removeProperty('--chat-vv-top');
             return;
         }
 
-        root.setProperty('--chat-vv-h', vv.height + 'px');
-        root.setProperty('--chat-vv-top', vv.offsetTop + 'px');
+        html.style.setProperty('--chat-vv-h', vv.height + 'px');
+        html.style.setProperty('--chat-vv-top', vv.offsetTop + 'px');
         messages.scrollTop = messages.scrollHeight;
     }
 

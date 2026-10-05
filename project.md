@@ -255,20 +255,22 @@ The rest of the same review, fixed in a second pass:
   field has focus. The chat's own input is excluded.
 - **Customer dashboard at 769–900px** joins the 993–1180px rule above: one
   column.
-- **The chatbot is a full-screen sheet on phones** (`partials/chatbot.blade.php`,
-  `(max-width: 480px), (max-height: 520px)`). As a floating card it was 336px
-  wide on a 360px phone with 140px of height given up to the offset and the
-  launcher, and opening it focused the input, so the keyboard took half of what
-  was left. Now: the window fills the screen, the launcher hides while it is
-  open (× and Escape close it), the quick replies are one sideways-scrolling
-  row, and the page behind does not scroll (`html.chat-open`). **The input is
-  not focused on open on a touch device**, so the keyboard waits until the
-  guest taps the field. The height comes from `window.visualViewport`
-  (`--chat-vv-h` / `--chat-vv-top`, set by `syncChatViewport()`), because the
-  on-screen keyboard covers a fixed element on Android and iOS and does not
-  resize it; `100dvh` is only the fallback. Open and close go through
-  `setChatOpen()`; don't toggle the `open` class directly. Tablet and desktop
-  keep the floating card.
+- **The chatbot stays a floating card on phones, made roomier**
+  (`partials/chatbot.blade.php`). A full-screen sheet was tried and rejected by
+  the owner; do not bring it back. What made the card cramped was what it spent
+  its height on: opening it focused the input, so the keyboard took half the
+  screen at once; the four quick replies wrapped to two or three rows; and with
+  the keyboard up the launcher still held 92px. Now the input is **not focused
+  on open on a touch device**, the quick replies are one sideways-scrolling
+  row, and while the keyboard is up (`html.chat-kb`, set by
+  `syncChatViewport()` from `window.visualViewport`) the card fills the visible
+  area with an 8px inset, positioned from the top, and the launcher and the
+  quick replies hide until the keyboard goes. Positioning from the top matters:
+  Android and iOS lay the keyboard over a fixed element instead of resizing
+  it, so `bottom` puts the input underneath. A viewport under 520px tall (a
+  phone on its side) gets the same compact treatment through
+  `html.chat-open`. Open and close go through `setChatOpen()`; don't toggle
+  the `open` class directly.
 - **One-line text links have a 44px hit area** (`portal.css`, "TEXT LINKS"):
   breadcrumbs, the back links, "View all →", booking references in the payments
   list, Get Directions, the phone and email links on the landing page, and the
