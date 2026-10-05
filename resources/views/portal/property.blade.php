@@ -768,11 +768,26 @@
                 gap: 2px;
             }
 
+            /* Ang pill ang pinipindot para pumili ng petsa at slot, kaya may
+               pinakamababang taas ito sa telepono: 22px lang dati, masyadong
+               maliit para sa daliri. */
             .slot-pill {
-                font-size: 11px;
+                font-size: 12px;
                 padding: 2px 3px;
                 gap: 3px;
                 letter-spacing: 0;
+                min-height: 30px;
+                justify-content: center;
+            }
+
+            /* "22 Hours" ay mas malapad sa ~40px na cell at napuputol sa
+               "22 Hc". Hinahayaan itong bumaba sa pangalawang linya: sa
+               petsang 22-oras ay ito lang ang pill, kaya may lugar. Ang
+               "Day" at "Night" ay iisang salita at hindi apektado. */
+            .slot-pill-txt {
+                white-space: normal;
+                text-align: center;
+                line-height: 1.2;
             }
 
             .slot-pill i {
@@ -828,18 +843,30 @@
             }
         }
 
-        /* Pinakamaliliit na telepono (~360px): hindi na sabay kasya ang
-           icon at ang salita sa loob ng ~48px na cell. Ang salita ang
-           nananatili — ito ang hindi kailangang hulaan. */
-        @media(max-width:380px) {
+        /* Telepono: hindi na sabay kasya ang icon at ang 12px na salita sa
+           loob ng ~45–55px na cell ("Night" ay napuputol sa "Nigh" sa
+           390px). Ang salita ang nananatili — ito ang hindi kailangang
+           hulaan. */
+        @media(max-width:480px) {
             .slot-pill i {
                 display: none;
             }
 
             .slot-pill {
-                font-size: 10.5px;
                 padding: 2px;
-                justify-content: center;
+            }
+        }
+
+        /* Daliri, hindi mouse: mas mataas na pill at mas malaking pindutan
+           ng buwan, anuman ang lapad ng screen (kasama ang tablet). */
+        @media (pointer: coarse) {
+            .slot-pill {
+                min-height: 30px;
+            }
+
+            .fc .fc-button {
+                min-width: 44px;
+                min-height: 40px;
             }
         }
     </style>

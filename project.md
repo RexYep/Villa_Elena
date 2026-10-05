@@ -1,7 +1,7 @@
 # Villa Elena Private Rental Resort
 ## Resort Management System — Project Documentation
 
-**Version:** 7.55
+**Version:** 7.56
 **Stack:** PHP 8.2 / Laravel 12 / MySQL 8 / Bootstrap 5
 **Local URL:** `http://127.0.0.1:8000` (`php artisan serve`) or `http://localhost:8000` (Docker — see v5.3)
 **Live URL:** `https://villa-elena.onrender.com` (Render, free tier — testing only, not yet handed to real guests)
@@ -188,7 +188,85 @@ is the natural moment to remove them rather than a migration of their own.
 
 ---
 
-## What Changed in v7.55 (Read This First)
+## What Changed in v7.56 (Read This First)
+
+### Five responsive fixes on the landing page and the customer portal
+
+Found by rendering 19 guest pages in headless Chrome at 12 widths (320–1920px),
+plus a landscape phone and the open states (menu, drawer, chatbot, modals). No
+page scrolled sideways before or after; these were clipped or unreachable
+content.
+
+- **Landing villa card, 320–375px** (`portal/home.blade.php`). The stacked
+  `.villa-showcase` used a bare `1fr` track, which cannot shrink below its
+  widest content, so the card grew up to 79px past its own edge and
+  `overflow: hidden` cut the Book Now button. Now `minmax(0, 1fr)`, and the
+  amenity tags are two across below 480px. **A single-column grid inside an
+  `overflow: hidden` card is `minmax(0, 1fr)`, never `1fr`.**
+- **Chatbot window** (`partials/chatbot.blade.php`). A flat `height: 560px`
+  plus the 100px offset needs 660px of viewport; only the ≤480px-wide rule
+  adapted. On a landscape phone or a 1366x768 laptop the header and close
+  button were above the screen. The base rule is now
+  `min(560px, calc(100dvh - 120px))`, still a definite height.
+- **Landing mobile menu** (`.mobile-menu`). It is `position: fixed`, so it
+  needs its own `max-height` + `overflow-y: auto`; without them everything
+  below "Rooms" was out of reach on a landscape phone.
+- **Customer dashboard and booking detail, 993–1180px.** The 252px sidebar
+  appears at 993px (`portal.css`), but page breakpoints measure the window, so
+  the two-column grids were laid out in ~670px. Both collapse to one column in
+  that band. **A customer-page breakpoint above 992px must subtract the
+  sidebar.**
+- **Closed customer drawer** (`portal.css`). Its 40px box-shadow reached back
+  on-screen as a grey band down the left edge of every page on a phone. The
+  shadow is on `.cust-sidebar.open` only.
+
+The rest of the same review, fixed in a second pass:
+
+- **Villa page calendar pills** (`portal/property.blade.php`). 22px tall with
+  10.5px text, and "22 Hours" cut to "22 Hc". Now 30px minimum on phones and on
+  any touch device, 12px text, and the label may wrap: on a 22-hour date it is
+  the only pill, so there is room. The day/night icon is dropped at 480px and
+  below, not 380px, because a 12px "Night" plus the icon does not fit a 54px
+  cell. **Check the calendar at 390px, not only 320px, after touching this.**
+- **Form fields are 16px on touch devices** (`portal.css`,
+  `@media (pointer: coarse)`). iOS Safari zooms the page on focus below that
+  and does not zoom back. It is `!important` because every page sets its own
+  size in a later `<style>` block; desktop keeps the 13–15px sizes.
+- **Tap targets raised to 44px:** customer hamburger and bell, pagination,
+  sign-out, booking filter chips, the policy modal's close button, the chat's
+  close button, the "Cancel this booking" toggle, public nav buttons (touch
+  only). The landing gallery dots already had a 44px `::after` hit area; the
+  review measured the visible dot.
+- **`dvh` beside every `vh`** on the customer sidebar and the chat window, so
+  the mobile browser's toolbar is not counted as usable height.
+- **Landing page gutters.** `#amenities .section` and six others set their
+  padding through an id, which outranked the `.section` phone rule: they kept
+  40px while the rest dropped to 20px. All are 20px at 768px and below now.
+  **A per-section padding set with an id needs its own line in the phone
+  block.**
+- **Landing page at tablet width:** the hero search is three fields and a
+  full-width button (Guests no longer alone on a row), room cards fit three
+  across, and the footer is brand-on-top with two link columns. Its links lost
+  an indent that was Bootstrap's `ul { padding-left: 2rem }`.
+- **Feature cards stay two across on phones**, compact. One per row was about
+  1,800px of extra scrolling at 390px (15,190px page, now 13,364px).
+- **The chat launcher steps aside** while a Bootstrap modal or the confirm
+  dialog is open (its z-index is above the modal), and on phones while a page
+  field has focus. The chat's own input is excluded.
+- **Customer dashboard at 769–900px** joins the 993–1180px rule above: one
+  column.
+- **One-line text links have a 44px hit area** (`portal.css`, "TEXT LINKS"):
+  breadcrumbs, the back links, "View all →", booking references in the payments
+  list, Get Directions, the phone and email links on the landing page, and the
+  brand in the customer top bar. It is an `::after` overlay, not padding, so
+  nothing moves; each of these has its own margin on its own page. A new link
+  of this kind is added to that selector list. The checkout page's back link,
+  the chat's quick-reply chips and the legal pages' contents links use padding
+  instead, the last two on touch devices only.
+
+---
+
+## What Changed in v7.55
 
 ### Only a guest account can book through the public portal
 

@@ -412,4 +412,12 @@
             padding: 28px 22px;
         }
     }
+
+    /* Finger, not mouse: each contents link is a full 44px row. */
+    @media (pointer: coarse) {
+        .toc-link {
+            padding-top: 12px;
+            padding-bottom: 12px;
+        }
+    }
 </style>

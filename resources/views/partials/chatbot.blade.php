@@ -52,7 +52,13 @@
         bottom: 100px;
         right: 28px;
         width: 380px;
-        height: 560px;
+        /* Never taller than the room above the launcher (100px offset plus a
+           20px gap at the top). A flat 560px put the header and its close
+           button off-screen on any viewport shorter than 680px: a landscape
+           phone, or a 1366x768 laptop. A definite height, not max-height, so
+           the scrolling message list inside still resolves. */
+        height: min(560px, calc(100vh - 120px));
+        height: min(560px, calc(100dvh - 120px));
         background: #fff;
         border-radius: 20px;
         box-shadow: 0 12px 48px rgba(0, 0, 0, 0.18);
@@ -140,8 +146,16 @@
         }
     }
 
+    /* A 44px box around the "×": the glyph alone was an 11x20px target.
+       The negative margin keeps it where it was in the header. */
     .chat-close {
-        margin-left: auto;
+        margin: -10px -12px -10px auto;
+        width: 44px;
+        height: 44px;
+        flex: none;
+        display: flex;
+        align-items: center;
+        justify-content: center;
         background: none;
         border: none;
         color: rgba(255, 255, 255, .5);
@@ -500,11 +514,41 @@
                Kept a DEFINITE height rather than auto + max-height so the
                flex column inside (scrolling message list) still resolves. */
             height: min(560px, calc(100vh - 140px));
+            height: min(560px, calc(100dvh - 140px));
         }
 
         #chat-bubble {
             bottom: 20px;
             right: 20px;
+        }
+
+        /* On a phone the launcher floats over the right end of whatever
+           field is under it. While the guest is typing in a page field it
+           steps aside; the chat's own input is excluded so the launcher
+           stays while the chat is in use. */
+        body:has(:is(input, select, textarea):focus:not(#chat-input)) #chat-bubble {
+            opacity: 0;
+            pointer-events: none;
+        }
+    }
+
+    /* A modal or the confirm dialog owns the screen while it is open. The
+       launcher's z-index is above Bootstrap's modal, so it sat on the
+       corner of the booking-policy modal. */
+    body.modal-open #chat-bubble,
+    body:has(dialog[open]) #chat-bubble {
+        display: none;
+    }
+
+    /* iOS Safari zooms the page when a focused field's text is under 16px. */
+    @media (pointer: coarse) {
+        .qr-btn {
+            padding: 11px 14px;
+            font-size: 13px;
+        }
+
+        .chat-input {
+            font-size: 16px;
         }
     }
 </style>

@@ -212,6 +212,14 @@
             padding: 20px 24px 28px;
             z-index: 999;
             border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            /* The menu is fixed, so the page scrolling behind it does not
+               move it: on a landscape phone everything below "Rooms" was
+               out of reach. `dvh` where supported, so the browser toolbar
+               is not counted as usable height. */
+            max-height: calc(100vh - var(--nav-h));
+            max-height: calc(100dvh - var(--nav-h));
+            overflow-y: auto;
+            overscroll-behavior: contain;
         }
 
         .mobile-menu.open {
@@ -809,7 +817,7 @@
 
         .villa-showcase-amenities {
             display: grid;
-            grid-template-columns: repeat(4, 1fr);
+            grid-template-columns: repeat(4, minmax(0, 1fr));
             gap: 8px;
             margin-bottom: 24px;
         }
@@ -923,8 +931,12 @@
         }
 
         @media (max-width: 900px) {
+            /* `minmax(0, …)`, not a bare `1fr`: a `1fr` track cannot shrink
+               below its widest content, so on a 320px phone the card grew
+               79px past its own edge and `overflow: hidden` cut the Book Now
+               button in half. */
             .villa-showcase {
-                grid-template-columns: 1fr;
+                grid-template-columns: minmax(0, 1fr);
             }
 
             .villa-showcase-img-wrap {
@@ -1158,6 +1170,15 @@
             display: flex;
             align-items: center;
             gap: 6px;
+        }
+
+        /* 280px columns leave a tablet with two cards and a third alone on
+               its own row. */
+        @media (max-width: 900px) {
+            .room-tour-grid {
+                grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+                gap: 20px;
+            }
         }
 
         @media (max-width: 600px) {
@@ -1934,6 +1955,10 @@
 
         .footer-links {
             list-style: none;
+            /* Bootstrap gives every <ul> a 2rem left padding, which indented
+                   the links under their own column heading. */
+            padding: 0;
+            margin: 0;
             display: flex;
             flex-direction: column;
             gap: 12px;
@@ -2463,8 +2488,11 @@
         }
 
         @media (max-width: 900px) {
+            /* Tatlong field sa isang hilera, ang pindutan sa ilalim. Dalawang
+                   hanay dati, kaya ang Guests ay naiiwang mag-isa sa pangalawang
+                   hilera na may blangkong katabi. */
             .book-bar {
-                grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+                grid-template-columns: minmax(0, 1.1fr) minmax(0, 1.3fr) minmax(0, 0.7fr);
             }
 
             .btn-availability {
@@ -2555,9 +2583,34 @@
                 grid-template-columns: 1fr;
             }
 
+            /* Each of these is set through an id selector further up, which
+                   outranks the `.section` rule above: they kept a 40px gutter
+                   while every other section dropped to 20px, so the left edge
+                   jumped from section to section. */
+            #amenities .section,
+            #room-tour .section,
+            #gallery .section,
+            #about .section,
+            #testimonials .section,
+            #location .section,
+            #contact .section {
+                padding: 72px 20px;
+            }
+
+            .footer {
+                padding-left: 20px;
+                padding-right: 20px;
+            }
+
+            /* Brand across the top, link columns two-up beneath it. One
+                   column made the footer about 900px tall on a phone. */
             .footer-top {
-                grid-template-columns: 1fr;
-                gap: 36px;
+                grid-template-columns: 1fr 1fr;
+                gap: 36px 24px;
+            }
+
+            .footer-top > :first-child {
+                grid-column: 1 / -1;
             }
 
             .footer-bottom {
@@ -2632,8 +2685,38 @@
         }
 
         @media (max-width: 480px) {
+            /* Two compact cards across, not one full-height card per row:
+                   nine of those were about 2,300px of scrolling on a phone. */
             .amenities-grid {
-                grid-template-columns: 1fr;
+                gap: 12px;
+                margin-top: 36px;
+            }
+
+            .amenity-card {
+                padding: 20px 12px;
+                border-radius: 16px;
+            }
+
+            .amenity-icon {
+                width: 46px;
+                height: 46px;
+                font-size: 20px;
+                margin-bottom: 12px;
+            }
+
+            .amenity-name {
+                font-size: 15px;
+                margin-bottom: 6px;
+            }
+
+            .amenity-desc {
+                font-size: 12px;
+            }
+
+            /* Four tags across leaves about 50px each on a 320px phone,
+               narrower than the word "Conditioned". */
+            .villa-showcase-amenities {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
             }
         }
 

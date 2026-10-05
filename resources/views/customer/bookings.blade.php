@@ -13,6 +13,7 @@
         }
 
         .filter-btn {
+            min-height: 40px;
             padding: 7px 16px;
             border-radius: 20px;
             font-size: 14px;
@@ -197,7 +198,7 @@
             .filter-btn {
                 padding: 9px 6px;
                 font-size: 13px;
-                min-height: 38px;
+                min-height: 44px;
             }
 
             .bc-img,

@@ -458,6 +458,20 @@
         }
 
 
+        /* Lumilitaw ang 252px na sidebar sa 993px (portal.css), pero ang
+           lapad ng bintana pa rin ang sinusukat ng mga breakpoint dito. Kaya
+           mula 993px hanggang 1180px ay ~670–850px lang ang laman, at ang
+           340px na hanay ay nag-iiwan ng napakakitid na Booking History:
+           nahahati ang reference sa "VE-" / "IN3GVCEH". */
+        /* Ganoon din mula 769px hanggang 900px (tablet na nakatayo): wala
+           nang sidebar doon, pero ~730–860px pa rin ang laman. */
+        @media (max-width:900px),
+        (min-width:993px) and (max-width:1180px) {
+            .content-grid {
+                grid-template-columns: minmax(0, 1fr);
+            }
+        }
+
         @media(max-width:768px) {
             .stats-row {
                 grid-template-columns: 1fr 1fr;

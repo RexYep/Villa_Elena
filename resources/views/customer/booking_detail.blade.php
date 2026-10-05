@@ -309,7 +309,8 @@
             font-size: 13px;
             font-weight: 500;
             color: var(--terracotta);
-            padding: 4px 0;
+            /* Buong lapad at 44px ang taas para madaling tamaan ng daliri. */
+            padding: 12px 0;
         }
 
         .cancel-toggle summary::-webkit-details-marker {
@@ -517,6 +518,15 @@
         @media (max-width:900px) {
             .detail-grid {
                 grid-template-columns: 1fr;
+            }
+        }
+
+        /* Kapareho ng sa dashboard: may 252px na sidebar mula 993px, kaya
+           ~670–850px lang ang laman hanggang 1180px. Sa tabi ng 300px na
+           hanay ay nagdidikit ang mga heading ng Payment History. */
+        @media (min-width:993px) and (max-width:1180px) {
+            .detail-grid {
+                grid-template-columns: minmax(0, 1fr);
             }
         }
 

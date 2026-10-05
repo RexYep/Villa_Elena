@@ -391,8 +391,8 @@
         }
 
         .policy-modal-close {
-            width: 34px;
-            height: 34px;
+            width: 44px;
+            height: 44px;
             flex-shrink: 0;
             border: none;
             border-radius: 50%;

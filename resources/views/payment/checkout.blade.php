@@ -264,10 +264,12 @@
             color: #fff;
         }
 
+        /* 44px ang taas ng napipindot: 12px na padding sa itaas at ibaba
+           kapalit ng dating 12px na margin. */
         .btn-back {
             display: block;
             text-align: center;
-            margin-top: 12px;
+            padding: 12px 0;
             color: var(--muted);
             font-size: 13px;
             text-decoration: none;
