@@ -504,19 +504,6 @@
        at the same specificity, so source order is what decides the
        winner. Placed above the base rule it would silently lose. */
     @media (max-width: 480px) {
-        #chat-window {
-            left: 12px;
-            right: 12px;
-            width: auto;
-            bottom: 92px;
-            /* A flat 560px does not fit a 667px-tall phone once the
-               bottom offset and the launcher below it are accounted for.
-               Kept a DEFINITE height rather than auto + max-height so the
-               flex column inside (scrolling message list) still resolves. */
-            height: min(560px, calc(100vh - 140px));
-            height: min(560px, calc(100dvh - 140px));
-        }
-
         #chat-bubble {
             bottom: 20px;
             right: 20px;
@@ -529,6 +516,101 @@
         body:has(:is(input, select, textarea):focus:not(#chat-input)) #chat-bubble {
             opacity: 0;
             pointer-events: none;
+        }
+    }
+
+    /* ── Phones: the chat is the whole screen ─────────────────────────
+       As a floating card it was 336px wide on a 360px phone, minus 140px
+       of height for the offset and the launcher, and then the keyboard
+       took half of what was left: about two lines of conversation. A
+       phone has no room to show the page and a chat at once, so the chat
+       takes the screen and the header's × gives it back.
+
+       The second condition is a phone on its side (short, not narrow).
+
+       `--chat-vv-h` / `--chat-vv-top` come from the script below, which
+       copies window.visualViewport: on Android and iOS the on-screen
+       keyboard covers a fixed element instead of resizing it, so without
+       them the input sits under the keyboard. The `dvh` value is the
+       fallback before the script has run. */
+    @media (max-width: 480px), (max-height: 520px) {
+        #chat-window {
+            top: var(--chat-vv-top, 0px);
+            left: 0;
+            right: 0;
+            bottom: auto;
+            width: auto;
+            height: 100vh;
+            height: var(--chat-vv-h, 100dvh);
+            border: none;
+            border-radius: 0;
+            box-shadow: none;
+            /* The overshooting slide-up of the desktop card shows the page
+               through the gap at the bottom of a full-screen sheet. */
+            animation: chatFadeIn .18s ease-out;
+        }
+
+        /* Nothing behind a full-screen chat should scroll or be tapped,
+           and the launcher has nothing left to toggle: × closes it. */
+        html.chat-open,
+        html.chat-open body {
+            overflow: hidden;
+        }
+
+        html.chat-open #chat-bubble {
+            display: none;
+        }
+
+        .chat-header {
+            padding: 12px 16px;
+            padding-top: calc(12px + env(safe-area-inset-top, 0px));
+        }
+
+        /* One row that scrolls sideways. Wrapped, the four suggestions took
+           two or three rows off the top of the conversation. */
+        .quick-replies {
+            flex-wrap: nowrap;
+            overflow-x: auto;
+            padding: 10px 14px;
+            scrollbar-width: none;
+            -webkit-overflow-scrolling: touch;
+        }
+
+        .quick-replies::-webkit-scrollbar {
+            display: none;
+        }
+
+        .qr-btn {
+            flex: none;
+        }
+
+        .chat-messages {
+            padding: 14px;
+            overscroll-behavior: contain;
+        }
+
+        .msg-bubble {
+            font-size: 14.5px;
+        }
+
+        .chat-input-area {
+            padding: 10px 12px;
+            padding-bottom: calc(10px + env(safe-area-inset-bottom, 0px));
+        }
+
+        .chat-send {
+            width: 44px;
+            height: 44px;
+        }
+    }
+
+    @keyframes chatFadeIn {
+        from {
+            opacity: 0;
+        }
+
+        to {
+            opacity: 1;
         }
     }
 
@@ -625,14 +707,54 @@
     let isLoading = false;
 
     // ── Toggle ─────────────────────────────────────────────────────────
-    bubble.addEventListener('click', () => {
-        chatWin.classList.toggle('open');
+    // `chat-open` on <html> is what the phone layout keys off: it locks the
+    // page behind the full-screen chat and hides the launcher.
+    function setChatOpen(open) {
+        chatWin.classList.toggle('open', open);
+        document.documentElement.classList.toggle('chat-open', open);
+        syncChatViewport();
+
+        if (!open) return;
         document.getElementById('chat-notif-dot').style.display = 'none';
-        if (chatWin.classList.contains('open')) {
+        messages.scrollTop = messages.scrollHeight;
+
+        // Focusing the input on a touch device raises the keyboard before the
+        // guest has read the greeting or seen the suggestions, and it covers
+        // half the chat. A mouse-and-keyboard guest still gets the focus.
+        if (!window.matchMedia('(pointer: coarse)').matches) {
             setTimeout(() => input.focus(), 100);
         }
+    }
+
+    // The on-screen keyboard covers a fixed element on Android and iOS; it
+    // does not resize it. visualViewport is the part of the screen actually
+    // visible, so the chat is sized to that and the input stays above the
+    // keyboard. Only the phone layout reads these two properties.
+    function syncChatViewport() {
+        const vv = window.visualViewport;
+        const root = document.documentElement.style;
+
+        if (!vv || !chatWin.classList.contains('open')) {
+            root.removeProperty('--chat-vv-h');
+            root.removeProperty('--chat-vv-top');
+            return;
+        }
+
+        root.setProperty('--chat-vv-h', vv.height + 'px');
+        root.setProperty('--chat-vv-top', vv.offsetTop + 'px');
+        messages.scrollTop = messages.scrollHeight;
+    }
+
+    if (window.visualViewport) {
+        window.visualViewport.addEventListener('resize', syncChatViewport);
+        window.visualViewport.addEventListener('scroll', syncChatViewport);
+    }
+
+    bubble.addEventListener('click', () => setChatOpen(!chatWin.classList.contains('open')));
+    closeBtn.addEventListener('click', () => setChatOpen(false));
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && chatWin.classList.contains('open')) setChatOpen(false);
     });
-    closeBtn.addEventListener('click', () => chatWin.classList.remove('open'));
 
     // ── Input resize ───────────────────────────────────────────────────
     input.addEventListener('input', () => {
