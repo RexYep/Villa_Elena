@@ -133,6 +133,42 @@ class PayMongoService
         return $response->json('data');
     }
 
+    // ── Expire a Checkout Session ──────────────────────────────────
+    /**
+     * Closes a checkout session so it can no longer be paid.
+     *
+     * A checkout session NEVER expires by itself — PayMongo keeps it
+     * `active` until this endpoint is called. Only the QR Ph code inside
+     * it has a clock (30 minutes from when it is shown), and reopening
+     * the checkout link simply draws a new one. So a booking we cancel
+     * stays payable for as long as its session is left open.
+     *
+     * PayMongo answers 400 for three different states and does not say
+     * which in a way worth parsing: already expired, already paid, or a
+     * payment in progress. That is 'refused' here; the caller re-reads
+     * the session to find out which.
+     *
+     * @return string 'expired' | 'refused' | 'missing'
+     */
+    public function expireCheckoutSession(string $sessionId): string
+    {
+        $response = Http::withBasicAuth($this->secretKey, '')
+            ->timeout(8)
+            ->post("{$this->baseUrl}/checkout_sessions/{$sessionId}/expire");
+
+        if ($response->successful()) {
+            return 'expired';
+        }
+
+        return match ($response->status()) {
+            400 => 'refused',
+            // A session made under the other key mode (test vs live) does
+            // not exist for this key. Nothing to close.
+            404 => 'missing',
+            default => throw new \Exception('PayMongo Error: ' . $response->body()),
+        };
+    }
+
     // ── Retrieve a Payment Link ────────────────────────────────────
     public function getPaymentLink(string $linkId): array
     {

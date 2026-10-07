@@ -154,7 +154,17 @@
                             }
 
                             if (announced) {
-                                if (data.booking_status !== 'pending' || settleLeft <= 0) {
+                                // 'cancelled' ay hindi rin pinal: ang bayad na
+                                // dumating sa isang na-auto-cancel na booking ay
+                                // naitatala MUNA, at saka pa lang ibinabalik ang
+                                // booking sa hiwalay na hakbang
+                                // (reinstateAfterLatePayment()). Kung titigil dito
+                                // sa unang basa, mananatiling "Cancelled" ang
+                                // page ng isang booking na kumpirmado na.
+                                const unsettled = data.booking_status === 'pending'
+                                    || data.booking_status === 'cancelled';
+
+                                if (!unsettled || settleLeft <= 0) {
                                     stop();
                                     return;
                                 }

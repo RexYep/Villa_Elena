@@ -1,7 +1,7 @@
 # Villa Elena Private Rental Resort
 ## Resort Management System — Project Documentation
 
-**Version:** 7.59
+**Version:** 7.60
 **Stack:** PHP 8.2 / Laravel 12 / MySQL 8 / Bootstrap 5
 **Local URL:** `http://127.0.0.1:8000` (`php artisan serve`) or `http://localhost:8000` (Docker — see v5.3)
 **Live URL:** `https://villa-elena.onrender.com` (Render, free tier — testing only, not yet handed to real guests)
@@ -185,6 +185,112 @@ through `user_id` and nothing denormalises their name into a booking row.
 from Task 11 · F5 get dropped at the same time — they are empty and reserved
 (`users.id_type` / `users.id_number`, see v7.40), and a schema change for erasure
 is the natural moment to remove them rather than a migration of their own.
+
+---
+
+## What Changed in v7.60 (Read This First)
+
+### A booking could be cancelled and then paid
+
+Found with real money on live keys (2026-10-07). The guest's QR Ph code is good
+for 30 minutes; the unpaid hold (`booking_hold_minutes`) was 15. The sweeper
+cancelled the booking at minute 15, the guest scanned the same QR afterwards,
+and the payment went through. Result: a booking that read **cancelled, paid**.
+
+Two separate faults, and both had to be fixed:
+
+**1. Nothing ever closed the checkout session.** A PayMongo checkout session
+does not expire by itself. Their docs: *"There is no default time limit — an
+active session stays open indefinitely until you mark it as expired."* Only the
+QR inside it has a clock, and reopening the checkout link draws a new one. A
+comment in `createCheckout()` said a session lives 24 hours; that was wrong and
+is corrected. So the exposure was never "30 minutes" — it was forever.
+
+**2. The late payment was recorded and then nothing else happened.**
+`confirmOnFirstPayment()` returns at once unless the booking is `pending`. The
+v7.0 guard for "a late payment on an expired hold" lives in that method, so it
+only ever ran in the minute between the hold expiring and the sweeper's next
+run. After that the booking is `cancelled` and the guard is unreachable. The
+guest was sent "Payment Received! … confirmed" and a receipt; the admins got the
+routine payment notice and nothing that said the booking was cancelled.
+
+**What changed:**
+
+- **`PayMongoService::expireCheckoutSession()`** —
+  `POST /v1/checkout_sessions/{id}/expire`. Returns `expired`, `refused` (400)
+  or `missing` (404). PayMongo answers 400 for three states (already expired,
+  already paid, payment in progress), so a refusal is followed by a GET to see
+  which.
+- **`Booking::closeCheckoutSession()`**, called from a `saved` hook whenever
+  `status` becomes `cancelled`. It is in the model because there are three
+  cancel paths (sweeper, guest, admin) and a session with no expiry punishes
+  the one that forgets. It runs in `DB::afterCommit()` (an HTTP call, and the
+  hook also fires inside `reserveSlot()`'s lock), never throws, and clears
+  `paymongo_session_id` only once the session is really closed. A session that
+  is paid or being paid keeps its id, because the success callback needs it to
+  record that payment.
+- **`AutoCheckInOutBookings::closeLingeringCheckoutSessions()`** retries for
+  bookings cancelled in the last 24 hours that still carry a session id — a
+  PayMongo outage, or a guest who was mid-payment at the cancel and then gave
+  up.
+- **`Booking::reinstateAfterLatePayment()`**, called from
+  `recordPaymongoPayment()` **after** the payment transaction commits. A
+  cancelled booking comes back as `confirmed` only when all four hold: the
+  **system** cancelled it for non-payment, its check-in is still ahead, its slot
+  is still offered on that date, and nobody else holds the slot (tested under
+  `reserveSlot()`'s lock). Otherwise it stays cancelled and the admins get
+  *"Payment on a cancelled booking"* naming the reason. It returns one of the
+  `Booking::LATE_PAYMENT_*` outcomes.
+- **The guest is told the truth in each case.** Reinstated: "…the booking is
+  confirmed again", plus the confirmation email. Not reinstated: "…had already
+  been cancelled and could not be restored. The resort has been notified and
+  will contact you about this payment", and **no email** — that mail is a
+  confirmation or a "Fully Paid" receipt, and neither is true of a cancelled
+  booking. `payment/success.blade.php` shows "Payment Received" with the same
+  note instead of "Payment Successful!".
+
+**Decision confirmed with the owner (2026-10-08):** reinstate automatically when
+the slot is still free. The alternative was to always keep it cancelled and
+refund.
+
+**Why reinstating runs after the commit and not inside the transaction.**
+`confirmOnFirstPayment()` runs inside it, so this looks inconsistent. The
+difference is that reinstating takes `reserveSlot()`'s lock in a nested
+transaction. If that deadlocks, MySQL rolls back the **whole** transaction and
+the payment row goes with it; catching the exception does not bring it back.
+A booking left cancelled with an admin alert can be fixed by a person. A
+payment that was never written down cannot. The cost is a short moment where
+the booking reads "cancelled, paid" before it flips, which is why the status
+watcher now keeps polling through `cancelled` as well as `pending`.
+
+**Do not add reinstating to `reconcileBooking()`.** That method runs on every
+duplicate delivery and every refresh of the success page. If the slot was
+taken, the admins have already been told to refund; a later retry that finds
+the slot free again (the other booking was cancelled) would silently confirm a
+booking that is being refunded.
+
+**What it does not do:**
+
+- It does not refund. A payment on a booking that stays cancelled is recorded
+  and waits for a person (Payments page), like every other refund decision.
+- It does not re-quote. The guest paid against the price they were shown.
+- It does not shorten the QR. `expiry_seconds` exists only on the Payment
+  Intent API; the hosted checkout this app uses has no such field.
+- **It does not close sessions left open before this version.** The retry is
+  bounded to 24 hours on purpose, so bookings cancelled earlier still have a
+  payable link. A payment through one is now handled (reinstated or flagged),
+  but the link itself is still open.
+- `no_show` bookings are not covered — only `cancelled`.
+
+**Verification.** Two scripts against the local database, inside a transaction
+that was rolled back, with mail, Pusher and PayMongo faked: 36 checks on the
+payment paths (reinstated, slot taken, guest-cancelled, check-in passed, an
+ordinary payment unchanged, a duplicate delivery, and each PayMongo answer to
+the expire call), and 10 on a real render of the success page in its three
+states. **Not verified:** nothing here was run against PayMongo itself. Whether
+expiring a session kills a QR already on the guest's screen is unconfirmed —
+the docs say expiring "cancels any associated payment intent", which suggests
+it does. Repeat the original test on live keys to settle it.
 
 ---
 

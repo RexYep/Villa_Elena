@@ -311,6 +311,24 @@ class Booking extends Model
             }
         });
 
+        // A cancelled booking must not stay payable.
+        //
+        // Here in the model, not in the three places that cancel (the
+        // stale-hold sweeper, the guest, the admin): a PayMongo checkout
+        // session never expires by itself, so any cancel path that forgot
+        // this would leave a live QR behind. That is how a booking
+        // auto-cancelled at 15 minutes was paid at minute 20.
+        //
+        // After the commit, because it is an HTTP call and this hook also
+        // fires inside reserveSlot()'s lock (releaseAsExpiredHold()).
+        static::saved(function ($booking) {
+            if ($booking->wasChanged('status')
+                && $booking->status === 'cancelled'
+                && $booking->paymongo_session_id) {
+                \Illuminate\Support\Facades\DB::afterCommit(fn () => $booking->closeCheckoutSession());
+            }
+        });
+
         static::deleted(function () {
             \App\Services\DashboardStats::touch();
             static::touchAvailability();
@@ -2116,6 +2134,154 @@ class Booking extends Model
         $this->update(['status' => 'confirmed']);
 
         return true;
+    }
+
+    // ── A payment that arrives after the booking was cancelled ──────
+
+    public const LATE_PAYMENT_REINSTATED  = 'reinstated';
+    public const LATE_PAYMENT_NOT_SYSTEM  = 'not_system';
+    public const LATE_PAYMENT_PASSED      = 'passed';
+    public const LATE_PAYMENT_NOT_OFFERED = 'not_offered';
+    public const LATE_PAYMENT_SLOT_TAKEN  = 'slot_taken';
+
+    /**
+     * Decides what a payment does to a booking that was already
+     * `cancelled` when the money arrived. Call it AFTER the payment is
+     * committed and recalculateFinancials() has run.
+     *
+     * confirmOnFirstPayment() cannot cover this: it only acts on
+     * `pending`, and the stale-hold sweeper turns an unpaid hold into
+     * `cancelled` within a minute of the grace period ending. The guest's
+     * QR outlives that (PayMongo gives it 30 minutes; our hold is
+     * shorter), so the payment landed on a cancelled booking, was
+     * recorded, and nothing else happened — "cancelled, paid", with the
+     * guest told "payment confirmed" and no admin told anything.
+     *
+     * The booking comes back only when ALL of these hold, and otherwise
+     * stays cancelled for a person to decide (refund, or revive by hand):
+     *
+     *   - the SYSTEM cancelled it for non-payment. A booking the guest or
+     *     an admin cancelled was a decision, and money arriving does not
+     *     undo a decision;
+     *   - its check-in is still ahead;
+     *   - its slot is still offered on that date (a 22-hour date may have
+     *     been opened or closed since);
+     *   - nobody else holds the slot — tested under reserveSlot()'s lock,
+     *     like every other way of taking a slot.
+     *
+     * It never re-quotes: the guest paid against the price they were
+     * shown, and that price stands.
+     *
+     * @return string|null  one of the LATE_PAYMENT_* outcomes, or NULL
+     *                      when this is not a late payment at all
+     */
+    public function reinstateAfterLatePayment(): ?string
+    {
+        if ($this->status !== 'cancelled' || $this->amount_paid <= 0) {
+            return null;
+        }
+
+        if ($this->cancelled_by !== 'system') {
+            return static::LATE_PAYMENT_NOT_SYSTEM;
+        }
+
+        $checkIn  = $this->checkInDateTime();
+        $checkOut = $this->checkOutDateTime();
+
+        if ($checkIn->isPast()) {
+            return static::LATE_PAYMENT_PASSED;
+        }
+
+        $slot = $this->slotKey();
+
+        if (! $slot || ! in_array($slot, static::slotsOfferedOn($this->check_in_date, $this->property), true)) {
+            return static::LATE_PAYMENT_NOT_OFFERED;
+        }
+
+        $reinstated = static::reserveSlot($this->property_id, $checkIn, $checkOut, function () {
+            // `cancelled_by` goes too: it feeds the unpaid-hold cooldown
+            // (recentAutoCancelCount()), and this guest did pay.
+            $this->update([
+                'status'              => 'confirmed',
+                'cancelled_at'        => null,
+                'cancellation_reason' => null,
+                'cancelled_by'        => null,
+            ]);
+
+            // The cancel zeroed `balance_due`, and the cancelled branch of
+            // recalculateFinancials() calls any payment at all "paid".
+            // Recompute now that the booking is live again, or a deposit
+            // would leave it showing nothing left to pay.
+            $this->recalculateFinancials();
+
+            return true;
+        }, $this->id);
+
+        if (! $reinstated) {
+            // A rolled-back attempt leaves `confirmed` on this instance.
+            $this->refresh();
+
+            return static::LATE_PAYMENT_SLOT_TAKEN;
+        }
+
+        StaffLog::record('reinstated_after_late_payment', 'bookings', $this->id,
+            "System reinstated {$this->booking_ref} as confirmed — payment arrived after the unpaid hold was auto-cancelled, and the slot was still free.");
+
+        return static::LATE_PAYMENT_REINSTATED;
+    }
+
+    /**
+     * Closes this booking's PayMongo checkout session, if it has one.
+     *
+     * Never throws: it runs from a model hook on every cancel, and a
+     * PayMongo outage must not turn a cancellation into an error. A
+     * failed attempt keeps `paymongo_session_id`, which is what
+     * AutoCheckInOutBookings::closeLingeringCheckoutSessions() retries on.
+     *
+     * A refusal is not a failure. PayMongo will not expire a session that
+     * is paid or being paid, and then the id MUST stay: the success
+     * callback reads it to record that payment, and
+     * reinstateAfterLatePayment() deals with the booking once it lands.
+     */
+    public function closeCheckoutSession(): void
+    {
+        $sessionId = $this->paymongo_session_id;
+
+        if (! $sessionId) {
+            return;
+        }
+
+        try {
+            $paymongo = app(\App\Services\PayMongoService::class);
+
+            if ($paymongo->expireCheckoutSession($sessionId) === 'refused') {
+                $state = $paymongo->getCheckoutSession($sessionId)['attributes']['status'] ?? null;
+
+                if ($state !== 'expired') {
+                    \Illuminate\Support\Facades\Log::info(
+                        "Checkout session {$sessionId} for cancelled booking {$this->booking_ref} could not be expired — it is paid or being paid. Left open for the payment to be recorded."
+                    );
+
+                    return;
+                }
+            }
+
+            // Query builder, and only if the id is still this one: no
+            // saving() hooks for a bookkeeping column, and a newer
+            // session must not be wiped by a slow call about an old one.
+            static::whereKey($this->getKey())
+                ->where('paymongo_session_id', $sessionId)
+                ->update(['paymongo_session_id' => null]);
+
+            if ($this->paymongo_session_id === $sessionId) {
+                $this->paymongo_session_id = null;
+                $this->syncOriginalAttribute('paymongo_session_id');
+            }
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning(
+                "Could not expire checkout session {$sessionId} for cancelled booking {$this->booking_ref}: ".$e->getMessage()
+            );
+        }
     }
 
     public function getStatusBadgeAttribute(): string

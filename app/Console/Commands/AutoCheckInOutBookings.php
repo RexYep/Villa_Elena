@@ -30,6 +30,7 @@ class AutoCheckInOutBookings extends Command
         $this->autoCheckIns();
         $this->autoCheckOuts();
         $this->cancelStalePendingBookings();
+        $this->closeLingeringCheckoutSessions();
         // Bago mangulit tungkol sa mga refund, alamin muna kung dumating
         // na pala ang ilan — kung hindi, mapapaalalahanan ang admin
         // tungkol sa isang refund na naipadala na kanina.
@@ -355,5 +356,29 @@ class AutoCheckInOutBookings extends Command
 
             $this->info("🗑️ Auto-cancelled stale pending: {$booking->booking_ref}");
         }
+    }
+
+    // ── Checkout sessions left open on cancelled bookings ───────────
+    /**
+     * Retries closing a cancelled booking's PayMongo checkout session.
+     *
+     * The Booking model already closes it at the moment of cancelling.
+     * This is for the two times that does not finish: PayMongo was
+     * unreachable, or it refused because the guest was mid-payment and
+     * then never completed it. Without a retry either one leaves the
+     * session payable forever — it has no expiry of its own.
+     *
+     * Bounded to the last day so a session that can never be closed is
+     * not asked about every minute for good. closeCheckoutSession() never
+     * throws, and clears the id once the session is closed.
+     */
+    private function closeLingeringCheckoutSessions(): void
+    {
+        Booking::where('status', 'cancelled')
+            ->whereNotNull('paymongo_session_id')
+            ->where('cancelled_at', '>=', now()->subDay())
+            ->limit(20)
+            ->get()
+            ->each(fn (Booking $booking) => $booking->closeCheckoutSession());
     }
 }

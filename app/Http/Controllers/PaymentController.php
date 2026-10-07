@@ -155,9 +155,13 @@ class PaymentController extends Controller
                     // PayMongo, kaya kaya natin itong pirmahan; ang guest
                     // ay dinadala lang dito ng isang redirect.
                     //
-                    // 24 oras: iyon ang buhay ng isang PayMongo checkout
-                    // session, kaya hindi kailanman mag-e-expire ang pirma
-                    // habang may mababalikang session pa.
+                    // 24 oras ay SARILI NATING pagpili. Ang isang PayMongo
+                    // checkout session ay HINDI nag-e-expire nang kusa —
+                    // dating sinasabi rito na 24 oras ang buhay nito, at
+                    // mali iyon. Nananatili itong bukas hanggang isara
+                    // (Booking::closeCheckoutSession()). Kapag lumipas ang
+                    // pirma, walang nasisira: hindi lang ginagalaw ng
+                    // cancel() ang session id.
                     'cancel_url' => URL::temporarySignedRoute(
                         'payment.cancel',
                         now()->addHours(24),
@@ -919,6 +923,25 @@ class PaymentController extends Controller
         // Wala nang maaaring mangyari sa ibaba na makakabura ng naitalang
         // bayad. Iyon ang buong punto ng hangganang ito.
 
+        // ── A payment on a booking that was ALREADY CANCELLED ──────
+        //
+        // The unpaid hold is shorter than the life of the guest's QR, so
+        // this is an ordinary event, not a freak one: the sweeper cancels
+        // at the end of the grace period and the guest pays a few minutes
+        // later. confirmOnFirstPayment() above did nothing — it only acts
+        // on `pending`.
+        //
+        // AFTER the commit, and that is deliberate. Reinstating takes
+        // reserveSlot()'s lock in a transaction of its own, and nothing
+        // that goes wrong there may undo a payment already written down.
+        // Swallowing the error inside the transaction above is not an
+        // option either: a deadlock there has already rolled the whole
+        // transaction back in MySQL, payment included.
+        //
+        // NULL = not a late payment; everything below is then unchanged.
+        $late = $this->settleLatePayment($booking);
+        $reinstated = $late === Booking::LATE_PAYMENT_REINSTATED;
+
         // MAHALAGA ang pagkakasunod: dati, nauuna ang notification kaysa
         // sa recalculateFinancials(), kaya ang "Balance due" na iniulat
         // sa admin ay LAGING ISANG HAKBANG NA HULI — ang balanse BAGO
@@ -928,13 +951,37 @@ class PaymentController extends Controller
         // bayad na nang buo. Tumatawag pagkatapos ng recompute.
         NotificationHelper::paymentReceived($booking->fresh(), $amount, $stored);
 
+        if ($late !== null) {
+            [$title, $message] = $this->latePaymentAdminNotice($booking, $amount, $late);
+
+            NotificationHelper::notifyAdmin($title, $message, route('admin.bookings.show', $booking, false));
+        }
+
         // Notify guest (in-app)
+        //
+        // "Payment … confirmed" is only true for a live booking. Saying it
+        // about one that stays cancelled is how a guest came to hold a
+        // receipt for a stay they do not have.
+        [$guestTitle, $guestMessage] = match (true) {
+            $late === null => [
+                'Payment Received!',
+                'Payment of ₱'.number_format($amount, 2)." for booking {$booking->booking_ref} confirmed.",
+            ],
+            $reinstated => [
+                'Payment Received — Booking Confirmed',
+                'Your payment of ₱'.number_format($amount, 2)." for booking {$booking->booking_ref} arrived after the booking had been auto-cancelled. Your slot was still free, so the booking is confirmed again.",
+            ],
+            default => [
+                'Payment Received — Booking Is Cancelled',
+                'We received your payment of ₱'.number_format($amount, 2)." for booking {$booking->booking_ref}, but that booking had already been cancelled and could not be restored. The resort has been notified and will contact you about this payment.",
+            ],
+        };
+
         Notification::create([
             'user_id' => $booking->user_id,
             'type' => 'in_app',
-            'title' => 'Payment Received!',
-            'message' => 'Payment of ₱'.number_format($amount, 2).
-                " for booking {$booking->booking_ref} confirmed.",
+            'title' => $guestTitle,
+            'message' => $guestMessage,
             'link' => route('customer.bookings.show', $booking, false),
             'is_read' => 0,
             'status' => 'sent',
@@ -977,9 +1024,83 @@ class PaymentController extends Controller
         // na — walang resibo, at walang kumpirmasyon na bayad na nang
         // buo. Ang $wasPending ngayon ay pumipili na lang ng ANYO ng
         // email (kumpirmasyon vs. resibo), hindi na kung ipapadala ba.
-        BookingMailHelper::paymentRecorded($booking, (float) $amount, $wasPending);
+        //
+        // Not sent for a late payment that left the booking cancelled: the
+        // mail is a confirmation or a "Fully Paid" receipt, and neither is
+        // true of a cancelled booking. The in-app notice above carries the
+        // honest version. A reinstated booking gets the confirmation form.
+        if ($late === null || $reinstated) {
+            BookingMailHelper::paymentRecorded($booking, (float) $amount, $wasPending || $reinstated);
+        }
 
         return true;
+    }
+
+    /**
+     * Runs Booking::reinstateAfterLatePayment() without ever throwing.
+     *
+     * The payment is committed by the time this is called, and the
+     * webhook runs through here: an exception would skip every
+     * notification below and tell nobody that money arrived. A failed
+     * attempt is reported as an outcome of its own instead.
+     *
+     * @return string|null  a Booking::LATE_PAYMENT_* outcome, 'error', or
+     *                      NULL when the booking was not cancelled
+     */
+    private function settleLatePayment(Booking $booking): ?string
+    {
+        try {
+            return $booking->reinstateAfterLatePayment();
+        } catch (\Throwable $e) {
+            \Log::error("Late payment on cancelled booking {$booking->booking_ref}: reinstating it failed", [
+                'exception' => $e::class,
+                'error' => $e->getMessage(),
+            ]);
+
+            return 'error';
+        }
+    }
+
+    /**
+     * What the admins are told about a payment that landed on a
+     * cancelled booking: [title, message].
+     *
+     * Separate from the routine "Payment Received" notice on purpose.
+     * That one reads the same for every payment, and this is the one
+     * that needs a person — someone paid for a stay they may not have.
+     */
+    private function latePaymentAdminNotice(Booking $booking, float $amount, string $outcome): array
+    {
+        $paid = '₱'.number_format($amount, 2);
+        $when = $booking->checkInDateTime()->format('M d, Y g:i A');
+
+        if ($outcome === Booking::LATE_PAYMENT_REINSTATED) {
+            return [
+                "Booking reinstated — {$booking->booking_ref}",
+                "{$paid} arrived for {$booking->booking_ref} after it had been auto-cancelled for non-payment. "
+                ."Its slot ({$when}) was still free, so the booking is confirmed again. No action needed.",
+            ];
+        }
+
+        $why = match ($outcome) {
+            Booking::LATE_PAYMENT_NOT_SYSTEM => match ($booking->cancelled_by) {
+                'guest' => 'the guest cancelled it',
+                'admin' => 'an admin cancelled it',
+                default => 'it was not cancelled by the unpaid-hold timer',
+            },
+            Booking::LATE_PAYMENT_PASSED => "its check-in time ({$when}) has already passed",
+            Booking::LATE_PAYMENT_NOT_OFFERED => 'its slot is no longer offered on '.$booking->check_in_date->format('M d, Y'),
+            Booking::LATE_PAYMENT_SLOT_TAKEN => "another booking now holds its slot ({$when})",
+            default => 'the system hit an error while trying — see the log',
+        };
+
+        \Log::warning("Payment received for cancelled booking {$booking->booking_ref}; not reinstated ({$outcome}).");
+
+        return [
+            "Payment on a cancelled booking — {$booking->booking_ref}",
+            "{$paid} was received for {$booking->booking_ref} after it was cancelled, and the booking was NOT reinstated: {$why}. "
+            .'The payment is recorded. Refund it from the Payments page, or change the booking status back if it should stand.',
+        ];
     }
 
     /**

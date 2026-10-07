@@ -7,6 +7,17 @@
     // Kailangan itong sabihin nang tapat sa halip na magpakita ng
     // berdeng tsek na "Payment Successful" na wala namang pinatutunayan.
     $confirmed = $paymentConfirmed ?? true;
+
+    // Bayad na, pero CANCELLED ang booking: dumating ang bayad matapos
+    // itong ma-cancel at hindi na naibalik (tingnan ang
+    // Booking::reinstateAfterLatePayment()). Totoo ang "received"; hindi
+    // totoo ang "confirmed" — kaya hiwalay ang sinasabi ng page dito.
+    $paidButCancelled = $confirmed && $booking->status === 'cancelled';
+
+    // Iisang kopya para sa unang render at sa script sa ibaba.
+    $lateHeading = 'This booking was already cancelled when your payment arrived.';
+    $lateNote = 'Your payment was received, but this booking had already been cancelled and could not be restored. '
+        . 'The resort has been notified and will contact you about this payment.';
 @endphp
 
 @section('title', ($confirmed ? 'Payment Successful' : 'Waiting for Payment Confirmation') . ' — Villa Elena Resort')
@@ -214,6 +225,11 @@
             margin-top: 1px;
         }
 
+        /* `display: flex` above would otherwise beat the hidden attribute. */
+        .pending-note[hidden] {
+            display: none;
+        }
+
         .status-unpaid {
             background: var(--tag-amber-bg);
             color: var(--tag-amber-fg);
@@ -231,7 +247,11 @@
             {{-- Pinapalitan ng laman nito ang sarili kapag dumating ang
                  bayad habang bukas ang page — tingnan ang script sa ibaba. --}}
             <div id="payHead">
-                @if ($confirmed)
+                @if ($paidButCancelled)
+                    <div class="pending-circle"><i class="bi bi-exclamation-triangle"></i></div>
+                    <h1>Payment Received</h1>
+                    <p>{{ $lateHeading }}</p>
+                @elseif ($confirmed)
                     <div class="confetti">🎉</div>
                     <div class="success-circle"><i class="bi bi-check-lg"></i></div>
                     <h1>Payment Successful!</h1>
@@ -249,6 +269,14 @@
                 $booking->refresh();
                 $paidNow = $amountPaid ?? 0;
             @endphp
+
+            {{-- Laging nasa DOM, nakatago kapag hindi kailangan: ipinapakita
+                 ito ng script sa ibaba kapag dumating ang bayad habang
+                 bukas ang page at cancelled pa rin ang booking. --}}
+            <div class="pending-note" id="payLateNote" @if (!$paidButCancelled) hidden @endif>
+                <i class="bi bi-info-circle-fill"></i>
+                <div>{{ $lateNote }}</div>
+            </div>
 
             <div id="payAmount">
                 @if ($confirmed)
@@ -336,6 +364,37 @@
             <script>
                 (function () {
                     const BASELINE_PAID = Number(@json((float) $booking->amount_paid));
+                    const LATE_HEADING = @json($lateHeading);
+
+                    let received = false;
+
+                    // Ang ulo ng card PAGKATAPOS dumating ang bayad. Dalawa
+                    // ang anyo: ang karaniwan, at ang bayad na dumating sa
+                    // isang booking na cancelled pa rin. Tinatawag ito sa
+                    // bawat tanong mula noon, hindi minsan lang — ibinabalik
+                    // ang booking sa hiwalay na hakbang matapos maitala ang
+                    // bayad, kaya puwedeng "cancelled" pa ang unang basa at
+                    // "confirmed" na ang kasunod.
+                    function renderReceived(cancelled) {
+                        const head = document.getElementById('payHead');
+                        if (head) {
+                            head.innerHTML = cancelled
+                                ? '<div class="pending-circle"><i class="bi bi-exclamation-triangle"></i></div>' +
+                                  '<h1>Payment Received</h1>' +
+                                  '<p></p>'
+                                : '<div class="confetti">🎉</div>' +
+                                  '<div class="success-circle"><i class="bi bi-check-lg"></i></div>' +
+                                  '<h1>Payment Successful!</h1>' +
+                                  '<p>Your payment has been received and confirmed.</p>';
+                            if (cancelled) head.querySelector('p').textContent = LATE_HEADING;
+                        }
+
+                        const note = document.getElementById('payLateNote');
+                        if (note) note.hidden = !cancelled;
+
+                        document.title = (cancelled ? 'Payment Received' : 'Payment Successful') +
+                            ' — Villa Elena Resort';
+                    }
 
                     function peso(n) {
                         return '₱' + Number(n).toLocaleString('en-PH', {
@@ -367,6 +426,8 @@
                             span.textContent = d.booking_status_label;
                             booking.replaceChildren(span);
                         }
+
+                        if (received) renderReceived(d.booking_status === 'cancelled');
                     });
 
                     // Dumating na. Ito ang sandaling dating hindi
@@ -379,16 +440,10 @@
                         // — ganito rin ang ibig sabihin nito kapag
                         // server-rendered ang confirmed na estado, kaya
                         // pareho ang basa ng guest anuman ang daanan.
-                        const received = Math.max(0, Number(d.amount_paid) - BASELINE_PAID);
+                        const paidNow = Math.max(0, Number(d.amount_paid) - BASELINE_PAID);
 
-                        const head = document.getElementById('payHead');
-                        if (head) {
-                            head.innerHTML =
-                                '<div class="confetti">🎉</div>' +
-                                '<div class="success-circle"><i class="bi bi-check-lg"></i></div>' +
-                                '<h1>Payment Successful!</h1>' +
-                                '<p>Your payment has been received and confirmed.</p>';
-                        }
+                        received = true;
+                        renderReceived(d.booking_status === 'cancelled');
 
                         const amount = document.getElementById('payAmount');
                         if (amount) {
@@ -397,15 +452,13 @@
                                 '<div class="amount-label">Amount Paid</div>' +
                                 '<div class="amount-val"></div>' +
                                 '</div>';
-                            amount.querySelector('.amount-val').textContent = peso(received);
+                            amount.querySelector('.amount-val').textContent = peso(paidNow);
                         }
 
                         // Walang dapat subukang muli — bayad na. Kung
                         // maiiwan ito, ang pinakamalapit na aksiyon sa
                         // guest matapos magbayad ay ang magbayad ulit.
                         document.getElementById('payRetryLink')?.remove();
-
-                        document.title = 'Payment Successful — Villa Elena Resort';
                     });
                 })();
             </script>
