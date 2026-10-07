@@ -2,48 +2,41 @@
 
 namespace App\Services\Prescriptive\Advisors;
 
-use App\Models\Booking;
 use App\Models\Recommendation;
-use App\Services\Prescriptive\DemandModel;
+use App\Services\Prescriptive\OccupancyCalendar;
 use Carbon\Carbon;
 
 /**
- * "Malakas ang mga petsang ito — kulang ba ang sinisingil natin?"
+ * PEAK PRICING — "these dates are in demand, charge more for what is left."
  *
- * Ang kabaligtaran ng IdleDatePromoAdvisor, at kailangan niyang umiral.
- * Ang isang engine na diskuwento lang ang alam ay hindi umoopetimisa ng
- * kita — namimigay lang ito. Parehong anyo ng optimisasyon, taas naman
- * ang direksyon:
+ * Two triggers, one action:
  *
- *     E(u) = p(u) x presyo x (1 + u)
- *     p(u) = p x (1 - peak_elasticity x u)
+ *   IF   predicted occupancy for a stretch is at or above the busy threshold
+ *   THEN raise the rate on that stretch.
  *
- * DALAWANG ELASTICITY, AT IYON AY SADYA. Ang bumibili ng tahimik na
- * Martes ay naghahanap ng mura — malamang na elastic (`prescriptive_elasticity`,
- * default 1.5). Ang bumubuo ng reunion sa Sabado ng Mahal na Araw ay may
- * petsang hindi mababago — malamang na INELASTIC (`prescriptive_peak_elasticity`,
- * default 0.6). Iisang numero para sa dalawa ay siguradong mali sa isa.
+ *   IF   a date is a public holiday
+ *   THEN raise the rate on the holiday itself (back-to-back holidays
+ *        together) — not on the rest of its week.
  *
- * Ang matematika ay nagbibigay ng parehong klasikong hangganan sa
- * kabilang panig: ang pagtataas ng presyo ay nagbabayad lang kapag
- * INELASTIC ang demand (e < 1), at ang optimum ay
+ * Either way only when the owner has not already set a rate for those dates
+ * and no promo is discounting them.
  *
- *     u* = (1 - e) / (2e)
+ * Both numbers are the owner's policy (Admin → Settings → Booking Rules →
+ * Recommendation Rules): `prescriptive_busy_threshold` (default 70%) and
+ * `prescriptive_increase_percent` (default 10%).
  *
- * Sa e = 0.6, iyon ay ~33%, na hinihigpitan ng `prescriptive_max_increase`.
- * Sa e >= 1, walang imumungkahi kailanman — tama iyon.
+ * THE HOLIDAY TRIGGER IS A POLICY, NOT A MEASUREMENT, and the card says so.
+ * Six months of history has each holiday in it at most once, which is not
+ * enough to claim it measured holiday demand. A first version raised the
+ * whole Mon–Thu stretch because its Monday was All Souls' Day, on a week
+ * with nothing booked; that is the over-reach the per-date rule removes.
  *
- * ⚠️ ANG BITAG: `type = 'fixed'` ANG GINAGAMIT, HINDI `'percentage'`.
- *
- * Ang isang `pricing_rules` na `percentage` ay kinukuwenta ng
- * `Property::getPackagePrice()` bilang `base_price x (1 + price/100)` —
- * laging laban sa BASE, hindi sa `weekend_price`. Ang mga peak na petsa ay
- * halos palaging weekend, kaya ang isang "+15%" na rule sa isang Sabado ay
- * magbibigay ng 4,000 x 1.15 = 4,600 — mas MABABA pa sa 6,000 na
- * kasalukuyang sinisingil. Ang mungkahing magtaas ng presyo ay tahimik
- * na magpapamura. Kaya ganap na halaga ang ipinapadala rito, at ang
- * magkakasunod na petsa ay pinagsasama LANG kapag pareho ang
- * kasalukuyang presyo nila.
+ * The action is a PERCENTAGE `pricing_rules` row. That is only correct
+ * because `Property::getPackagePrice()` applies a percentage on top of the
+ * NORMAL price for that date and slot — so "+10%" means ₱4,400 on a weekday,
+ * ₱6,600 on a weekend, and 10% more for a 22-hour stay. A pricing rule has no
+ * slot of its own, so one row covers every slot on its dates, which is what
+ * the card says it does.
  */
 class PeakRateAdvisor extends Advisor
 {
@@ -52,185 +45,129 @@ class PeakRateAdvisor extends Advisor
         return Recommendation::TYPE_PEAK_RATE;
     }
 
-    public function generate(DemandModel $demand): array
+    public function generate(OccupancyCalendar $calendar): array
     {
-        $elasticity = DemandModel::setting('prescriptive_peak_elasticity', 0.6);
-        $peakCutoff = DemandModel::setting('prescriptive_peak_threshold', 60) / 100;
-        $maxIncrease = DemandModel::setting('prescriptive_max_increase', 20);
-        $minImpact = DemandModel::setting('prescriptive_min_impact', 500);
-        $candidates = (array) config('prescriptive.increase_candidates', [0, 5, 10, 15, 20]);
+        $threshold = OccupancyCalendar::setting('prescriptive_busy_threshold', 70);
+        $percent = OccupancyCalendar::setting('prescriptive_increase_percent', 10);
 
-        // Walang halaga ang pagtataas ng presyo kapag elastic ang demand —
-        // at ang paglabas dito nang maaga ay nagpapaliwanag ng katahimikan
-        // ng advisor nang hindi kailangang basahin ang buong loop.
-        if ($elasticity >= 1) {
+        if ($percent <= 0) {
             return [];
         }
 
-        $start = Carbon::today()->addDays((int) config('prescriptive.min_lead_days', 2));
-        $end = Carbon::today()->addDays($demand->lookaheadDays());
+        $stretches = $calendar->stretches();
 
-        $out = [];
+        $busy = array_filter(
+            $stretches,
+            fn (array $stretch) => $stretch['predicted'] >= $threshold && $this->canRaise($stretch, $calendar)
+        );
 
-        foreach ($demand->bookableSlots() as $slot) {
-            $perDate = [];
+        $cards = [];
+        $covered = [];
 
-            for ($date = $start->copy(); $date->lte($end); $date->addDay()) {
-                // Tingnan ang kaparehong tala sa IdleDatePromoAdvisor:
-                // nakadepende sa petsa ang inaalok na slot.
-                if (! in_array($slot, $demand->slotsOfferedOn($date), true)) {
-                    continue;
-                }
+        foreach ($this->joinSameWeek($busy, $calendar) as $stretch) {
+            $cards[] = $this->card(
+                $stretch,
+                $calendar,
+                $percent,
+                sprintf(
+                    'Predicted occupancy is %s — at or above your %s busy mark — so the %s can be priced higher.',
+                    $this->percent($stretch['predicted']),
+                    $this->percent($threshold),
+                    $this->openSlots($stretch)
+                ),
+                $this->occupancyFacts($stretch, $calendar),
+                [$stretch['week'], $stretch['kind']]
+            );
 
-                $best = $this->bestIncreaseFor(
-                    $demand, $date, $slot,
-                    $elasticity, $peakCutoff, $maxIncrease, $candidates
-                );
-
-                if ($best !== null) {
-                    $perDate[$date->format('Y-m-d')] = $best;
-                }
-            }
-
-            foreach ($this->groupIntoRuns($perDate) as $run) {
-                $rec = $this->buildRecommendation($run, $slot, $elasticity, $minImpact, $demand->lookbackDays());
-
-                if ($rec !== null) {
-                    $out[] = $rec;
-                }
+            foreach ($stretch['dates'] as $date) {
+                $covered[$date->format('Y-m-d')] = true;
             }
         }
 
-        return $out;
-    }
+        foreach ($this->holidayRuns($stretches, $covered) as $dates) {
+            $run = $calendar->summarise($dates);
 
-    /**
-     * @return array{increase: float, gain: float, p: float, p_new: float, price: float, sample: int, booked: int, raw_rate: float, dow: int}|null
-     */
-    private function bestIncreaseFor(
-        DemandModel $demand,
-        Carbon $date,
-        string $slot,
-        float $elasticity,
-        float $peakCutoff,
-        float $maxIncrease,
-        array $candidates
-    ): ?array {
-        if ($demand->isOccupied($date, $slot)) {
-            return null;
-        }
-        if ($demand->isBlocked($date)) {
-            return null;
-        }
-
-        // May itinakda nang presyo ang may-ari para sa araw na ito, o may
-        // tumatakbong promo — alinman sa dalawa ay sadyang desisyon na
-        // hindi dapat pangunahan.
-        if ($demand->hasPricingRule($date)) {
-            return null;
-        }
-        if ($demand->hasPromo($date, $slot)) {
-            return null;
-        }
-
-        $fill = $demand->fillRate($date->dayOfWeek, $slot);
-
-        if ($fill['sample'] < 1) {
-            return null;
-        }
-
-        $p = $fill['rate'];
-
-        // Hindi ito peak — walang batayan para magtaas.
-        if ($p < $peakCutoff) {
-            return null;
-        }
-
-        $price = $demand->price($date, $slot);
-        $baseline = $p * $price;
-
-        $bestIncrease = 0.0;
-        $bestValue = $baseline;
-        $bestP = $p;
-
-        foreach ($candidates as $u) {
-            $u = (float) $u;
-
-            if ($u <= 0 || $u > $maxIncrease) {
+            if (! $this->canRaise($run, $calendar)) {
                 continue;
             }
 
-            // Hindi puwedeng maging negatibo ang posibilidad kahit gaano
-            // kalaki ang taas.
-            $pNew = max(0.0, $p * (1 - ($elasticity * $u) / 100));
-            $value = $pNew * $price * (1 + $u / 100);
+            $names = [];
+            foreach ($run['holidays'] as $day => $name) {
+                $names[] = "{$name} ({$day})";
+            }
 
-            if ($value > $bestValue) {
-                $bestValue = $value;
-                $bestIncrease = $u;
-                $bestP = $pNew;
+            $cards[] = $this->card(
+                $run,
+                $calendar,
+                $percent,
+                sprintf(
+                    '%s %s. Your rule prices holiday dates higher, and %s still open.',
+                    implode(' and ', $names),
+                    count($names) === 1 ? 'is a public holiday' : 'are public holidays',
+                    $run['open'] === 1 ? '1 slot is' : $run['open'].' slots are'
+                ),
+                [sprintf(
+                    'Booked so far: %d of %d slots (%s).',
+                    $run['booked'],
+                    $run['offered'],
+                    $this->percent($run['booked_pct'])
+                )],
+                ['holiday', $run['start']->toDateString(), $run['end']->toDateString()]
+            );
+        }
+
+        return $cards;
+    }
+
+    /** Something is still open, the owner has not set a rate, and no promo is running. */
+    private function canRaise(array $stretch, OccupancyCalendar $calendar): bool
+    {
+        if ($stretch['open'] <= 0) {
+            return false;
+        }
+
+        // A rate the owner set for these dates is a decision, not something
+        // to advise over.
+        foreach ($stretch['dates'] as $date) {
+            if ($calendar->hasPricingRule($date)) {
+                return false;
             }
         }
 
-        if ($bestIncrease <= 0) {
-            return null;
-        }
-
-        return [
-            'increase' => $bestIncrease,
-            'gain' => round($bestValue - $baseline, 2),
-            'p' => $p,
-            'p_new' => $bestP,
-            'price' => $price,
-            'sample' => $fill['sample'],
-            'booked' => $fill['booked'],
-            'raw_rate' => $fill['raw_rate'],
-            'dow' => $date->dayOfWeek,
-        ];
+        return ! $this->hasPromoOnOpenSlot($stretch, $calendar);
     }
 
     /**
-     * Pinagsasama ang magkakasunod na petsa — pero PAREHONG KASALUKUYANG
-     * PRESYO lang, hindi tulad ng promo advisor.
+     * Holiday dates not already inside a busy-stretch card, with holidays on
+     * consecutive days kept together (Nov 1 and Nov 2 are one card).
      *
-     * Ang ipinapadala ay ganap na halaga (tingnan ang bitag sa itaas), at
-     * ang isang `pricing_rules` row ay iisang presyo para sa buong saklaw
-     * nito. Ang pagsama ng Biyernes (6,000) at Lunes (4,000) sa isang rule
-     * ay magpapapantay sa kanila — tataas ang Lunes, at BABABA ang
-     * Biyernes.
-     *
-     * @return array<int, array<string, array>>
+     * @param  array<string, bool>  $covered  'Y-m-d' => true
+     * @return array<int, array<int, Carbon>>
      */
-    private function groupIntoRuns(array $perDate): array
+    private function holidayRuns(array $stretches, array $covered): array
     {
-        if (empty($perDate)) {
-            return [];
-        }
-
-        ksort($perDate);
-
-        $maxDays = max(1, (int) config('prescriptive.max_promo_run_days', 14));
-
         $runs = [];
         $current = [];
-        $prev = null;
 
-        foreach ($perDate as $date => $info) {
-            $carbon = Carbon::parse($date);
-
-            $continues = $prev !== null
-                && $carbon->copy()->subDay()->isSameDay($prev['date'])
-                && $info['increase'] === $prev['increase']
-                && abs($info['price'] - $prev['price']) < 0.01
-                && count($current) < $maxDays;
-
-            if (! $continues && ! empty($current)) {
-                $runs[] = $current;
-                $current = [];
+        foreach ($stretches as $stretch) {
+            if (empty($stretch['holidays'])) {
+                continue;
             }
 
-            $current[$date] = $info;
-            $prev = ['date' => $carbon, 'increase' => $info['increase'], 'price' => $info['price']];
+            foreach ($stretch['dates'] as $date) {
+                $isHoliday = isset($stretch['holidays'][$date->format('M j')]);
+
+                if (! $isHoliday || isset($covered[$date->format('Y-m-d')])) {
+                    continue;
+                }
+
+                if (! empty($current) && ! end($current)->copy()->addDay()->isSameDay($date)) {
+                    $runs[] = $current;
+                    $current = [];
+                }
+
+                $current[] = $date;
+            }
         }
 
         if (! empty($current)) {
@@ -240,150 +177,54 @@ class PeakRateAdvisor extends Advisor
         return $runs;
     }
 
-    private function buildRecommendation(
-        array $run,
-        string $slot,
-        float $elasticity,
-        float $minImpact,
-        int $lookbackDays
-    ): ?array {
-        $dates = array_keys($run);
-        $first = Carbon::parse($dates[0]);
-        $last = Carbon::parse(end($dates));
-        $increase = (float) $run[$dates[0]]['increase'];
+    private function openSlots(array $stretch): string
+    {
+        return $stretch['open'].' open slot'.($stretch['open'] === 1 ? '' : 's');
+    }
 
-        $gain = round(array_sum(array_column($run, 'gain')), 2);
+    /**
+     * @param  array<int, string>  $facts
+     * @param  array<int, string>  $identity  what makes this card the same card tomorrow
+     */
+    private function card(
+        array $stretch,
+        OccupancyCalendar $calendar,
+        float $percent,
+        string $summary,
+        array $facts,
+        array $identity
+    ): array {
+        $window = $this->rangeLabel($stretch['start'], $stretch['end']);
+        $up = $this->number($percent);
 
-        if ($gain < $minImpact) {
-            return null;
+        if ($change = $this->priceChange($stretch, $calendar, 1 + $percent / 100)) {
+            $facts[] = "At +{$up}%, ".$change;
         }
 
-        $price = (float) $run[$dates[0]]['price'];   // pareho sa buong run — tingnan ang groupIntoRuns()
-        $newPrice = round($price * (1 + $increase / 100), 2);
-        $avgPNew = array_sum(array_column($run, 'p_new')) / count($run);
-
-        $byDow = [];
-        foreach ($run as $info) {
-            $byDow[$info['dow']] = ['sample' => $info['sample'], 'booked' => $info['booked']];
-        }
-
-        $totalSample = array_sum(array_column($byDow, 'sample'));
-        $totalBooked = array_sum(array_column($byDow, 'booked'));
-        $rawFill = $totalSample > 0 ? $totalBooked / $totalSample : 0.0;
-
-        // Mula sa Booking::SLOTS — tingnan ang kaparehong tala sa
-        // IdleDatePromoAdvisor.
-        $slotLabel = Booking::SLOTS[$slot]['name'] ?? ucfirst($slot);
-        $window = $first->isSameDay($last)
-            ? $first->format('M j')
-            : $first->format('M j').'–'.$last->format('M j');
-
-        $elasticityLabel = rtrim(rtrim(number_format($elasticity, 2), '0'), '.');
-
-        $evidence = [
-            sprintf(
-                '%s slot on %s filled %d of %d comparable days in the last %d days (%d%%) — among the strongest on the calendar.',
-                $slotLabel,
-                $this->dayNames($run),
-                $totalBooked,
-                $totalSample,
-                $lookbackDays,
-                round($rawFill * 100)
-            ),
-            sprintf(
-                '%d date%s in this window %s still open at PHP %s.',
-                count($run),
-                count($run) === 1 ? '' : 's',
-                count($run) === 1 ? 'is' : 'are',
-                number_format($price, 0)
-            ),
-            sprintf(
-                'At PHP %s (+%d%%), the fill rate is projected to ease to %d%% — fewer bookings, but more revenue per booking.',
-                number_format($newPrice, 0),
-                $increase,
-                round($avgPNew * 100)
-            ),
-            sprintf(
-                'Net projected gain PHP %s across the window.',
-                number_format($gain, 0)
-            ),
-            sprintf(
-                'Assumption: peak-date price elasticity = %s — demand here is treated as INELASTIC, so a %d%% rise costs only %s%% of demand. At 1.0 or above, no increase would ever be recommended.',
-                $elasticityLabel,
-                $increase,
-                rtrim(rtrim(number_format($elasticity * $increase, 1), '0'), '.')
-            ),
-        ];
+        $facts[] = 'Bookings already made keep the price they were booked at.';
 
         return [
             'type' => Recommendation::TYPE_PEAK_RATE,
-            'title' => sprintf('Raise the %s rate %d%% for %s', strtolower($slotLabel), $increase, $window),
-            'summary' => sprintf(
-                '%d %s-slot date%s in %s %s filling well above the peak threshold. Holding them at PHP %s leaves money on the table; PHP %s is projected to be worth about PHP %s more.',
-                count($run),
-                strtolower($slotLabel),
-                count($run) === 1 ? '' : 's',
-                $window,
-                count($run) === 1 ? 'is' : 'are',
-                number_format($price, 0),
-                number_format($newPrice, 0),
-                number_format($gain, 0)
-            ),
-            'evidence' => $evidence,
-            'target_start' => $first->toDateString(),
-            'target_end' => $last->toDateString(),
-            'slot' => $slot,
+            'title' => "Raise the rate {$up}% for {$window}",
+            'summary' => $summary,
+            'evidence' => $facts,
+            'target_start' => $stretch['start']->toDateString(),
+            'target_end' => $stretch['end']->toDateString(),
+            'slot' => null,
             'action_type' => Recommendation::ACTION_CREATE_PRICING_RULE,
             'action_payload' => [
-                'label' => sprintf('Peak Rate %s (+%d%%)', $window, $increase),
-                // GANAP na halaga, hindi porsyento — tingnan ang bitag sa
-                // docblock ng klase. Huwag itong gawing 'percentage'.
-                'type' => 'fixed',
-                'price' => $newPrice,
-                'start_date' => $first->toDateString(),
-                'end_date' => $last->toDateString(),
+                'label' => "Peak rate +{$up}% ({$window})",
+                'type' => 'percentage',
+                'price' => $percent,
+                'start_date' => $stretch['start']->toDateString(),
+                'end_date' => $stretch['end']->toDateString(),
                 'is_active' => 1,
-                'current_price' => $price,
-                'increase_pct' => $increase,
             ],
-            'expected_impact' => $gain,
-            'baseline_projection' => round(array_sum(array_map(
-                fn ($info) => $info['p'] * $info['price'],
-                $run
-            )), 2),
-            'sample_size' => $totalSample,
-            'confidence' => DemandModel::confidence((int) min(array_column($byDow, 'sample'))),
-            'fingerprint' => $this->fingerprint([
-                Recommendation::TYPE_PEAK_RATE,
-                $slot,
-                $first->toDateString(),
-                $last->toDateString(),
-                $increase,
-            ]),
+            'fingerprint' => $this->fingerprint(array_merge(
+                [Recommendation::TYPE_PEAK_RATE],
+                $identity,
+                [$percent]
+            )),
         ];
-    }
-
-    private function dayNames(array $run): string
-    {
-        $names = [];
-
-        foreach (array_keys($run) as $date) {
-            $names[Carbon::parse($date)->dayOfWeek] = Carbon::parse($date)->format('l').'s';
-        }
-
-        ksort($names);
-        $names = array_values($names);
-
-        if (count($names) === 7) {
-            return 'every day of the week';
-        }
-
-        if (count($names) === 1) {
-            return $names[0];
-        }
-
-        $lastName = array_pop($names);
-
-        return implode(', ', $names).' and '.$lastName;
     }
 }

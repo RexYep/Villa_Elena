@@ -43,7 +43,8 @@ class BriefingWriter
     {
         $open = Recommendation::open()
             ->whereDate('target_end', '>=', now()->toDateString())
-            ->orderByDesc('expected_impact')
+            ->orderBy('target_start')
+            ->orderBy('id')
             ->limit(8)
             ->get();
 
@@ -91,12 +92,10 @@ class BriefingWriter
 
         foreach ($open as $rec) {
             $lines .= sprintf(
-                "- %s | window: %s | projected value: PHP %s | confidence: %s (%d past days) | %s\n",
+                "- [%s] %s | dates: %s | %s\n",
+                $rec->action_label,
                 $rec->title,
                 $rec->window_label,
-                number_format((float) $rec->expected_impact, 0),
-                $rec->confidence_label,
-                $rec->sample_size,
                 $rec->summary
             );
         }
@@ -106,18 +105,19 @@ class BriefingWriter
         exclusive-use private pool villa in the Philippines rented as a whole to one group
         at a time.
 
-        A separate analytics engine has ALREADY computed the recommendations below from the
-        resort's own booking history. Your ONLY job is to summarise and prioritise them in
-        prose.
+        A separate rule-based engine has ALREADY worked out the recommendations below from the
+        resort's own bookings. They are listed soonest first. Your ONLY job is to summarise
+        and prioritise them in prose.
 
         HARD RULES — breaking any of these makes the output unusable:
         - Do NOT invent, estimate, or adjust any number. Use only the figures given below.
+        - Do NOT promise or estimate any revenue, profit or peso gain. None was computed.
         - Do NOT suggest any action that is not in the list. No new discounts, dates, or ideas.
-        - Do NOT mention 'occupancy rate' or multiple rooms/units — there is only ONE bookable villa.
+        - Do NOT mention multiple rooms or units — there is only ONE bookable villa. "Occupancy"
+          here means booked slots out of offered slots for that one villa.
         - Do NOT use markdown, headings, bullets, or bold. Plain sentences only.
         - Write 2 to 3 sentences, maximum 70 words total.
-        - Say which one deserves attention first and why, in the owner's terms (money and timing).
-        - If confidence is Low on the top item, say so plainly.
+        - Say which one deserves attention first and why, in the owner's terms (timing and guests).
 
         RECOMMENDATIONS:
         {$lines}

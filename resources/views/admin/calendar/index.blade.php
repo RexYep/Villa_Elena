@@ -8,10 +8,19 @@
     <button class="btn-navy" onclick="openBlockModal()">
         <i class="bi bi-calendar-x"></i> Block Dates
     </button>
+    {{-- Ang mga 22-oras na slot na may presyo na — ang mga pagpipilian sa
+         "Open a 22-Hour Date". Hango sa Booking::SLOTS, hindi nakasulat na
+         `stay22`: dalawa na ang variant (7PM at 8AM). --}}
+    @php
+        $windowSlots = collect(\App\Models\Booking::windowedSlotKeys())
+            ->intersect(\App\Models\Booking::bookableSlotKeys($villa))
+            ->mapWithKeys(fn ($k) => [$k => \App\Models\Booking::SLOTS[$k]])
+            ->all();
+    @endphp
     {{-- Ipinapakita lang kapag may presyo na ang 22-oras na slot: kung wala,
          ang window ay walang bisa (tingnan ang Booking::slotsOfferedOn()) at
          ang pindutan ay nangangako ng isang bagay na hindi mangyayari. --}}
-    @if (in_array('stay22', \App\Models\Booking::bookableSlotKeys($villa), true))
+    @if ($windowSlots)
         <button class="btn-navy" style="background:#0f766e;" onclick="openSlotWindowModal()">
             <i class="bi bi-house-door"></i> 22-Hour Date
         </button>
@@ -687,11 +696,19 @@
             </div>
             <div class="modal-body">
                 <p class="text-muted-theme" style="font-size:13px; margin:0 0 12px;">
-                    Pick the <strong>check-in date</strong>. That date will offer the
-                    22-hour stay <strong>only</strong> — Day and Night are hidden on it.
-                    Every other date keeps the regular slots. A date that is blocked
-                    or already booked cannot be opened.
+                    Pick the stay and its <strong>check-in date</strong>. That date will
+                    offer that 22-hour stay <strong>only</strong> — Day and Night are hidden
+                    on it. Every other date keeps the regular slots. A date that is blocked,
+                    already booked, or overlapped by another 22-hour date cannot be opened.
                 </p>
+                <div class="mb-12">
+                    <label for="swSlot" class="form-label-sm">Stay</label>
+                    <select id="swSlot" class="form-control-sm2" required>
+                        @foreach ($windowSlots as $key => $def)
+                            <option value="{{ $key }}">{{ $def['label'] }}</option>
+                        @endforeach
+                    </select>
+                </div>
                 <div class="mb-12">
                     <label for="swDate" class="form-label-sm">Check-in Date</label>
                     <input type="date" id="swDate" class="form-control-sm2"
@@ -1101,6 +1118,8 @@
 
         // ── 22-Hour Slot Windows ───────────────────────────────────────
         let activeSlotWindowId = null;
+        // Ang mga variant na mapipili sa modal, mula sa Booking::SLOTS.
+        const WINDOW_SLOT_DEFS = @json($windowSlots);
 
         function openSlotWindowModal() {
             document.getElementById('swDate').value = '';
@@ -1113,24 +1132,31 @@
         }
 
         // Ipinapakita ang buong saklaw ng stay habang pumipili ng petsa, para
-        // hindi na kailangang hulaan ng admin kung saan ito nagtatapos. 19:00
-        // → 17:00 kinabukasan; nakasulat dito dahil ang input ay petsa lang.
-        document.getElementById('swDate')?.addEventListener('change', function () {
+        // hindi na kailangang hulaan ng admin kung saan ito nagtatapos. Ang
+        // oras ay galing sa depinisyon ng piniling variant, hindi nakasulat
+        // na 19:00 — ang isa ay 7PM → 5PM, ang isa ay 8AM → 6AM.
+        function showSlotWindowSpan() {
             const el = document.getElementById('swSpan');
-            if (!this.value) { el.textContent = ''; return; }
-            const start = new Date(this.value + 'T19:00:00');
-            const end = new Date(start.getTime() + 22 * 3600 * 1000);
+            const date = document.getElementById('swDate').value;
+            const def = WINDOW_SLOT_DEFS[document.getElementById('swSlot').value];
+            if (!date || !def) { el.textContent = ''; return; }
+            const start = new Date(date + 'T' + def.check_in + ':00');
+            const end = new Date(date + 'T' + def.check_out + ':00');
+            if (def.overnight) end.setDate(end.getDate() + 1);
             const f = d => d.toLocaleString('en-US', {
                 month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit'
             });
             el.textContent = 'Stay: ' + f(start) + ' → ' + f(end);
-        });
+        }
+        document.getElementById('swDate')?.addEventListener('change', showSlotWindowSpan);
+        document.getElementById('swSlot')?.addEventListener('change', showSlotWindowSpan);
 
         // Wala nang "pindutin ulit para magpatuloy". Tahasang tinatanggihan
         // ng server ang isang petsang naka-block o may booking na, at
         // sinasabi kung alin ang aalisin muna — tingnan ang addSlotWindow().
         function submitSlotWindow() {
             const date = document.getElementById('swDate').value;
+            const slot = document.getElementById('swSlot').value;
             const notes = document.getElementById('swNotes').value;
             const warn = document.getElementById('swWarn');
 
@@ -1148,7 +1174,7 @@
                         'X-CSRF-TOKEN': CSRF
                     },
                     body: JSON.stringify({
-                        slot: 'stay22',
+                        slot,
                         check_in_date: date,
                         notes
                     })
@@ -1158,7 +1184,8 @@
                     if (d.success) {
                         closeModal('slotWindowModal');
                         calendar.refetchEvents();
-                        showToast('Opened ' + (d.span_label || 'that date') + ' as 22-hour only');
+                        showToast('Opened ' + (d.span_label || 'that date') + ' as ' +
+                            (WINDOW_SLOT_DEFS[slot]?.name || '22-hour') + ' only');
                         return;
                     }
 

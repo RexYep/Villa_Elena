@@ -697,7 +697,48 @@ class CalendarController extends Controller
                 ." Remove the block first if you want to offer the {$slotName} stay on {$when}.";
         }
 
-        // (2) May booking na ba sa petsa, o sa loob ng saklaw ng stay?
+        // (2) May IBANG 22-oras na petsa bang bumabangga rito?
+        //
+        //     Hindi ito posible noong iisa ang windowed na slot: ang 7PM →
+        //     5PM ng magkasunod na petsa ay hindi kailanman nagpapatong.
+        //     Sa `day22` (8AM → 6AM) ay dalawa na ang paraan:
+        //       • parehong petsa, ibang variant — iisa lang ang maiaalok
+        //         ng slotsOfferedOn(), kaya patay ang ikalawang row;
+        //       • `stay22` kahapon (hanggang 5PM ngayon) at `day22` ngayon.
+        //         Kapag na-book ang una, hindi na mabibili ang ikalawa —
+        //         pero nakatago pa rin ang Night ng petsang ito, na bakante
+        //         naman talaga.
+        //     Hindi kasama ang window na lumipas na ang check-in: hindi na
+        //     iyon maipagbibili, at kung may bisita na ito, huli na iyon ng
+        //     (3) sa ibaba.
+        $other = SlotWindow::where('property_id', $villa->id)
+            ->where('is_active', 1)
+            ->whereDate('check_in_date', '>=', $checkIn->copy()->subDay())
+            ->whereDate('check_in_date', '<=', $checkOut)
+            ->orderBy('check_in_date')
+            ->get()
+            ->first(function (SlotWindow $w) use ($checkIn, $checkOut) {
+                if (! isset(Booking::SLOTS[$w->slot]) || $w->isPast()) {
+                    return false;
+                }
+
+                [$in, $out] = $w->stayDateTimes();
+
+                return $w->check_in_date->isSameDay($checkIn)
+                    || ($checkIn->lt($out) && $checkOut->gt($in));
+            });
+
+        if ($other) {
+            $otherName = Booking::SLOTS[$other->slot]['name'];
+
+            return $other->check_in_date->isSameDay($checkIn)
+                ? "{$when} is already open as a {$otherName} date ({$other->span_label}). "
+                    .'A date offers one 22-hour stay only — close that one first to switch it.'
+                : $other->check_in_date->format('M j')." is open as a {$otherName} date ({$other->span_label}), "
+                    ."which overlaps a {$slotName} stay on {$when}. Close that date first.";
+        }
+
+        // (3) May booking na ba sa petsa, o sa loob ng saklaw ng stay?
         //
         //     DALAWANG tanong, at parehong pagtanggi ang sagot:
         //       • nagpapatong sa oras (Night ng petsa, Day ng kinabukasan)

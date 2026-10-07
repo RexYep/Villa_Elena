@@ -440,8 +440,10 @@
                             <div>
                                 <label class="form-label">22-Hour Regular Rate</label>
                                 <small class="field-caption">
-                                    {{ \App\Models\Booking::SLOTS['stay22']['label'] }} — blank means the slot
-                                    is not offered anywhere
+                                    {{-- Bawat slot na bumabasa ng column na ito, hindi
+                                         `SLOTS['stay22']` — dalawa na ang 22-oras. --}}
+                                    {{ collect(\App\Models\Booking::SLOTS)->filter(fn ($d) => ($d['rate'] ?? null) === '22h')->pluck('times')->join(', ', ' and ') }}
+                                    — one rate for both; blank means neither is offered anywhere
                                 </small>
                                 <div class="input-prefix">
                                     <span>₱</span>

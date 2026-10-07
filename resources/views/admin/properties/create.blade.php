@@ -451,8 +451,10 @@
                                         placeholder="Leave blank to hide the slot">
                                 </div>
                                 <small class="field-hint d-block">
-                                    {{ \App\Models\Booking::SLOTS['stay22']['label'] }} — leave blank and the
-                                    slot is not offered anywhere.
+                                    {{-- Bawat slot na bumabasa ng column na ito, hindi
+                                         `SLOTS['stay22']` — dalawa na ang 22-oras. --}}
+                                    {{ collect(\App\Models\Booking::SLOTS)->filter(fn ($d) => ($d['rate'] ?? null) === '22h')->pluck('times')->join(', ', ' and ') }}
+                                    — one rate for both; leave blank and neither is offered anywhere.
                                 </small>
                             </div>
                             <div>

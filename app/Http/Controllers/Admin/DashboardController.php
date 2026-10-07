@@ -49,7 +49,10 @@ class DashboardController extends Controller
         // pinindot ng admin. Mura naman ang query: tatlong row, may index.
         $topActions = Recommendation::open()
             ->whereDate('target_end', '>=', today())
-            ->orderByDesc('expected_impact')
+            // Pinakamalapit na petsa muna — wala nang peso value na
+            // pagbabatayan ng pagkakasunod (v7.58).
+            ->orderBy('target_start')
+            ->orderBy('id')
             ->limit(3)
             ->get();
 

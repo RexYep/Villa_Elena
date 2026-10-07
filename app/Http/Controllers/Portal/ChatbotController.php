@@ -120,7 +120,7 @@ Extract:
 {
   \"intent\": \"check_availability\" or \"get_price\" or \"general_question\" or \"greeting\",
   \"checkin\": \"YYYY-MM-DD or null\",
-  \"slot\": {$slotParts['json']} — the available slots are: {$slotParts['detail']}. Infer from words like 'morning', 'daytime', 'day tour' → day; 'evening', 'overnight', 'night' → night; '22 hours', 'whole day and night', 'until tomorrow afternoon' → stay22. Use only a slot listed above.
+  \"slot\": {$slotParts['json']} — the available slots are: {$slotParts['detail']}. Infer from words like 'morning', 'daytime', 'day tour' → day; 'evening', 'overnight', 'night' → night; a 22-hour stay that starts in the evening (7 PM), 'until tomorrow afternoon' → stay22; a 22-hour stay that starts in the morning (8 AM), 'until early next morning' → day22; a bare '22 hours' or 'whole day and night' with no start time → whichever of those two is offered on the requested date, else null. Use only a slot listed above.
   \"guests\": number or null
 }
 

@@ -698,9 +698,20 @@
                         @foreach ($property->pricingRules as $rule)
                             <div
                                 style="background:var(--cream); border-radius:9px; padding:10px 14px; border:1px solid var(--border); font-size:13px;">
-                                <div class="fw-600">{{ $rule->name ?? ucfirst($rule->type) }}</div>
+                                <div class="fw-600">
+                                    {{ $rule->label ?? ucfirst($rule->type) }}
+                                    @unless ($rule->is_active)
+                                        <span class="text-muted-theme fw-400">(turned off)</span>
+                                    @endunless
+                                </div>
                                 <div class="text-muted-theme" style="font-size: 14px; margin-top:2px;">
-                                    ₱{{ number_format($rule->price ?? $rule->amount, 2) }}
+                                    {{-- Ang percentage rule ay porsyento sa ibabaw ng karaniwang
+                                         presyo, hindi piso: ang "₱10.00" para sa +10% ay mali. --}}
+                                    @if ($rule->type === 'percentage')
+                                        {{ (float) $rule->price >= 0 ? '+' : '' }}{{ rtrim(rtrim(number_format((float) $rule->price, 2), '0'), '.') }}% on the normal rate
+                                    @else
+                                        ₱{{ number_format((float) $rule->price, 2) }}
+                                    @endif
                                     @if (isset($rule->start_date))
                                         · {{ \Carbon\Carbon::parse($rule->start_date)->format('M d') }} –
                                         {{ \Carbon\Carbon::parse($rule->end_date)->format('M d, Y') }}

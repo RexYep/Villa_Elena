@@ -326,7 +326,7 @@ class FrontDeskController extends Controller
      *
      * Sinasadyang `bookableSlotKeys()` at hindi `slotsOfferedOn()`: kung
      * kada petsa magbabago ang column, hindi na parisukat ang talahanayan.
-     * Nananatili ang tatlong column, at ang mga cell na hindi inaalok sa
+     * Nananatili ang lahat ng column, at ang mga cell na hindi inaalok sa
      * petsang iyon ay minamarkahang `unoffered` ng buildSlotGrid(). Iyon
      * din ang nagpapakita kay staff — sa isang sulyap — kung aling petsa
      * ang may 22-oras na alok.

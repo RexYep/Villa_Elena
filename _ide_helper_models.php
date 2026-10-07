@@ -616,29 +616,25 @@ namespace App\Models{
 
 namespace App\Models{
 /**
- * Isang PRESCRIPTIVE na mungkahi: "ito ang dapat gawin, ito ang dahilan,
- * ito ang tinatayang epekto".
+ * One recommendation: "do this, on these dates, because of this fact".
  *
- * Ang isang row dito ay MUNGKAHI LANG. Wala itong epekto sa presyo, sa
- * kalendaryo, o sa nakikita ng guest hangga't hindi pumipindot ng Apply
- * ang admin — doon lang gagawin ng PrescriptiveController ang tunay na
- * record (Discount / AvailabilityBlock) at itatakda ang `applied_*`.
+ * A row here is ONLY A SUGGESTION. It has no effect on prices, the calendar,
+ * the frontdesk or any guest until the admin presses the button on its card
+ * — that is when `Admin\PrescriptiveController::apply()` creates the real
+ * record (promo, pricing rule, block, housekeeping task) or sends the
+ * reminder, and fills in `applied_*`.
  *
  * @property int $id
  * @property string $type
  * @property string $title
  * @property string $summary
- * @property array<array-key, mixed>|null $evidence
+ * @property array<array-key, mixed>|null $evidence the facts shown on the card
  * @property \Illuminate\Support\Carbon $target_start
  * @property \Illuminate\Support\Carbon $target_end
- * @property string|null $slot day | night | null = pareho
- * @property string $action_type create_promo | create_block
+ * @property string|null $slot
+ * @property string $action_type
  * @property array<array-key, mixed> $action_payload
- * @property numeric $expected_impact PHP; positibo = kita o naiwasang lugi
- * @property numeric|null $baseline_projection
- * @property numeric $confidence 0-100, base sa laki ng sample
- * @property int $sample_size ilang historical na obserbasyon ang pinagbatayan
- * @property string $status
+ * @property string $status new | applied | dismissed | expired
  * @property string $fingerprint
  * @property \Illuminate\Support\Carbon|null $generated_at
  * @property \Illuminate\Support\Carbon|null $applied_at
@@ -647,48 +643,34 @@ namespace App\Models{
  * @property int|null $applied_record_id
  * @property \Illuminate\Support\Carbon|null $dismissed_at
  * @property string|null $dismiss_reason
- * @property numeric|null $realized_impact
- * @property numeric|null $actual_revenue
- * @property \Illuminate\Support\Carbon|null $settled_at
  * @property \Illuminate\Support\Carbon|null $created_at
  * @property \Illuminate\Support\Carbon|null $updated_at
  * @property-read \App\Models\User|null $appliedBy
  * @property-read string $action_label
  * @property-read string $action_tag_class
- * @property-read string $confidence_label
- * @property-read string $impact_caption
- * @property-read string $impact_label
- * @property-read float|null $projected_total
- * @property-read string $realized_label
- * @property-read string $slot_label
+ * @property-read string $action_icon
+ * @property-read string $apply_label
+ * @property-read string $confirm_message
  * @property-read string $window_label
- * @method static \Illuminate\Database\Eloquent\Builder<static>|Recommendation decided()
- * @method static \Illuminate\Database\Eloquent\Builder<static>|Recommendation measured()
+ *
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Recommendation actedOn()
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Recommendation newModelQuery()
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Recommendation newQuery()
- * @method static \Illuminate\Database\Eloquent\Builder<static>|Recommendation noAction()
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Recommendation open()
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Recommendation query()
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Recommendation whereActionPayload($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Recommendation whereActionType($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|Recommendation whereActualRevenue($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Recommendation whereAppliedAt($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Recommendation whereAppliedBy($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Recommendation whereAppliedRecordId($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Recommendation whereAppliedRecordType($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|Recommendation whereBaselineProjection($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|Recommendation whereConfidence($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Recommendation whereCreatedAt($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Recommendation whereDismissReason($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Recommendation whereDismissedAt($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Recommendation whereEvidence($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|Recommendation whereExpectedImpact($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Recommendation whereFingerprint($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Recommendation whereGeneratedAt($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Recommendation whereId($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|Recommendation whereRealizedImpact($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|Recommendation whereSampleSize($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|Recommendation whereSettledAt($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Recommendation whereSlot($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Recommendation whereStatus($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Recommendation whereSummary($value)
@@ -697,6 +679,7 @@ namespace App\Models{
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Recommendation whereTitle($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Recommendation whereType($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Recommendation whereUpdatedAt($value)
+ *
  * @mixin \Eloquent
  */
 	class Recommendation extends \Eloquent {}

@@ -189,18 +189,20 @@ public function images()
             ->whereDate('end_date', '>=', $date->toDateString())
             ->first();
 
-        if ($rule) {
-            return $rule->type === 'percentage'
-                ? $this->base_price * (1 + $rule->price / 100)
-                : $rule->price;
+        if ($rule && $rule->type !== 'percentage') {
+            return $rule->price;
         }
 
         // Check if it's a weekend (Friday=5, Saturday=6)
-        if ($date->isSaturday() || $date->isSunday()) {
-            return $this->weekend_price ?? $this->base_price;
-        }
+        $normal = ($date->isSaturday() || $date->isSunday())
+            ? ($this->weekend_price ?? $this->base_price)
+            : $this->base_price;
 
-        return $this->base_price;
+        // Percentage: sa ibabaw ng karaniwang presyo ng petsa — kapareho ng
+        // getPackagePrice() sa ibaba (v7.58).
+        return $rule
+            ? round($normal * (1 + $rule->price / 100), 2)
+            : $normal;
     }
 
     /**
@@ -256,35 +258,43 @@ public function images()
             ->whereDate('end_date', '>=', $checkin->toDateString())
             ->first();
 
-        if ($rule) {
-            // Ang percentage rule ay porsyento ng base ng SLOT na ito,
-            // hindi laging ng `base_price`. Kung `base_price` ang laging
-            // pinagbabatayan, ang isang "+20% holiday" ay magiging
-            // ₱4,800 sa isang 22-oras na stay na ang listahan ay mas
-            // mataas pa roon — isang holiday surcharge na nagbabawas ng
-            // presyo. Ang fixed rule ay absolute pa rin: iyon ang sinabi
-            // ng admin na presyo para sa petsang iyon.
-            return $rule->type === 'percentage'
-                ? $base * (1 + $rule->price / 100)
-                : $rule->price;
+        // Fixed rule: absolute — iyon ang sinabi ng admin na presyo para sa
+        // petsang iyon, anuman ang araw o slot.
+        if ($rule && $rule->type !== 'percentage') {
+            return $rule->price;
         }
 
         $dayOfWeek = $checkin->dayOfWeek; // 0=Sunday ... 6=Saturday
 
-        // Linggo: mahal pa hanggang 6PM, tapos mura na
-        if ($dayOfWeek === 0) {
-            return $checkin->format('H:i') >= '18:00'
-                ? $base
-                : ($weekend ?? $base);
+        // Ang KARANIWANG presyo ng petsa at slot na ito:
+        //  - Linggo: mahal pa hanggang 6PM, tapos mura na
+        //  - Biyernes (5) at Sabado (6): peak rate buong araw
+        //  - Lunes–Huwebes: regular rate
+        $normal = match (true) {
+            $dayOfWeek === 0 => $checkin->format('H:i') >= '18:00' ? $base : ($weekend ?? $base),
+            in_array($dayOfWeek, [5, 6]) => $weekend ?? $base,
+            default => $base,
+        };
+
+        // ⚠️ Percentage rule: porsyento sa ibabaw ng KARANIWANG presyo sa
+        // itaas — HINDI ng `base_price`, at hindi rin ng base ng slot lang
+        // (v7.58).
+        //
+        // Hanggang v7.57 ay `$base × (1 + %)` ito, kaya ang "+10%" sa isang
+        // Sabado ay 4,000 × 1.10 = ₱4,400 — mas MABABA pa sa ₱6,000 na
+        // karaniwang sinisingil. Ang rule na ang pangalan ay pagtataas ay
+        // tahimik na nagpapamura tuwing weekend. Ngayon, ang "+10%" ay
+        // ₱4,400 sa Martes, ₱6,600 sa Sabado, at 10% rin sa 22-oras —
+        // iyon mismo ang sinasabi ng label, sa bawat petsa at slot.
+        //
+        // Ito ang inaasahan ng PeakRateAdvisor: iisang `pricing_rules` row
+        // para sa saklaw na may halong weekday at weekend. Huwag itong
+        // ibalik sa `$base`.
+        if ($rule) {
+            return round($normal * (1 + $rule->price / 100), 2);
         }
 
-        // Biyernes (5) at Sabado (6): peak rate buong araw
-        if (in_array($dayOfWeek, [5, 6])) {
-            return $weekend ?? $base;
-        }
-
-        // Lunes–Huwebes: regular rate
-        return $base;
+        return $normal;
     }
 
     /**
@@ -294,7 +304,10 @@ public function images()
      */
     public static function priceColumnsFor(?string $slot = null): array
     {
-        return $slot === 'stay22'
+        // Mula sa depinisyon ng slot, hindi `$slot === 'stay22'`: sa
+        // paghahambing na iyon, ang ikalawang 22-oras na slot (`day22`) ay
+        // tahimik na babagsak sa presyo ng Day/Night — kalahati ng dapat.
+        return (\App\Models\Booking::SLOTS[$slot]['rate'] ?? null) === '22h'
             ? ['base_price_22h', 'weekend_price_22h']
             : ['base_price', 'weekend_price'];
     }

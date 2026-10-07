@@ -529,105 +529,69 @@
 
                     <div class="settings-card">
                         <div class="settings-card-header">
-                            <div class="icon" style="background:#fef3c7;color:#b45309;"><i
-                                    class="bi bi-lightbulb"></i></div>
+                            <div class="icon tag-amber"><i class="bi bi-lightbulb"></i></div>
                             <div>
-                                <h3>Prescriptive Engine</h3>
-                                <p>The assumptions behind Recommendations — every number on that page traces back here
+                                <h3>Recommendation Rules</h3>
+                                <p>Your policy for the Recommendations page — each card there follows one of these numbers
                                 </p>
                             </div>
                         </div>
                         <div class="settings-card-body">
                             <div class="two-col mb-16">
                                 <div>
-                                    <label for="f_prescriptive_lookback_days" class="form-label">History Window (days)</label>
-                                    <input id="f_prescriptive_lookback_days" type="number" name="prescriptive_lookback_days" class="form-control"
-                                        value="{{ $settings['prescriptive_lookback_days'] ?? '180' }}" min="30"
-                                        max="730">
-                                    <span class="hint">How far back fill rates are measured. Longer is steadier but
-                                        slower to notice a change in demand.</span>
-                                </div>
-                                <div>
-                                    <label for="f_prescriptive_lookahead_days" class="form-label">Planning Horizon (days)</label>
-                                    <input id="f_prescriptive_lookahead_days" type="number" name="prescriptive_lookahead_days" class="form-control"
-                                        value="{{ $settings['prescriptive_lookahead_days'] ?? '45' }}" min="7"
-                                        max="180">
-                                    <span class="hint">How far ahead promo recommendations look.</span>
-                                </div>
-                            </div>
-                            <div class="two-col mb-16">
-                                <div>
-                                    <label for="f_prescriptive_idle_threshold" class="form-label">Idle Threshold (%)</label>
-                                    <input id="f_prescriptive_idle_threshold" type="number" name="prescriptive_idle_threshold" class="form-control"
-                                        value="{{ $settings['prescriptive_idle_threshold'] ?? '35' }}" min="1"
+                                    <label for="f_prescriptive_quiet_threshold" class="form-label">Quiet Dates — below (%)</label>
+                                    <input id="f_prescriptive_quiet_threshold" type="number" name="prescriptive_quiet_threshold" class="form-control"
+                                        value="{{ old('prescriptive_quiet_threshold', $settings['prescriptive_quiet_threshold'] ?? '30') }}" min="1"
                                         max="99" step="1">
-                                    <span class="hint">A date is only considered weak — and worth discounting — if its
-                                        historical fill rate is below this.</span>
+                                    <span class="hint">Upcoming dates count as quiet when predicted occupancy is below
+                                        this. A promo is suggested for them.</span>
                                 </div>
                                 <div>
-                                    <label for="f_prescriptive_elasticity" class="form-label">Discount Response</label>
-                                    <input id="f_prescriptive_elasticity" type="number" name="prescriptive_elasticity" class="form-control"
-                                        value="{{ $settings['prescriptive_elasticity'] ?? '1.5' }}" min="0"
-                                        max="10" step="0.1">
-                                    <span class="hint"><strong>This is an assumption, not a measurement.</strong>
-                                        Points of extra booking probability gained per 1% of discount. At 1.5, a 10%
-                                        promo is assumed to lift the fill rate by 15 points. Lower it to make the
-                                        engine more cautious.</span>
-                                </div>
-                            </div>
-                            <div class="two-col mb-16">
-                                <div>
-                                    <label for="f_prescriptive_max_discount" class="form-label">Maximum Discount (%)</label>
-                                    <input id="f_prescriptive_max_discount" type="number" name="prescriptive_max_discount" class="form-control"
-                                        value="{{ $settings['prescriptive_max_discount'] ?? '20' }}" min="1"
+                                    <label for="f_prescriptive_promo_percent" class="form-label">Promo for Quiet Dates (%)</label>
+                                    <input id="f_prescriptive_promo_percent" type="number" name="prescriptive_promo_percent" class="form-control"
+                                        value="{{ old('prescriptive_promo_percent', $settings['prescriptive_promo_percent'] ?? '10') }}" min="1"
                                         max="50" step="1">
-                                    <span class="hint">The engine will never recommend a promo deeper than this.</span>
-                                </div>
-                                <div>
-                                    <label for="f_prescriptive_min_impact" class="form-label">Minimum Worth (₱)</label>
-                                    <input id="f_prescriptive_min_impact" type="number" name="prescriptive_min_impact" class="form-control"
-                                        value="{{ $settings['prescriptive_min_impact'] ?? '500' }}" min="0"
-                                        step="100">
-                                    <span class="hint">Recommendations projected to be worth less than this are not
-                                        shown at all.</span>
+                                    <span class="hint">The discount a promo card offers.</span>
                                 </div>
                             </div>
                             <div class="two-col mb-16">
                                 <div>
-                                    <label for="f_prescriptive_maintenance_days" class="form-label">Maintenance Window (days)</label>
+                                    <label for="f_prescriptive_busy_threshold" class="form-label">Busy Dates — at or above (%)</label>
+                                    <input id="f_prescriptive_busy_threshold" type="number" name="prescriptive_busy_threshold" class="form-control"
+                                        value="{{ old('prescriptive_busy_threshold', $settings['prescriptive_busy_threshold'] ?? '70') }}" min="2"
+                                        max="100" step="1">
+                                    <span class="hint">Upcoming dates count as busy when predicted occupancy reaches
+                                        this. Public holidays always count as busy. Must be higher than the quiet
+                                        number.</span>
+                                    @error('prescriptive_busy_threshold')
+                                        <span class="hint text-red">{{ $message }}</span>
+                                    @enderror
+                                </div>
+                                <div>
+                                    <label for="f_prescriptive_increase_percent" class="form-label">Rate Increase for Busy Dates (%)</label>
+                                    <input id="f_prescriptive_increase_percent" type="number" name="prescriptive_increase_percent" class="form-control"
+                                        value="{{ old('prescriptive_increase_percent', $settings['prescriptive_increase_percent'] ?? '10') }}" min="1"
+                                        max="50" step="1">
+                                    <span class="hint">How much a peak-pricing card raises the rate, on top of the
+                                        normal weekday or weekend price.</span>
+                                </div>
+                            </div>
+                            <div class="two-col mb-16">
+                                <div>
+                                    <label for="f_prescriptive_maintenance_days" class="form-label">Maintenance Length (days)</label>
                                     <input id="f_prescriptive_maintenance_days" type="number" name="prescriptive_maintenance_days" class="form-control"
-                                        value="{{ $settings['prescriptive_maintenance_days'] ?? '2' }}" min="1"
+                                        value="{{ old('prescriptive_maintenance_days', $settings['prescriptive_maintenance_days'] ?? '2') }}" min="1"
                                         max="14">
-                                    <span class="hint">How many consecutive days the villa needs when it closes for
+                                    <span class="hint">How many days in a row the villa needs when it closes for
                                         maintenance.</span>
                                 </div>
                                 <div>
-                                    <label for="f_prescriptive_peak_threshold" class="form-label">Peak Threshold (%)</label>
-                                    <input id="f_prescriptive_peak_threshold" type="number" name="prescriptive_peak_threshold" class="form-control"
-                                        value="{{ $settings['prescriptive_peak_threshold'] ?? '60' }}" min="1"
-                                        max="100" step="1">
-                                    <span class="hint">A date is only considered strong enough to charge more for if
-                                        its fill rate is above this.</span>
-                                </div>
-                            </div>
-                            <div class="two-col mb-16">
-                                <div>
-                                    <label for="f_prescriptive_peak_elasticity" class="form-label">Peak Discount Response</label>
-                                    <input id="f_prescriptive_peak_elasticity" type="number" name="prescriptive_peak_elasticity" class="form-control"
-                                        value="{{ $settings['prescriptive_peak_elasticity'] ?? '0.6' }}" min="0"
-                                        max="10" step="0.1">
-                                    <span class="hint">Elasticity for <strong>busy</strong> dates, kept separate on
-                                        purpose. Guests booking a peak weekend have a fixed date and are assumed less
-                                        price-sensitive, so this should be <strong>below 1.0</strong> — at 1.0 or
-                                        above, no price increase is ever recommended.</span>
-                                </div>
-                                <div>
-                                    <label for="f_prescriptive_max_increase" class="form-label">Maximum Increase (%)</label>
-                                    <input id="f_prescriptive_max_increase" type="number" name="prescriptive_max_increase" class="form-control"
-                                        value="{{ $settings['prescriptive_max_increase'] ?? '20' }}" min="1"
-                                        max="100" step="1">
-                                    <span class="hint">The engine will never recommend raising a rate by more than
-                                        this.</span>
+                                    <label for="f_prescriptive_reminder_days" class="form-label">Balance Reminder (days before check-in)</label>
+                                    <input id="f_prescriptive_reminder_days" type="number" name="prescriptive_reminder_days" class="form-control"
+                                        value="{{ old('prescriptive_reminder_days', $settings['prescriptive_reminder_days'] ?? '3') }}" min="0"
+                                        max="14">
+                                    <span class="hint">A reminder is suggested when a guest with a balance still due
+                                        checks in within this many days.</span>
                                 </div>
                             </div>
                         </div>

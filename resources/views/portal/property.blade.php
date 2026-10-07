@@ -1271,10 +1271,19 @@
                 note.textContent = '';
                 return;
             }
+            // Mula sa SLOT_DEFS, hindi `slot === 'day' ? … : …` — ang
+            // ternary na iyon ay nagsasabing "Night slot, check-out 6:00 AM"
+            // sa bisitang pumili ng 22 oras.
+            const def = SLOT_DEFS[slot];
+            if (!def) {
+                note.className = 'duration-note';
+                note.textContent = '';
+                return;
+            }
+            const [checkIn, checkOut] = def.times.split(' – ');
             note.className = 'duration-note ok';
-            note.innerHTML = slot === 'day' ?
-                '<i class="bi bi-check-circle me-1"></i>Day slot — check-in 8:00 AM, check-out 5:00 PM.' :
-                '<i class="bi bi-check-circle me-1"></i>Night slot — check-in 7:00 PM, check-out 6:00 AM.';
+            note.innerHTML = '<i class="bi bi-check-circle me-1"></i>' + def.name +
+                ' — check-in ' + checkIn + ', check-out ' + checkOut + '.';
         }
 
         let previewAbortController = null;

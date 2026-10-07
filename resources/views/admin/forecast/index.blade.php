@@ -342,8 +342,8 @@
                 Written <strong>{{ $generatedAt->diffForHumans() }}</strong>
                 ({{ $generatedAt->format('M d, Y g:i A') }}) — press <em>Refresh Forecast</em> to rewrite it.
             @endif
-            This page is the <strong>outlook</strong> — for what to actually do about it, with the peso value of each
-            option worked out, see <a href="{{ route('admin.prescriptive.index') }}">Recommendations</a>.
+            This page is the <strong>outlook</strong> — for what to actually do about it, with the reason behind each
+            suggestion, see <a href="{{ route('admin.prescriptive.index') }}">Recommendations</a>.
         </div>
     </div>
 

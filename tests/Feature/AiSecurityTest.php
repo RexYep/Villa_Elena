@@ -530,9 +530,6 @@ class AiSecurityTest extends TestCase
             'target_end' => $end,
             'action_type' => Recommendation::ACTION_CREATE_BLOCK,
             'action_payload' => ['start_date' => $start, 'end_date' => $end, 'reason' => 'maintenance'],
-            'expected_impact' => 1234,
-            'confidence' => 90,
-            'sample_size' => 10,
             'status' => 'new',
             'fingerprint' => 'test-'.bin2hex(random_bytes(6)),
             'generated_at' => now(),
@@ -604,10 +601,6 @@ class AiSecurityTest extends TestCase
             $table->string('slot', 10)->nullable();
             $table->string('action_type', 40);
             $table->text('action_payload');
-            $table->decimal('expected_impact', 10, 2)->default(0);
-            $table->decimal('baseline_projection', 10, 2)->nullable();
-            $table->decimal('confidence', 5, 2)->default(0);
-            $table->integer('sample_size')->default(0);
             $table->string('status')->default('new');
             $table->string('fingerprint', 64)->unique();
             $table->timestamp('generated_at')->nullable();
@@ -617,9 +610,6 @@ class AiSecurityTest extends TestCase
             $table->unsignedBigInteger('applied_record_id')->nullable();
             $table->timestamp('dismissed_at')->nullable();
             $table->string('dismiss_reason', 255)->nullable();
-            $table->decimal('realized_impact', 10, 2)->nullable();
-            $table->decimal('actual_revenue', 10, 2)->nullable();
-            $table->timestamp('settled_at')->nullable();
             $table->timestamps();
         });
 

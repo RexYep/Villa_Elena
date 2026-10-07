@@ -154,17 +154,16 @@ Route::delete('reviews/{review}',             [ReviewController::class, 'destroy
     Route::post('/forecast/refresh', [ForecastController::class, 'refresh'])->name('forecast.refresh');
 
     // Prescriptive Analytics — ADMIN LANG, tulad ng Promotions. Ang mga
-    // aksyon dito ang gumagawa ng totoong Discount/AvailabilityBlock, at
-    // inilalantad ng page ang panloob na datos ng negosyo (mahihinang
-    // petsa, tinatayang kita), kaya wala ito sa staff portal.
+    // aksyon dito ang gumagawa ng totoong promo, pricing rule, block at
+    // housekeeping task, at inilalantad ng page ang panloob na datos ng
+    // negosyo (mahihinang petsa, sino ang may balanse pa), kaya wala ito
+    // sa staff portal.
     Route::get('prescriptive',                          [PrescriptiveController::class, 'index'])->name('prescriptive.index');
-    // GET at read-only — walang isinusulat ang simulator, kaya ligtas
-    // itong i-refresh at i-bookmark.
-    Route::get('prescriptive/simulate',                 [PrescriptiveController::class, 'simulate'])->name('prescriptive.simulate');
-    Route::get('prescriptive/accuracy',                 [PrescriptiveController::class, 'accuracy'])->name('prescriptive.accuracy');
     Route::post('prescriptive/regenerate',              [PrescriptiveController::class, 'regenerate'])->name('prescriptive.regenerate');
     Route::post('prescriptive/{recommendation}/apply',  [PrescriptiveController::class, 'apply'])->name('prescriptive.apply');
     Route::post('prescriptive/{recommendation}/dismiss', [PrescriptiveController::class, 'dismiss'])->name('prescriptive.dismiss');
+    // Ang pricing rule ay walang sariling page, kaya dito ito pinapatay.
+    Route::post('prescriptive/{recommendation}/turn-off-rate', [PrescriptiveController::class, 'turnOffRate'])->name('prescriptive.turn-off-rate');
 
     Route::get('search', [DashboardController::class, 'search'])->name('search');
 

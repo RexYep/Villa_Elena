@@ -1,7 +1,7 @@
 # Villa Elena Private Rental Resort
 ## Resort Management System — Project Documentation
 
-**Version:** 7.57
+**Version:** 7.59
 **Stack:** PHP 8.2 / Laravel 12 / MySQL 8 / Bootstrap 5
 **Local URL:** `http://127.0.0.1:8000` (`php artisan serve`) or `http://localhost:8000` (Docker — see v5.3)
 **Live URL:** `https://villa-elena.onrender.com` (Render, free tier — testing only, not yet handed to real guests)
@@ -185,6 +185,276 @@ through `user_id` and nothing denormalises their name into a booking row.
 from Task 11 · F5 get dropped at the same time — they are empty and reserved
 (`users.id_type` / `users.id_number`, see v7.40), and a schema change for erasure
 is the natural moment to remove them rather than a migration of their own.
+
+---
+
+## What Changed in v7.59 (Read This First)
+
+### A second 22-hour slot: 8:00 AM – 6:00 AM next day
+
+The owner's cut-off list has four stays, and the system only had three:
+
+| Stay | Key | Offered |
+|---|---|---|
+| 8AM – 5PM Daytime | `day` | every date |
+| 7PM – 6AM Overnight | `night` | every date |
+| 7PM – 5PM 22hrs | `stay22` | nominated dates only |
+| **8AM – 6AM 22hrs** | **`day22`** (new) | nominated dates only |
+
+`day22` is one more entry in `Booking::SLOTS`. Everything that reasons about
+occupancy was already a datetime-overlap test, so nothing there needed a special
+case. Confirmed with a script against the local database (37 checks, in a
+transaction that was rolled back): a booked `day22` on Dec 2 closes Dec 2's Day,
+Night and `stay22`, and Dec 1's `stay22` (which runs to 5PM Dec 2); it leaves
+Dec 3's Day and Dec 1's Night open; `blockSpan()` claims Dec 2 only.
+
+**Decisions confirmed with the owner (2026-10-07):**
+
+- **One rate for both 22-hour stays.** `day22` reads the existing
+  `base_price_22h` / `weekend_price_22h`. No new columns, no new admin fields.
+- **Nominated per date, one variant per date.** `day22` is `window_required`
+  like `stay22`, and the admin picks the variant in Admin → Calendar →
+  "22-Hour Date". The "window first and exclusive" rule and the five JS pickers
+  are unchanged.
+- **The names carry the start time:** "22 Hours (7PM)" and "22 Hours (8AM)".
+  The existing slot was renamed from "22 Hours"; names are derived, never
+  stored, so the three existing `stay22` bookings simply read differently.
+
+**What had to change, and why each one mattered:**
+
+- **`Property::priceColumnsFor()` tested `$slot === 'stay22'`.** A second
+  22-hour key would have fallen through to the Day/Night columns and been sold
+  at ₱4,000/₱6,000 instead of ₱8,000/₱10,000 — silently. It now reads a `rate`
+  tag on the slot definition. The tag is `'22h'`, not a column name, because the
+  definitions are sent to the guest page as JSON (`SLOT_DEFS`).
+- **Two 22-hour windows can overlap each other; one could not.** Consecutive
+  7PM→5PM stays never touch. With `day22` there are two collisions: both
+  variants on one date, and `stay22` on a date with `day22` on the next (the
+  first runs to 5PM, the second starts at 8AM). Left alone, booking the first
+  makes the second unsellable while exclusivity still hides that date's Night,
+  which is physically free. `CalendarController::slotWindowProblem()` now
+  refuses both, naming the date to close first. A window whose check-in has
+  passed is ignored (it can no longer be sold; if it was booked, the booking
+  check catches it).
+- **The "22-Hour Date" modal posted `slot: 'stay22'`** and previewed a hardcoded
+  19:00 + 22h span. It now has a Stay dropdown built from the priced windowed
+  slots, and the preview reads the chosen definition's times.
+- **`discounts.applies_to`** gained `day22`
+  (`2026_10_07_100000_add_day22_to_discounts_applies_to`). The promo form offers
+  every key in `SLOTS`, so without it choosing the new slot fails the INSERT.
+- **Chatbot intent hints** now tell the two 22-hour stays apart by start time,
+  and send a bare "22 hours" to whichever is offered on the requested date.
+- **Admin → Properties** rate hint lists every slot on the 22-hour rate rather
+  than printing `SLOTS['stay22']['label']`.
+
+**An existing bug fixed on the way.** `showSlotNote()` on the villa page was a
+`slot === 'day' ? … : …` ternary, so a guest who picked the 22-hour stay was told
+"Night slot — check-in 7:00 PM, check-out 6:00 AM". It now builds the sentence
+from `SLOT_DEFS`.
+
+**Things that behave as designed but are worth knowing:**
+
+- **Price follows the check-in time**, so on a Sunday `day22` (8AM) is the peak
+  rate and `stay22` (7PM, after 6PM) is the regular rate.
+- **`slot_hold` covers less again.** `day` and `day22` share `08:00`, so the
+  index catches those two on one date. `day22`-vs-`night` and
+  `day22`-vs-`stay22` are caught only by `reserveSlot()`'s row lock.
+
+**A second existing bug fixed: an extension could rename the booking.** The
+`Booking` saving hook wrote `slot` from `exactSlotKey()` whenever the stored
+times matched a slot exactly. "Preserved when the times match no slot" was the
+stated rule, but an extension can land exactly on another slot's times:
+
+| Booked as | Extended to | Times now equal | Was relabelled |
+|---|---|---|---|
+| Night 7PM–6AM | 5:00 PM | `stay22` | "22 Hours (7PM)" — since v7.47 |
+| Day 8AM–5PM | 6:00 AM next day | `day22` | "22 Hours (8AM)" — new with this slot |
+
+The hook runs on every save, so the rename did not need `extendStay()` itself:
+the check-out or a payment after the extension would have done it. It is more
+than a label, because `slotKey()` feeds `moveOfferingProblem()` and
+`SlotWindow::holdingBooking()`.
+
+**The rule now: the slot is decided at check-in.** `slot` is re-read from the
+times only when `check_in_date` or `check_in_time` changes (create, reschedule,
+drag-move) or when the column is still empty (backfill). A change to the
+check-out alone is an extension and keeps the stored value. Checked with real
+saves in a rolled-back transaction (14 checks): Day extended to 6AM stays
+`day`, Night extended to 5PM stays `night`, both survive a later unrelated
+save, and a reschedule or move still relabels correctly.
+
+What the rule cannot tell apart is a reschedule to the **same date and same
+check-in time** in a different slot (Night ↔ `stay22`, Day ↔ `day22`). That is
+not reachable: a 22-hour date is exclusive, and `addSlotWindow()` refuses a
+date that already holds a booking of another slot.
+
+No row needed repair locally: `staff_logs` has no `extended_stay` entry.
+Production could not be checked from here.
+
+**Deploying:** run the new migration (`RUN_MIGRATIONS=true`, or
+`php artisan migrate --force --database=aiven`). Nothing appears to guests until
+a `day22` date is opened in the calendar.
+
+---
+
+## What Changed in v7.58 (Read This First)
+
+### Recommendations became plain IF–THEN rules
+
+The prescriptive feature was rebuilt because it was hard to explain and, on the
+real data, said almost nothing. Measured on the local database before anything
+was changed (2026-10-06):
+
+- **One open card.** About 16 of 85 offered slots in the next 45 days were
+  booked (19%), and the page showed a single maintenance card — no promo, no
+  pricing.
+- **No promo could appear.** With the assumed price elasticity of 1.5, a 15%
+  discount on *every* open slot was projected to add ₱1,810 in total; split into
+  14-day cards each fell under the ₱500 minimum and was hidden.
+- **No rate increase could appear.** A date needed a 60% historical fill rate to
+  count as peak; the highest in the data was 33%.
+- **Nothing had ever been measured.** The Accuracy page had 0 measured rows and
+  showed only its formula and a "not a controlled experiment" warning.
+- **The central number was an assumption.** Every peso figure depended on an
+  elasticity the code itself labelled "an assumption, not a measurement".
+
+So the model was removed and replaced with five rules a person can check against
+the calendar by hand. The owner confirmed two points first: the manuscript does
+**not** describe the feature as optimisation, elasticity or expected revenue, and
+staffing may be expressed as housekeeping tasks (there is no staff roster) with
+inventory left out (there is no stock data).
+
+**The three numbers every occupancy rule reads** (`OccupancyCalendar::summarise()`),
+for one stretch of upcoming dates — each week's weekdays (Mon–Thu) or weekend
+(Fri–Sun), the two groups the villa already prices differently:
+
+| Number | Meaning |
+|---|---|
+| Booked so far | slots already booked ÷ slots offered (a slot = Day, Night, or the 22-hour stay on a nominated date) |
+| Usual | how full the same weekdays were over the last `history_days` (180), Day and Night only |
+| Predicted occupancy | the larger of the two |
+
+**The five rules** (`app/Services/Prescriptive/Advisors/`):
+
+| Decision | Rule | Apply creates |
+|---|---|---|
+| Promotion — `QuietDatesPromoAdvisor` | predicted occupancy below the quiet threshold, no holiday in the stretch, no promo already running | a `discounts` row (percentage, `applies_to = all`) |
+| Peak pricing — `PeakRateAdvisor` | predicted occupancy at or above the busy threshold → the stretch; **or** a public holiday → the holiday date(s) only | a **percentage** `pricing_rules` row |
+| Maintenance — `MaintenanceWindowAdvisor` | no maintenance scheduled → the free N-day gap whose weekdays are usually quietest (earliest on a tie) | an `availability_blocks` row |
+| Housekeeping — `TurnoverCleanAdvisor` | one booking checks out and the next checks in within `turnover_gap_hours` (3), in the next 7 days, and no cleaning task exists for that checkout | a `housekeeping_tasks` row (`checkout_clean`, urgent) + `FrontdeskBroadcast` |
+| Booking follow-up — `BalanceReminderAdvisor` | a confirmed booking checks in within the reminder days and still has `balance_due` | an in-app notification to the guest with the `payment.page` link |
+
+**The owner's numbers** are six settings under Admin → Settings → Booking Rules →
+*Recommendation Rules*: `prescriptive_quiet_threshold` (30), `prescriptive_promo_percent`
+(10), `prescriptive_busy_threshold` (70), `prescriptive_increase_percent` (10),
+`prescriptive_maintenance_days` (2), `prescriptive_reminder_days` (3). The busy
+threshold must be higher than the quiet one (`gt:` in `SettingsController`), or one
+stretch would be both. Developer values (history 180 days, look-ahead 30 days,
+turnover gap 3 hours, turnover look-ahead 7 days) stay in `config/prescriptive.php`.
+
+**Rules that must survive edits:**
+
+- **The discount and the increase are the owner's policy, not an output.** The
+  rule decides *when*; the owner decides *how much*. Do not bring back a formula
+  that computes the percentage — the answer to "where does 10% come from?" must
+  be a Settings field.
+- **No peso "projected gain", no "confidence" label.** Both were removed with the
+  columns that held them. A card states counts; it never promises revenue. The AI
+  briefing prompt forbids it too.
+- **A stretch is identified by its week and kind, never by its first date**
+  (`OccupancyCalendar::stretches()`), so the same stretch keeps its fingerprint
+  from one day to the next. That is what keeps a dismissed card dismissed; a
+  fingerprint built from `today + 2` changes daily and the card comes back.
+- **"Usual" counts Day and Night only.** The 22-hour stay is sold on nominated
+  dates and has no weekday pattern. The old model counted every overlapping Day
+  or Night booking as 22-hour demand, so it showed the highest fill rate in the
+  table (up to 32%) with three real bookings.
+- **"Taken" is still a datetime-overlap test**, and "closed by a block" still goes
+  through `Booking::blockSpan()` — neither was reimplemented.
+- **The holiday trigger is per date, and its card says it is a policy.** A first
+  cut raised the whole Mon–Thu stretch because its Monday was All Souls' Day, in
+  a week with nothing booked. 180 days of history holds each holiday at most
+  once, so the card says "your rule prices holiday dates higher", not "holidays
+  are in demand".
+- **One reminder per booking, ever** — the card's fingerprint is the booking id.
+  In-app only, never email (shared Brevo quota). The amount is read from the
+  booking at send time, not from the card.
+- **The turnover card does not bring back the automatic checkout task** removed in
+  v7.11. Nothing is sent until the admin presses the button.
+- **`expired` cards are not history.** "Your decisions" lists applied and
+  dismissed only; its *What happened* column is read live from the record the
+  card created (bookings that used the promo, the task's status, whether the
+  balance was paid) — no stored outcome, no model.
+- **`apply()` keeps its shape:** claim under `lockForUpdate()`, create the record,
+  then two `StaffLog` rows — `applied_recommendation` and the same action name
+  the manual path uses (`created_promo`, `created_pricing_rule`,
+  `created_availability_block`, `task_created`, `sent_balance_reminder`). The
+  frontdesk broadcast is after the commit.
+- **`staleReason()` re-checks every action**, not only blocks: a rate already set
+  on those dates, a turnover whose booking changed or already has a task, a
+  balance already paid.
+
+### 🔴 Percentage pricing rules were calculated from the weekday rate
+
+`Property::getPackagePrice()` applied a percentage `pricing_rules` row as
+`base × (1 + %)`, where `base` is the slot's **weekday** price. A "+10%" rule on
+a Saturday therefore charged 4,000 × 1.10 = **₱4,400 instead of ₱6,000** — a rule
+named as an increase lowered the price every weekend. The old engine worked
+around it by forcing `fixed` rules, which cannot span a weekday and a weekend
+and (having no slot) set Sunday Day and Sunday Night to the same price.
+
+A percentage now applies **on top of the normal price for that date and slot**.
+Verified through `quoteFor()` with a +10% rule on Nov 1–2, 2026: Sunday Day
+₱6,000 → ₱6,600, Sunday Night ₱4,000 → ₱4,400, Monday Day ₱4,000 → ₱4,400, and
+back to ₱6,000 when the rule is turned off. `getPriceForDate()` (legacy, no
+callers) was changed the same way. **Fixed rules are unchanged.**
+
+⚠️ **Before deploying, check production for `pricing_rules.type = 'percentage'`.**
+The local table was empty and the `aiven` connection could not be reached from
+here. Any such row starts charging what its label says on weekend dates.
+
+### Other changes in this version
+
+- **A pricing rule can be turned off from the page** (`POST
+  /admin/prescriptive/{rec}/turn-off-rate`). There is no pricing-rule admin
+  screen, so the old success message ("Edit or deactivate it under Properties →
+  Pricing Rules") pointed at a read-only list.
+- **Properties → Pricing Rules** prints a percentage rule as "+10% on the normal
+  rate" (it printed "₱10.00") and reads `label` (it read a `name` column that
+  does not exist).
+- **Removed:** the What-If Simulator, the Accuracy page, `DemandModel`,
+  `OutcomeTracker`, `IdleDatePromoAdvisor`, and nine settings
+  (`prescriptive_elasticity`, `_peak_elasticity`, `_idle_threshold`,
+  `_peak_threshold`, `_max_discount`, `_max_increase`, `_min_impact`,
+  `_lookback_days`, `_lookahead_days`).
+- **Confirmation uses `data-confirm`** (the shared `<dialog>`) instead of two
+  Bootstrap modals per card; the message is `Recommendation::$confirm_message`
+  and the button is named for what it does (`$apply_label`: "Create promo",
+  "Send task" …). The optional dismiss-reason field is gone from the page;
+  `dismiss_reason` is still stored and shown for older rows.
+
+**Migration `2026_10_06_100000_simplify_recommendations_table`** drops
+`expected_impact`, `baseline_projection`, `confidence`, `sample_size`,
+`realized_impact`, `actual_revenue`, `settled_at` and their two indexes, adds
+`(status, target_start)`, marks every still-`new` card `expired` (they carry the
+old payload shape; the next run writes fresh ones) and deletes the nine removed
+settings rows. **Order matters on deploy:** the new code runs correctly before
+the migration (it writes none of the dropped columns), but the *old* code breaks
+after it — so run the migration with or after this deploy, never before.
+
+**Verified** against the local database through the real HTTP kernel (routes,
+middleware, CSRF, Blade), with every created row removed afterwards: all five
+actions applied once each; a second click on each was refused; a dismissed card
+stayed dismissed across a re-run; staff got 403; `/admin/prescriptive`,
+`/admin/settings`, `/admin/dashboard`, `/admin/properties/{id}` and
+`/admin/forecast` rendered 200. The page was checked in Chrome at desktop width
+and in a 390px frame (no horizontal overflow; history table stacks; rules table
+becomes labelled blocks). `AiSecurityTest` + `RateLimitingTest`: 58 passed.
+
+**Not verified:** anything on production; a real Pusher delivery of the
+`task_assigned` broadcast (the check ran with the `null` broadcaster so a test
+could not reach a live frontdesk screen); a real guest paying from the reminder
+link.
 
 ---
 
@@ -8600,38 +8870,45 @@ LLM-written outlook over 6 months of **live** booking and revenue data (the hard
 
 ### 6.18 Prescriptive Analytics (Recommendations)
 
-**Routes:** `GET /admin/prescriptive` → `admin.prescriptive.index`, plus `regenerate` / `{rec}/apply` / `{rec}/dismiss` (all POST)
+**Routes:** `GET /admin/prescriptive` → `admin.prescriptive.index`, plus `regenerate` / `{rec}/apply` / `{rec}/dismiss` / `{rec}/turn-off-rate` (all POST)
 **Generated by:** `prescriptive:generate`, scheduled `dailyAt('01:30')` in `routes/console.php`
-**Admin only** — same reasoning as Promotions (`routes/admin.php`): applying a card creates a real discount, and the page exposes internal business data (weak dates, projected revenue, the elasticity assumption).
+**Admin only** — same reasoning as Promotions (`routes/admin.php`): applying a card changes a price, closes dates or messages a guest, and the page exposes internal business data (quiet dates, who still owes a balance).
 
-The layer that answers **"what should I do?"** — as distinct from Insights (*why*) and Forecast (*what will happen*). Full rationale in **What Changed in v6.3**.
+The layer that answers **"what should I do?"** — as distinct from Insights (*why*) and Forecast (*what will happen*). Rebuilt in **v7.58** as plain IF–THEN rules; the original expected-revenue model (v6.3–v6.5) is described in those versions' notes and no longer exists in the code.
 
 **Pipeline:**
 
 ```
-DemandModel          p(date, slot) from smoothed historical fill rates
+OccupancyCalendar    for a stretch of dates: booked so far, usual, predicted occupancy
                      price via Property::quoteFor()  ← never reimplemented
    ↓
-Advisors             IdleDatePromoAdvisor     → best discount by expected revenue
-                     PeakRateAdvisor          → best increase (inelastic peak dates)
-                     MaintenanceWindowAdvisor → cheapest window to close
+Advisors (rules)     QuietDatesPromoAdvisor   → promo when predicted occupancy is low
+                     PeakRateAdvisor          → higher rate when it is high, or on a holiday
+                     MaintenanceWindowAdvisor → quietest free gap to close
+                     TurnoverCleanAdvisor     → cleaning task between back-to-back bookings
+                     BalanceReminderAdvisor   → reminder when a balance is due before check-in
    ↓
 PrescriptiveEngine   dedupe by fingerprint, refresh open cards, expire stale ones
    ↓
 recommendations      one table. Nothing else is written. Guests see nothing.
    ↓
-Apply (a human)      → Discount / AvailabilityBlock + StaffLog + applied_record_id
+Apply (a human)      → Discount / PricingRule / AvailabilityBlock / HousekeepingTask /
+                       guest notification + two StaffLog rows + applied_record_*
 ```
 
-**Each card carries:** title, plain-language summary, a **"Why this?"** evidence list built from the actual numbers (including the elasticity assumption, named out loud), projected peso impact, confidence (from sample size — the *weakest* day-of-week in the window, not the total), and the target window.
+**Each card carries:** the kind of decision, one sentence saying what to do, a one-line reason, and two to five facts built from actual counts ("Booked so far: 0 of 8 slots"). No peso projection and no confidence label.
 
-**Confirmation modals state the exact effect**, not "Are you sure?" — including an explicit warning that an applied promo is visible to guests immediately (landing banner + booking price), while a block simply removes dates from the calendar.
+**The page also shows** *How these recommendations are worked out* — the three numbers and the five rules with the owner's current settings filled in (`PrescriptiveController::rules()`) — and *Your decisions*, the last 15 applied or dismissed cards with what came of each, read live from the record the card created.
 
-**Key files:** `app/Services/Prescriptive/{DemandModel,PrescriptiveEngine,HolidayCalendar,BriefingWriter,OutcomeTracker}.php`, `app/Services/Prescriptive/Advisors/`, `app/Models/Recommendation.php`, `app/Http/Controllers/Admin/PrescriptiveController.php`, `resources/views/admin/prescriptive/{index,simulate,accuracy}.blade.php`, `config/prescriptive.php`.
+**Confirmation states the exact effect**, not "Are you sure?" (`Recommendation::$confirm_message`, through the shared `data-confirm` dialog), and the button is named for what it does.
 
-**Also surfaces in two other places:** the Dashboard's *Recommended Actions* widget (top 3, queried **outside** the 60-second KPI cache so an applied card disappears immediately), and the **What-If Simulator** at `/admin/prescriptive/simulate` — the same `DemandModel`, but with the admin asking the question.
+**Settings:** six fields under Admin → Settings → Booking Rules → *Recommendation Rules* (`prescriptive_quiet_threshold`, `_promo_percent`, `_busy_threshold`, `_increase_percent`, `_maintenance_days`, `_reminder_days`). Developer values are in `config/prescriptive.php`.
 
-**Outcome tracking (v6.5):** once a window closes, `OutcomeTracker` fills `actual_revenue` and `realized_impact` against the `baseline_projection` frozen when the forecast was made, and `/admin/prescriptive/accuracy` reports it. Read that page's two sections as it labels them: **dismissed/expired** recommendations test the model cleanly, **applied** ones are confounded by the intervention. Maintenance windows are never scored — see v6.5 for why.
+**Key files:** `app/Services/Prescriptive/{OccupancyCalendar,PrescriptiveEngine,HolidayCalendar,BriefingWriter}.php`, `app/Services/Prescriptive/Advisors/`, `app/Models/Recommendation.php`, `app/Http/Controllers/Admin/PrescriptiveController.php`, `resources/views/admin/prescriptive/index.blade.php`.
+
+**Also surfaces on** the Dashboard's *Recommended Actions* widget (the three soonest, queried **outside** the 60-second KPI cache so an applied card disappears immediately).
+
+**AI briefing:** one AI call per run summarises the open cards in prose (`BriefingWriter`); it may not add a recommendation or promise revenue, and the page is complete without it.
 
 ---
 
@@ -9175,11 +9452,10 @@ GET    /admin/reports                         admin.reports.index
 GET    /admin/insights                        admin.insights
 GET    /admin/forecast                        admin.forecast
 GET    /admin/prescriptive                    admin.prescriptive.index
-GET    /admin/prescriptive/simulate           admin.prescriptive.simulate
-GET    /admin/prescriptive/accuracy           admin.prescriptive.accuracy
 POST   /admin/prescriptive/regenerate         admin.prescriptive.regenerate
 POST   /admin/prescriptive/{rec}/apply        admin.prescriptive.apply
 POST   /admin/prescriptive/{rec}/dismiss      admin.prescriptive.dismiss
+POST   /admin/prescriptive/{rec}/turn-off-rate admin.prescriptive.turn-off-rate
 GET    /admin/settings
 PUT    /admin/settings
 GET    /admin/calendar                        admin.calendar.index
@@ -9456,19 +9732,23 @@ DELETE /my/profile/devices/{device}           customer.profile.devices.destroy  
 | 78 | **(v5.7)** Payment Label + Ordering Cleanup (`type_label`/`method_label`, date-tie fix) | ✅ Complete |
 | 79 | **(v5.7)** Stale-Balance Notification Fixed + Webhook Rejection Diagnostics | ✅ Complete |
 | 80 | **(v6.3)** Prescriptive Engine — `DemandModel`, `PrescriptiveEngine`, `recommendations` table, `prescriptive:generate` (nightly) | ✅ Complete |
-| 81 | **(v6.3)** Idle-Date Promo Advisor (expected-revenue optimization over candidate discounts) | ✅ Complete |
+| 81 | **(v6.3)** Idle-Date Promo Advisor (expected-revenue optimization over candidate discounts) | ♻️ Replaced in v7.58 (rule-based `QuietDatesPromoAdvisor`) |
 | 82 | **(v6.3)** Maintenance Window Advisor (minimizes revenue at risk across candidate windows) | ✅ Complete |
 | 83 | **(v6.3)** Recommendations Action Center — evidence, confirmation modal, Apply → real `Discount`/`AvailabilityBlock`, dismiss w/ reason, decision history | ✅ Complete |
-| 84 | **(v6.3)** Prescriptive assumptions exposed in Settings (`prescriptive_*`) + `config/prescriptive.php` | ✅ Complete |
+| 84 | **(v6.3)** Prescriptive assumptions exposed in Settings (`prescriptive_*`) + `config/prescriptive.php` | ♻️ Replaced in v7.58 (six owner-policy settings) |
 | 85 | **(v6.3)** Forecast prompt stripped of AI-invented recommendations (single source of advice) | ✅ Complete |
-| 86 | **(v6.4)** Peak Rate Advisor — recommends *raising* rates on strong dates (separate peak elasticity, forced `fixed` rule) | ✅ Complete |
-| 87 | **(v6.4)** What-If Simulator (`/admin/prescriptive/simulate`) — read-only, admin-driven price scenarios | ✅ Complete |
+| 86 | **(v6.4)** Peak Rate Advisor — recommends *raising* rates on strong dates (separate peak elasticity, forced `fixed` rule) | ♻️ Replaced in v7.58 (percentage rule, holiday or busy trigger) |
+| 87 | **(v6.4)** What-If Simulator (`/admin/prescriptive/simulate`) — read-only, admin-driven price scenarios | 🗑️ Removed in v7.58 |
 | 88 | **(v6.4)** Dashboard "Recommended Actions" widget (top 3, outside the KPI cache) | ✅ Complete |
 | 89 | **(v6.4)** AI morning briefing — one Groq call per run, prose only, fails open by clearing | ✅ Complete |
 | 90 | **(v6.4)** 🔴 Pricing-rule boundary bug fixed — DATE vs DATETIME meant a rule never applied on its last day, and a one-day rule never applied at all | ✅ Complete |
 | 91 | **(v6.4)** Engine hardening — expiry scoped to advisors that finished; `expired` cards revive when the opportunity returns | ✅ Complete |
-| 92 | **(v6.5)** Outcome tracking — `baseline_projection` frozen at forecast time, `actual_revenue`/`realized_impact` filled by `OutcomeTracker` after each window closes | ✅ Complete |
-| 93 | **(v6.5)** Accuracy page (`/admin/prescriptive/accuracy`) — model calibration and action outcomes measured separately, with sample-size warnings | ✅ Complete |
+| 92 | **(v6.5)** Outcome tracking — `baseline_projection` frozen at forecast time, `actual_revenue`/`realized_impact` filled by `OutcomeTracker` after each window closes | 🗑️ Removed in v7.58 |
+| 93 | **(v6.5)** Accuracy page (`/admin/prescriptive/accuracy`) — model calibration and action outcomes measured separately, with sample-size warnings | 🗑️ Removed in v7.58 |
+| 94 | **(v7.58)** Recommendations rebuilt as five IF–THEN rules on booked / usual / predicted occupancy (`OccupancyCalendar`) | ✅ Complete |
+| 95 | **(v7.58)** Two new decisions — turnover-clean task (`TurnoverCleanAdvisor`) and balance reminder (`BalanceReminderAdvisor`) | ✅ Complete |
+| 96 | **(v7.58)** 🔴 Percentage pricing rules apply on top of the normal price for the date and slot (were calculated from the weekday rate) | ✅ Complete |
+| 97 | **(v7.58)** Recommendations page simplified — one sentence + facts per card, rules table, live "What happened" history, Turn off rate | ✅ Complete |
 
 ### Pending / Optional
 

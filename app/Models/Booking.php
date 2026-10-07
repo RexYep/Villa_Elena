@@ -224,14 +224,42 @@ class Booking extends Model
         // pangalan ng slot sa calendar sa eksaktong sandaling
         // pinahahaba ang stay — habang ang katotohanan ay alam pa naman:
         // Night itong binook, at Night pa rin.
+        //
+        // ⚠️ ANG SLOT AY PINAGPAPASYAHAN SA CHECK-IN (v7.59). Muli itong
+        // binabasa mula sa oras LAMANG kapag nagbago ang petsa o oras ng
+        // check-in — paglikha, reschedule, drag-move. Ang pagbabago sa
+        // check-OUT lang ay extension, at pinapanatili ang nakaimbak.
+        //
+        // Hindi sapat ang "pinapanatili kapag walang tugma". Ang isang
+        // extension ay maaaring TUMAMA nang eksakto sa ibang slot:
+        //
+        //   Night  7PM–6AM, pinahaba hanggang 5PM  → oras ng `stay22`
+        //   Day    8AM–5PM, pinahaba hanggang 6AM  → oras ng `day22`
+        //
+        // at dati ay muling isinusulat ang label doon. Tumatakbo pa ang
+        // hook na ito sa BAWAT save, kaya kahit ang check-out o isang
+        // bayad pagkaraan ng extension ay magpapalit sana ng pangalan.
+        // Hindi lang label ang nasisira: `slotKey()` ang binabasa ng
+        // moveOfferingProblem() at ng SlotWindow::holdingBooking(), kaya
+        // ituturing na 22-oras ang isang Day booking.
+        //
+        // Ang HINDI nito nasasaklaw: reschedule sa PAREHONG petsa at
+        // PAREHONG oras ng check-in pero ibang slot (Night ↔ `stay22`,
+        // Day ↔ `day22`). Hindi iyon nangyayari: eksklusibo ang 22-oras
+        // na petsa, at tinatanggihan ng addSlotWindow() ang petsang may
+        // booking na ng ibang slot.
         static::saving(function ($booking) {
             if (! static::hasOptionalColumn('slot')) {
                 return;
             }
 
+            if (! empty($booking->slot) && ! $booking->isDirty(['check_in_date', 'check_in_time'])) {
+                return;
+            }
+
             // Ang exactSlotKey() ay sumasagot LAMANG kapag eksaktong
-            // tugma ang oras, kaya ang isang pinahabang stay (o isang
-            // legacy na 2:00 PM na row) ay walang isinasagot dito.
+            // tugma ang oras, kaya ang isang legacy na 2:00 PM na row ay
+            // walang isinasagot dito at nananatili ang dati nitong halaga.
             if ($slot = $booking->exactSlotKey()) {
                 $booking->slot = $slot;
             }
@@ -470,11 +498,39 @@ class Booking extends Model
     // iba ang oras. Ang lock ng reserveSlot() ang humahawak doon. Mas
     // manipis ang backstop ngayon kaysa noong dalawa ang slot.
 
+    // ⚠️ DALAWA NA ANG 22-ORAS NA SLOT (v7.59), at nagpapatong SILA SA
+    // ISA'T ISA:
+    //
+    //   Okt 1 7PM ──── stay22 ──── Okt 2 5PM
+    //                  Okt 2 8AM ──── day22 ──── Okt 3 6AM
+    //                         Okt 2 7PM ──── stay22 ──── Okt 3 5PM
+    //
+    // Ang `day22` ng isang petsa ay bumabangga sa Day at Night ng petsang
+    // iyon, sa `stay22` ng PAREHONG petsa, at sa `stay22` ng NAKARAANG
+    // petsa (na umaabot ng 5PM). Hindi nito ginagalaw ang Day ng
+    // kinabukasan (6AM → 8AM ang pagitan). Gaya ng dati, datetime-overlap
+    // ang humahawak nito — walang espesyal na kaso.
+    //
+    // Sa `slot_hold`: 08:00 ang check-in ng Day AT ng `day22`, kaya huli
+    // ng index ang dalawang iyon sa isang petsa. Ang `day22`-vs-Night at
+    // ang `day22`-vs-`stay22` ay sa lock ng reserveSlot() lang nahuhuli.
+
     // Ang `name` at `times` ay para sa mga radio card, na ipinapakita ang
-    // pangalan nang bold at ang oras nang maliit. INVARIANT:
-    // `label === "{name} ({times})"`. Nakalista ang tatlo sa halip na
-    // pagbuo-buuin sa runtime dahil nasa isang tanawin lang silang lahat
-    // dito; kapag binago ang isa, tingnan ang katabi.
+    // pangalan nang bold at ang oras nang maliit. INVARIANT para sa Day at
+    // Night: `label === "{name} ({times})"`. Ang dalawang 22-oras na slot
+    // ay may oras ng check-in sa `name` — "22 Hours (8AM)" / "(7PM)" —
+    // dahil maraming lugar ang nagpapakita ng `name` LAMANG (calendar
+    // pill, booking label, ang listahan ng chatbot) at hindi sila
+    // mapag-iiba roon kung pareho silang "22 Hours". Ang `label` nila ay
+    // walang tag na iyon: kasunod na nito ang buong oras. Nakalista ang
+    // lahat sa halip na pagbuo-buuin sa runtime dahil nasa isang tanawin
+    // lang silang lahat dito; kapag binago ang isa, tingnan ang katabi.
+    //
+    // `rate`: aling presyo ang binabasa ng slot — isinasalin ito ng
+    // Property::priceColumnsFor() sa pares ng column. Kapag wala, ang
+    // presyo ng Day at Night. Tag lang ito at hindi pangalan ng column
+    // dahil ipinapadala ang mga depinisyong ito bilang JSON sa pahina ng
+    // bisita (SLOT_DEFS).
     public const SLOTS = [
         'day' => [
             'label'     => 'Day (8:00 AM – 5:00 PM)',
@@ -498,7 +554,7 @@ class Booking extends Model
         // exactSlotKey() at kung bakit may `bookings.slot` na column.
         'stay22' => [
             'label'     => '22 Hours (7:00 PM – 5:00 PM next day)',
-            'name'      => '22 Hours',
+            'name'      => '22 Hours (7PM)',
             'times'     => '7:00 PM – 5:00 PM next day',
             'check_in'  => '19:00',
             'check_out' => '17:00',
@@ -510,6 +566,22 @@ class Booking extends Model
             // sa "walang row = hindi kailanman inaalok" (dito) at sa
             // "walang row = laging inaalok" (Day/Night).
             'window_required' => true,
+            'rate'            => '22h',
+        ],
+        // Ang ikalawang 22-oras na alok ng may-ari (v7.59): nagsisimula sa
+        // umaga sa halip na sa gabi. Kapareho ng `stay22` sa lahat ng iba —
+        // pinipili kada petsa, eksklusibo sa petsang iyon, at iisang presyo
+        // (parehong "22hrs" sa listahan ng may-ari). IISANG variant lang
+        // kada petsa: tingnan ang CalendarController::slotWindowProblem().
+        'day22' => [
+            'label'     => '22 Hours (8:00 AM – 6:00 AM next day)',
+            'name'      => '22 Hours (8AM)',
+            'times'     => '8:00 AM – 6:00 AM next day',
+            'check_in'  => '08:00',
+            'check_out' => '06:00',
+            'overnight' => true,
+            'window_required' => true,
+            'rate'            => '22h',
         ],
     ];
 
@@ -565,7 +637,7 @@ class Booking extends Model
      *
      * Tatlong magkaibang tanong, tatlong method:
      *
-     *   SLOTS                 ano ang mga DEPINISYON (laging tatlo)
+     *   SLOTS                 ano ang mga DEPINISYON (laging lahat)
      *   bookableSlotKeys()    ano ang may PRESYO
      *   slotsOfferedOn($date) ano ang inaalok SA PETSANG ITO
      *
@@ -642,8 +714,12 @@ class Booking extends Model
             : \Carbon\Carbon::parse($date)->format('Y-m-d');
 
         // May window ba sa petsang ito para sa isang slot na may presyo?
-        // Ang unang tumama ang nananaig — at dahil iisa lang ngayon ang
-        // windowed na slot, hindi pa kailangan ng panuntunan sa pag-uuna.
+        // Ang unang tumama ang nananaig. Dalawa na ang windowed na slot
+        // (v7.59), pero IISANG variant lang ang pinapayagan kada petsa —
+        // tinatanggihan ng addSlotWindow() ang ikalawa — kaya walang
+        // petsang dapat magkaroon ng dalawang tatama rito. Kung
+        // magkaroon man (direktang sinulat sa DB), ang pagkakasunod sa
+        // SLOTS ang nagpapasya, at ganoon din ang JS ng limang picker.
         foreach (static::windowedSlotKeys() as $slot) {
             if (! in_array($slot, $priced, true)) {
                 continue;   // Bitag 1: walang presyo, walang bisa ang window.

@@ -41,20 +41,22 @@ class SettingsController extends Controller
             'tiktok_url' => 'nullable|url',
             'google_maps_url' => 'nullable|url',
 
-            // Prescriptive engine — mga PAGPAPALAGAY, hindi sinukat na
-            // katotohanan. Nakalantad sila rito nang sadya: ang unang
-            // itatanong tungkol sa isang rekomendasyon ay "saan galing ang
-            // numerong iyan?", at dapat may maituturong field ang sagot.
-            'prescriptive_lookback_days' => 'required|integer|min:30|max:730',
-            'prescriptive_lookahead_days' => 'required|integer|min:7|max:180',
-            'prescriptive_idle_threshold' => 'required|numeric|min:1|max:99',
-            'prescriptive_elasticity' => 'required|numeric|min:0|max:10',
-            'prescriptive_max_discount' => 'required|numeric|min:1|max:50',
-            'prescriptive_min_impact' => 'required|numeric|min:0',
+            // Recommendation rules — ang PATAKARAN ng may-ari, hindi mga
+            // pagpapalagay ng isang modelo. Ang unang itatanong tungkol sa
+            // isang rekomendasyon ay "saan galing ang 10% na iyan?", at ang
+            // sagot ay isa sa anim na field na ito.
+            //
+            // `gt:` sa busy threshold: kapag pantay o mas mababa ito sa
+            // quiet threshold, iisang petsa ang sabay na "mahina" at
+            // "malakas" at dalawang magkasalungat na card ang lalabas.
+            'prescriptive_quiet_threshold' => 'required|numeric|min:1|max:99',
+            'prescriptive_promo_percent' => 'required|numeric|min:1|max:50',
+            'prescriptive_busy_threshold' => 'required|numeric|min:2|max:100|gt:prescriptive_quiet_threshold',
+            'prescriptive_increase_percent' => 'required|numeric|min:1|max:50',
             'prescriptive_maintenance_days' => 'required|integer|min:1|max:14',
-            'prescriptive_peak_threshold' => 'required|numeric|min:1|max:100',
-            'prescriptive_peak_elasticity' => 'required|numeric|min:0|max:10',
-            'prescriptive_max_increase' => 'required|numeric|min:1|max:100',
+            'prescriptive_reminder_days' => 'required|integer|min:0|max:14',
+        ], [
+            'prescriptive_busy_threshold.gt' => 'The busy threshold must be higher than the quiet threshold.',
         ]);
 
         // Taken before anything is written; compared against a fresh read at
@@ -75,11 +77,9 @@ class SettingsController extends Controller
             'booking_cooldown_threshold', 'booking_cooldown_window_days', 'booking_cooldown_hours',
             'max_advance_days',
             'facebook_url', 'tiktok_url', 'google_maps_url',
-            'prescriptive_lookback_days', 'prescriptive_lookahead_days',
-            'prescriptive_idle_threshold', 'prescriptive_elasticity',
-            'prescriptive_max_discount', 'prescriptive_min_impact',
-            'prescriptive_maintenance_days', 'prescriptive_peak_threshold',
-            'prescriptive_peak_elasticity', 'prescriptive_max_increase',
+            'prescriptive_quiet_threshold', 'prescriptive_promo_percent',
+            'prescriptive_busy_threshold', 'prescriptive_increase_percent',
+            'prescriptive_maintenance_days', 'prescriptive_reminder_days',
         ];
 
         foreach ($keys as $key) {

@@ -4,27 +4,22 @@ namespace App\Services\Prescriptive\Advisors;
 
 use App\Models\Booking;
 use App\Models\Recommendation;
-use App\Services\Prescriptive\DemandModel;
+use App\Services\Prescriptive\OccupancyCalendar;
 use Carbon\Carbon;
 
 /**
- * "Kailan dapat isara ang villa para sa maintenance?"
+ * MAINTENANCE — "the villa has to close for a few days; close it when it
+ * costs the least."
  *
- * Isang tapat na MINIMIZATION, at ito ang pinakamalinis na halimbawa ng
- * prescriptive analytics sa sistema: kailangang isara ang villa nang
- * ilang araw — hindi iyon mapag-uusapan. Ang tanging tanong ay KAILAN,
- * at ang bawat sagot ay may presyo. Sinusukat ng advisor ang lahat ng
- * posibleng window sa horizon at pinipili ang PINAKAMURA:
+ *   IF   no maintenance is scheduled yet
+ *   THEN of every gap of N days with nothing booked, no block and no public
+ *        holiday, suggest the one whose weekdays are usually the quietest
+ *        (the earliest such gap when several tie).
  *
- *     halaga(window) = sum ng p(araw, slot) x presyo(araw, slot)
+ * N is the owner's `prescriptive_maintenance_days` (default 2).
  *
- * Ang inuulat na epekto ay hindi ang halaga ng napiling window kundi ang
- * NAIWASAN: karaniwang halaga ng window - pinakamababa. Iyon ang tunay na
- * naiaambag ng pagpili, at hindi ito nagpapanggap na libre ang maintenance.
- *
- * Isang beses lang ito nagsasalita: kung may nakatakda nang maintenance
- * block sa loob ng horizon, wala itong imumungkahi. Hindi ito paalala,
- * mungkahi ito.
+ * It speaks once: when a maintenance block already exists inside the
+ * horizon, it suggests nothing. This is advice, not a reminder.
  */
 class MaintenanceWindowAdvisor extends Advisor
 {
@@ -33,189 +28,134 @@ class MaintenanceWindowAdvisor extends Advisor
         return Recommendation::TYPE_MAINTENANCE;
     }
 
-    public function generate(DemandModel $demand): array
+    public function generate(OccupancyCalendar $calendar): array
     {
-        $days = max(1, (int) DemandModel::setting('prescriptive_maintenance_days', 2));
-        $lead = (int) config('prescriptive.maintenance_lead_days', 7);
-        $horizon = (int) config('prescriptive.maintenance_horizon_days', 60);
+        $days = max(1, (int) OccupancyCalendar::setting('prescriptive_maintenance_days', 2));
 
-        $first = Carbon::today()->addDays($lead);
-        $last = Carbon::today()->addDays($horizon);
+        $first = Carbon::today()->addDays((int) config('prescriptive.maintenance_lead_days', 7));
+        $last = Carbon::today()->addDays((int) config('prescriptive.maintenance_horizon_days', 60));
 
-        // May nakatakda na — hindi na kailangan ng mungkahi.
-        for ($d = Carbon::today()->copy(); $d->lte($last); $d->addDay()) {
-            if ($demand->blockReason($d) === 'maintenance') {
+        for ($day = Carbon::today(); $day->lte($last); $day->addDay()) {
+            if ($calendar->blockReason($day) === 'maintenance') {
                 return [];
             }
         }
 
-        $windows = [];
+        $gaps = [];
 
         for ($start = $first->copy(); $start->copy()->addDays($days - 1)->lte($last); $start->addDay()) {
-            $window = $this->evaluate($demand, $start, $days);
-
-            if ($window !== null) {
-                $windows[] = $window;
+            if ($gap = $this->freeGap($calendar, $start, $days)) {
+                $gaps[] = $gap;
             }
         }
 
-        // Isang kandidato lang ay walang pinipilian — walang maipagmamalaking
-        // desisyon, at walang naiwasang halagang maiuulat nang tapat.
-        if (count($windows) < 2) {
+        if (empty($gaps)) {
             return [];
         }
 
-        usort($windows, fn ($a, $b) => $a['cost'] <=> $b['cost']);
+        // Quietest weekdays first; the earliest date breaks a tie.
+        usort($gaps, fn (array $a, array $b) => [$a['usual_pct'], $a['start']->timestamp]
+            <=> [$b['usual_pct'], $b['start']->timestamp]);
 
-        $best = $windows[0];
-        $average = array_sum(array_column($windows, 'cost')) / count($windows);
-        $worst = end($windows);
-        $saved = round($average - $best['cost'], 2);
+        $best = $gaps[0];
+        $busiest = end($gaps);
 
-        // Pantay-pantay ang lahat ng window (karaniwan kapag manipis pa ang
-        // datos) — walang totoong mapipili, kaya walang sasabihin.
-        if ($saved <= 0) {
+        // No history at all: every gap looks the same and picking one would
+        // be a guess dressed up as a recommendation.
+        if ($best['usual_offered'] === 0) {
             return [];
         }
 
-        $start = $best['start'];
-        $end = $best['end'];
+        $window = $this->rangeLabel($best['start'], $best['end']);
+        $weekdays = $this->weekdayLabel($best['dates']);
 
-        $windowLabel = $days === 1
-            ? $start->format('M j')
-            : $start->format('M j').'–'.$end->format('M j');
-
-        $evidence = [
+        $facts = [
             sprintf(
-                'Checked %d possible %d-day windows between %s and %s; %s is the cheapest.',
-                count($windows),
+                'Checked %d free %d-day gap%s between %s and %s.',
+                count($gaps),
                 $days,
+                count($gaps) === 1 ? '' : 's',
                 $first->format('M j'),
-                $last->format('M j'),
-                $windowLabel
+                $last->format('M j')
             ),
             sprintf(
-                'Projected revenue at risk in this window: PHP %s, against PHP %s for an average window and PHP %s for the worst.',
-                number_format($best['cost'], 0),
-                number_format($average, 0),
-                number_format($worst['cost'], 0)
-            ),
-            sprintf(
-                'Days covered: %s — historically the quieter end of the week.',
-                $best['day_names']
-            ),
-            'No bookings, existing blocks, or Philippine holidays fall inside this window.',
-            sprintf(
-                'Closing here instead of an average window protects about PHP %s of expected revenue.',
-                number_format($saved, 0)
+                'Usual for %s: %s — %d of %d slots were booked in the last %d days.',
+                $weekdays,
+                $this->percent($best['usual_pct']),
+                $best['usual_booked'],
+                $best['usual_offered'],
+                $calendar->historyDays()
             ),
         ];
 
+        if (round($busiest['usual_pct']) > round($best['usual_pct'])) {
+            $facts[] = sprintf(
+                'The busiest free gap (%s) usually fills %s.',
+                $this->weekdayLabel($busiest['dates']),
+                $this->percent($busiest['usual_pct'])
+            );
+        }
+
+        $facts[] = 'No bookings, blocks or public holidays fall on these dates.';
+
         return [[
             'type' => Recommendation::TYPE_MAINTENANCE,
-            'title' => sprintf('Schedule %d-day maintenance on %s', $days, $windowLabel),
+            'title' => "Close the villa for maintenance on {$window}",
             'summary' => sprintf(
-                'Of the %d open %d-day windows in the next %d days, %s costs the least in expected revenue (PHP %s versus PHP %s for a typical window).',
-                count($windows),
-                $days,
-                $horizon,
-                $windowLabel,
-                number_format($best['cost'], 0),
-                number_format($average, 0)
+                'Nothing is booked on %s, and %s usually %s only %s — the quietest of the free gaps.',
+                $days === 1 ? 'this date' : "these {$days} days",
+                $weekdays,
+                $days === 1 ? 'fills' : 'fill',
+                $this->percent($best['usual_pct'])
             ),
-            'evidence' => $evidence,
-            'target_start' => $start->toDateString(),
-            'target_end' => $end->toDateString(),
+            'evidence' => $facts,
+            'target_start' => $best['start']->toDateString(),
+            'target_end' => $best['end']->toDateString(),
             'slot' => null,
             'action_type' => Recommendation::ACTION_CREATE_BLOCK,
             'action_payload' => [
-                'start_date' => $start->toDateString(),
-                'end_date' => $end->toDateString(),
+                'start_date' => $best['start']->toDateString(),
+                'end_date' => $best['end']->toDateString(),
                 'reason' => 'maintenance',
-                'notes' => sprintf(
-                    'Scheduled from a prescriptive recommendation — lowest projected revenue at risk (PHP %s) of %d candidate windows.',
-                    number_format($best['cost'], 0),
-                    count($windows)
-                ),
+                'notes' => "Scheduled from a recommendation — quietest free {$days}-day gap ({$weekdays}).",
             ],
-            'expected_impact' => $saved,
-            // Ang kitang isinusuko sa napiling window. Naitala para sa
-            // display, PERO hindi ito kailanman ginagawang
-            // `realized_impact` — tingnan ang OutcomeTracker: sadyang
-            // sinasara ang window na ito, kaya laging zero ang aktuwal na
-            // kita, at ang tunay na tanong (magkano sana kung ibang
-            // window ang pinili) ay hindi kailanman masasagot.
-            'baseline_projection' => $best['cost'],
-            'sample_size' => $best['sample'],
-            'confidence' => DemandModel::confidence($best['min_sample']),
             'fingerprint' => $this->fingerprint([
                 Recommendation::TYPE_MAINTENANCE,
-                $start->toDateString(),
-                $end->toDateString(),
-                $days,
+                $best['start']->toDateString(),
+                $best['end']->toDateString(),
             ]),
         ]];
     }
 
-    /**
-     * Halaga ng isang kandidatong window, o null kung hindi ito puwede.
-     *
-     * @return array{start: Carbon, end: Carbon, cost: float, sample: int, min_sample: int, day_names: string}|null
-     */
-    private function evaluate(DemandModel $demand, Carbon $start, int $days): ?array
+    /** The facts for a gap starting here, or null when it is not free. */
+    private function freeGap(OccupancyCalendar $calendar, Carbon $start, int $days): ?array
     {
-        $end = $start->copy()->addDays($days - 1);
-        $cost = 0.0;
+        $dates = [];
 
-        $samples = [];
-        $dayNames = [];
+        for ($i = 0; $i < $days; $i++) {
+            $date = $start->copy()->addDays($i);
 
-        for ($d = $start->copy(); $d->lte($end); $d->addDay()) {
-            // Hindi puwedeng isara ang villa sa ibabaw ng isang totoong
-            // booking, ng ibang block, o ng pista.
-            if ($demand->isBlocked($d)) {
-                return null;
-            }
-            if ($demand->holidayName($d) !== null) {
+            if ($calendar->isBlocked($date) || $calendar->holidayName($date) !== null) {
                 return null;
             }
 
-            // Ang tanong dito ay "walang-wala bang nangyayari sa petsang
-            // ito", at ang Day + Night ang sumasaklaw sa buong araw
-            // (8AM–5PM at 7PM–6AM). Sapat na iyon kahit may 22-oras na
-            // booking: ang isang 22-oras na nagsimula kahapon ay
-            // pumapatong sa Day ngayon, kaya nahuhuli ito ng Day.
-            //
-            // TANDAAN: ang pagsama ng 22-Hours dito (kapag naipresyo na)
-            // ay nagpapahigpit nang bahagya — nangangailangan din na
-            // bakante ang umaga ng KINABUKASAN, dahil doon umaabot ang
-            // slot na iyon. Bookable-slots ang ini-loop para tumugma sa
-            // ibang advisor; kung magiging masyadong mahigpit ito, dito
-            // ang tamang lugar para paliitin sa Day + Night.
-            // Ang mga slot na maaaring humawak ng booking SA PETSANG ITO.
-            // Sa isang petsang 22-oras lamang, ang tanong ay tungkol sa
-            // 22-oras — walang Day/Night doon na maaaring okupado.
-            foreach ($demand->slotsOfferedOn($d) as $slot) {
-                if ($demand->isOccupied($d, $slot)) {
+            $slots = $calendar->sellableSlots($date);
+
+            if (empty($slots)) {
+                return null;
+            }
+
+            foreach ($slots as $slot) {
+                // A date the owner nominated for a 22-hour stay is being
+                // sold on purpose; closing it is not this rule's call.
+                if (Booking::slotRequiresWindow($slot) || $calendar->isTaken($date, $slot)) {
                     return null;
                 }
-
-                $cost += $demand->expectedRevenue($d, $slot);
-                $samples[] = $demand->fillRate($d->dayOfWeek, $slot)['sample'];
             }
 
-            $dayNames[$d->dayOfWeek] = $d->format('D');
+            $dates[] = $date;
         }
 
-        ksort($dayNames);
-
-        return [
-            'start' => $start->copy(),
-            'end' => $end,
-            'cost' => round($cost, 2),
-            'sample' => array_sum($samples),
-            'min_sample' => $samples ? (int) min($samples) : 0,
-            'day_names' => implode(', ', $dayNames),
-        ];
+        return $calendar->summarise($dates);
     }
 }

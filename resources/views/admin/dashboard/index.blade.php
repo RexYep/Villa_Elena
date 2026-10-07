@@ -842,9 +842,9 @@
                                 @foreach ($topActions as $action)
                                     <a href="{{ route('admin.prescriptive.index') }}"
                                         style="display:flex;gap:12px;align-items:flex-start;padding:12px 0;text-decoration:none;border-bottom:{{ $loop->last ? 'none' : '1px solid var(--border)' }}">
-                                        <div
-                                            style="flex-shrink:0;width:34px;height:34px;border-radius:9px;display:flex;align-items:center;justify-content:center;background:#fef3c7;color:#b45309">
-                                            <i class="bi bi-lightbulb"></i>
+                                        <div class="{{ $action->action_tag_class }}"
+                                            style="flex-shrink:0;width:34px;height:34px;border-radius:9px;display:flex;align-items:center;justify-content:center">
+                                            <i class="bi bi-{{ $action->action_icon }}"></i>
                                         </div>
                                         <div style="flex:1;min-width:0">
                                             <div
@@ -852,13 +852,8 @@
                                                 {{ $action->title }}
                                             </div>
                                             <div style="font-size:12px;color:var(--muted);margin-top:2px">
-                                                {{ $action->window_label }} ·
-                                                {{ strtolower($action->confidence_label) }} confidence
+                                                {{ $action->action_label }} · {{ $action->window_label }}
                                             </div>
-                                        </div>
-                                        <div
-                                            style="flex-shrink:0;font-family: var(--font-display);font-size: 17px;font-weight:700;color:var(--terracotta)">
-                                            {{ $action->impact_label }}
                                         </div>
                                     </a>
                                 @endforeach
