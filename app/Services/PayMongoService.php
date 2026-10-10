@@ -73,10 +73,61 @@ class PayMongoService
         return $response->json('data');
     }
 
+    // ── Which environment a checkout belongs to ────────────────────
+    /**
+     * A short tag naming THIS deployment: APP_URL without its scheme
+     * (`villa-elena.onrender.com`, `127.0.0.1:8000`).
+     *
+     * Local and production share one PayMongo account, and PayMongo
+     * delivers every event to every enabled webhook of its mode — so each
+     * environment also receives the other's payments. Stamped on a
+     * checkout's metadata, this is what lets the webhook tell "another
+     * environment's payment" from "a payment of ours that we cannot place".
+     *
+     * IT NEVER DECIDES WHETHER A PAYMENT IS RECORDED. Matching is by
+     * booking reference alone (PaymentController::resolveWebhookBooking());
+     * the tag only chooses between an admin alert and a quiet log line for
+     * an event that already failed to match. That limit is deliberate:
+     * APP_URL can change between a checkout being opened and paid, and a
+     * stale tag must never cost a real payment.
+     */
+    public function originTag(): string
+    {
+        return strtolower((string) preg_replace('#^https?://#i', '', rtrim((string) config('app.url'), '/')));
+    }
+
+    /**
+     * Was this checkout stamped by a different environment?
+     *
+     * False when there is no stamp at all (a checkout opened before v7.61,
+     * or a flow that dropped the metadata) — unknown is not foreign, and
+     * an unknown unmatched payment must still reach a human.
+     */
+    public function isForeignOrigin(mixed $origin): bool
+    {
+        $ours = $this->originTag();
+
+        return is_string($origin)
+            && $origin !== ''
+            && $ours !== ''
+            && strtolower($origin) !== $ours;
+    }
+
     // ── Create a Checkout Session ──────────────────────────────────
     // Redirects guest to PayMongo hosted checkout page
     public function createCheckoutSession(array $data): array
     {
+        $metadata = [
+            'booking_id'   => $data['booking_id'],
+            'booking_ref'  => $data['reference_number'],
+            'payment_type' => $data['payment_type'] ?? 'deposit',
+        ];
+
+        // Left out rather than sent empty when APP_URL is unset.
+        if (($origin = $this->originTag()) !== '') {
+            $metadata['origin'] = $origin;
+        }
+
         $response = Http::withBasicAuth($this->secretKey, '')
             ->post("{$this->baseUrl}/checkout_sessions", [
                 'data' => [
@@ -104,11 +155,7 @@ class PayMongoService
                         'cancel_url'        => $data['cancel_url'],
                         'reference_number'  => $data['reference_number'],
                         'statement_descriptor' => 'Villa Elena Resort',
-                        'metadata'          => [
-                            'booking_id'   => $data['booking_id'],
-                            'booking_ref'  => $data['reference_number'],
-                            'payment_type' => $data['payment_type'] ?? 'deposit',
-                        ],
+                        'metadata'          => $metadata,
                     ]
                 ]
             ]);

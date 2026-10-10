@@ -67,24 +67,26 @@
             font-weight: 600;
         }
 
-        .s-success {
-            background: #dcfce7;
-            color: #15803d;
+        /* Ang kulay ay ayon sa `Payment::guestStatusTone()`, hindi sa hilaw
+           na `status` — kapareho ng refund panel sa booking details. */
+        .s-done {
+            background: var(--tag-green-bg);
+            color: var(--tag-green-fg);
         }
 
-        .s-pending {
-            background: #fef3c7;
-            color: #b45309;
+        .s-waiting {
+            background: var(--tag-amber-bg);
+            color: var(--tag-amber-fg);
         }
 
-        .s-failed {
-            background: #fee2e2;
-            color: #b91c1c;
+        .s-moving {
+            background: var(--tag-blue-bg);
+            color: var(--tag-blue-fg);
         }
 
-        .s-refunded {
-            background: #e0e7ff;
-            color: #4338ca;
+        .s-problem {
+            background: var(--tag-red-bg);
+            color: var(--tag-red-fg);
         }
 
         .empty-state {
@@ -206,7 +208,9 @@
                             <td class="text-muted-theme pay-date">{{ $payment->payment_date?->format('M d, Y') }}</td>
                             <td>
                                 @if ($payment->booking)
-                                    <a href="{{ route('customer.bookings.show', $payment->booking) }}" class="booking-link">
+                                    {{-- Ang refund ay dumidiretso sa refund panel ng booking:
+                                         doon ang "Add account details" kapag iyon ang hinihintay. --}}
+                                    <a href="{{ route('customer.bookings.show', $payment->booking) }}{{ $payment->isRefund() ? '#refund' : '' }}" class="booking-link">
                                         {{ $payment->booking->booking_ref }}
                                     </a>
                                     <div class="text-muted-theme fs-13">
@@ -215,9 +219,9 @@
                                     —
                                 @endif
                             </td>
-                            <td>{{ $payment->method_label }}</td>
+                            <td>{{ $payment->guest_method_label }}</td>
                             <td><span class="type-pill">{{ $payment->type_label }}</span></td>
-                            <td><span class="status-pill s-{{ $payment->status }}">{{ ucfirst($payment->status) }}</span>
+                            <td><span class="status-pill s-{{ $payment->guestStatusTone() }}">{{ $payment->guest_status_label }}</span>
                             </td>
                             <td class="pay-amount"
                                 style="text-align:right;font-weight:600;color:{{ $payment->payment_type === 'refund' ? '#dc2626' : '#15803d' }};">

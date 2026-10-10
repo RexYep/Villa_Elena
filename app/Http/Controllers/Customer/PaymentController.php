@@ -15,7 +15,10 @@ class PaymentController extends Controller
         $payments = Payment::whereHas('booking', function ($q) {
                 $q->where('user_id', Auth::id());
             })
-            ->with('booking.property')
+            // Ang huling dalawa ay para sa katayuan at destinasyon ng mga
+            // refund (`guest_status_label`, `guest_method_label`) — kung
+            // wala, isang query kada refund na hanay.
+            ->with(['booking.property', 'refundDestination', 'refundTransfers'])
             // Ang `payment_date` ay PETSA lang (walang oras), kaya ang
             // dalawang bayad sa iisang araw ay patas ang laban at basta
             // na lang pumipili ang MySQL — kadalasan ay pabalik pa.

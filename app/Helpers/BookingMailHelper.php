@@ -3,7 +3,9 @@
 namespace App\Helpers;
 
 use App\Mail\BookingConfirmedMail;
+use App\Mail\RefundNoticeMail;
 use App\Models\Booking;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 
@@ -45,5 +47,66 @@ class BookingMailHelper
             // talaga ang bayad.
             Log::error("Failed sending booking payment email for {$booking->booking_ref}: ".$e->getMessage());
         }
+    }
+
+    /**
+     * Ang email na katapat ng isang abiso tungkol sa refund (v7.68).
+     *
+     * Tinatawag ito ng mga guest-facing na refund preset ng
+     * NotificationHelper, na may PAREHONG pamagat at pangungusap — kaya
+     * hindi puwedeng magkaiba ang sinasabi ng kampana at ng email.
+     *
+     * Tatlong bagay ang sinasadya rito:
+     *
+     *  - `DB::afterCommit()`. Ang isa sa mga tumatawag
+     *    (Admin\PaymentController::refund()) ay nasa loob ng isang
+     *    transaction na may hawak na lock. Ang email ay isang tawag sa
+     *    labas na tumatagal ng ilang segundo, at ang refund na
+     *    na-rollback ay hindi dapat naipaalam na. Kapag walang
+     *    transaction, tumatakbo ito agad.
+     *
+     *  - `\Throwable`, hindi `\Exception`. Dumadaan dito ang callback ng
+     *    PayMongo kapag dumating ang isang transfer; ang email na hindi
+     *    naipadala ay hindi dapat makasira sa pagsasara ng refund.
+     *
+     *  - Sinusunod ang `email_notifications_enabled`, gaya ng email ng
+     *    bayad sa itaas. Nananatili ang in-app na abiso anuman ang
+     *    setting na iyon.
+     *
+     * Ang `$link` ay ang RELATIVE na link ng abiso; ginagawa itong
+     * absolute rito mula sa APP_URL — hindi sa host ng kasalukuyang
+     * request, na maaaring ang address na ginamit ng admin at hindi ang
+     * maaabot ng guest.
+     */
+    public static function refundNotice(
+        Booking $booking,
+        string $heading,
+        string $body,
+        float $amount,
+        string $link,
+        string $actionLabel,
+        ?string $actionNote = null
+    ): void {
+        DB::afterCommit(function () use ($booking, $heading, $body, $amount, $link, $actionLabel, $actionNote) {
+            try {
+                $user = $booking->user;
+
+                if (! $user || ! $user->email || ! $user->email_notifications_enabled) {
+                    return;
+                }
+
+                Mail::to($user->email)->send(new RefundNoticeMail(
+                    $booking,
+                    $heading,
+                    $body,
+                    $amount,
+                    $actionLabel,
+                    rtrim((string) config('app.url'), '/') . '/' . ltrim($link, '/'),
+                    $actionNote,
+                ));
+            } catch (\Throwable $e) {
+                Log::error("Failed sending refund email ({$heading}) for {$booking->booking_ref}: ".$e->getMessage());
+            }
+        });
     }
 }

@@ -259,6 +259,22 @@
             color: var(--terracotta);
         }
 
+        /* Buo ang bawat link, pero puwedeng bumaba sa susunod na linya ang
+           pangkat. Dating `nowrap` ang buong cell, at ang `.table-card` ay
+           `overflow: hidden` sa lapad ng desktop — kaya sa hanay na may
+           tatlong link ay napuputol ang huli ("Mark Paid Out") sa gilid ng
+           card, nang walang paraan para maabot ito. */
+        .row-actions a {
+            display: inline-block;
+            white-space: nowrap;
+            padding: 2px 0;
+        }
+
+        /* Kapag nasa sarili nitong linya, nakahanay ito sa mga nasa itaas. */
+        .row-actions .payout-alt-link {
+            margin-left: 0;
+        }
+
         /* ── MODAL ── */
         .modal-box {
             width: 480px;
@@ -424,7 +440,7 @@
             <i class="bi bi-exclamation-triangle-fill" style="font-size:20px;"></i>
             <div style="flex:1;">
                 <strong>{{ $pendingRefundsCount }} refund{{ $pendingRefundsCount === 1 ? '' : 's' }}
-                    ({{ '₱' . number_format($pendingRefunds, 2) }}) awaiting payout.</strong>
+                    ({{ '₱' . number_format($pendingRefunds, 2) }}) not sent yet.</strong>
                 <div style="font-size: 14px;margin-top:2px;">
                     Open each one and use <em>Send Refund</em> — the system transfers the money itself.
                     <em>Mark Paid Out</em> is only for cash, or for money you already sent by hand.
@@ -516,7 +532,6 @@
                         <th>Date</th>
                         <th>Booking Ref</th>
                         <th>Guest</th>
-                        <th>Property</th>
                         <th>Method</th>
                         <th>Type</th>
                         <th>Amount</th>
@@ -528,13 +543,15 @@
                     @foreach ($payments as $payment)
                         <tr>
                             <td class="text-muted-theme fs-14">
-                                {{ $payment->created_at->format('M d, Y') }}
+                                {{-- Ang petsa ng BAYAD, hindi ng pagkakatala: ito ang
+                                     pinagbabatayan ng pagkakasunod at ng From/To na filter,
+                                     at ito ang tinype ng admin sa Record Payment. --}}
+                                {{ $payment->payment_date?->format('M d, Y') }}
                             </td>
                             <td>
                                 <strong class="fs-13">{{ $payment->booking->booking_ref ?? 'N/A' }}</strong>
                             </td>
                             <td>{{ $payment->booking->user->full_name ?? 'N/A' }}</td>
-                            <td>{{ $payment->booking->property->property_name ?? 'N/A' }}</td>
                             <td>
                                 <span class="badge b-{{ $payment->payment_method }}">
                                     {{ $payment->method_label }}
@@ -546,7 +563,7 @@
                                 </span>
                                 @if ($payment->isAwaitingPayout())
                                     <span class="badge b-awaiting"
-                                        title="Refund approved — money not sent to the guest yet">
+                                        title="Refund issued — money not sent to the guest yet">
                                         NOT SENT
                                     </span>
                                     {{-- Dalawang magkaibang estado ang "hindi pa naipapadala":
@@ -570,8 +587,8 @@
                                     @endif
                                     @if ($payment->isOverduePayout())
                                         <span class="badge b-overdue"
-                                            title="The guest was told they would hear back — this has been sitting since it was approved">
-                                            {{ $payment->daysAwaitingPayout() }}D WAITING
+                                            title="The guest was told they would hear back — this has been sitting since it was issued">
+                                            {{ $payment->daysAwaitingPayout() }} DAYS WAITING
                                         </span>
                                     @endif
                                 @endif
@@ -583,17 +600,35 @@
                                 style="font-size: 14px; max-width:140px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
                                 {{ $payment->notes ?? '—' }}
                             </td>
-                            <td class="nowrap">
+                            <td class="row-actions">
+                                {{-- Dalawang magkaibang pahina: ang booking, at ang bayad
+                                     mismo. Dating iisang "View" (papunta sa booking) ang
+                                     nandito, at ang pahina ng bayad ay naaabot lang habang
+                                     hindi pa naipapadala ang isang refund — kaya pagkatapos
+                                     itong maipadala ay wala nang daan pabalik sa transfer
+                                     history, reference at account nito. Ang bawat hanay ay
+                                     may daan na papunta roon: "Details", o ang aksyon mismo
+                                     (Send Refund / Add Details / Check) kapag mayroon. --}}
                                 <a href="{{ route('admin.bookings.show', $payment->booking_id) }}"
-                                    class="view-link me-2">View</a>
+                                    class="view-link me-2">Booking</a>
                                 @if ($payment->payment_type !== 'refund')
-                                    <a href="#" class="refund-link"
-                                        {{-- Js::from(), never '{{ $x }}': the HTML parser decodes entities in an attribute
-                                             before the JS parser runs, so `{{ }}` does not keep a value inside a JS string.
-                                             Measured exploitable on this shape; see staff/partials/_today_list.blade.php. --}}
-                                        onclick="openRefundModal({{ $payment->id }}, {{ $payment->amount }}, {{ Illuminate\Support\Js::from($payment->booking->booking_ref ?? '') }})">
-                                        Refund
-                                    </a>
+                                    <a href="{{ route('admin.payments.show', $payment) }}"
+                                        class="view-link me-2">Details</a>
+                                    {{-- Ang kisame ay ang mas maliit sa halaga ng bayad na ito
+                                         at sa natitirang maire-refund ng BUONG booking — ang
+                                         huli ang sinusuri ng server (Payment::refundableByBooking()).
+                                         Dating ang halaga lang ng bayad ang "Max", kaya matapos
+                                         ang isang naunang refund ay nag-aalok ito ng halagang
+                                         tatanggihan. Walang link kapag wala nang maire-refund. --}}
+                                    @if (($refundCeiling = $payment->refundCeiling($refundableByBooking[$payment->booking_id] ?? 0)) > 0)
+                                        <a href="#" class="refund-link"
+                                            {{-- Js::from(), never '{{ $x }}': the HTML parser decodes entities in an attribute
+                                                 before the JS parser runs, so `{{ }}` does not keep a value inside a JS string.
+                                                 Measured exploitable on this shape; see staff/partials/_today_list.blade.php. --}}
+                                            onclick="event.preventDefault(); openRefundModal({{ $payment->id }}, {{ $refundCeiling }}, {{ Illuminate\Support\Js::from($payment->booking->booking_ref ?? '') }})">
+                                            Issue Refund
+                                        </a>
+                                    @endif
                                 @elseif($payment->isAwaitingPayout())
                                     @if ($payment->hasTransferInFlight())
                                         {{-- Walang aksyon nang sinasadya: ang muling pagpapadala
@@ -636,6 +671,8 @@
                                         <a href="{{ route('admin.payments.show', $payment) }}#manual-payout"
                                             class="payout-alt-link">Mark Paid Out</a>
                                     @else
+                                        <a href="{{ route('admin.payments.show', $payment) }}"
+                                            class="view-link me-2">Details</a>
                                         <a href="#" class="refund-link"
                                             onclick="event.preventDefault(); openPayoutModal(
                                                 {{ $payment->id }},
@@ -647,6 +684,11 @@
                                             Mark Paid Out
                                         </a>
                                     @endif
+                                @else
+                                    {{-- Refund na naipadala na. Walang aksyon, pero dito
+                                         makikita kung saan, kailan at paano ito napunta. --}}
+                                    <a href="{{ route('admin.payments.show', $payment) }}"
+                                        class="view-link">Details</a>
                                 @endif
                             </td>
                         </tr>
@@ -757,26 +799,66 @@
             </div>
             <form method="POST" id="refundForm" class="modal-body">
                 @csrf
+                {{-- Para mabuksan ulit ang modal na ito matapos ang isang
+                     error, nang buo pa ang tinype — gaya ng Record Payment.
+                     Dati ay nagsasara ito at naiiwan ang error sa itaas ng
+                     pahina, at kailangang i-type ulit ang lahat. Pang-display
+                     lang ang tatlong ito; ang server ay sa URL at sa sarili
+                     nitong kuwenta bumabatay, hindi rito. --}}
+                <input type="hidden" name="_form" value="refund">
+                <input type="hidden" name="_payment_id" id="refundPaymentId">
+                <input type="hidden" name="_max" id="refundMaxInput">
+                <input type="hidden" name="_booking_ref" id="refundBookingRefInput">
+
+                @if (old('_form') === 'refund' && ($errors->any() || session('error')))
+                    <div id="refundError" hidden
+                        style="background:var(--tag-red-bg); color:var(--tag-red-fg); border-radius:8px; padding:10px 12px; margin-bottom:12px; font-size:14px;">
+                        <i class="bi bi-exclamation-circle me-2"></i>{{ $errors->first() ?: session('error') }}
+                    </div>
+                @endif
+
+                {{-- Dating pulang kahon na may babala at "Refund for booking X"
+                     lang. Ang hindi nito sinasabi ang mahalaga: walang perang
+                     gumagalaw sa pagpindot, at maaabisuhan agad ang guest. --}}
                 <div
-                    style="background:#fee2e2; border-radius:10px; padding:12px 16px; margin-bottom:16px; font-size:13px; color:#b91c1c;">
-                    <i class="bi bi-exclamation-triangle me-2"></i>
-                    Refund for booking <strong id="refundBookingRef"></strong>
+                    style="background:var(--cream); border:1px solid var(--border); border-radius:10px; padding:12px 16px; margin-bottom:16px; font-size:14px; line-height:1.55; color:var(--stone);">
+                    Refund for booking <strong id="refundBookingRef"></strong>.
+                    Issuing it records the refund and notifies the guest.
+                    <strong>No money moves yet</strong> — you send it afterwards with Send Refund,
+                    or hand over cash and use Mark Paid Out.
                 </div>
                 <div class="mb-12">
                     <label for="refundAmountInput" class="form-label">Refund Amount (₱)</label>
                     <input type="number" name="refund_amount" id="refundAmountInput" class="form-control"
                         min="1" step="0.01" required>
-                    <div class="text-muted-theme" style="font-size: 13px; margin-top:4px;">Max: ₱<span
-                            id="refundMax"></span></div>
+                    <div class="text-muted-theme" style="font-size: 13px; margin-top:4px;">Up to ₱<span
+                            id="refundMax"></span> can still be refunded.</div>
+                </div>
+                {{-- Walang naka-preselect: ang pinili rito ang nagpapasya sa
+                     pangungusap na matatanggap ng guest
+                     (NotificationHelper::refundComingForGuest()), at hindi
+                     ito mahuhulaan mula sa booking. --}}
+                <div class="mb-12">
+                    <label for="f_refund_kind" class="form-label">Why is this being refunded?</label>
+                    <select id="f_refund_kind" name="refund_kind" class="form-select" required>
+                        <option value="">Select…</option>
+                        @foreach (\App\Models\Payment::REFUND_KINDS as $kind => $definition)
+                            <option value="{{ $kind }}">{{ $definition['label'] }}</option>
+                        @endforeach
+                    </select>
+                    <div class="text-muted-theme" style="font-size: 13px; margin-top:4px;">
+                        The guest is told this reason in their notification.
+                    </div>
                 </div>
                 <div class="mb-12">
-                    <label for="f_refund_reason" class="form-label">Reason for Refund</label>
+                    <label for="f_refund_reason" class="form-label">Internal note <span class="text-muted-theme fw-400"
+                           >(the guest does not see this)</span></label>
                     <textarea id="f_refund_reason" name="refund_reason" class="form-control" rows="2" required minlength="5"
-                        placeholder="e.g. Guest cancelled 48 hours before check-in"></textarea>
+                        placeholder="e.g. Charged twice on Oct 9 — returning the second payment"></textarea>
                 </div>
                 <button type="submit"
                     style="background:#dc2626; color:#fff; border:none; border-radius:9px; padding:12px; width:100%; font-size:14px; font-weight:600; cursor:pointer; font-family: var(--font-body);">
-                    <i class="bi bi-arrow-counterclockwise me-2"></i> Process Refund
+                    <i class="bi bi-arrow-counterclockwise me-2"></i> Issue Refund
                 </button>
             </form>
         </div>
@@ -794,7 +876,7 @@
     <div class="modal-overlay" id="payoutModal">
         <div class="modal-box">
             <div class="modal-head" style="background:var(--terracotta);">
-                <div class="modal-title">Confirm Refund Sent</div>
+                <div class="modal-title">Mark Paid Out</div>
                 <button class="modal-close" onclick="closeModal('payoutModal')">✕</button>
             </div>
             <form method="POST" id="payoutForm" class="modal-body">
@@ -829,7 +911,7 @@
 
                 <button type="submit"
                     style="background:var(--terracotta); color:#fff; border:none; border-radius:9px; padding:12px; width:100%; font-size:14px; font-weight:600; cursor:pointer; font-family: var(--font-body);">
-                    <i class="bi bi-check2-circle me-2"></i> Confirm Sent
+                    <i class="bi bi-check2-circle me-2"></i> Mark Paid Out
                 </button>
             </form>
         </div>
@@ -844,11 +926,22 @@
 
         function openRefundModal(paymentId, amount, bookingRef) {
             document.getElementById('refundBookingRef').textContent = bookingRef;
+            document.getElementById('refundPaymentId').value = paymentId;
+            document.getElementById('refundMaxInput').value = amount;
+            document.getElementById('refundBookingRefInput').value = bookingRef;
+            // Ang error ay para sa refund na tinanggihan kanina. Kapag
+            // binuksan ang modal para sa ibang hanay, wala na itong saysay.
+            const staleError = document.getElementById('refundError');
+            if (staleError) staleError.hidden = true;
             document.getElementById('refundMax').textContent = parseFloat(amount).toLocaleString('en-PH', {
                 minimumFractionDigits: 2
             });
             document.getElementById('refundAmountInput').max = amount;
             document.getElementById('refundAmountInput').value = amount;
+            // Iisang form ito para sa lahat ng row, kaya binubura ang
+            // napili kanina — kung hindi, ang dahilan ng NAUNANG refund ang
+            // maipapadala sa guest ng susunod.
+            document.getElementById('f_refund_kind').value = '';
             // Gumagamit ng route() helper (naka-embed via Blade) sa halip na
             // hardcoded na "/villa-elena/public/..." path — para gumana ito
             // kahit paano ma-access ang app (php artisan serve, XAMPP subfolder,
@@ -957,7 +1050,7 @@
                             warn.style.cssText = 'color:#b91c1c;font-weight:600;margin-top:4px;';
                             warn.textContent = 'This booking is ' + (data.status === 'no_show' ? 'a no-show' :
                                     'cancelled') +
-                                ' — there is nothing to collect. To close a refund, use Mark Paid Out on the refund instead.';
+                                ' — there is nothing to collect. To pay a refund, open it from the list and use Send Refund (or Mark Paid Out if it is cash or you already sent it by hand).';
                             info.append(warn);
                         }
                     }).catch(() => {});
@@ -981,8 +1074,33 @@
             })();
         @endif
 
+        // Ganoon din sa Issue Refund. `Js::from()` at hindi `@@json`:
+        // hinahati ng `@@json` ang expression sa bawat kuwit.
+        @if (old('_form') === 'refund')
+            (function() {
+                const old = {{ Illuminate\Support\Js::from(collect(old())->only(['_payment_id', '_max', '_booking_ref', 'refund_amount', 'refund_kind', 'refund_reason'])) }};
+                const paymentId = parseInt(old._payment_id, 10);
+                if (!paymentId) return;
+
+                openRefundModal(paymentId, parseFloat(old._max) || 0, old._booking_ref || '');
+
+                const form = document.getElementById('refundForm');
+                ['refund_amount', 'refund_kind', 'refund_reason'].forEach(name => {
+                    if (old[name] != null) form.elements[name].value = old[name];
+                });
+
+                const error = document.getElementById('refundError');
+                if (error) error.hidden = false;
+            })();
+        @endif
+
+        // Ang tagumpay lang ang kusang nawawala. Dating `.alert` ang
+        // selector nito, kaya pagkalipas ng 5 segundo ay nawawala rin ang
+        // "N refunds awaiting payout" na banner (permanente dapat iyon —
+        // utang iyon ng resort), ang mga validation error, at ang
+        // mahabang tagubilin kapag bumagsak ang isang transfer.
         setTimeout(() => {
-            document.querySelectorAll('.alert').forEach(a => a.style.display = 'none');
+            document.querySelectorAll('.alert-success').forEach(a => a.style.display = 'none');
         }, 5000);
     </script>
 @endpush

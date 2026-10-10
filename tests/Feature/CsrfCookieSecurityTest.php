@@ -7,6 +7,7 @@ use App\Models\Property;
 use App\Models\User;
 use Illuminate\Foundation\Http\Middleware\ValidateCsrfToken;
 use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\URL;
@@ -208,6 +209,7 @@ class CsrfCookieSecurityTest extends TestCase
     public function test_an_unsigned_cancel_does_not_clear_the_checkout_session(): void
     {
         [$user, $booking] = $this->makeBooking();
+        Http::fake();
 
         $this->actingAs($user)
             ->get(route('payment.cancel', $booking))
@@ -218,12 +220,23 @@ class CsrfCookieSecurityTest extends TestCase
             $booking->fresh()->paymongo_session_id,
             'An unsigned hit must leave the reusable checkout session alone.'
         );
+
+        // Nor may it reach PayMongo: since v7.62 a signed cancel EXPIRES the
+        // session, so a forged one would otherwise kill a guest's live QR.
+        Http::assertNothingSent();
     }
 
-    /** The real callback, with the signature createCheckout() put on it. */
-    public function test_a_signed_cancel_clears_the_checkout_session(): void
+    /**
+     * The real callback, with the signature createCheckout() put on it.
+     *
+     * It must close the session at PayMongo, not only forget its id. A
+     * session has no expiry of its own, so one that is merely forgotten stays
+     * payable with nothing left that can close it.
+     */
+    public function test_a_signed_cancel_expires_and_clears_the_checkout_session(): void
     {
         [$user, $booking] = $this->makeBooking();
+        Http::fake(['*/checkout_sessions/cs_existing_session/expire' => Http::response(['data' => []], 200)]);
 
         $url = URL::temporarySignedRoute('payment.cancel', now()->addHours(24), $booking->id);
 
@@ -231,7 +244,49 @@ class CsrfCookieSecurityTest extends TestCase
             ->get($url)
             ->assertRedirect(route('customer.bookings.show', $booking));
 
+        Http::assertSent(fn ($request) => $request->method() === 'POST'
+            && str_ends_with($request->url(), '/checkout_sessions/cs_existing_session/expire'));
+
         $this->assertNull($booking->fresh()->paymongo_session_id);
+    }
+
+    /**
+     * PayMongo refuses to expire a session that is paid or being paid. The id
+     * has to survive that — the success callback reads it to record the
+     * payment — and the guest goes to the page that looks for the payment,
+     * not to one saying it was not completed.
+     */
+    public function test_a_signed_cancel_keeps_a_session_that_is_being_paid(): void
+    {
+        [$user, $booking] = $this->makeBooking();
+        Http::fake([
+            '*/checkout_sessions/cs_existing_session/expire' => Http::response(['errors' => []], 400),
+            '*/checkout_sessions/cs_existing_session' => Http::response(['data' => ['attributes' => ['status' => 'active']]], 200),
+        ]);
+
+        $url = URL::temporarySignedRoute('payment.cancel', now()->addHours(24), $booking->id);
+
+        $this->actingAs($user)
+            ->get($url)
+            ->assertRedirect(route('payment.success', $booking))
+            ->assertSessionMissing('error');
+
+        $this->assertSame('cs_existing_session', $booking->fresh()->paymongo_session_id);
+    }
+
+    /** PayMongo unreachable: nothing is closed, so nothing may be forgotten. */
+    public function test_a_signed_cancel_keeps_the_session_when_paymongo_cannot_be_reached(): void
+    {
+        [$user, $booking] = $this->makeBooking();
+        Http::fake(['*' => Http::response('unavailable', 503)]);
+
+        $url = URL::temporarySignedRoute('payment.cancel', now()->addHours(24), $booking->id);
+
+        $this->actingAs($user)
+            ->get($url)
+            ->assertRedirect(route('customer.bookings.show', $booking));
+
+        $this->assertSame('cs_existing_session', $booking->fresh()->paymongo_session_id);
     }
 
     /** An expired signature is treated exactly like a forged one. */
@@ -527,6 +582,15 @@ class CsrfCookieSecurityTest extends TestCase
 
     private function makeTables(): void
     {
+        // The cancel callback now words its message from the booking's
+        // payment deadline, which reads `booking_hold_minutes`.
+        Schema::create('settings', function ($table) {
+            $table->id();
+            $table->string('setting_key');
+            $table->text('setting_value')->nullable();
+            $table->timestamps();
+        });
+
         Schema::create('users', function ($table) {
             $table->id();
             $table->string('full_name');

@@ -25,8 +25,30 @@ class PaymentController extends Controller
     public function showPaymentPage(Booking $booking)
     {
         abort_if($booking->user_id !== Auth::id(), 403);
-        abort_if($booking->balance_due <= 0, 400, 'No balance due for this booking.');
-        abort_if(in_array($booking->status, ['cancelled', 'checked_out']), 400, 'Cannot pay for this booking.');
+
+        // Back to the booking with a sentence, never an error page.
+        //
+        // These were `abort(400)`. A guest reaches this URL quite
+        // innocently — the Back button from PayMongo's page, or a "Pay
+        // Now" link on a tab opened before the booking was auto-cancelled
+        // — and a bare "400 Cannot pay for this booking" told them
+        // nothing about what had happened or what to do next.
+        //
+        // Status first: a cancelled booking's balance is zeroed, so the
+        // balance test would otherwise answer for it with the wrong reason.
+        if (in_array($booking->status, ['cancelled', 'checked_out'], true)) {
+            $redirect = redirect()->route('customer.bookings.show', $booking);
+
+            // A cancelled booking explains itself there, in its banner.
+            return $booking->status === 'cancelled'
+                ? $redirect
+                : $redirect->with('error', 'This booking can no longer be paid for.');
+        }
+
+        if ($booking->balance_due <= 0) {
+            return redirect()->route('customer.bookings.show', $booking)
+                ->with('info', "Booking {$booking->booking_ref} is already fully paid — there is nothing left to pay.");
+        }
 
         $booking->load('property');
 
@@ -387,7 +409,26 @@ class PaymentController extends Controller
         abort_if($booking->user_id !== Auth::id(), 403);
 
         if ($request->hasValidSignature()) {
-            $booking->update(['paymongo_session_id' => null]);
+            // CLOSED at PayMongo, not merely forgotten here.
+            //
+            // This used to be `paymongo_session_id = NULL` and nothing
+            // else. The session itself stayed open — it has no expiry of
+            // its own — with nothing left pointing at it: the guest's
+            // next attempt opened a second one beside it (two live QR
+            // codes, the double charge createCheckout() exists to stop),
+            // and a later cancellation could no longer close the first,
+            // because closing needs the id.
+            //
+            // closeCheckoutSession() clears the id only once the session
+            // is really expired. When PayMongo refuses, the session is
+            // paid or being paid — the guest scanned on their phone and
+            // pressed Back on this device before the page caught up. Then
+            // the id must stay, and the honest page is not "payment not
+            // completed" but the one that checks for the payment and
+            // records it.
+            if ($booking->closeCheckoutSession() === 'open') {
+                return redirect()->route('payment.success', $booking);
+            }
         } else {
             // Nakarating dito nang walang tamang pirma — ipinilit ng ibang
             // site, o luma na ang link. Ipakita pa rin ang booking, pero
@@ -395,8 +436,40 @@ class PaymentController extends Controller
             \Log::warning("Unsigned payment-cancel hit for booking {$booking->booking_ref} from ".$request->ip());
         }
 
-        return redirect()->route('customer.bookings.show', $booking)
-            ->with('error', 'Payment was cancelled. Your booking is still reserved — you can try again anytime.');
+        $redirect = redirect()->route('customer.bookings.show', $booking);
+        $message = $this->paymentNotCompletedMessage($booking);
+
+        return $message ? $redirect->with('error', $message) : $redirect;
+    }
+
+    /**
+     * What to tell a guest who came back from PayMongo without paying,
+     * or NULL when the booking page already says it.
+     *
+     * This was one fixed sentence — "Your booking is still reserved — you
+     * can try again anytime" — shown whatever the booking's state. Since
+     * v7.60 the most common way back here is the link on PayMongo's
+     * "session is no longer active" page, reached AFTER the booking was
+     * auto-cancelled, so that sentence sat directly above "This booking
+     * was cancelled". It was not true of a live booking either: an unpaid
+     * hold is reserved until its deadline, not "anytime".
+     */
+    private function paymentNotCompletedMessage(Booking $booking): ?string
+    {
+        // The cancelled banner is the whole message.
+        if ($booking->status === 'cancelled') {
+            return null;
+        }
+
+        if ($deadline = $booking->holdExpiresAt()) {
+            // Past the deadline but not swept yet: the deadline notice on
+            // the booking page already says the time has ended.
+            return $deadline->isPast()
+                ? null
+                : 'Payment not completed. You can still pay before the deadline shown below.';
+        }
+
+        return 'Payment not completed. Your booking is unchanged, and you can pay the balance later.';
     }
 
     // ── PayMongo Webhook ───────────────────────────────────────────
@@ -644,6 +717,27 @@ class PaymentController extends Controller
 
         $booking = $this->resolveWebhookBooking($metadata, $paymentData);
 
+        // Another environment's payment, not a lost one of ours (v7.61).
+        //
+        // Local and production share one PayMongo account, so each receives
+        // the other's events. Those can never match a booking here, and the
+        // alert below — "record it manually if the money arrived" — is wrong
+        // advice for them: the money did arrive, at the other environment,
+        // which recorded it. An alert that is usually false is one nobody
+        // reads when it is true, so these are logged and nothing more.
+        //
+        // Only reached when NO booking matched. The stamp never stops a
+        // payment being recorded — see PayMongoService::originTag().
+        if (! $booking && $this->paymongo->isForeignOrigin($metadata['origin'] ?? null)) {
+            \Log::info('PayMongo webhook: payment.paid belongs to another environment — ignored', [
+                'payment_ref' => $paymentRef,
+                'origin' => Str::limit((string) $metadata['origin'], 100),
+                'ours' => $this->paymongo->originTag(),
+            ]);
+
+            return ['received' => true, 'handled' => false, 'reason' => 'other_environment'];
+        }
+
         if (! $booking || ! $paymentRef) {
             \Log::warning('PayMongo webhook: payment.paid could not be matched to a booking', [
                 'payment_ref' => $paymentRef,
@@ -729,29 +823,55 @@ class PaymentController extends Controller
     }
 
     /**
-     * Hinahanap kung aling booking ang tinutukoy ng isang webhook event.
+     * Which booking a webhook event is about.
      *
-     * Ang `metadata.booking_id` ang pangunahing paraan (itinatakda natin
-     * ito sa createCheckoutSession), pero hindi lahat ng PayMongo flow ay
-     * nagpo-propagate ng session metadata pababa sa payment object. Kaya
-     * may dalawang fallback batay sa booking_ref, na ipinapasa naman
-     * natin bilang `reference_number` ng checkout session.
+     * THE REFERENCE DECIDES, NEVER THE ID ALONE (v7.61). This used to try
+     * `metadata.booking_id` first and return whatever it found. That id is
+     * an auto-increment, and the local and production databases both count
+     * from 1 while sharing one PayMongo account — which delivers every
+     * event to every enabled webhook of its mode. So a payment made on one
+     * environment arrived at the other correctly signed, and `find($id)`
+     * handed back a different guest's booking: recorded, confirmed, and
+     * the guest emailed about money they never sent.
+     *
+     * `booking_ref` is random (`VE-` + 8 characters), so it does not repeat
+     * across databases. Both values have been sent on every checkout since
+     * the first commit, so nothing legitimate arrives with the id alone.
+     * The reference comes from the metadata, or from
+     * `external_reference_number` — the checkout's `reference_number` — for
+     * a flow that does not carry the session metadata down to the payment.
+     *
+     * When an id is present it must agree with the booking the reference
+     * found. A disagreement is refused rather than resolved either way.
      */
     private function resolveWebhookBooking(array $metadata, array $paymentData): ?Booking
     {
-        if (! empty($metadata['booking_id'])) {
-            $booking = Booking::find($metadata['booking_id']);
-
-            if ($booking) {
-                return $booking;
-            }
-        }
-
         $ref = $metadata['booking_ref']
             ?? $paymentData['external_reference_number']
             ?? null;
 
-        return $ref ? Booking::where('booking_ref', $ref)->first() : null;
+        if (! is_string($ref) || $ref === '') {
+            return null;
+        }
+
+        $booking = Booking::where('booking_ref', $ref)->first();
+
+        if (! $booking) {
+            return null;
+        }
+
+        $id = $metadata['booking_id'] ?? null;
+
+        if ($id !== null && $id !== '' && (! is_scalar($id) || (string) $id !== (string) $booking->id)) {
+            \Log::warning('PayMongo webhook: booking id and reference disagree — not recorded', [
+                'booking_ref' => $ref,
+                'metadata_booking_id' => Str::limit((string) json_encode($id), 40),
+            ]);
+
+            return null;
+        }
+
+        return $booking;
     }
 
     /**

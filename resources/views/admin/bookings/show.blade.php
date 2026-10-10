@@ -559,10 +559,10 @@
                 This booking was rescheduled, so the likely cause is a move to a cheaper slot — that
                 difference is <strong>non-refundable</strong> and the guest agreed to it. Only if the payments
                 below show a double charge should the excess be returned through the
-                <a href="{{ route('admin.payments.index') }}">Payments page</a>.
+                <a href="{{ route('admin.payments.index', ['search' => $booking->booking_ref]) }}">Payments page</a>.
             @else
                 This is usually a sign the guest was charged twice. Check the payments below and return the
-                excess through the <a href="{{ route('admin.payments.index') }}">Payments page</a>.
+                excess through the <a href="{{ route('admin.payments.index', ['search' => $booking->booking_ref]) }}">Payments page</a>.
             @endif
         </div>
     @endif
@@ -870,8 +870,17 @@
                                             @if ($payment->isAwaitingPayout())
                                                 <a href="{{ route('admin.payments.show', $payment) }}"
                                                     style="font-size: 12px;font-weight:700;color:#92400e;background:#fef3c7;padding:2px 8px;border-radius:10px;text-decoration:none;white-space:nowrap;"
-                                                    title="Refund approved — money not sent yet. Open it to send it, or to mark it paid out.">
+                                                    title="Refund issued — money not sent yet. Open it to send it.">
                                                     NOT SENT →
+                                                </a>
+                                            @elseif ($payment->isRefund())
+                                                {{-- Naipadala na. Dating walang link dito, kaya
+                                                     hindi na maabot ang transfer history at
+                                                     reference ng isang saradong refund. --}}
+                                                <a href="{{ route('admin.payments.show', $payment) }}"
+                                                    style="font-size: 12px;font-weight:700;color:var(--tag-green-fg);background:var(--tag-green-bg);padding:2px 8px;border-radius:10px;text-decoration:none;white-space:nowrap;"
+                                                    title="Paid out. Open it to see where, when and how it was sent.">
+                                                    PAID OUT →
                                                 </a>
                                             @endif
                                         </td>
@@ -1080,7 +1089,7 @@
             {{-- Property Info --}}
             <div class="card-panel">
                 <div class="card-header-custom">
-                    <h3>Property</h3>
+                    <h3>Villa</h3>
                     <a href="{{ route('admin.properties.show', $booking->property_id) }}"
                         style="font-size: 14px;color:var(--terracotta);text-decoration:none;">View →</a>
                 </div>
@@ -1112,7 +1121,7 @@
                     <h5 style="font-family: var(--font-display);font-size: 18px;margin-bottom:6px;">Cancel Booking?
                     </h5>
                     <p style="font-size:13px;color:var(--muted);margin-bottom:16px;">
-                        This will cancel booking <strong>{{ $booking->booking_ref }}</strong> and free up the property.
+                        This will cancel booking <strong>{{ $booking->booking_ref }}</strong> and free up its slot.
                     </p>
                     <form method="POST" action="{{ route('admin.bookings.status', $booking) }}">
                         @csrf @method('PATCH')

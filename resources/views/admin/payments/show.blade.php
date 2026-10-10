@@ -306,8 +306,45 @@
                 </div>
                 <div class="info-row"><span class="lbl">Type</span><span class="val"><span
                             class="badge b-{{ $payment->payment_type }}">{{ $payment->type_label }}</span></span></div>
-                <div class="info-row"><span class="lbl">Date</span><span
+                <div class="info-row"><span class="lbl">{{ $payment->isRefund() ? 'Issued' : 'Date' }}</span><span
                         class="val">{{ $payment->payment_date?->format('M d, Y') }}</span></div>
+                {{-- Walang nagsasabi rito dati kung naipadala na ba ang isang
+                     refund: ang tanging palatandaan ay ang "SENT" na badge sa
+                     Refund Destination card, at ang cash refund ay wala man
+                     lang niyon. Mahalaga ito ngayong naaabot na ang pahinang
+                     ito pagkatapos maipadala ang refund. --}}
+                @if ($payment->isRefund())
+                    <div class="info-row"><span class="lbl">Status</span><span class="val">
+                            @if ($payment->isPaidOut())
+                                Paid out
+                            @elseif ($payment->hasTransferInFlight())
+                                Clearing — sent, waiting on the bank
+                            @elseif ($payment->needsRefundDestination())
+                                Not sent — waiting on account details
+                            @elseif ($payment->payment_method === 'cash')
+                                Not paid out yet
+                            @else
+                                Not sent
+                            @endif
+                        </span></div>
+                    @if ($payment->isPaidOut())
+                        <div class="info-row"><span class="lbl">Paid out on</span><span
+                                class="val">{{ $payment->refundClosedAt()?->format('M d, Y g:i A') }}</span></div>
+                        <div class="info-row"><span class="lbl">How</span><span class="val">
+                                @if ($payment->payment_method === 'cash')
+                                    Cash, handed to the guest
+                                @elseif ($payment->succeededTransfer())
+                                    Sent by the system (PayMongo)
+                                @else
+                                    Sent by hand, recorded with Mark Paid Out
+                                @endif
+                            </span></div>
+                        @if ($payment->processedBy)
+                            <div class="info-row"><span class="lbl">Paid out by</span><span
+                                    class="val">{{ $payment->processedBy->full_name }}</span></div>
+                        @endif
+                    @endif
+                @endif
                 @if ($payment->reference_number)
                     <div class="info-row"><span class="lbl">Reference</span><span class="val"
                             style="font-size: 14px;word-break:break-all;">{{ $payment->reference_number }}</span></div>
@@ -338,7 +375,7 @@
             <div class="card-body">
                 <div class="info-row"><span class="lbl">Guest</span><span
                         class="val">{{ $payment->booking->user->full_name }}</span></div>
-                <div class="info-row"><span class="lbl">Property</span><span
+                <div class="info-row"><span class="lbl">Villa</span><span
                         class="val">{{ $payment->booking->property->property_name }}</span></div>
                 <div class="info-row"><span class="lbl">Check-in</span><span
                         class="val">{{ $payment->booking->check_in_date->format('M d, Y') }}</span></div>
@@ -378,7 +415,7 @@
                 @elseif ($payment->needsRefundDestination())
                     <span class="badge" style="background:#e0e7ff;color:#3730a3;">WAITING ON GUEST</span>
                 @elseif ($payment->refundDestination)
-                    <span class="badge" style="background:var(--border);color:var(--muted);">SENT</span>
+                    <span class="badge" style="background:var(--border);color:var(--muted);">PAID OUT</span>
                 @endif
             </div>
             <div class="card-body">
@@ -443,7 +480,7 @@
                                      nagbago ang halaga mula nang mabuksan ang pahina,
                                      tumatanggi ang controller sa halip na magpadala
                                      ng ibang bilang kaysa sa nakita ng admin. --}}
-                                <form method="POST" action="{{ route('admin.payments.send', $payment) }}">
+                                <form method="POST" action="{{ route('admin.payments.send', $payment) }}" id="sendRefundForm">
                                     @csrf
                                     <input type="hidden" name="confirm_amount" value="{{ $payment->amount }}">
 
@@ -489,10 +526,15 @@
                                         <span>I have checked the account number and name above against what the guest gave us.</span>
                                     </label>
 
-                                    <button type="submit" class="btn-submit" style="padding:10px 22px;font-size:13px;">
+                                    <button type="submit" class="btn-submit" id="sendRefundBtn" style="padding:10px 22px;font-size:13px;">
                                         <i class="bi bi-send me-1"></i>
                                         Send ₱{{ number_format($payment->amount, 2) }} now
                                     </button>
+                                    {{-- Nakatago hanggang pindutin: tingnan ang script sa ibaba. --}}
+                                    <div id="sendRefundWait" class="field-hint" role="status" hidden>
+                                        Sending, and waiting for the bank to answer. This can take up to 30 seconds —
+                                        please keep this page open.
+                                    </div>
                                 </form>
                             @elseif ($payment->amount <= \App\Models\RefundTransfer::MINIMUM_AMOUNT)
                                 {{-- Tinatanggihan ng PayMongo ang wala pang ₱5, pero
@@ -527,7 +569,7 @@
                             <details id="manual-payout" style="margin-top:16px;"
                                 {{ $payment->canSendTransfer() && old('_form') !== 'payout' ? '' : 'open' }}>
                                 <summary style="cursor:pointer;font-size: 14px;font-weight:600;color:var(--stone);">
-                                    I sent it myself — record it by hand
+                                    Already sent it by hand? Mark it paid out
                                 </summary>
 
                                 <form method="POST" action="{{ route('admin.payments.paidOut', $payment) }}"
@@ -553,7 +595,7 @@
                                     </div>
 
                                     <button type="submit" class="btn-submit" style="padding:10px 22px;font-size:13px;">
-                                        <i class="bi bi-check2-circle me-1"></i> Confirm Sent
+                                        <i class="bi bi-check2-circle me-1"></i> Mark Paid Out
                                     </button>
                                 </form>
                             </details>
@@ -697,7 +739,7 @@
                                     </div>
 
                                     <button type="submit" class="btn-submit" style="padding:10px 22px;font-size:13px;">
-                                        <i class="bi bi-check2-circle me-1"></i> Confirm Sent
+                                        <i class="bi bi-check2-circle me-1"></i> Mark Paid Out
                                     </button>
                                 </form>
                             </details>
@@ -879,6 +921,45 @@
             el.open = true;
             el.scrollIntoView({
                 block: 'center'
+            });
+        })();
+
+        // "Send ₱X now": ang request na ito ay naghihintay sa bangko —
+        // hanggang tatlong pagsubok, bawat isa ay ilang segundo — kaya
+        // hanggang kalahating minuto itong mukhang walang nangyayari. Ang
+        // server ang humaharang sa dobleng pagpapadala (naka-lock ang
+        // pag-angkin sa RefundTransferService); dito lang ito ginagawang
+        // kitang-kita, para hindi pindutin ulit o isara ang pahina.
+        (function() {
+            const form = document.getElementById('sendRefundForm');
+            const btn = document.getElementById('sendRefundBtn');
+            const wait = document.getElementById('sendRefundWait');
+            if (!form || !btn) return;
+
+            const idleLabel = btn.innerHTML;
+
+            form.addEventListener('submit', function(e) {
+                if (form.dataset.submitted === '1') {
+                    e.preventDefault();
+                    return;
+                }
+
+                form.dataset.submitted = '1';
+                btn.disabled = true;
+                btn.innerHTML =
+                    '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Sending…';
+                if (wait) wait.hidden = false;
+            });
+
+            // Kapag bumalik gamit ang Back button, ibinabalik ng browser ang
+            // pahina mula sa bfcache kasama ang naka-disable na button.
+            window.addEventListener('pageshow', function(event) {
+                if (!event.persisted) return;
+
+                form.dataset.submitted = '';
+                btn.disabled = false;
+                btn.innerHTML = idleLabel;
+                if (wait) wait.hidden = true;
             });
         })();
     </script>

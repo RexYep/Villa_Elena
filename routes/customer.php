@@ -47,7 +47,7 @@ Route::prefix('my')
 
     Route::get('payments', [CustomerPaymentController::class, 'index'])->name('payments.index');
 
-    // Saan ipapadala ang refund. Naaabot mula sa "Refund Approved" na
+    // Saan ipapadala ang refund. Naaabot mula sa "Refund Coming" na
     // notification at mula sa booking detail page — hindi ito makukuha
     // sa QR Ph payment, kaya kailangang itanong (project.md §v5.9).
     Route::get('refunds/{payment}/destination',   [RefundDestinationController::class, 'edit'])->name('refunds.destination');

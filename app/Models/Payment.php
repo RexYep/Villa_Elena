@@ -11,6 +11,7 @@ use Illuminate\Database\Eloquent\Model;
  * @property numeric $amount
  * @property string $payment_method
  * @property string $payment_type
+ * @property string|null $refund_kind
  * @property string|null $transaction_ref
  * @property array<array-key, mixed>|null $gateway_response
  * @property string $status
@@ -71,6 +72,38 @@ class Payment extends Model
         });
 
         static::deleted(fn () => \App\Services\DashboardStats::touch());
+
+        // `refund_kind` (v7.64) ay maaaring wala pa kapag nauna ang code
+        // sa migration — sa production ay tumatakbo lang ang migration
+        // kapag RUN_MIGRATIONS=true. Kung hindi ito aalisin dito, ang
+        // bawat pag-issue ng refund ay magiging SQL error hanggang doon;
+        // sa ganito, ang tanging nawawala ay ang dahilan sa panel ng guest.
+        static::saving(function ($payment) {
+            if ($payment->isDirty('refund_kind') && ! static::refundKindColumnExists()) {
+                unset($payment->refund_kind);
+            }
+        });
+    }
+
+    protected static ?bool $refundKindColumnExists = null;
+
+    /**
+     * Pampubliko: binabasa rin ito ng Booking::recalculateFinancials(),
+     * na nagfi-filter sa column na ito sa BAWAT pagtutuos ng bayad. Kung
+     * wala ang tsekeng ito roon, ang code na nauna sa migration ay
+     * magiging SQL error sa bawat bayad — hindi lang sa mga refund.
+     */
+    public static function refundKindColumnExists(): bool
+    {
+        if (static::$refundKindColumnExists === null) {
+            try {
+                static::$refundKindColumnExists = \Illuminate\Support\Facades\Schema::hasColumn('payments', 'refund_kind');
+            } catch (\Throwable $e) {
+                static::$refundKindColumnExists = false;
+            }
+        }
+
+        return static::$refundKindColumnExists;
     }
 
     /**
@@ -99,6 +132,7 @@ class Payment extends Model
         'amount',
         'payment_method',
         'payment_type',
+        'refund_kind',
         'transaction_ref',
         'reference_number',
         'gateway_response',
@@ -424,6 +458,323 @@ class Payment extends Model
             'refund'       => 'Refund',
             default        => ucfirst(str_replace('_', ' ', (string) $type)),
         };
+    }
+
+    // ── Bakit ibinabalik ang pera (v7.63) ──────────────────────────
+    /**
+     * Ang mga uri ng refund na inilalabas mula sa Payments page, at ang
+     * label na nakikita ng admin sa Issue Refund na form.
+     *
+     * Pinipili ito ng admin dahil hindi ito mahuhulaan mula sa booking,
+     * at ito ang nagpapasya kung ANO ANG SASABIHIN SA GUEST
+     * (`NotificationHelper::refundComingForGuest()`). Dating iisang
+     * "Refund Approved" ang natatanggap ng lahat — kasama ang guest na
+     * kakasabihan pa lang na non-refundable ang bayad niya, at hindi
+     * naman humiling ng anuman.
+     *
+     * `label` ang nakikita ng admin; `guest` ang pangungusap na
+     * nababasa ng guest. Iisa ang `guest` para sa abiso AT sa refund
+     * panel ng booking details (v7.64) — kaya wala itong halaga o
+     * booking reference: idinadagdag iyon ng tumatawag. Huwag itong
+     * i-type muli sa isang view o sa helper.
+     */
+    public const REFUND_KINDS = [
+        'overpayment' => [
+            'label' => 'Double charge or overpayment',
+            'guest' => 'You paid more than this booking costs, so we are returning the extra.',
+        ],
+        'late_payment' => [
+            'label' => 'Payment arrived after the booking was cancelled',
+            'guest' => 'Your payment arrived after this booking was cancelled, so we are returning it.',
+        ],
+        'resort_cancelled' => [
+            'label' => 'The resort cancelled the booking',
+            'guest' => 'We had to cancel this booking on our side, so we are returning what you paid.',
+        ],
+        'goodwill' => [
+            'label' => 'Goodwill — the resort chose to return it',
+            'guest' => 'Payments are normally non-refundable, but the resort has decided to return this to you.',
+        ],
+    ];
+
+    public static function refundKindLabelFor(?string $kind): string
+    {
+        return self::REFUND_KINDS[$kind]['label'] ?? 'Refund';
+    }
+
+    /**
+     * NULL kapag hindi kilala ang uri — kasama ang bawat refund na
+     * ginawa bago nagkaroon ng `refund_kind`. Walang hinuhulaang dahilan.
+     */
+    public static function refundReasonForGuest(?string $kind): ?string
+    {
+        return self::REFUND_KINDS[$kind]['guest'] ?? null;
+    }
+
+    // ── Ang refund sa mata ng guest (v7.64) ────────────────────────
+    //
+    // Iba ang tanong dito sa `Booking::refundStage()`, na para sa admin
+    // at sa badge ng buong booking. Ito ay kada refund, at ang sagot ay
+    // kung ano ang dapat MALAMAN O GAWIN ng guest — kaya walang
+    // "failed" rito: ang bumagsak na transfer ay problema ng resort,
+    // maliban kung ang account na ibinigay niya ang tinanggihan.
+
+    /**
+     * @return string  none | needs_details | details_rejected | not_sent
+     *                 | on_its_way | cash_due | received | sent | paid_cash
+     */
+    public function guestRefundState(): string
+    {
+        if (! $this->isRefund()) {
+            return 'none';
+        }
+
+        $cash = $this->payment_method === 'cash';
+
+        if ($this->isPaidOut()) {
+            return match (true) {
+                $cash                              => 'paid_cash',
+                $this->succeededTransfer() !== null => 'received',
+                default                            => 'sent',
+            };
+        }
+
+        if ($cash) {
+            return 'cash_due';
+        }
+
+        if ($this->hasTransferInFlight()) {
+            return 'on_its_way';
+        }
+
+        $destination = $this->refundDestination;
+
+        if ($destination === null) {
+            return 'needs_details';
+        }
+
+        // Tinanggihan ang ACCOUNT, hindi lang ang pagsubok. Ang lahat ng
+        // iba pang pagkabigo (AC06 ng GCash, kulang na laman ng wallet,
+        // `error`) ay hindi maaayos ng guest, kaya "not sent yet" lang
+        // ang mga iyon sa kanya. Kapag in-update na niya ang detalye
+        // matapos ang pagtanggi, tapos na ang bahagi niya.
+        return $this->rejectedDetailsTransfer() ? 'details_rejected' : 'not_sent';
+    }
+
+    /**
+     * Ang pagtatangkang tinanggihan dahil sa KASALUKUYANG detalye ng
+     * guest, kung mayroon.
+     *
+     * Hindi lang ang pinakahuling pagtatangka ang tinitingnan: kung
+     * tinanggihan ang account at saka bumagsak ulit sa ibang dahilan
+     * (hal. kulang ang laman ng wallet), mali pa rin ang account.
+     */
+    public function rejectedDetailsTransfer(): ?RefundTransfer
+    {
+        $since = $this->refundDestination?->provided_at;
+
+        return $this->refundTransfers->first(fn ($transfer) => $transfer->isAccountDetailProblem()
+            && ! ($since && $transfer->created_at && $since->gt($transfer->created_at)));
+    }
+
+    // ── Magkano pa ang puwedeng i-refund (v7.66) ───────────────────
+    /**
+     * Ang natitirang maire-refund kada booking: lahat ng bayad na hindi
+     * refund, bawas ang lahat ng refund (naipadala man o hindi pa — utang
+     * na iyon ng resort mula nang i-issue).
+     *
+     * IISA ang kahulugang ito para sa tseke ng server
+     * (`Admin\PaymentController::refund()`, na may `$lock`) at sa "Up to
+     * ₱X" ng Issue Refund na form. Noong ang form ay may sarili nitong
+     * bilang — ang halaga ng iisang bayad — nag-aalok ito ng refund na
+     * tinatanggihan ng server matapos ang isang naunang refund.
+     *
+     * Iisang query para sa buong pahina ng listahan, hindi isa kada hanay.
+     *
+     * @param  iterable<int>  $bookingIds
+     * @return array<int, float>  booking_id => halaga (hindi bababa sa 0)
+     */
+    public static function refundableByBooking(iterable $bookingIds, bool $lock = false): array
+    {
+        $ids = collect($bookingIds)->filter()->unique()->values();
+
+        if ($ids->isEmpty()) {
+            return [];
+        }
+
+        return static::query()
+            ->whereIn('booking_id', $ids)
+            ->when($lock, fn ($query) => $query->lockForUpdate())
+            ->get(['booking_id', 'payment_type', 'amount'])
+            ->groupBy('booking_id')
+            ->map(fn ($rows) => max(0, round(
+                (float) $rows->where('payment_type', '!=', 'refund')->sum('amount')
+                - (float) $rows->where('payment_type', 'refund')->sum('amount'),
+                2
+            )))
+            ->all();
+    }
+
+    /**
+     * Ang pinakamalaking refund na maiaalok mula sa bayad na ITO: hindi
+     * hihigit sa sarili nitong halaga, at hindi hihigit sa natitira sa
+     * booking.
+     */
+    public function refundCeiling(float $bookingRefundable): float
+    {
+        if ($this->isRefund()) {
+            return 0.0;
+        }
+
+        return max(0, round(min((float) $this->amount, $bookingRefundable), 2));
+    }
+
+    /**
+     * Ang maikling katayuan — pareho sa refund panel at sa hanay ng
+     * Payment History, kaya dito ito nakatira at hindi sa view.
+     */
+    public function getGuestRefundStatusLabelAttribute(): string
+    {
+        return match ($this->guestRefundState()) {
+            'needs_details'    => 'Needs your account details',
+            'details_rejected' => 'Could not be delivered',
+            'not_sent'         => 'Not sent yet',
+            'on_its_way'       => 'On its way',
+            'cash_due'         => 'To be paid in cash',
+            'received'         => 'Received',
+            'sent'             => 'Sent',
+            'paid_cash'        => 'Paid in cash',
+            default            => '',
+        };
+    }
+
+    /**
+     * Ang kulay ng katayuan: done | moving | problem | waiting.
+     *
+     * Iisa para sa refund panel at sa My Payments, para hindi maging
+     * berde sa isang pahina at dilaw sa isa ang iisang refund.
+     */
+    public function guestStatusTone(): string
+    {
+        if (! $this->isRefund()) {
+            return match ($this->status) {
+                'success', 'refunded' => 'done',
+                'failed'              => 'problem',
+                default               => 'waiting',
+            };
+        }
+
+        return match ($this->guestRefundState()) {
+            'received', 'sent', 'paid_cash' => 'done',
+            'on_its_way'                    => 'moving',
+            'details_rejected'              => 'problem',
+            default                         => 'waiting',
+        };
+    }
+
+    /**
+     * Ang katayuan ng ANUMANG bayad sa My Payments (v7.67).
+     *
+     * Dating `ucfirst($payment->status)` — ang hilaw na enum. "Success"
+     * ang lumalabas sa isang bayad, at "Pending" sa isang refund na
+     * hinihintay pala ang account ng guest, nang walang sinasabing
+     * siya ang hinihintay.
+     */
+    public function getGuestStatusLabelAttribute(): string
+    {
+        if ($this->isRefund()) {
+            return $this->guest_refund_status_label;
+        }
+
+        return match ($this->status) {
+            'success'  => 'Paid',
+            'pending'  => 'Pending',
+            'failed'   => 'Failed',
+            'refunded' => 'Refunded',
+            default    => ucfirst((string) $this->status),
+        };
+    }
+
+    /**
+     * Paano binayaran — o, para sa refund, saan ito ibinabalik.
+     *
+     * Ang refund row ay kumokopya ng `payment_method` ng ORIHINAL na
+     * bayad, kaya "QR Ph" ang lumalabas sa isang refund na ipinadala sa
+     * GCash account ng guest. Hindi naipapadala ang refund sa QR Ph.
+     */
+    public function getGuestMethodLabelAttribute(): string
+    {
+        if (! $this->isRefund() || $this->payment_method === 'cash') {
+            return $this->method_label;
+        }
+
+        $account = $this->succeededTransfer()
+            ?? $this->refundTransfers->firstWhere('status', 'pending')
+            ?? $this->refundDestination;
+
+        return $account->institution_name ?? 'Bank or e-wallet';
+    }
+
+    /**
+     * Ang bahaging pareho sa abiso at sa refund panel kapag tinanggihan
+     * ang account na ibinigay ng guest. Ang unahan ("We tried to send …
+     * to your …,") ay sa tumatawag, dahil magkaiba ang alam na ng
+     * mambabasa sa bawat lugar.
+     */
+    public const DETAILS_REJECTED_NOTE = "but it was not accepted — the account number or name may be wrong. "
+        . "Nothing was lost. Please check the details and we'll send it again.";
+
+    public function getGuestRefundReasonAttribute(): ?string
+    {
+        return self::refundReasonForGuest($this->refund_kind);
+    }
+
+    public function succeededTransfer(): ?RefundTransfer
+    {
+        return $this->refundTransfers->firstWhere('status', 'succeeded');
+    }
+
+    /**
+     * Saan pumunta (o pupunta) ang refund, sa pananalitang ligtas
+     * ipakita: "{institusyon} account ending in 4567".
+     *
+     * Ang transfer ang inuuna kapag may nasa daan o dumating na — iyon
+     * ang hindi nababagong tala ng aktwal na pinuntahan. Huling 4 na
+     * digit lang; financial account data ito.
+     */
+    public function refundAccountPhrase(): ?string
+    {
+        $account = $this->succeededTransfer()
+            ?? $this->refundTransfers->firstWhere('status', 'pending')
+            ?? $this->refundDestination;
+
+        return self::accountPhrase($account);
+    }
+
+    /**
+     * @param  RefundTransfer|RefundDestination|null  $account
+     */
+    public static function accountPhrase($account): ?string
+    {
+        if (! $account) {
+            return null;
+        }
+
+        return "{$account->institution_name} account ending in " . substr((string) $account->account_number, -4);
+    }
+
+    /**
+     * Kailan nagsara ang refund. Ang `settled_at` ng transfer kapag
+     * awtomatiko; kung hindi, ang huling galaw ng row — na ang pagmamarka
+     * mismo, dahil wala nang nagbabago sa isang refund pagkatapos niyon.
+     */
+    public function refundClosedAt(): ?\Illuminate\Support\Carbon
+    {
+        if (! $this->isPaidOut()) {
+            return null;
+        }
+
+        return $this->succeededTransfer()?->settled_at ?? $this->updated_at;
     }
 
     public function getMethodLabelAttribute(): string

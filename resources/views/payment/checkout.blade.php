@@ -317,6 +317,11 @@
             color: #15803d;
         }
 
+        .alert-info {
+            background: var(--tag-blue-bg);
+            color: var(--tag-blue-fg);
+        }
+
         @media (max-width:400px) {
             .card-top {
                 padding: 22px 20px;
@@ -386,6 +391,17 @@
             @if (session('error'))
                 <div class="alert alert-error"><i class="bi bi-exclamation-circle me-2"></i>{{ session('error') }}</div>
             @endif
+            {{-- Ipinapadala ng createCheckout() ang `info` ("already being
+                 set up — please wait") pero walang view na nagpapakita
+                 nito, kaya walang nakikita ang guest na pumindot nang
+                 dalawang beses. --}}
+            @if (session('info'))
+                <div class="alert alert-info"><i class="bi bi-info-circle me-2"></i>{{ session('info') }}</div>
+            @endif
+
+            {{-- Ang huling page na atin bago mapunta ang guest sa PayMongo,
+                 kaya dito dapat sabihin ang totoong deadline. --}}
+            @include('partials.hold_deadline')
 
             {{-- Booking Summary --}}
             <div class="mb-20">
@@ -493,17 +509,6 @@
                         any bank app that accepts QR Ph.</span>
                 </div>
 
-                {{-- Ito ang huling sandali bago gumalaw ang pera, kaya dito
-                     dapat makita ang patakaran — hindi lang sa Terms. --}}
-                <div class="policy-notice">
-                    <i class="bi bi-exclamation-circle" aria-hidden="true"></i>
-                    <div>
-                        <strong>{{ \App\Models\Booking::CANCELLATION_POLICY }}</strong>
-                        If your plans change you can reschedule instead —
-                        <a href="{{ route('portal.terms') }}#cancellation" target="_blank" rel="noopener">see the
-                            terms</a>.
-                    </div>
-                </div>
 
                 <button type="submit" class="btn-pay" id="payBtn">
                     <i class="bi bi-lock-fill"></i>
@@ -575,12 +580,34 @@
             // disable na button. Kung hindi ito ibabalik sa dati,
             // mukhang sira ang page at wala silang magagawa.
             window.addEventListener('pageshow', function (event) {
-                if (!event.persisted) return;
+                if (!event.persisted || holdEnded) return;
 
                 form.dataset.submitted = '';
                 btn.disabled = false;
                 btn.innerHTML = '<i class="bi bi-lock-fill"></i> Pay Now via PayMongo';
             });
+
+            // Tapos na ang oras ng pagbabayad (partials/hold_deadline).
+            //
+            // Ang QR na bubuksan mula rito ay mamamatay sa loob ng isang
+            // minuto — kinakansela ng sweeper ang booking at isinasara ang
+            // checkout session nito. Affordance lang ito, hindi harang:
+            // ang server pa rin ang nagpapasya sa createCheckout().
+            let holdEnded = false;
+
+            function endHold() {
+                holdEnded = true;
+                form.dataset.submitted = '1';
+                btn.disabled = true;
+                btn.textContent = 'The time to pay has ended';
+            }
+
+            document.addEventListener('villa:hold-ended', endHold);
+
+            // Nauuna sa stack ang script ng partial kaysa rito, kaya kapag
+            // lampas na ang oras noong na-render ang page, nakaalis na ang
+            // event bago pa makinig ang linya sa itaas.
+            if (document.getElementById('holdDeadline')?.classList.contains('is-over')) endHold();
         })();
 
         // ── Realtime: pinananatiling totoo ang page habang nakabukas ──

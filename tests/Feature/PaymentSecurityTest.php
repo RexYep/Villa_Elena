@@ -205,6 +205,170 @@ class PaymentSecurityTest extends TestCase
             ->assertJson(['synced' => 1]);
     }
 
+    // ── Which booking a payment belongs to (v7.61) ─────────────────
+    //
+    // Local and production share one PayMongo account, and PayMongo delivers
+    // every event to every enabled webhook of its mode. Both databases number
+    // bookings from 1, so `metadata.booking_id` on its own can name a
+    // different guest's booking here.
+
+    public function test_a_payment_whose_id_and_reference_agree_is_recorded(): void
+    {
+        $booking = $this->makeBooking();
+
+        $this->deliverPaid(['booking_id' => $booking->id, 'booking_ref' => $booking->booking_ref], 'pay_agree')
+            ->assertOk()
+            ->assertJson(['handled' => true, 'recorded' => true]);
+
+        $booking->refresh();
+        $this->assertSame(4000.0, (float) $booking->amount_paid);
+        $this->assertSame('confirmed', $booking->status);
+    }
+
+    /**
+     * THE BUG. Before the fix this recorded ₱4,000 on `$bystander` and
+     * confirmed it: the id was looked up first and the reference was only
+     * read when the id found nothing.
+     */
+    public function test_an_id_that_exists_here_is_not_enough_to_match(): void
+    {
+        $bystander = $this->makeBooking();
+
+        $this->deliverPaid(['booking_id' => $bystander->id, 'booking_ref' => 'VE-ELSEWHER'], 'pay_foreign_id')
+            ->assertOk()
+            ->assertJson(['handled' => false, 'reason' => 'unmatched_booking']);
+
+        $bystander->refresh();
+        $this->assertSame(0, Payment::where('booking_id', $bystander->id)->count(), 'Another environment\'s payment must not land on a booking that only shares its id.');
+        $this->assertSame(0.0, (float) $bystander->amount_paid);
+        $this->assertSame('pending', $bystander->status);
+    }
+
+    /** A reference of ours with somebody else's id is refused, not resolved either way. */
+    public function test_a_reference_whose_id_disagrees_is_refused(): void
+    {
+        $named = $this->makeBooking();
+        $other = $this->makeBooking();
+
+        $this->deliverPaid(['booking_id' => $other->id, 'booking_ref' => $named->booking_ref], 'pay_disagree')
+            ->assertOk()
+            ->assertJson(['handled' => false, 'reason' => 'unmatched_booking']);
+
+        $this->assertSame(0, Payment::count());
+    }
+
+    /** Every checkout this app has ever opened sends both, so the id alone is never ours. */
+    public function test_an_id_with_no_reference_is_refused(): void
+    {
+        $booking = $this->makeBooking();
+
+        $this->deliverPaid(['booking_id' => $booking->id], 'pay_id_only')
+            ->assertOk()
+            ->assertJson(['handled' => false, 'reason' => 'unmatched_booking']);
+
+        $this->assertSame(0, Payment::count());
+    }
+
+    /** The two reference-only routes in must keep working. */
+    public function test_a_reference_alone_still_matches(): void
+    {
+        $viaMetadata = $this->makeBooking();
+        $viaExternal = $this->makeBooking();
+
+        $this->deliverPaid(['booking_ref' => $viaMetadata->booking_ref], 'pay_ref_meta')
+            ->assertJson(['handled' => true, 'recorded' => true]);
+
+        // A flow that does not carry the session metadata down to the payment.
+        $this->deliverPaid([], 'pay_ref_external', ['external_reference_number' => $viaExternal->booking_ref])
+            ->assertJson(['handled' => true, 'recorded' => true]);
+
+        $this->assertSame(4000.0, (float) $viaMetadata->fresh()->amount_paid);
+        $this->assertSame(4000.0, (float) $viaExternal->fresh()->amount_paid);
+    }
+
+    /**
+     * An unmatched payment stamped by another environment is that
+     * environment's to record. Alerting here told the admins to "record it
+     * manually if the money arrived" about money that was never theirs.
+     */
+    public function test_another_environments_payment_is_ignored_without_an_alert(): void
+    {
+        config(['app.url' => 'http://127.0.0.1:8000']);
+        $this->makeAdmin();
+        $bystander = $this->makeBooking();
+
+        $this->deliverPaid([
+            'booking_id' => $bystander->id,
+            'booking_ref' => 'VE-ELSEWHER',
+            'origin' => 'villa-elena.onrender.com',
+        ], 'pay_other_env')
+            ->assertOk()
+            ->assertJson(['handled' => false, 'reason' => 'other_environment']);
+
+        $this->assertSame(0, Payment::count());
+        $this->assertSame(0, \DB::table('notifications')->count(), 'Nobody should be alerted about another environment\'s payment.');
+    }
+
+    /** With our own stamp, or none at all, an unmatched payment still reaches a human. */
+    public function test_an_unmatched_payment_that_may_be_ours_still_alerts_the_admins(): void
+    {
+        config(['app.url' => 'https://villa-elena.onrender.com']);
+        $this->makeAdmin();
+
+        $stamps = [
+            'pay_ours' => ['origin' => 'villa-elena.onrender.com'],
+            'pay_unstamped' => [],
+        ];
+
+        foreach ($stamps as $payId => $stamp) {
+            $this->deliverPaid(['booking_id' => 424242, 'booking_ref' => 'VE-GONE0000'] + $stamp, $payId)
+                ->assertOk()
+                ->assertJson(['handled' => false, 'reason' => 'unmatched_booking']);
+        }
+
+        $this->assertSame(2, \DB::table('notifications')->where('title', 'Unmatched online payment')->count());
+    }
+
+    /**
+     * The stamp chooses between an alert and a log line for a payment that
+     * already failed to match. It must never stop one that did: APP_URL can
+     * change between a checkout being opened and paid.
+     */
+    public function test_a_stale_stamp_never_costs_a_real_payment(): void
+    {
+        config(['app.url' => 'https://a-new-domain.example']);
+        $booking = $this->makeBooking();
+
+        $this->deliverPaid([
+            'booking_id' => $booking->id,
+            'booking_ref' => $booking->booking_ref,
+            'origin' => 'villa-elena.onrender.com',
+        ], 'pay_stale_stamp')
+            ->assertJson(['handled' => true, 'recorded' => true]);
+
+        $this->assertSame(4000.0, (float) $booking->fresh()->amount_paid);
+    }
+
+    public function test_a_checkout_is_stamped_with_the_environment_that_opened_it(): void
+    {
+        config(['app.url' => 'https://Villa-Elena.onrender.com/']);
+        Http::fake(['*' => Http::response(['data' => ['id' => 'cs_test']], 200)]);
+
+        app(PayMongoService::class)->createCheckoutSession([
+            'guest_name' => 'Guest', 'guest_email' => 'guest@example.test',
+            'amount' => 4000, 'description' => 'Villa Elena',
+            'success_url' => 'https://example.test/ok', 'cancel_url' => 'https://example.test/no',
+            'reference_number' => 'VE-ABCDEFGH', 'booking_id' => 7, 'payment_type' => 'deposit',
+        ]);
+
+        Http::assertSent(fn ($request) => data_get($request->data(), 'data.attributes.metadata') === [
+            'booking_id' => 7,
+            'booking_ref' => 'VE-ABCDEFGH',
+            'payment_type' => 'deposit',
+            'origin' => 'villa-elena.onrender.com',
+        ]);
+    }
+
     // ── Recording: atomicity and idempotency ───────────────────────
 
     /**
@@ -373,6 +537,49 @@ class PaymentSecurityTest extends TestCase
                     ],
                 ],
             ],
+        ]);
+    }
+
+    /**
+     * A signed `payment.paid` delivery through the real route.
+     *
+     * @param  array<string, mixed>  $metadata
+     * @param  array<string, mixed>  $attributes  extra payment attributes
+     */
+    private function deliverPaid(array $metadata, string $paymentId, array $attributes = []): \Illuminate\Testing\TestResponse
+    {
+        $body = json_encode([
+            'data' => [
+                'id' => 'evt_'.$paymentId,
+                'attributes' => [
+                    'type' => 'payment.paid',
+                    'livemode' => false,
+                    'data' => [
+                        'id' => $paymentId,
+                        'attributes' => [
+                            'amount' => 400000,
+                            'source' => ['type' => 'qrph'],
+                            'metadata' => $metadata,
+                        ] + $attributes,
+                    ],
+                ],
+            ],
+        ]);
+
+        return $this->call('POST', '/webhooks/paymongo', [], [], [], [
+            'CONTENT_TYPE' => 'application/json',
+            'HTTP_PAYMONGO_SIGNATURE' => $this->sign($body),
+        ], $body);
+    }
+
+    private function makeAdmin(): User
+    {
+        static $n = 0;
+        $n++;
+
+        return User::create([
+            'full_name' => 'Webhook Admin '.$n, 'email' => "webhook-admin{$n}@example.test",
+            'password' => 'x', 'role' => 'admin', 'status' => 1,
         ]);
     }
 

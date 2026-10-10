@@ -259,6 +259,12 @@
             border-bottom: none;
         }
 
+        .pay-refund-status {
+            margin-left: 6px;
+            font-size: 13px;
+            color: var(--muted);
+        }
+
         /* Manage Booking */
         .btn-manage {
             display: block;
@@ -469,6 +475,11 @@
             color: #2c2416;
         }
 
+        .alert-info {
+            background: var(--tag-blue-bg);
+            color: var(--tag-blue-fg);
+        }
+
         .cancelled-banner {
             background: #fee2e2;
             border-radius: 10px;
@@ -481,6 +492,16 @@
         .cancelled-banner strong {
             display: block;
             margin-bottom: 3px;
+        }
+
+        .cancelled-banner-next {
+            margin-top: 6px;
+        }
+
+        .cancelled-banner-next a {
+            color: inherit;
+            font-weight: 700;
+            text-decoration: underline;
         }
 
         /* Report an issue (v7.11) — ang form ay nasa customer/partials/issue_report_modal */
@@ -653,6 +674,15 @@
     @if (session('error'))
         <div class="alert alert-error"><i class="bi bi-exclamation-circle me-2"></i>{{ session('error') }}</div>
     @endif
+    {{-- Apat na redirect ang nagpapadala ng `info` dito ("already fully
+         paid" ×2, "already submitted a review" ×2) at walang nagpapakita
+         nito dati. --}}
+    @if (session('info'))
+        <div class="alert alert-info"><i class="bi bi-info-circle me-2"></i>{{ session('info') }}</div>
+    @endif
+
+    {{-- Walang inilalabas maliban kung may tumatakbong oras ng pagbabayad. --}}
+    @include('partials.hold_deadline')
 
     @if ($booking->status === 'cancelled')
         <div class="cancelled-banner">
@@ -660,6 +690,17 @@
             {{ $booking->cancellation_reason }}
             @if ($booking->cancelled_at)
                 · {{ $booking->cancelled_at->format('M d, Y') }}
+            @endif
+
+            {{-- Para sa na-auto-cancel na hindi nabayaran: dalawa ang tanong
+                 ng guest na dumating dito mula sa patay na QR page — may
+                 nasingil ba, at ano na ang gagawin. --}}
+            @if ($booking->cancelled_by === 'system' && (float) $booking->amount_paid <= 0)
+                <div class="cancelled-banner-next">
+                    No payment was received for it.
+                    <a href="{{ route('portal.property', $booking->property_id) }}">Book again</a>
+                    if the date is still open.
+                </div>
             @endif
         </div>
     @endif
@@ -697,7 +738,9 @@
         </div>
         <div class="hero-badges">
             <span class="badge b-{{ $booking->status }}">{{ ucfirst(str_replace('_', ' ', $booking->status)) }}</span>
-            <span class="badge {{ $booking->payment_status_class }}">{{ $booking->payment_status_label }}</span>
+            {{-- Ang pananalita para sa guest, hindi ang sa admin: walang
+                 "Refund Failed" dito (Booking::guest_payment_status_label). --}}
+            <span class="badge {{ $booking->guest_payment_status_class }}">{{ $booking->guest_payment_status_label }}</span>
         </div>
         @if ($booking->status === 'checked_out')
             @php
@@ -717,6 +760,12 @@
             @endif
         @endif
     </div>
+
+    {{-- Walang inilalabas maliban kung may refund ang booking. Nasa itaas
+         ng grid at hindi sa loob ng isang hanay: kapag may kailangang
+         gawin ang guest dito, hindi ito dapat nasa ilalim ng buong
+         kaliwang hanay sa telepono. --}}
+    @include('customer.partials._refund_panel')
 
     <div class="detail-grid">
 
@@ -794,9 +843,17 @@
                                     <tr>
                                         <td class="text-muted-theme" data-label="Date">
                                             {{ $payment->payment_date?->format('M d, Y') }}</td>
-                                        <td data-label="Method">{{ $payment->method_label }}</td>
-                                        <td data-label="Type"><span
-                                                style="background:var(--sand);padding:2px 8px;border-radius:10px;font-size: 12px;">{{ $payment->type_label }}</span>
+                                        <td data-label="Method">{{ $payment->guest_method_label }}</td>
+                                        {{-- Kung walang katayuan, ang "-₱4,000 Refund" ay
+                                             mukhang perang naibalik na mula pa nang
+                                             i-issue ito. Iisang span ang dalawa para
+                                             manatili silang magkatabi sa telepono. --}}
+                                        <td data-label="Type"><span class="pay-type"><span
+                                                    style="background:var(--sand);padding:2px 8px;border-radius:10px;font-size: 12px;">{{ $payment->type_label }}</span>
+                                                @if ($payment->isRefund())
+                                                    <span class="pay-refund-status">{{ $payment->guest_refund_status_label }}</span>
+                                                @endif
+                                            </span>
                                         </td>
                                         <td data-label="Amount"
                                             style="text-align:right;font-weight:600;color:{{ $payment->payment_type === 'refund' ? '#dc2626' : '#15803d' }};">
@@ -841,8 +898,30 @@
                     @endif
                     <div class="price-row total">
                         <span>Total</span><span>₱{{ number_format($booking->total_amount, 2) }}</span></div>
-                    <div class="price-row paid"><span>Paid</span><span>₱{{ number_format($booking->amount_paid, 2) }}</span>
-                    </div>
+                    {{-- Ang `amount_paid` ay bawas na ng refund mula sa
+                         sandaling i-issue ito (recalculateFinancials()), kaya
+                         "Paid ₱0.00" ang lumalabas dito bago pa gumalaw ang
+                         pera. Kapag may refund, hiwalay na ipinapakita ang
+                         binayaran at ang ibinabalik. --}}
+                    @php
+                        $refundRows = $booking->payments->where('payment_type', 'refund');
+                        $refundTotal = (float) $refundRows->sum('amount');
+                        $paidBeforeRefunds = (float) $booking->payments
+                            ->where('payment_type', '!=', 'refund')
+                            ->where('status', 'success')
+                            ->sum('amount');
+                    @endphp
+                    @if ($refundTotal > 0)
+                        <div class="price-row paid"><span>Paid</span><span>₱{{ number_format($paidBeforeRefunds, 2) }}</span>
+                        </div>
+                        <div class="price-row">
+                            <span class="text-muted-theme">{{ $refundRows->contains(fn ($r) => $r->isAwaitingPayout()) ? 'Refund pending' : 'Refunded' }}</span>
+                            <span>-₱{{ number_format($refundTotal, 2) }}</span>
+                        </div>
+                    @else
+                        <div class="price-row paid"><span>Paid</span><span>₱{{ number_format($booking->amount_paid, 2) }}</span>
+                        </div>
+                    @endif
                     @if ($booking->balance_due > 0)
                         <div class="price-row due"><span>Balance
                                 Due</span><span>₱{{ number_format($booking->balance_due, 2) }}</span></div>

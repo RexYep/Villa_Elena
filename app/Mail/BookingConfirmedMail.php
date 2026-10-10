@@ -68,9 +68,13 @@ class BookingConfirmedMail extends Mailable
         $total = round((float) $this->booking->total_amount, 2);
         $totalPaid = round((float) $this->booking->amount_paid, 2);
 
-        // Netong nabayaran na ang amount_paid (nabawasan na ito ng
-        // anumang refund), kaya sinusundan ito ng balanse.
-        $balance = max(0, round($total - $totalPaid, 2));
+        // Ang balanse ay ang `balance_due` na kinuwenta ng
+        // recalculateFinancials() — HINDI `total − amount_paid`. Pareho
+        // ang dalawa maliban kapag may goodwill na refund (v7.68), na
+        // ibinabawas sa `amount_paid` pero hindi na muling sinisingil.
+        // Ang sariling kuwenta rito ay magsasabi sa guest na may utang
+        // pa siyang wala naman sa booking page.
+        $balance = max(0, round((float) $this->booking->balance_due, 2));
         $fullyPaid = $balance <= 0;
 
         $current = is_null($this->amountPaid) ? null : round((float) $this->amountPaid, 2);

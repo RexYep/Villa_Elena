@@ -708,9 +708,9 @@
                         <form method="POST" action="{{ route('customer.profile.email-notifications') }}"
                             data-keep-panel>
                             @csrf @method('PUT')
-                            <label class="toggle-switch" title="Booking confirmation emails">
+                            <label class="toggle-switch" title="Booking and refund emails">
                                 <input type="checkbox" name="email_notifications_enabled" value="1"
-                                    aria-label="Booking confirmation emails"
+                                    aria-label="Booking and refund emails"
                                     {{ $user->email_notifications_enabled ? 'checked' : '' }}
                                     onchange="this.form.submit()">
                                 <span class="toggle-slider"></span>
@@ -931,9 +931,9 @@
                     @csrf @method('PUT')
                     <div class="toggle-row" style="margin-bottom:0;">
                         <div>
-                            <div class="device-name">Booking confirmation emails</div>
+                            <div class="device-name">Booking and refund emails</div>
                             <div class="hint" style="margin-top:3px;">
-                                You will receive an email booking confirmation and a promo offer.
+                                We email you a confirmation when a payment is received, and an update when a refund is issued, needs your account details, or is paid out. These always appear in your notifications here, whether this is on or off.
                             </div>
                         </div>
                         <label class="toggle-switch">

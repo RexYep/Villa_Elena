@@ -362,7 +362,9 @@ class RefundTransferService
             'transaction_ref' => $transfer->receipt_reference,
         ]);
 
-        NotificationHelper::refundPaidOut($refund->fresh('booking'));
+        // Kasama ang `$transfer`: iyon ang nagsasabi sa preset na
+        // DUMATING na ang pera, hindi lang "naipadala".
+        NotificationHelper::refundPaidOut($refund->fresh('booking'), $transfer);
 
         StaffLog::record('refund_sent', 'payments', $refund->id,
             'Refund ₱' . number_format((float) $refund->amount, 2) . ' sent to '
@@ -392,10 +394,46 @@ class RefundTransferService
             route('admin.payments.show', $refund, false),
         );
 
+        $this->tellGuestIfDetailsRejected($refund, $transfer);
+
         StaffLog::record('refund_transfer_failed', 'payments', $refund->id,
             'Refund transfer failed for booking '
             . ($refund->booking->booking_ref ?? '#' . $refund->booking_id)
             . ' — ' . ($transfer->provider_error_code ?: $transfer->status) . ': ' . $reason);
+    }
+
+    /**
+     * Kapag ang ACCOUNT ng guest ang tinanggihan, sabihin sa kanya —
+     * siya lang ang makakapag-ayos niyon (v7.67).
+     *
+     * Makitid nang sinasadya: ang `AC06` ng GCash, ang kulang na laman ng
+     * wallet at ang iba pang pagkabigo ay hindi maaayos ng guest, kaya
+     * walang abiso sa kanya para sa mga iyon.
+     *
+     * MINSAN lang kada set ng detalye. Kung pinindot ulit ng admin ang
+     * Send nang hindi pa nababago ang account, pareho lang ang
+     * kalalabasan — at ang pangalawang "check your details" ay ingay na
+     * lang. Kapag nag-save ang guest ng bagong detalye, panibago na
+     * ang bilang.
+     */
+    private function tellGuestIfDetailsRejected(Payment $refund, RefundTransfer $transfer): void
+    {
+        if (! $transfer->isAccountDetailProblem()) {
+            return;
+        }
+
+        $detailsSince = $refund->refundDestination?->provided_at;
+
+        $alreadyTold = RefundTransfer::where('payment_id', $refund->id)
+            ->whereKeyNot($transfer->id)
+            ->where('status', 'failed')
+            ->whereIn('provider_error_code', RefundTransfer::ACCOUNT_DETAIL_ERROR_CODES)
+            ->when($detailsSince, fn ($query) => $query->where('created_at', '>=', $detailsSince))
+            ->exists();
+
+        if (! $alreadyTold) {
+            NotificationHelper::refundDetailsRejectedForGuest($refund, $transfer);
+        }
     }
 
     // ── Mga maliliit na katulong ───────────────────────────────────

@@ -448,6 +448,28 @@ class Booking extends Model
         return (int) Setting::get('booking_hold_minutes', 60);
     }
 
+    /**
+     * The moment this booking is auto-cancelled if nothing is paid, or
+     * NULL when no such clock is running.
+     *
+     * For telling the guest their deadline (partials/hold_deadline).
+     * Until v7.62 nothing guest-facing did: the hold was stated once, in
+     * the Terms, while PayMongo's own page showed a 30-minute timer — so
+     * a guest with 20 minutes believed they had 30.
+     *
+     * The test must stay the same as cancelStalePendingBookings()'s
+     * (`pending`, nothing paid, counted from `created_at`), or this
+     * promises a deadline the sweeper does not keep.
+     */
+    public function holdExpiresAt(): ?\Carbon\Carbon
+    {
+        if ($this->status !== 'pending' || (float) $this->amount_paid > 0 || ! $this->created_at) {
+            return null;
+        }
+
+        return $this->created_at->copy()->addMinutes(static::pendingHoldMinutes());
+    }
+
     // ── Alin ang puwedeng ilipat ng petsa ───────────────────────────
     /**
      * Ang mga status LAMANG na makatuwirang ilipat sa ibang petsa.
@@ -1805,6 +1827,33 @@ class Booking extends Model
         };
     }
 
+    /**
+     * Ang parehong badge, sa pananalita para sa GUEST (v7.64).
+     *
+     * Ang "Refund Failed" ay totoo at kapaki-pakinabang sa admin, pero
+     * sa guest ay nakakatakot at walang magagawa: ang bumagsak na
+     * transfer ay uulitin ng resort, at utang pa rin ang refund. Kung
+     * may kailangan siyang gawin (hal. itama ang account), ang refund
+     * panel sa booking details ang nagsasabi niyon —
+     * `Payment::guestRefundState()`. Ang dating "Refund" lang para sa
+     * `owed` ay hindi rin nagsasabi kung tapos na ba o hindi.
+     */
+    public function getGuestPaymentStatusLabelAttribute(): string
+    {
+        return match ($this->refundStage()) {
+            'owed', 'failed' => 'Refund Pending',
+            'processing'     => 'Refund On Its Way',
+            default          => $this->payment_status_label,
+        };
+    }
+
+    public function getGuestPaymentStatusClassAttribute(): string
+    {
+        return $this->refundStage() === 'failed'
+            ? 'p-refund-progress'
+            : $this->payment_status_class;
+    }
+
     // ── Helper Methods ─────────────────────────────────────────────
 
     public function isPending(): bool    { return $this->status === 'pending'; }
@@ -1941,7 +1990,8 @@ class Booking extends Model
      * mga refund na hindi pa naibibigay. Iisang kopya na lang ngayon —
      * tumawag nito sa halip na gumawa ng panibagong kopya.
      *
-     * Dalawang panuntunan ang ipinapatupad dito:
+     * Tatlong panuntunan ang ipinapatupad dito (ang ikatlo — ang goodwill
+     * na refund — ay nasa loob ng method):
      *
      *   1. Ang mga TUNAY na bayad ay binibilang lang kapag `status`
      *      ay 'success' — ang isang naiwang 'pending' na gateway payment
@@ -1975,7 +2025,31 @@ class Booking extends Model
                 ? ($totalRefunded > 0 ? 'partial' : 'paid')
                 : ($totalRefunded > 0 ? 'refunded' : 'unpaid');
         } else {
-            $balanceDue = max(0, round((float) $this->total_amount - $netPaid, 2));
+            // 3. Ang GOODWILL na refund ay hindi na muling sinisingil
+            //    (v7.68). Kusang ibinalik iyon ng resort — hal. bayad-pinsala
+            //    sa sirang aircon — kaya hindi ito dapat bumalik bilang
+            //    utang ng guest. Dating ibinabawas ang lahat ng refund sa
+            //    naibayad nang walang pagtatangi, kaya ang ₱2,000 na
+            //    ibinalik sa isang bayad nang ₱4,000 na booking ay
+            //    lumalabas na ₱2,000 na "Balance Due" — may "Pay Now" pa
+            //    sa guest, at sisingilin ulit sa front desk.
+            //
+            //    Ang IBANG uri ay nananatiling ibinabawas, at tama iyon:
+            //    ang `overpayment` ay pagbabalik ng SOBRA (₱8,000 sa
+            //    ₱4,000 na booking → ibinalik ang ₱4,000 → bayad pa rin
+            //    nang buo), at ang NULL ay ang mga lumang refund, na
+            //    ganoon din ang kahulugan noon.
+            //
+            //    Ang `amount_paid` ay nananatiling NETO — ang perang hawak
+            //    talaga ng resort. Ang balanse lang ang nagbabago.
+            $goodwill = Payment::refundKindColumnExists()
+                ? (float) $this->payments()
+                    ->where('payment_type', 'refund')
+                    ->where('refund_kind', 'goodwill')
+                    ->sum('amount')
+                : 0.0;
+
+            $balanceDue = max(0, round((float) $this->total_amount - $netPaid - $goodwill, 2));
 
             if ($netPaid <= 0) {
                 $paymentStatus = $totalRefunded > 0 ? 'refunded' : 'unpaid';
@@ -2242,13 +2316,17 @@ class Booking extends Model
      * is paid or being paid, and then the id MUST stay: the success
      * callback reads it to record that payment, and
      * reinstateAfterLatePayment() deals with the booking once it lands.
+     *
+     * @return string  'closed' — expired, or there was none to close;
+     *                 'open'   — PayMongo refused: paid, or being paid;
+     *                 'failed' — PayMongo could not be asked.
      */
-    public function closeCheckoutSession(): void
+    public function closeCheckoutSession(): string
     {
         $sessionId = $this->paymongo_session_id;
 
         if (! $sessionId) {
-            return;
+            return 'closed';
         }
 
         try {
@@ -2259,10 +2337,10 @@ class Booking extends Model
 
                 if ($state !== 'expired') {
                     \Illuminate\Support\Facades\Log::info(
-                        "Checkout session {$sessionId} for cancelled booking {$this->booking_ref} could not be expired — it is paid or being paid. Left open for the payment to be recorded."
+                        "Checkout session {$sessionId} for booking {$this->booking_ref} could not be expired — it is paid or being paid. Left open for the payment to be recorded."
                     );
 
-                    return;
+                    return 'open';
                 }
             }
 
@@ -2277,10 +2355,14 @@ class Booking extends Model
                 $this->paymongo_session_id = null;
                 $this->syncOriginalAttribute('paymongo_session_id');
             }
+
+            return 'closed';
         } catch (\Throwable $e) {
             \Illuminate\Support\Facades\Log::warning(
-                "Could not expire checkout session {$sessionId} for cancelled booking {$this->booking_ref}: ".$e->getMessage()
+                "Could not expire checkout session {$sessionId} for booking {$this->booking_ref}: ".$e->getMessage()
             );
+
+            return 'failed';
         }
     }
 

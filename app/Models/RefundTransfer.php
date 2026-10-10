@@ -230,6 +230,25 @@ class RefundTransfer extends Model
             && in_array(strtoupper((string) $this->provider_error_code), self::RETRYABLE_ERROR_CODES, true);
     }
 
+    /**
+     * Mga code na tungkol sa ACCOUNT na ibinigay ng guest — maling
+     * numero, saradong account, o pangalang hindi tugma.
+     *
+     * Ito lang ang mga pagkabigong ipinapakita sa guest bilang "check
+     * your details" (`Payment::guestRefundState()`). Sinasadyang makitid:
+     * ang `AM04` (kulang ang laman ng wallet NG RESORT), `AG01`/`RR04`
+     * (patakaran ng bangko) at ang mga hindi kilalang code ay hindi
+     * maaayos ng guest, kaya ang pagsasabi sa kanyang itama ang detalye
+     * niya ay pagpapagawa ng bagay na walang mababago.
+     */
+    public const ACCOUNT_DETAIL_ERROR_CODES = ['AC01', 'AC02', 'AC03', 'AC04', 'AC07', 'BE01'];
+
+    public function isAccountDetailProblem(): bool
+    {
+        return $this->status === 'failed'
+            && in_array(strtoupper((string) $this->provider_error_code), self::ACCOUNT_DETAIL_ERROR_CODES, true);
+    }
+
     // ── Mensaheng nauunawaan ng tao ────────────────────────────────
 
     /**

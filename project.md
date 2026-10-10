@@ -1,7 +1,7 @@
 # Villa Elena Private Rental Resort
 ## Resort Management System — Project Documentation
 
-**Version:** 7.60
+**Version:** 7.68
 **Stack:** PHP 8.2 / Laravel 12 / MySQL 8 / Bootstrap 5
 **Local URL:** `http://127.0.0.1:8000` (`php artisan serve`) or `http://localhost:8000` (Docker — see v5.3)
 **Live URL:** `https://villa-elena.onrender.com` (Render, free tier — testing only, not yet handed to real guests)
@@ -185,6 +185,663 @@ through `user_id` and nothing denormalises their name into a booking row.
 from Task 11 · F5 get dropped at the same time — they are empty and reserved
 (`users.id_type` / `users.id_number`, see v7.40), and a schema change for erasure
 is the natural moment to remove them rather than a migration of their own.
+
+---
+
+## What Changed in v7.68 (Read This First)
+
+### Refund emails, the admin hears when details arrive, and goodwill is not owed back
+
+The three items v7.67 left open. The owner approved the emails (2026-10-09).
+
+**1. Refund notices are emailed too.** They were in-app only, so a guest who did
+not log in — the usual case after the resort cancels a booking — never learned
+that a refund was coming or that their account details were needed.
+
+| Notice | Emailed | Button |
+|---|---|---|
+| Refund Coming | yes | **Add account details** when they are needed, else View your booking |
+| Booking Cancelled by the Resort | yes | same |
+| Refund Could Not Be Delivered | yes | **Check account details** |
+| Refund Received / Refund Sent / Refund Paid in Cash | yes | View your booking |
+| Refund On Its Way | **no** | — the next notice follows it, and quota is shared |
+| "We still need your refund details" (the 3-day nudge) | **no** | — it repeats, and the first email already asked |
+
+- `App\Mail\RefundNoticeMail` + `emails/refund_notice.blade.php`, sent through
+  `BookingMailHelper::refundNotice()`. The four guest presets in
+  `NotificationHelper` call it with **the same title and sentence** as the
+  in-app notice, so the bell and the inbox cannot disagree. Subject:
+  *"Refund Coming — VE-… | Villa Elena Resort"*.
+- **`DB::afterCommit()`.** `Admin\PaymentController::refund()` calls its preset
+  inside a transaction that holds a lock; the email is a slow outside call, and
+  a refund that is rolled back must not have been announced. With no
+  transaction open it runs at once.
+- **`catch (\Throwable)`.** The PayMongo transfer callback passes through here
+  when a refund lands; a failed email must not disturb closing the refund.
+- **It follows `email_notifications_enabled`**, like the payment email. The
+  in-app notice is created either way. The setting in My Account is relabelled
+  "Booking and refund emails" and its hint now says what it covers (it used to
+  promise "a promo offer", which is never emailed).
+- **The link is built from `APP_URL`**, not the current request's host — that
+  may be the address the admin used, not one the guest can reach. The in-app
+  `link` stays relative.
+- The email leaves out the in-app notice's *"open this to add your … details"*:
+  there is no "this" in an email. The button replaces it, with one sentence
+  above it.
+- **Cost:** at most three emails per refund (coming, a possible rejection, paid
+  out), from the same Brevo quota as 2FA codes and booking confirmations.
+
+**2. The admins are told when the guest gives their account details.**
+`RefundDestinationController::update()` sends
+`NotificationHelper::refundDetailsProvided()` — *"Refund Ready To Send"*, with
+the account's last four digits, the `refundNextStepForAdmin()` sentence and a
+link to that refund. Before, "NEEDS DETAILS" simply disappeared from the list
+and the unsent-refund nudge came three days later. It fires only when the bank,
+number or name actually changed (`provided_at` is rewritten on every save, so it
+is not the test).
+
+**3. A goodwill refund is not owed back.** `recalculateFinancials()` subtracted
+every refund from what was paid, so ₱1,000 returned as goodwill on a fully paid
+₱4,000 booking left a ₱1,000 "Balance Due" — with a Pay Now button for the
+guest and a balance to collect at the front desk. Rule 3, now in that method:
+
+```
+balance due = total − net paid − goodwill refunds      (never below 0)
+```
+
+| Case (total ₱4,000) | Before | Now |
+|---|---|---|
+| Paid ₱4,000, ₱1,000 **goodwill** refund | balance ₱1,000, `partial` | balance ₱0, `paid` |
+| Paid ₱8,000, ₱4,000 returned as **overpayment** | balance ₱0, `paid` | unchanged |
+| Paid ₱2,000, ₱500 **goodwill** refund | balance ₱2,500 | balance ₱2,000 (what it was before the refund) |
+
+- Only `refund_kind = 'goodwill'` is treated this way. `overpayment` returns an
+  excess, so subtracting it is right; NULL is every refund made before v7.64,
+  which meant the same thing then. Cancelled bookings were already ₱0.
+- `amount_paid` stays **net** — the money the resort actually holds. Only the
+  balance changes.
+- The query filters on `payments.refund_kind`, and this method runs on **every**
+  payment. `Payment::refundKindColumnExists()` (now public) guards it: with the
+  code deployed ahead of the migration the rule is simply off, with no error.
+- `BookingConfirmedMail::summary()` computed its own `total − amount_paid`; it
+  now reads `balance_due`, or the payment email would have shown a balance the
+  booking page does not.
+- **Not guarded:** choosing "Double charge or overpayment" for a refund larger
+  than the actual excess still leaves a balance due. That follows from what the
+  admin said the refund was.
+
+**Verified** with the mailer faked for every run (the local mailer is a real
+SMTP account): four emails with their subjects, bodies and buttons; none for On
+Its Way, for a guest with emails switched off, or inside a transaction that
+rolls back. The admin notice through the full HTTP stack — sent on the first
+save, not on an identical save, sent again on a changed number. The three
+balance cases above through the real refund endpoint, and the missing-column
+fallback. The email template was opened in Chrome.
+
+**Deploying:** needs the v7.64 migration (`RUN_MIGRATIONS=true`). Until it runs,
+refunds still work; the panel shows no reason and rule 3 is off.
+
+---
+
+## What Changed in v7.67 (Read This First)
+
+### The guest hears when their account is rejected, and My Payments speaks plainly
+
+Fifth and last built part of the 2026-10-09 payment and refund review — the
+remaining customer findings.
+
+**1. A rejected account was the admin's secret.** When a transfer failed, only
+the admins were notified (*"Check the details with the guest and try again"*).
+For a wrong or closed account the guest is the only one who can fix it, and
+they were told nothing.
+
+- `RefundTransferService::recordFailure()` now calls
+  `tellGuestIfDetailsRejected()`, which sends
+  `NotificationHelper::refundDetailsRejectedForGuest()` — *"Refund Could Not Be
+  Delivered"*, linking straight to the account form.
+- **Only for `RefundTransfer::ACCOUNT_DETAIL_ERROR_CODES`.** `AC06` (GCash's
+  random rejection) and `AM04` (the resort's wallet is short) notify the admins
+  as before and say nothing to the guest.
+- **Once per set of details.** If an admin presses Send again before the guest
+  has changed anything, the outcome is the same and a second notice is noise.
+  When the guest saves new details the count starts over.
+- The sentence is shared with the refund panel through
+  `Payment::DETAILS_REJECTED_NOTE`.
+- `Payment::rejectedDetailsTransfer()` now decides the panel's `details_rejected`
+  state. v7.64 looked only at the *latest* attempt, so a wrong account followed
+  by an unrelated failure (the wallet running short) went back to "Not sent
+  yet" while the account was still wrong.
+
+**2. My Payments showed the database's words.** The Status column printed
+`ucfirst($payment->status)`: "Success" for a payment, and "Pending" for a refund
+that was in fact waiting on the guest.
+
+- `guest_status_label` — "Paid" / "Pending" / "Failed" for a payment, and for a
+  refund the same short status as the refund panel ("Needs your account
+  details", "Not sent yet", "Sent", …).
+- `guestStatusTone()` (`done` / `waiting` / `moving` / `problem`) sets the
+  colour on both My Payments and the panel, so one refund cannot be green on
+  one page and amber on the other. The pill classes use the `--tag-*` tokens.
+- `guest_method_label` — a refund row copies the original payment's method, so
+  a refund sent to GCash read "QR Ph". It now shows where the refund goes (the
+  bank or e-wallet, "Cash", or "Bank or e-wallet" while no account is known).
+  Used on My Payments and in the booking page's Payment History.
+- A refund row's booking link goes to `#refund`, the panel that holds "Add
+  account details".
+
+**3. "We will send your refund … shortly."** Nothing moves until an admin
+presses Send Refund, so the message after saving account details promised
+something the system cannot do. It now says where the refund will go (last four
+digits) and *"we'll notify you when it's sent"* — the same words as the panel on
+the page it redirects to.
+
+**Verified** through the real service and controllers in a rolled-back
+transaction, with the one PayMongo read (a transfer's status) answered locally:
+five failures in sequence (`AC06`, `AC01`, `AC01` again, `AC01` after new
+details, `AM04`) — the admins were told every time, the guest on the second and
+fourth only. My Payments was rendered with five rows and opened in Chrome at
+desktop width and in a 360px frame: no overflow, and the long statuses wrap to
+their own line.
+
+**Left open by this version, all three closed in v7.68:** refund notices were
+in-app only; nobody was told when the guest provided their details; and a
+goodwill refund on a booking that is not cancelled raised its balance due.
+
+---
+
+## What Changed in v7.66 (Read This First)
+
+### Admin refund screens: one name per stage, an honest "Max", a button that says it is working
+
+Fourth part of the 2026-10-09 payment and refund review — the remaining admin
+findings.
+
+**One name per stage.** The same refund was called Refund, Issue Refund, Process
+Refund, approved, NOT SENT, awaiting payout, Confirm Sent, Mark Paid Out and
+SENT, depending on the screen. The words now in use:
+
+| Stage | Word | Was also called |
+|---|---|---|
+| Creating it | **Issue Refund** (row link, modal title, button) | "Refund" (link), "Process Refund" (button), "approved" (tooltips, the unsent-refund nudge) |
+| Recorded, no money moved | **Not sent** | "awaiting payout" (banner) |
+| Transfer in flight | **Clearing** | — |
+| Money has reached the guest | **Paid out** | "SENT" (destination badge) |
+| Recording a payout made by hand or in cash | **Mark Paid Out** (modal title, all three buttons) | "Confirm Refund Sent", "Confirm Sent", "I sent it myself — record it by hand" |
+
+"Paid out" was kept over "Sent" because it is the word already in the routes,
+the notification, the status rows added in v7.65 and every error message, and
+because it also covers cash. A *transfer* is still DELIVERED / CLEARING / FAILED
+in Transfer History: that describes one attempt, not the refund. The overdue
+badge reads "3 DAYS WAITING" instead of "3D WAITING". The `status=awaiting_payout`
+query parameter and `Payment::isAwaitingPayout()` are unchanged — those are
+code, not wording.
+
+**The Issue Refund form.**
+
+- **"Up to ₱X can still be refunded"** is now the smaller of that payment's
+  amount and what is left to refund on the *booking*. It used to be the
+  payment's amount alone, while the server checked the booking — so after one
+  refund the form offered an amount the server refused. Both now read
+  `Payment::refundableByBooking()` (`refund()` passes `lock: true`); the list
+  runs it once per page. A payment with nothing left to refund has no Issue
+  Refund link.
+- **It reopens after an error** with what was typed and the reason shown inside
+  it, the way Record Payment does. Four hidden fields (`_form`, `_payment_id`,
+  `_max`, `_booking_ref`) carry what the modal needs; they are display only —
+  the server still goes by the URL and its own sum. The "exceeds the refundable
+  balance" redirect gained `withInput()`.
+- **It says what pressing the button does**: it records the refund and notifies
+  the guest, and no money moves yet. That replaced a red warning box that only
+  repeated the booking reference.
+
+**"Send ₱X now" shows that it is working.** The request waits on the bank for up
+to three attempts, so the page could sit for half a minute with nothing
+changing. On submit the button is disabled and reads "Sending…", with a line
+saying it can take up to 30 seconds. The server remains the guard against a
+double send (the locked claim in `RefundTransferService`); this only makes the
+wait visible.
+
+**Smaller ones.**
+
+- The Overpaid banner on the booking page links to the Payments page already
+  searched for that booking.
+- The Payments list's Date column shows `payment_date` (what the list is sorted
+  and filtered by, and what Record Payment asks for), not `created_at`.
+- The list's Property column is gone — one villa, so it said the same thing on
+  every row. "Property" reads "Villa" on the payment page and the booking page,
+  and the cancel dialog says "free up its slot".
+
+**Deliberately not done:** the review also listed the capitalised badges. They
+are capitalised by the admin stylesheet for every badge in the panel, so
+changing them on the Payments pages alone would make those pages the odd ones
+out.
+
+**Verified** with the real controllers and renders in rolled-back transactions:
+the ceiling before, between and after two refunds; a refused refund sent through
+the full HTTP stack (CSRF, validation, redirect) for both error paths, with the
+typed values flashed back; the list, payment and booking pages. In Chrome the
+modal reopened with the error and the typed amount, reason and note, and the
+Send button stayed enabled while its checkbox was unticked, then disabled itself
+on the one submit.
+
+---
+
+## What Changed in v7.65 (Read This First)
+
+### Admin Payments: messages that stay, a refund you can reopen, one instruction
+
+Third part of the 2026-10-09 payment and refund review — the three admin
+findings that could lead to a wrong action on real money.
+
+**1. The Payments page hid every alert after five seconds.** The script at the
+bottom of `admin/payments/index.blade.php` selected `.alert`, so along with the
+success flash it removed the permanent *"N refunds awaiting payout"* banner
+(`alert alert-warning`), validation errors and the long instructions shown when
+a transfer fails. The selector is now `.alert-success`. The same snippet is
+still in `admin/reviews/index` and `staff/frontdesk`; those were not touched.
+
+**2. A refund that had been paid out could not be opened again.**
+`admin.payments.show` was linked only while a refund was unsent, so its
+transfer history, reference and destination were unreachable from the UI
+afterwards. An ordinary payment's page was never linked at all.
+
+- Payments list: "View" is now **Booking**, and every row reaches its own page —
+  through **Details**, or through the action that already goes there (Send
+  Refund / Add Details / Check).
+- Booking page, Payment History: a paid-out refund has a **PAID OUT →** link,
+  next to where an unsent one has NOT SENT →.
+- The payment page's *Payment Information* now states, for a refund: **Status**
+  (Paid out / Clearing / Not sent — waiting on account details / Not paid out
+  yet / Not sent), and once paid out, **Paid out on**, **How** (sent by the
+  system, sent by hand, or cash) and **Paid out by**. Before, the only sign was
+  a "SENT" badge on the Refund Destination card, which a cash refund does not
+  have. "Date" reads "Issued" on a refund.
+- The action cell is no longer `nowrap`. `.table-card` is `overflow: hidden` at
+  desktop widths, so a row with three links had its last one ("Mark Paid Out")
+  cut off at the card's edge with no way to reach it. Each link stays whole and
+  the group wraps (`.row-actions`).
+
+**3. Two messages told the admin to use the manual path.** The banner says *use
+Send Refund; Mark Paid Out is only for cash or money already sent by hand*. The
+flash after issuing a refund and the "Refund To Send" notification both said
+*"mark it as paid out once the money has been sent"* — wording from before Send
+Refund existed. Mark Paid Out sends nothing, and §6.11 records it being pressed
+with no money moved.
+
+- `NotificationHelper::refundNextStepForAdmin($refund)` is the one sentence for
+  both, and it depends on the refund: cash ("hand it to the guest, then record
+  it with Mark Paid Out"), account details still needed, or ready to send.
+- `refundIssued()` takes the refund as a fourth argument and links to that
+  refund's page instead of the filtered list, so the admin lands on the right
+  button.
+- The flash now reads *"Refund of ₱X recorded for VE-… No money has moved yet."*
+  followed by that sentence.
+- The Record Payment lookup's warning on a cancelled booking said *"To close a
+  refund, use Mark Paid Out"*; it now names Send Refund first.
+
+**Verified** with the real controllers and real renders inside rolled-back
+transactions (issuing a QR Ph and a cash refund; the detail page for five refund
+states; the list; the booking page), then the list in Chrome: after 7 seconds
+the success flash was gone and the error and the banner were still shown, and
+no action link was outside the card.
+
+---
+
+## What Changed in v7.64 (Read This First)
+
+### The guest can see their refund on the booking page
+
+Second part of the 2026-10-09 payment and refund review. Four things were wrong
+with what a guest saw once a refund existed:
+
+1. **The "where should we send it" form was reachable only from one
+   notification.** No page linked to it, and the notifications page marks
+   everything read when it is opened.
+2. **The booking page looked refunded before any money moved.** A refund is
+   deducted the moment it is issued (`recalculateFinancials()`), so the page
+   showed "Paid ₱0.00" and a "-₱4,000 Refund" row with no status.
+3. **The badge said "Refund", or "Refund Failed".** The first does not say
+   whether it is done; the second is an admin state the guest cannot act on.
+4. **An old notification link gave a 403 error page** once the refund was sent
+   or in transit, although nothing was wrong.
+
+**The refund panel** — `customer/partials/_refund_panel.blade.php`, included by
+the booking details between the hero and the two columns, so on a phone it is
+not below the whole left column. It renders nothing unless the booking has a
+refund. Per refund it shows the amount, the reason, a status and one next step:
+
+| `Payment::guestRefundState()` | Status shown | Next step | Action |
+|---|---|---|---|
+| `needs_details` | Needs your account details | "We can't send this until you tell us which bank or e-wallet account should receive it." | **Add account details** |
+| `details_rejected` | Could not be delivered | the account was not accepted, nothing was lost | **Check account details** |
+| `not_sent` | Not sent yet | "It will go to your … account ending in 1234. We'll notify you when it's sent." | Change account |
+| `on_its_way` | On its way | "Sent to your … We'll notify you when it arrives." | none (locked) |
+| `cash_due` | To be paid in cash | "This will be paid to you in cash by the resort." | none |
+| `received` | Received | arrived, with date and transfer reference | none |
+| `sent` | Sent | sent by hand, with date and reference | none |
+| `paid_cash` | Paid in cash | date | none |
+
+Rules that came out of building it:
+
+- **A failed transfer is not shown to the guest as a failure.** It is the
+  resort's problem and the refund is still owed, so it reads "Not sent yet".
+  The one exception is `details_rejected`, and it is deliberately narrow:
+  `RefundTransfer::ACCOUNT_DETAIL_ERROR_CODES` (`AC01`–`AC04`, `AC07`, `BE01`).
+  `AC06` (GCash's random rejection), `AM04` (the *resort's* wallet is short) and
+  unknown codes are excluded, because telling the guest to fix their details
+  there asks for something that changes nothing. It clears as soon as the guest
+  saves details newer than the failed attempt.
+- **One sentence per reason, in one place.** `Payment::REFUND_KINDS` now holds a
+  `label` (admin) and a `guest` sentence. The notification and the panel both
+  print the `guest` sentence, so the v7.63 sentences lost their amount and
+  booking reference (the notification adds them in front).
+- **`payments.refund_kind`** (new, nullable `VARCHAR(32)`, migration
+  `2026_10_09_100000`). v7.63 read the kind once and dropped it; the panel needs
+  it later. A `string`, not an `ENUM`, so a new kind needs no `MODIFY`. Refunds
+  made before the migration have NULL and show no reason — it is not guessed.
+  A `saving` hook on `Payment` drops the attribute while the column does not
+  exist, so code deployed ahead of the migration can still issue refunds.
+- **The short status is `guest_refund_status_label`**, on the model, because the
+  Payment History row prints the same words next to "Refund".
+- **Price Summary** shows what was paid and what is being returned as two rows
+  ("Paid ₱6,000 / Refund pending -₱2,000", later "Refunded") when a refund
+  exists, instead of the net `amount_paid`.
+- **The guest badge is `guest_payment_status_label` / `_class`**: "Refund
+  Pending" for both `owed` and `failed`, "Refund On Its Way" for `processing`.
+  The admin pages keep `payment_status_label`, where "Refund Failed" is useful.
+- **`RefundDestinationController::lockedRedirect()`** replaces the two
+  `abort_if(…, 403)` calls: a refund already sent, or in transit, sends the
+  guest to the booking with an `info` message. Ownership and "not a refund" are
+  still 403/404.
+
+**Verified** by rendering the real booking page through the HTTP kernel as the
+booking's owner, with a refund built in each of the eight states plus three
+edge cases (a retryable failure, a rejection the guest has since corrected, a
+refund with no kind) and two refunds at once — each inside a rolled-back
+transaction. The saved pages were then opened in Chrome at desktop width and in
+360px frames: no horizontal overflow, the action button is full width and 45px
+tall, and a 34-character transfer reference wraps inside the card.
+
+**Seen while testing, not changed:** a refund issued on a booking that is not
+cancelled raises `balance_due` by the same amount (`total − net paid`). That is
+right for a returned overpayment and wrong for a goodwill refund, where the
+guest then appears to owe the money back. And a refund row in the guest's
+Payment History still shows the *original* payment's method ("QR Ph").
+(Both fixed later: the method in v7.67, the balance in v7.68.)
+
+---
+
+## What Changed in v7.63 (Read This First)
+
+### Refund notifications say what actually happened
+
+A UI/UX review of the payment and refund flow (2026-10-09) found that three
+guest notifications each reused one sentence for situations that differ. This
+version fixes the wording only; the rest of that review is not built yet.
+
+**1. "Refund Approved" implied a request the guest can no longer make.** Since
+v7.52 a guest cannot ask for a refund, so every refund issued from the Payments
+page is the resort's decision. A guest who cancelled had just been told *"no
+refund will be sent"*, and the next notification said a refund was "approved".
+The admin's typed reason was also shown to the guest word for word, with
+nothing on the form saying so.
+
+- The Issue Refund form now asks **why** (`refund_kind`, required, no default —
+  same reasoning as `cancel_initiator`). The options are `Payment::REFUND_KINDS`.
+- `NotificationHelper::refundComingForGuest($booking, $amount, $kind, $refund)`
+  replaces `refundApprovedForGuest()`. The title is **"Refund Coming"** and the
+  sentence is chosen by the kind:
+
+| `refund_kind` | Admin label | Guest sentence |
+|---|---|---|
+| `overpayment` | Double charge or overpayment | "You paid more than this booking costs, so we are returning the extra." |
+| `late_payment` | Payment arrived after the booking was cancelled | "Your payment arrived after this booking was cancelled, so we are returning it." |
+| `resort_cancelled` | The resort cancelled the booking | "We had to cancel this booking on our side, so we are returning what you paid." |
+| `goodwill` | Goodwill — the resort chose to return it | "Payments are normally non-refundable, but the resort has decided to return this to you." |
+
+The notification reads *"A refund of ₱X is coming for booking …. {sentence}"*.
+(These are the v7.64 sentences: they lost their amount and booking reference so
+the refund panel can print the same one.)
+
+- The typed text (`refund_reason`) is now an **internal note**. It is kept in
+  `payments.notes` as `Refund ({label}): {note}`, in the `refund_issued` log row
+  and in the admins' "Refund To Send" notification. The guest never sees it.
+- No schema change in this version. v7.64 stores the kind in
+  `payments.refund_kind`, because the refund panel needs it after the
+  notification has gone.
+
+**2. "Refund Sent … allow a few banking days" was one sentence for three
+events.** `refundPaidOut()` is called when PayMongo reports a transfer
+`succeeded` and when an admin records a payout by hand, which includes cash. It
+now takes the transfer: `refundPaidOut($payment, $transfer = null)`.
+
+| How it was paid out | Title | Guest is told |
+|---|---|---|
+| Automatic transfer, `succeeded` (`$transfer` passed) | Refund Received | it has arrived in their account ending in 1234, with the transfer reference |
+| Recorded by hand, not cash | Refund Sent | where it was sent, the reference, "usually within minutes, but a bank transfer can take until the next banking day" |
+| Cash | Refund Paid in Cash | it was paid in cash; contact the resort if not received |
+
+The old text also said *"sent via QR Ph"*. A refund row copies the
+`payment_method` of the original payment, so that named how the guest paid, not
+how the refund travelled. The message now names the destination (last four
+digits only), taken from the transfer when there is one. The admins' "Refund
+Paid Out" notification had the same fault and is corrected the same way.
+
+**3. A resort cancellation with a full refund arrived as "Booking Status
+Updated".** It was an inline `Notification::create()` in
+`Admin\BookingController::updateStatus()`, so it also sent no realtime toast.
+It is now `NotificationHelper::bookingCancelledByResortForGuest()`, titled
+**"Booking Cancelled by the Resort"**. The other status updates on that path are
+unchanged.
+
+`NotificationHelper::REFUND_NOT_SENT_YET` is the one sentence shared by both
+"a refund is coming" notices: *"The money hasn't been sent yet — we'll notify
+you again when it's sent."* It says "when it's sent", not "once it's on its
+way", because the next notice may be any of On Its Way, Received, Sent or Paid
+in Cash.
+
+**Verified** with the real controllers against the local database, inside a
+transaction that was rolled back, with broadcasts and mail faked: all four
+kinds, a missing and an invalid `refund_kind` (both refused, nothing recorded),
+the three payout wordings, the resort-cancel endpoint, and a real render of
+`/admin/payments` showing the new field.
+
+---
+
+## What Changed in v7.62 (Read This First)
+
+### The guest is told the payment deadline, and the way back from a dead QR makes sense
+
+v7.60 was confirmed on live keys (2026-10-08): after the hold ended, PayMongo's
+page said the checkout session was no longer active and the QR was gone. That
+exposed two things about what the guest *sees*.
+
+**1. Two messages that contradicted each other.** The link on PayMongo's
+inactive page is our `cancel_url`. `PaymentController::cancel()` answered every
+visit with one fixed sentence, *"Payment was cancelled. Your booking is still
+reserved — you can try again anytime"*, so it sat directly above *"This booking
+was cancelled"*. It was not true of a live booking either: an unpaid hold is
+reserved until its deadline, not "anytime". `paymentNotCompletedMessage()` now
+picks the wording from the booking's state:
+
+| Booking | Message |
+|---|---|
+| `cancelled` | none — the cancelled banner is the whole message |
+| unpaid hold, still running | "Payment not completed. You can still pay before the deadline shown below." |
+| unpaid hold, past its deadline but not swept yet | none — the deadline box says the time has ended |
+| anything else (a confirmed booking paying its balance) | "Payment not completed. Your booking is unchanged, and you can pay the balance later." |
+
+**2. The guest was never told the deadline.** `booking_hold_minutes` was stated
+in the Terms and nowhere else, while PayMongo's page shows its own 30-minute
+timer. A guest with a 20-minute hold reasonably believed they had 30. We cannot
+change PayMongo's page, add a countdown to it, or make it redirect when a
+session is expired, so the deadline has to be said on our side, before they
+leave.
+
+- **`Booking::holdExpiresAt()`** — `created_at + booking_hold_minutes` for a
+  `pending` booking with nothing paid, otherwise NULL. Its test is the same as
+  `cancelStalePendingBookings()`'s and must stay that way.
+- **`partials/hold_deadline.blade.php`**, included by the checkout page and the
+  guest's booking details: *"Pay by 3:42 PM — 14:05 left"*, and the sentence
+  *"The QR page may show a longer timer. This deadline is the one that
+  counts."* It turns red in the last two minutes. The countdown runs on the
+  server's clock (the page measures its own offset once), so a phone set fast
+  does not lose minutes.
+- **At zero** the wording changes to "The time to pay has ended", the checkout
+  page switches off its Pay button (the `villa:hold-ended` event), and the page
+  asks `payment.status` every 10 seconds for up to 3 minutes. The sweeper runs
+  once a minute, so the booking is not cancelled the instant the clock stops.
+  When the status leaves `pending` the guest is taken to the booking details —
+  the cancelled banner, or the confirmed booking if a payment landed late.
+- **The cancelled banner** for an unpaid auto-cancel adds *"No payment was
+  received for it. Book again if the date is still open."*
+- **`showPaymentPage()` no longer answers with an error page.** It was
+  `abort(400)` for a cancelled, checked-out or fully-paid booking, and a guest
+  reaches that URL innocently (Back from PayMongo, or a stale "Pay Now" tab).
+  All three now redirect to the booking details. Status is tested before the
+  balance, because a cancelled booking's balance is zeroed and would otherwise
+  be reported as "no balance due".
+
+**Decided with the owner (2026-10-09): a countdown only.** Not built: refusing
+to start a payment when only a few minutes are left; an email on auto-cancel
+(it would spend the shared Brevo quota); web push (needs a permission most
+guests refuse, and arrives after the booking is lost); opening PayMongo in a
+new tab so our page can keep counting.
+
+**Verification.** 32 checks on real requests through the HTTP kernel against the
+local database (rolled back), covering each row of the table above, the three
+redirects, the deadline box on both pages, and the two later fixes below; 17
+checks on the countdown script with a controllable clock. **Not verified:** the countdown has not been
+watched in a real browser, and nothing here was run on a phone.
+
+**Two more faults found while doing this, then fixed (2026-10-09):**
+
+- **Pressing Back on a live PayMongo page forgot the session without closing
+  it.** A signed `cancel()` was `paymongo_session_id = NULL` and nothing else.
+  The session has no expiry of its own, so it stayed payable with nothing left
+  pointing at it: the guest's next attempt opened a second session beside it
+  (two live QR codes), and a later cancellation could not close the first,
+  because closing needs the id. `cancel()` now calls
+  `Booking::closeCheckoutSession()`, which returns `closed`, `open` or
+  `failed`:
+  - `closed` — expired at PayMongo, id cleared, the usual message.
+  - `open` — PayMongo refused, so the session is paid or being paid (the guest
+    scanned on their phone and pressed Back on this device). The id is kept and
+    the guest goes to `payment.success`, which looks for the payment and
+    records it, instead of being told "payment not completed".
+  - `failed` — PayMongo could not be reached. The id is kept, so the next
+    attempt reuses the same session rather than opening a second.
+
+  An **unsigned** hit still touches nothing and now must not reach PayMongo
+  either: a forged cancel that expired the session would kill a guest's live
+  QR. `CsrfCookieSecurityTest` asserts that, plus the three outcomes.
+- **No guest view rendered `session('info')`.** Five redirects send one. The
+  checkout page and the booking details now show it, which covers four:
+  "already being set up", "already fully paid" (twice), and "already submitted
+  a review" (twice, from `ReviewController`). `showPaymentPage()` uses `info`
+  for "already fully paid" too, so both routes to that sentence look the same.
+
+**Still open:** the fifth `info` flash — `PortalController::bookingForm()`
+sends a signed-out guest to the login page with "Please log in or create an
+account to complete your booking", and the login view does not show it.
+
+---
+
+## What Changed in v7.61 (Read This First)
+
+### Both live webhooks were disabled, and the cause was the v6.9 one again
+
+PayMongo disabled both live-mode webhooks on 2026-10-08
+(`disabled_reason: max_retries_exceeded`). The endpoint itself was not at fault:
+it has answered 200 to everything since v6.9.
+
+| Webhook | Registered URL | Why every delivery failed |
+|---|---|---|
+| `hook_qt1n…` (live → Render) | `https://villa-elena.onrender.com` — **no path** | `POST /` is 405 from the router |
+| `hook_ryzR…` (live → ngrok) | `…ngrok-free.dev/webhooks/paymongo` | tunnel not running: 404 `ERR_NGROK_3200` |
+
+The Render one is the v6.9 mistake exactly. It was repaired then for the
+test-mode registration only, because **`paymongo:webhooks` lists the mode of the
+active key** and the dev machine runs test keys. The live registrations were
+never looked at. The URL is corrected and the webhook re-enabled (2026-10-09).
+
+**After any webhook work, list the other mode too.** Put the live key in
+`PAYMONGO_SECRET_KEY` for one `php artisan paymongo:webhooks`, then put the test
+key back.
+
+There are four registrations, two per mode:
+
+| | Local (ngrok) | Render |
+|---|---|---|
+| Test | `hook_Z9mp…` | `hook_Gowz…` |
+| Live | `hook_ryzR…` | `hook_qt1n…` |
+
+- **Each environment sets both `PAYMONGO_WEBHOOK_SECRET_TEST` and `_LIVE`**, to
+  its own two webhooks' secrets. The slot is chosen from the event's signature
+  (`te=` / `li=`), not from the API keys, so switching between test and live is
+  a swap of the two API keys and nothing else. With only the generic
+  `PAYMONGO_WEBHOOK_SECRET`, the other mode's events get a 200 and are ignored
+  as `invalid_signature`: nothing is disabled and nothing is recorded.
+- **The live ngrok webhook stays disabled between sessions.** `paymongo:tunnel`
+  refuses live keys, so it is by hand: `paymongo:webhooks --enable=<id>` once
+  ngrok and the app are both up, `--disable=<id>` when done.
+
+### A payment could be recorded on another environment's booking
+
+Found while reading the webhook for the above. `resolveWebhookBooking()` looked
+up `metadata.booking_id` first and returned whatever it found; the reference was
+only read when the id found nothing.
+
+`booking_id` is an auto-increment. The local and production databases both count
+from 1, they share one PayMongo account, and PayMongo delivers every event to
+every enabled webhook of its mode, each signed with that webhook's own secret.
+So a payment made locally arrived at Render correctly signed, and
+`Booking::find($id)` returned whichever production booking had that number. It
+was recorded there, the booking confirmed, and that guest emailed. The same in
+reverse whenever the tunnel was up. Not observed in production data (it cannot
+be read from here); it follows from the code, and the test reproduces it.
+
+**What changed:**
+
+- **The reference decides, never the id alone.** `booking_ref` is random, so it
+  does not repeat across databases. It is read from the metadata, or from
+  `external_reference_number` for a flow that drops the metadata. When an id is
+  also present it must agree with the booking the reference found; a
+  disagreement is refused, not resolved either way.
+- **An id with no reference is refused.** Both values have been sent on every
+  checkout since the first commit, so nothing of ours arrives that way.
+- **A checkout is stamped with the environment that opened it** —
+  `metadata.origin`, from `PayMongoService::originTag()` (APP_URL without its
+  scheme). An unmatched payment carrying **another** environment's stamp is
+  logged (`reason: other_environment`) and nothing more.
+
+**Why the stamp exists.** With matching fixed, every payment made on one
+environment reaches the other as unmatched, and the unmatched path alerts the
+admins: *"record it manually if the money arrived"*. That is wrong advice for
+money the other environment already recorded, and an alert that is usually false
+is not read when it is true.
+
+**The stamp never decides whether a payment is recorded.** It is consulted only
+after matching has already failed. APP_URL can change between a checkout being
+opened and paid, and a stale stamp must not cost a real payment. A payment with
+our own stamp, or with none (a checkout opened before this version), still
+alerts as before.
+
+**Verification.** Nine cases in `PaymentSecurityTest`, each a signed delivery
+through the real route; the four that describe the bug fail against the old
+controller. One real test-mode checkout was created and expired to confirm
+PayMongo accepts the stamp: it stored `"origin":"127.0.0.1:8000"`, and returns
+`booking_id` as a **string**, which is why the id comparison is on strings.
+**Not verified:** no live-mode payment has been delivered since the Render
+webhook was re-enabled, so the value in Render's `PAYMONGO_WEBHOOK_SECRET_LIVE`
+is unproven until the first one. A wrong value logs `invalid signature` with
+`livemode: true`.
+
+| File | Change |
+|---|---|
+| `app/Http/Controllers/PaymentController.php` | `resolveWebhookBooking()` matches by reference; quiet `other_environment` branch |
+| `app/Services/PayMongoService.php` | `originTag()`, `isForeignOrigin()`, `metadata.origin` on checkout |
+| `tests/Feature/PaymentSecurityTest.php` | nine cases |
 
 ---
 
@@ -8883,17 +9540,20 @@ NotificationHelper::notifyGuest($userId, 'Title', 'Message', $link = null);
 | `NotificationHelper::walkInBooking($booking, $staffName)` | Staff creates walk-in | `admin.bookings.show` |
 | `NotificationHelper::guestCheckedIn($booking)` | Staff checks in guest | `admin.bookings.show` |
 | `NotificationHelper::guestCheckedOut($booking)` | Staff checks out guest | `admin.bookings.show` |
-| `NotificationHelper::refundIssued($booking, $amount, $reason)` | Refund approved (any path) | `admin.payments.index?status=awaiting_payout` |
+| `NotificationHelper::refundIssued($booking, $amount, $reason, $refund)` | Refund issued (any path). The next step comes from `refundNextStepForAdmin()` (v7.65) | `admin.payments.show` for that refund (the filtered list when no refund is passed) |
 
 **Guest-facing presets (NEW v5.6)** — the refund lifecycle is the one flow where wording had to stay consistent across four different entry points, so it lives here instead of in inline `Notification::create()` blocks:
 
 | Method | Triggered When | Links To (guest-facing) |
 |---|---|---|
 | `NotificationHelper::bookingCancelledForGuest($booking, $refundAmount, $refundPct)` | Guest cancels their own booking | `customer.bookings.show` |
-| `NotificationHelper::refundApprovedForGuest($booking, $amount, $reason)` | Refund approved but **not yet sent** | `customer.bookings.show` |
-| `NotificationHelper::refundPaidOut($payment)` | Admin marks a refund paid out — notifies **guest *and* admins** | `customer.bookings.show` / `admin.bookings.show` |
+| `NotificationHelper::refundComingForGuest($booking, $amount, $kind, $refund)` | Refund issued from the Payments page, **not yet sent** — sentence chosen by `Payment::REFUND_KINDS` (v7.63; was `refundApprovedForGuest()`) | `customer.refunds.destination` when details are needed, else `customer.bookings.show` |
+| `NotificationHelper::bookingCancelledByResortForGuest($booking, $refundAmount, $refund)` | Admin cancels a paid booking as the resort (v7.63) | same as above |
+| `NotificationHelper::refundDetailsProvided($payment, $destination)` | The guest saved new or changed account details — notifies **admins** (v7.68) | `admin.payments.show` |
+| `NotificationHelper::refundDetailsRejectedForGuest($payment, $transfer)` | A transfer failed because of the guest's account details — once per set of details (v7.67) | `customer.refunds.destination` |
+| `NotificationHelper::refundPaidOut($payment, $transfer = null)` | A refund is closed — notifies **guest *and* admins**. Wording depends on how: automatic transfer, by hand, or cash (v7.63) | `customer.bookings.show` / `admin.bookings.show` |
 
-The wording distinction is deliberate and load-bearing: **"Approved" ≠ "Sent".** A refund row is created as `status='pending'` and no money moves until an admin manually sends it and marks it paid out (see §6.11). Saying "processed" at approval time — which is what the code did before v5.6 — sends guests looking in their GCash for money that hasn't left yet.
+The wording distinction is deliberate and load-bearing: **"Coming" ≠ "Sent"** (the first notice was titled "Approved" until v7.63). A refund row is created as `status='pending'` and no money moves until an admin sends it or marks it paid out (see §6.11). Saying "processed" at approval time — which is what the code did before v5.6 — sends guests looking in their GCash for money that hasn't left yet.
 
 Other guest-facing notifications (booking confirmations, payment receipts, review approve/reject/reply, etc.) are still created directly via `Notification::create([...])` at ~11 call sites across `PaymentController`, `Admin\{Booking,Payment,Review}Controller`, `Staff\FrontDeskController`, and `AutoCheckInOutBookings` — every one includes a `link` pointing to `customer.bookings.show` or `customer.reviews.index` as appropriate.
 

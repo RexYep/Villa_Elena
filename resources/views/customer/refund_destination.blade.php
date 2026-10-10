@@ -248,7 +248,7 @@
         <div>
             <div class="summary-name">{{ $booking->booking_ref }}</div>
             <div class="summary-dates">
-                {{ $booking->check_in_date->format('M d, Y') }} · Refund approved
+                {{ $booking->check_in_date->format('M d, Y') }} · Refund issued
                 {{ $payment->payment_date?->format('M d, Y') }}
             </div>
         </div>

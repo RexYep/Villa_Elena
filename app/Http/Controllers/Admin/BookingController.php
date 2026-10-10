@@ -456,6 +456,7 @@ class BookingController extends Controller
                 'amount'         => $refundAmount,
                 'payment_method' => $originalMethod,
                 'payment_type'   => 'refund',
+                'refund_kind'    => 'resort_cancelled',
                 // 'pending' — inaprubahan na ang refund, pero manu-mano
                 // pang ipapadala ang pera (tingnan ang Payments page).
                 'status'         => 'pending',
@@ -469,41 +470,36 @@ class BookingController extends Controller
             NotificationHelper::refundIssued(
                 $booking->fresh(),
                 $refundAmount,
-                'Booking cancelled by the resort (full refund)'
+                'Booking cancelled by the resort (full refund)',
+                $refundPayment
             );
         }
 
         // Notify guest
-        $statusMessage = "Your booking {$booking->booking_ref} status has been updated to: " . ucfirst(str_replace('_', ' ', $newStatus));
-        $statusLink    = route('customer.bookings.show', $booking, false);
+        if ($refundPayment) {
+            // Kinansela ng resort at may ibabalik na pera: may sarili
+            // itong preset (v7.63). Dating "Booking Status Updated" ang
+            // pamagat nito, at ang tanong na "saan ipapadala?" ay
+            // nakabaon sa dulo ng isang status update.
+            NotificationHelper::bookingCancelledByResortForGuest($booking, $refundAmount, $refundPayment);
+        } else {
+            $statusMessage = "Your booking {$booking->booking_ref} status has been updated to: " . ucfirst(str_replace('_', ' ', $newStatus));
 
-        if ($newStatus === 'cancelled') {
-            if ($refundPayment) {
-                $statusMessage .= '. We had to cancel it on our side, so the full ₱' . number_format($refundAmount, 2)
-                    . " you paid will be refunded. The money hasn't been sent yet — we'll notify you again once it's on its way.";
-
-                // Kailangan namin ng account na padadalhan. Kung wala ang
-                // tanong na ito, naghihintay ang guest ng perang walang
-                // mapupuntahan.
-                if ($refundPayment->needsRefundDestination()) {
-                    $statusMessage .= ' First, please tell us where to send it — open this to add your GCash, Maya, or bank account details.';
-                    $statusLink     = route('customer.refunds.destination', $refundPayment, false);
-                }
-            } elseif ($forfeited > 0) {
+            if ($newStatus === 'cancelled' && $forfeited > 0) {
                 $statusMessage .= '. The ₱' . number_format($forfeited, 2)
                     . ' you paid is non-refundable under our booking policy, so no refund will be sent.';
             }
-        }
 
-        Notification::create([
-            'user_id' => $booking->user_id,
-            'type' => 'in_app',
-            'title'   => 'Booking Status Updated',
-            'message' => $statusMessage,
-            'link'    => $statusLink,
-            'sent_at' => now(),
-            'status'  => 'sent',
-        ]);
+            Notification::create([
+                'user_id' => $booking->user_id,
+                'type' => 'in_app',
+                'title'   => 'Booking Status Updated',
+                'message' => $statusMessage,
+                'link'    => route('customer.bookings.show', $booking, false),
+                'sent_at' => now(),
+                'status'  => 'sent',
+            ]);
+        }
 
         $logMessage = "Status changed from {$oldStatus} to {$newStatus} for {$booking->booking_ref}";
         if ($newStatus === 'cancelled') {

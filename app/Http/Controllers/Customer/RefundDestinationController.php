@@ -2,11 +2,13 @@
 
 namespace App\Http\Controllers\Customer;
 
+use App\Helpers\NotificationHelper;
 use App\Http\Controllers\Controller;
 use App\Models\Payment;
 use App\Models\RefundDestination;
 use App\Models\StaffLog;
 use App\Services\PayMongoService;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
@@ -39,6 +41,10 @@ class RefundDestinationController extends Controller
     {
         $this->authorizeRefund($payment);
 
+        if ($locked = $this->lockedRedirect($payment)) {
+            return $locked;
+        }
+
         $institutions = $this->paymongo->receivingInstitutions();
 
         return view('customer.refund_destination', [
@@ -58,6 +64,10 @@ class RefundDestinationController extends Controller
     public function update(Request $request, Payment $payment)
     {
         $this->authorizeRefund($payment);
+
+        if ($locked = $this->lockedRedirect($payment)) {
+            return $locked;
+        }
 
         // Ang BIC ay dapat galing sa buhay na listahan ng PayMongo —
         // hindi malayang text. Dito napipigilan ang isang bumagsak na
@@ -86,7 +96,7 @@ class RefundDestinationController extends Controller
             return back()->withErrors(['account_number' => $error])->withInput();
         }
 
-        RefundDestination::updateOrCreate(
+        $destination = RefundDestination::updateOrCreate(
             ['payment_id' => $payment->id],
             [
                 'institution_name' => $institution['name'],
@@ -108,54 +118,83 @@ class RefundDestinationController extends Controller
 
         Log::info("Refund destination set for payment {$payment->id} by user " . Auth::id());
 
+        // Sabihin sa mga admin na puwede na itong ipadala — pero kapag
+        // may NAGBAGO lang. Ang `provided_at` ay laging bago, kaya ang
+        // tatlong field ng account mismo ang tinitingnan; kung hindi, ang
+        // bawat muling pag-save ng parehong detalye ay isang abiso.
+        if ($destination->wasRecentlyCreated
+            || $destination->wasChanged(['institution_bic', 'account_number', 'account_name'])
+        ) {
+            NotificationHelper::refundDetailsProvided(
+                $payment->setRelation('refundDestination', $destination),
+                $destination
+            );
+        }
+
         return redirect()
             ->route('customer.bookings.show', $payment->booking_id)
-            ->with('success', 'Thank you — we have your refund details. '
-                . 'We will send your refund to your ' . $institution['name'] . ' account shortly.');
+            // Walang "shortly": walang gumagalaw hangga't hindi pinipindot
+            // ng admin ang Send Refund, kaya iyon ay pangakong hindi kayang
+            // tuparin ng sistema. Ang kaya nitong ipangako ay ang abiso —
+            // kapareho ng sinasabi ng refund panel sa pahinang pupuntahan.
+            ->with('success', 'Thank you — we have your refund details. It will go to your '
+                . Payment::accountPhrase($destination) . ", and we'll notify you when it's sent.");
     }
 
     // ── Guards ─────────────────────────────────────────────────────
 
     /**
-     * Sarili lang niyang refund ang puwedeng galawin ng guest, at
-     * refund na hindi pa naipapadala.
-     *
-     * Ang tseke sa `isAwaitingPayout()` ang pumipigil sa pagpapalit ng
-     * destinasyon PAGKATAPOS nang maipadala ang pera — sa puntong iyon
-     * ang record ay talaan na ng kung saan aktwal na napunta ang pera,
-     * at ang pag-edit dito ay magpapasinungaling sa audit trail.
+     * Sarili lang niyang refund ang puwedeng galawin ng guest.
      */
     private function authorizeRefund(Payment $payment): void
     {
         abort_if(! $payment->isRefund(), 404);
         abort_if($payment->booking?->user_id !== Auth::id(), 403);
 
-        abort_if(
-            ! $payment->isAwaitingPayout(), 403,
-            'This refund has already been sent, so its details can no longer be changed.'
-        );
-
-        // NASA DAAN NA ANG PERA.
-        //
-        // Ang `isAwaitingPayout()` ay nananatiling totoo habang
-        // naglilinaw ang isang transfer — at sa PESONet (ang riles ng
-        // GCash) ay maaaring umabot iyon ng isang araw. Kung wala ang
-        // hadlang na ito, mapapalitan ng guest ang account niya mula
-        // GCash tungong Maya habang papunta na ang pera sa GCash:
-        // magpapakita ang sistema ng Maya, dadating ang pera sa GCash,
-        // at magmumukhang nawala ang refund.
-        //
-        // Ang naipadala na ay hindi na mababawi, kaya ang tanging tamang
-        // sagot ay maghintay. Kung bumagsak ito, muling bubukas ito —
-        // at doon nga kailangan ang pagpapalit.
-        abort_if(
-            $payment->load('refundTransfers')->hasTransferInFlight(), 403,
-            'Your refund is already on its way to the account you gave us, so these details are '
-            . 'locked until it arrives. If it does not go through, you will be able to change them again.'
-        );
-
         // Walang saysay ang bank details para sa cash refund — inaabot
         // ito nang personal sa front desk.
         abort_if($payment->payment_method === 'cash', 404);
+    }
+
+    /**
+     * Sarado na ba ang pagpapalit ng detalye? Kung oo, ibinabalik ang
+     * guest sa booking na may paliwanag — HINDI 403 (v7.64).
+     *
+     * Ang link ng lumang abiso ("Refund Coming", "We still need your
+     * refund details") ay nananatili sa kampana matapos maipadala ang
+     * pera, kaya ordinaryong pangyayari ang pagbukas nito nang huli —
+     * hindi isang paglabag. Ang error page doon ay nagsasabi sa guest na
+     * may mali sa refund niya gayong tapos na ito. Ang booking details
+     * ang nagpapakita ng `info`, at naroon din ang refund panel.
+     *
+     * Dalawang kandado:
+     *
+     *  - Naipadala na. Ang record ay talaan na ng kung saan aktwal na
+     *    napunta ang pera; ang pag-edit dito ay magpapasinungaling sa
+     *    audit trail.
+     *
+     *  - NASA DAAN NA ANG PERA. Ang `isAwaitingPayout()` ay nananatiling
+     *    totoo habang naglilinaw ang isang transfer — at sa PESONet ay
+     *    maaaring umabot iyon ng isang araw. Kung wala ito, mapapalitan
+     *    ng guest ang account niya mula GCash tungong Maya habang
+     *    papunta na ang pera sa GCash: magpapakita ang sistema ng Maya,
+     *    dadating ang pera sa GCash, at magmumukhang nawala ang refund.
+     *    Kung bumagsak ang transfer, muling bubukas ito — at doon nga
+     *    kailangan ang pagpapalit.
+     */
+    private function lockedRedirect(Payment $payment): ?RedirectResponse
+    {
+        $message = match (true) {
+            ! $payment->isAwaitingPayout()
+                => 'This refund has already been sent, so its account details can no longer be changed.',
+            $payment->load('refundTransfers')->hasTransferInFlight()
+                => 'Your refund is already on its way to the account you gave us, so these details are '
+                    . 'locked until it arrives. If it does not go through, you will be able to change them again.',
+            default => null,
+        };
+
+        return $message
+            ? redirect()->route('customer.bookings.show', $payment->booking_id)->with('info', $message)
+            : null;
     }
 }

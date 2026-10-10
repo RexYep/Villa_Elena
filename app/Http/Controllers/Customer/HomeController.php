@@ -87,8 +87,9 @@ class HomeController extends Controller
         abort_if($booking->user_id !== Auth::id(), 403);
 
         // Kasama ang `payments.refundTransfers` para hindi maging isang
-        // query kada refund ang `refundStage()` sa badge ng pahina.
-        $booking->load(['property.images', 'payments.refundTransfers', 'extras', 'issueReports' => fn ($q) => $q->latest()]);
+        // query kada refund ang `refundStage()` sa badge ng pahina, at
+        // ang `payments.refundDestination` para sa refund panel.
+        $booking->load(['property.images', 'payments.refundTransfers', 'payments.refundDestination', 'extras', 'issueReports' => fn ($q) => $q->latest()]);
 
         return view('customer.booking_detail', compact('booking'));
     }

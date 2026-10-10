@@ -159,7 +159,7 @@ class AutoCheckInOutBookings extends Command
 
             NotificationHelper::notifyAdmin(
                 "Refund still unsent after {$waiting} days — {$booking->booking_ref}",
-                "₱{$amount} for booking {$booking->booking_ref} has been approved and we have the guest's "
+                "₱{$amount} for booking {$booking->booking_ref} was issued and we have the guest's "
                 . 'account details, but the money still has not been sent. The guest was told they would '
                 . 'hear back from us.',
                 $link

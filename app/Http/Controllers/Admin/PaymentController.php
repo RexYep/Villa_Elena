@@ -17,6 +17,7 @@ use App\Helpers\BookingMailHelper;
 use App\Events\PaymentReceived;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 
 class PaymentController extends Controller
@@ -85,10 +86,15 @@ class PaymentController extends Controller
             ->whereDoesntHave('refundDestination')
             ->count();
 
+        // Para sa "Issue Refund" ng bawat hanay: kung magkano pa ang
+        // maire-refund sa booking nito. Isang query para sa buong pahina.
+        $refundableByBooking = Payment::refundableByBooking($payments->pluck('booking_id'));
+
         return view('admin.payments.index', compact(
             'payments', 'totalRevenue', 'todayRevenue',
             'monthRevenue', 'totalRefunds', 'pendingBalance',
-            'pendingRefunds', 'pendingRefundsCount', 'refundsNeedingDetails'
+            'pendingRefunds', 'pendingRefundsCount', 'refundsNeedingDetails',
+            'refundableByBooking'
         ));
     }
 
@@ -99,6 +105,7 @@ class PaymentController extends Controller
             'booking.user', 'booking.property', 'booking.payments',
             'refundDestination.providedBy',
             'refundTransfers.initiatedBy',
+            'processedBy',
         ]);
 
         // Kung may transfer na naiwang `pending` (natapos ang paghihintay
@@ -272,10 +279,20 @@ class PaymentController extends Controller
     {
         $request->validate([
             'refund_amount' => 'required|numeric|min:1',
+            // Ang URI ang nagpapasya kung ano ang sasabihin sa guest
+            // (Payment::REFUND_KINDS). Walang default, gaya ng
+            // `cancel_initiator`: hindi ito mahuhulaan, at ang maling
+            // hula ay maling paliwanag sa guest tungkol sa pera niya.
+            'refund_kind'   => ['required', Rule::in(array_keys(Payment::REFUND_KINDS))],
+            // Panloob na tala na lang ito — hindi na ipinapakita sa guest.
             'refund_reason' => 'required|string|min:5',
+        ], [
+            'refund_kind.required' => 'Choose why this refund is being issued — it decides what the guest is told. Nothing was recorded.',
+            'refund_kind.in'       => 'Choose why this refund is being issued — it decides what the guest is told. Nothing was recorded.',
         ]);
 
-        $booking = $payment->booking;
+        $booking   = $payment->booking;
+        $kindLabel = Payment::refundKindLabelFor($request->refund_kind);
 
         // Naka-wrap sa transaction + lockForUpdate() para hindi ma-double
         // process ang refund (double-click, retry dahil sa slow network,
@@ -283,19 +300,12 @@ class PaymentController extends Controller
         // natitirang refundable balance ng BUONG booking (total paid minus
         // total naunang na-refund), hindi lang sa orihinal na halaga ng
         // isang Payment record.
-        $refundPayment = \Illuminate\Support\Facades\DB::transaction(function () use ($request, $payment, $booking) {
+        $refundPayment = \Illuminate\Support\Facades\DB::transaction(function () use ($request, $payment, $booking, $kindLabel) {
 
-            $totalPaid = Payment::where('booking_id', $booking->id)
-                ->where('payment_type', '!=', 'refund')
-                ->lockForUpdate()
-                ->sum('amount');
-
-            $totalRefunded = Payment::where('booking_id', $booking->id)
-                ->where('payment_type', 'refund')
-                ->lockForUpdate()
-                ->sum('amount');
-
-            $refundableBalance = $totalPaid - $totalRefunded;
+            // Iisang kahulugan ito at ng "Up to ₱X" sa Issue Refund na
+            // form — tingnan ang Payment::refundableByBooking(). `true` =
+            // naka-lock ang mga row hanggang matapos ang transaction.
+            $refundableBalance = Payment::refundableByBooking([$booking->id], true)[$booking->id] ?? 0;
 
             if ($request->refund_amount > $refundableBalance) {
                 return null; // signal na lumampas sa refundable balance
@@ -306,6 +316,9 @@ class PaymentController extends Controller
                 'amount'         => $request->refund_amount,
                 'payment_method' => $payment->payment_method,
                 'payment_type'   => 'refund',
+                // Iniimbak na (v7.64): binabasa ito ng refund panel sa
+                // booking details ng guest.
+                'refund_kind'    => $request->refund_kind,
                 // 'pending' — naitala na ang refund at nabawas na sa
                 // booking, pero hindi pa naipapadala ang pera. Sa
                 // Payments page ito minamarkahang "Paid Out" kapag
@@ -313,7 +326,7 @@ class PaymentController extends Controller
                 'status'         => 'pending',
                 'payment_date'   => today(),
                 'received_by'    => Auth::id(),
-                'notes'          => "Refund: {$request->refund_reason}",
+                'notes'          => "Refund ({$kindLabel}): {$request->refund_reason}",
             ]);
 
             // Realtime broadcast lang ito — kailangan i-catch dito
@@ -328,36 +341,45 @@ class PaymentController extends Controller
                 \Illuminate\Support\Facades\Log::error('Failed to broadcast PaymentReceived (refund): ' . $e->getMessage());
             }
 
-            NotificationHelper::refundIssued($booking, $request->refund_amount, $request->refund_reason);
+            NotificationHelper::refundIssued($booking, $request->refund_amount, "{$kindLabel}. Note: {$request->refund_reason}", $newRefund);
 
-            // Dating "Refund Processed" ang sinasabi nito sa guest, gayong
             // 'pending' pa lang ang refund row sa itaas — walang perang
-            // lumabas. Naghahanap tuloy ang guest sa GCash niya ng bagay
-            // na hindi pa naipapadala. "Approved" muna; may sunod na
-            // notification kapag aktwal nang na-paid out.
-            NotificationHelper::refundApprovedForGuest(
+            // lumabas — kaya sinasabi ng abisong ito na hindi pa ito
+            // naipapadala; may sunod na notification kapag naipadala na.
+            // Ang URI ang ipinapasa, hindi ang tinype ng admin: ang
+            // pangungusap para sa guest ay nakatira sa preset.
+            NotificationHelper::refundComingForGuest(
                 $booking,
                 (float) $request->refund_amount,
-                $request->refund_reason,
+                $request->refund_kind,
                 $newRefund
             );
 
             StaffLog::record('refund_issued', 'payments', $payment->id,
-                "Refund ₱{$request->refund_amount} for booking {$booking->booking_ref}. Reason: {$request->refund_reason}");
+                "Refund ₱{$request->refund_amount} for booking {$booking->booking_ref}. {$kindLabel}. Note: {$request->refund_reason}");
 
             return $newRefund;
         });
 
         if (!$refundPayment) {
-            return back()->with('error', 'The refund amount exceeds the remaining refundable balance for this booking. Please check the payment history first.');
+            // `withInput()` para mabuksan ulit ang Issue Refund na modal
+            // nang buo pa ang tinype, at doon mismo makita ang dahilan.
+            return back()->withInput()->with('error', 'The refund amount exceeds the remaining refundable balance for this booking. Please check the payment history first.');
         }
 
         // Recalculate (sa labas ng transaction, hindi problema dahil
         // consistent na ang Payment records nung nagsara na ang transaction)
         $this->recalculateBooking($booking);
 
+        // Ang susunod na hakbang ay kapareho ng sinasabi ng banner sa
+        // Payments page: Send Refund ang pangunahing daan, at ang Mark
+        // Paid Out ay para lang sa cash o sa naipadala na nang manu-mano.
+        // Dating "send the money to the guest, then mark it as paid out"
+        // ito — ang lumang manu-manong daan, na siyang paraan kung paano
+        // namarkahang naipadala ang isang refund na walang perang gumalaw.
         return back()->with('success', "✅ Refund of ₱" . number_format($request->refund_amount, 2)
-            . " approved and recorded. Send the money to the guest, then mark it as paid out.");
+            . " recorded for {$booking->booking_ref}. No money has moved yet. "
+            . NotificationHelper::refundNextStepForAdmin($refundPayment));
     }
 
     // ── Mark a pending refund as actually paid out ─────────────────
@@ -369,7 +391,7 @@ class PaymentController extends Controller
     public function markRefundPaidOut(Request $request, Payment $payment)
     {
         if (! $payment->isAwaitingPayout()) {
-            return back()->with('error', 'This payment is not a refund awaiting payout.');
+            return back()->with('error', 'This is not a refund that still needs to be sent.');
         }
 
         $payment->load(['refundDestination', 'refundTransfers']);
@@ -632,7 +654,7 @@ class PaymentController extends Controller
     public function sendRefundTransfer(Request $request, Payment $payment)
     {
         if (! $payment->isAwaitingPayout()) {
-            return back()->with('error', 'This payment is not a refund awaiting payout.');
+            return back()->with('error', 'This is not a refund that still needs to be sent.');
         }
 
         if ($payment->payment_method === 'cash') {

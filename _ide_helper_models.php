@@ -451,6 +451,7 @@ namespace App\Models{
  * @property numeric $amount
  * @property string $payment_method
  * @property string $payment_type
+ * @property string|null $refund_kind
  * @property string|null $transaction_ref
  * @property array<array-key, mixed>|null $gateway_response
  * @property string $status
