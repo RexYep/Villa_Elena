@@ -2,9 +2,11 @@
 
 namespace App\Http\Controllers\Portal;
 
+use App\Console\Commands\PruneUnverifiedUsers;
 use App\Events\BookingCreated;
 use App\Events\PropertyAvailabilityChanged;
 use App\Helpers\NotificationHelper;
+use App\Http\Controllers\AuthController;
 use App\Http\Controllers\Controller;
 use App\Mail\ContactFormSubmitted;
 use App\Models\Booking;
@@ -31,7 +33,7 @@ class PortalController extends Controller
      * ipinapakita nito sa guest ay kung kailan huling nagbago ang
      * *patakaran*, hindi kung kailan huling na-deploy ang app.
      */
-    public const LEGAL_LAST_UPDATED = '2026-10-03';
+    public const LEGAL_LAST_UPDATED = '2026-10-11';
 
     // ── Homepage / Property Listing ────────────────────────────────
     public function home(Request $request)
@@ -204,28 +206,79 @@ class PortalController extends Controller
      */
     private function legalContext(): array
     {
+        $villa = Property::where('type', 'villa')->first();
+
+        // Ang mga slot na TUNAY na maipagbibili. Ang Terms ay isang
+        // pahayag sa publiko tungkol sa aktwal na ipinagbibili, kaya
+        // walang saysay na ilista ang slot na wala pang presyo. Hindi
+        // ito per-date: isang pangkalahatang talahanayan ito, at ang
+        // pagiging "sa piling mga petsa lang" ng 22-Hours ay
+        // ipinapaliwanag ng teksto sa tabi nito.
+        $slots = collect(Booking::bookableSlotKeys($villa))
+            ->mapWithKeys(fn ($k) => [$k => Booking::SLOTS[$k]])
+            ->all();
+
         return [
             'resortName' => Setting::get('resort_name', 'Villa Elena Private Rental Resort'),
             'resortEmail' => Setting::get('resort_email', config('mail.from.address')),
             'resortPhone' => Setting::get('resort_phone', '+63 917 123 4567'),
             'resortAddress' => Setting::get('resort_address', 'Barangay Pansol, Calamba, Laguna'),
-            'villa' => Property::where('type', 'villa')->first(),
+            'villa' => $villa,
             'depositPct' => (float) Setting::get('deposit_percentage', 50),
             'holdMinutes' => Booking::pendingHoldMinutes(),
-            // Ang mga slot na TUNAY na maipagbibili. Ang Terms ay isang
-            // pahayag sa publiko tungkol sa aktwal na ipinagbibili, kaya
-            // walang saysay na ilista ang slot na wala pang presyo. Hindi
-            // ito per-date: isang pangkalahatang talahanayan ito, at ang
-            // pagiging "sa piling mga petsa lang" ng 22-Hours ay
-            // ipinapaliwanag ng teksto sa tabi nito.
-            'slots' => collect(Booking::bookableSlotKeys())
-                ->mapWithKeys(fn ($k) => [$k => Booking::SLOTS[$k]])
-                ->all(),
+            'slots' => $slots,
+            'rateGroups' => $this->legalRateGroups($villa, $slots),
             'windowedSlots' => Booking::windowedSlotKeys(),
             'maxReschedules' => Booking::MAX_RESCHEDULES,
             'rescheduleCutoff' => Booking::RESCHEDULE_CUTOFF_DAYS,
+            // Mula sa latestBookableDate() mismo, hindi sa setting: iyon ang
+            // ipinapatupad ng booking at reschedule validator.
+            'maxAdvanceDays' => (int) today()->diffInDays(Booking::latestBookableDate()),
+            'unverifiedHours' => PruneUnverifiedUsers::DEFAULT_HOURS,
+            'trustedDeviceCookie' => AuthController::TRUSTED_DEVICE_COOKIE,
+            'trustedDeviceDays' => AuthController::TRUSTED_DEVICE_DAYS,
+            // 0 = hindi kailanman binubura (config/audit.php).
+            'auditRoutineDays' => (int) config('audit.retention.routine_days'),
+            'auditSecurityDays' => (int) config('audit.retention.security_days'),
+            // Ang AI provider ay isang .env switch, kaya ang pangalang
+            // nakalista sa Privacy Policy ay kailangang sumunod dito.
+            'aiProviderName' => config('services.ai.provider') === 'gemini' ? 'Google (Gemini)' : 'Groq',
             'lastUpdated' => Carbon::parse(self::LEGAL_LAST_UPDATED),
         ];
+    }
+
+    /**
+     * Ang talahanayan ng presyo sa Terms: isang hanay kada PARES ng price
+     * column, hindi kada slot. Ang Day at Night ay iisa ang presyo; ang
+     * dalawang 22-oras na slot ay may sarili nilang pares
+     * (Property::priceColumnsFor()). Dating `base_price`/`weekend_price`
+     * lang ang ipinapakita, kaya ang 22-oras ay nakalista sa Terms bilang
+     * slot pero walang presyo.
+     *
+     * @return array<int, array{names: array<int, string>, regular: float, peak: float}>
+     */
+    private function legalRateGroups(?Property $villa, array $slots): array
+    {
+        if (! $villa) {
+            return [];
+        }
+
+        $groups = [];
+
+        foreach ($slots as $key => $slot) {
+            [$baseCol, $weekendCol] = Property::priceColumnsFor($key);
+
+            $groups[$baseCol] ??= [
+                'names' => [],
+                'regular' => (float) $villa->{$baseCol},
+                // Bumabagsak sa regular ang peak kapag blangko — gaya ng
+                // ginagawa ng getPackagePrice().
+                'peak' => (float) ($villa->{$weekendCol} ?? $villa->{$baseCol}),
+            ];
+            $groups[$baseCol]['names'][] = $slot['name'];
+        }
+
+        return array_values($groups);
     }
 
     // ── Contact Form Submission ──────────────────────────────────────

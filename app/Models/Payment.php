@@ -106,6 +106,50 @@ class Payment extends Model
         return static::$refundKindColumnExists;
     }
 
+    // ── Revenue: one rule, read by Reports and the dashboard (v7.69) ──
+    //
+    //   collected   a payment that succeeded and is not a refund
+    //   refunds     every refund row, WHATEVER its status
+    //   net         collected − refunds
+    //
+    // A refund counts from the moment it is issued, not when the money is
+    // sent — the same rule as Booking::recalculateFinancials(). Filter it
+    // by `status = success` and a refund still waiting to be paid out is
+    // not subtracted, so net revenue reads higher than it is.
+    //
+    // The two scopes and NET_AMOUNT_SQL are that rule written twice, once
+    // for a caller that shows the parts and once for a caller that wants
+    // the net in a single query. Change one, change the other.
+
+    public function scopeCollected($query)
+    {
+        return $query->where('status', 'success')->where('payment_type', '!=', 'refund');
+    }
+
+    public function scopeRefunds($query)
+    {
+        return $query->where('payment_type', 'refund');
+    }
+
+    /** What one payment row adds to net revenue. A refund is stored as a positive amount. */
+    public const NET_AMOUNT_SQL = "CASE WHEN payment_type = 'refund' THEN -amount WHEN status = 'success' THEN amount ELSE 0 END";
+
+    /**
+     * Net revenue of whatever payments the query selects, e.g.
+     * `Payment::netRevenue(Payment::whereDate('payment_date', today()))`.
+     * It can be negative: a refund issued on a day nothing was collected.
+     */
+    public static function netRevenue($query): float
+    {
+        return (float) $query->sum(\Illuminate\Support\Facades\DB::raw(self::NET_AMOUNT_SQL));
+    }
+
+    /** "₱49,006", or "−₱500" — never "₱-500". */
+    public static function formatPesos(float $amount, int $decimals = 0): string
+    {
+        return ($amount < 0 ? '−' : '').'₱'.number_format(abs($amount), $decimals);
+    }
+
     /**
      * Ilang araw bago pukawin ang isang refund na hindi pa naipapadala.
      *

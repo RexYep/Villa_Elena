@@ -53,17 +53,22 @@ class DashboardStats
         // Badge ng Housekeeping sa sidebar — nasa bawat admin page.
         $openReports = IssueReport::open()->count();
 
-        // Ang refund ay naitatala bilang Payment row na `payment_type =
-        // refund` na may POSITIBONG halaga, kaya kailangang hindi isama —
-        // ganito rin ang dating query ng dashboard.
-        $today = (float) Payment::whereDate('payment_date', today())
-            ->where('payment_type', '!=', 'refund')
-            ->sum('amount');
+        // NETO ang revenue ng dashboard mula v7.69: nakolekta BAWAS ang
+        // mga refund, ayon sa Payment::netRevenue() — ang parehong
+        // panuntunan ng "Net Revenue" sa Reports. Dating "hindi kasama ang
+        // refund" lang (gross, at walang `status = success`), kaya
+        // ₱49,018 ang buwan dito at ₱49,006 sa Reports: dalawang
+        // "revenue ngayong buwan" na magkaiba sa iisang admin.
+        //
+        // Ang refund ay Payment row na may POSITIBONG halaga, kaya dapat
+        // itong IBAWAS, hindi lang laktawan — at lalong hindi idagdag
+        // (iyon ang orihinal na bug ng Revenue Today). Maaaring maging
+        // negatibo ang araw: refund na inilabas nang walang nakolekta.
+        $today = Payment::netRevenue(Payment::whereDate('payment_date', today()));
 
-        $month = (float) Payment::whereMonth('payment_date', now()->month)
-            ->whereYear('payment_date', now()->year)
-            ->where('payment_type', '!=', 'refund')
-            ->sum('amount');
+        $month = Payment::netRevenue(
+            Payment::whereMonth('payment_date', now()->month)->whereYear('payment_date', now()->year)
+        );
 
         // ── Mga chart ──────────────────────────────────────────────
         //
@@ -78,14 +83,21 @@ class DashboardStats
         // isang GROUP BY). Ang refetch ay tumatakbo LANG kapag may
         // `stats.changed` o tuwing 60s sa bukas na dashboard — hindi sa
         // anumang public page.
+        //
+        // `startOfMonth()` muna bago ang `subMonths()` (v7.69). Kapag ika-29
+        // hanggang ika-31 ngayon at mas maikli ang buwang tinutumbok,
+        // lumalampas ang petsa sa susunod na buwan: Okt 31 − 1 buwan =
+        // "Set 31" = Okt 1, kaya dalawang beses lumabas ang Oktubre at
+        // nawala ang Setyembre sa chart.
         $revenueByMonth = collect(range(5, 0))->map(function ($i) {
-            $m = now()->subMonths($i);
-            $amount = Payment::whereYear('payment_date', $m->year)
-                ->whereMonth('payment_date', $m->month)
-                ->where('payment_type', '!=', 'refund')
-                ->sum('amount');
+            $m = now()->startOfMonth()->subMonths($i);
+            // Neto rin, kagaya ng card: kung gross ang chart, sasalungat
+            // ang bar ng kasalukuyang buwan sa Revenue This Month.
+            $amount = Payment::netRevenue(
+                Payment::whereYear('payment_date', $m->year)->whereMonth('payment_date', $m->month)
+            );
 
-            return ['label' => $m->format('M'), 'amount' => (float) $amount];
+            return ['label' => $m->format('M'), 'amount' => $amount];
         })->values()->toArray();
 
         $sources = collect(['online' => 0, 'walk_in' => 0, 'phone' => 0, 'partner' => 0])
@@ -113,8 +125,8 @@ class DashboardStats
             'formatted' => [
                 'pending_bookings' => (string) $pending,
                 'total_bookings' => number_format($total),
-                'revenue_today' => '₱'.number_format($today, 0),
-                'revenue_this_month' => '₱'.number_format($month, 0),
+                'revenue_today' => Payment::formatPesos($today),
+                'revenue_this_month' => Payment::formatPesos($month),
                 'total_guests' => number_format($guests),
                 'registered_guests' => number_format($registered),
                 'open_reports' => (string) $openReports,

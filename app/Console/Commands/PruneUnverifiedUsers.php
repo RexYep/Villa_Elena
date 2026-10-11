@@ -34,8 +34,12 @@ class PruneUnverifiedUsers extends Command
 {
     private const MAX_AGE_DAYS = 30;
 
+    // Public because the Terms of Service and the Privacy Policy print it
+    // (PortalController::legalContext()). Change it here and both pages follow.
+    public const DEFAULT_HOURS = 48;
+
     protected $signature = 'users:prune-unverified
-                            {--hours=48 : Minimum age of an unverified account before it is deleted}
+                            {--hours='.self::DEFAULT_HOURS.' : Minimum age of an unverified account before it is deleted}
                             {--dry-run : Report what would be deleted and delete nothing}';
 
     protected $description = 'Delete self-registered customer accounts that never verified their email';

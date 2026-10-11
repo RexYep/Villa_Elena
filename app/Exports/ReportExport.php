@@ -13,9 +13,11 @@ class ReportExport implements WithMultipleSheets
     public function sheets(): array
     {
         return [
-            'Summary'          => new ReportSummarySheet($this->data),
-            'Revenue by Month' => new ReportRevenueByMonthSheet($this->data['revenueByMonth']),
-            'Top Properties'   => new ReportTopPropertiesSheet($this->data['topProperties']),
+            'Summary'               => new ReportSummarySheet($this->data),
+            'Net Revenue in Period' => new ReportPeriodRevenueSheet($this->data['revenueSeries'], $this->data['revenueUnit']),
+            'Revenue by Month'      => new ReportRevenueByMonthSheet($this->data['revenueByMonth']),
+            'Bookings by Slot'      => new ReportBySlotSheet($this->data['bySlot']),
+            'Sources and Status'    => new ReportBreakdownSheet($this->data['bookingsBySource'], $this->data['bookingsByStatus']),
         ];
     }
 }

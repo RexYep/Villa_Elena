@@ -94,8 +94,13 @@ class InsightsController extends Controller
                                 ->where('payment_type', '!=', 'refund')
                                 ->sum('amount');
 
-        $revenueLastMonth   = Payment::whereMonth('payment_date', $now->copy()->subMonth()->month)
-                                ->whereYear('payment_date', $now->copy()->subMonth()->year)
+        // `startOfMonth()` muna (v7.69): sa ika-31, ang `subMonth()` nang
+        // mag-isa ay bumabalik sa KASALUKUYANG buwan kapag 30 araw lang ang
+        // nakaraan (Okt 31 − 1 buwan = "Set 31" = Okt 1).
+        $lastMonth          = $now->copy()->startOfMonth()->subMonth();
+
+        $revenueLastMonth   = Payment::whereMonth('payment_date', $lastMonth->month)
+                                ->whereYear('payment_date', $lastMonth->year)
                                 ->where('status', 'success')
                                 ->where('payment_type', '!=', 'refund')
                                 ->sum('amount');

@@ -362,8 +362,9 @@ class CalendarController extends Controller
         // (portal preview at submit, staff walk-in, admin create, extendStay).
         // Ito lang ang hubad na diffInDays, at 0 ang isinasagot niyon sa isang
         // Day booking, na iisang petsa lamang. LAHAT ng row sa database ay
-        // num_nights = 1, at `sum('num_nights')` ang ginagamit ng
-        // ReportController:115 — tahimik sanang kukulangin ang kabuuan.
+        // num_nights = 1. (Dating `sum('num_nights')` ang occupancy ng
+        // ReportController; mula v7.69 ay slot na ang binibilang doon, pero
+        // nananatili ang max(1, …) para tugma sa ibang sumusulat.)
         $nights = max(1, $newIn->diffInDays($newOut));
 
         // Dati, WALANG availability check dito — ang pinaka-maluwag na

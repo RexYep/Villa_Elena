@@ -116,8 +116,14 @@ class ForecastController extends Controller
         $months = [];
         $historicalData = [];
 
+        // `startOfMonth()` muna (v7.69): mula ika-29 hanggang ika-31, ang
+        // `now()->subMonths()` / `addMonth()` ay lumalampas sa mas maikling
+        // buwan (Okt 31 − 1 buwan = Okt 1; Ene 31 + 1 buwan = Mar 3), kaya
+        // may buwang nauulit at may nawawala sa history at sa forecast.
+        $thisMonth = Carbon::now()->startOfMonth();
+
         for ($i = 5; $i >= 0; $i--) {
-            $date = Carbon::now()->subMonths($i);
+            $date = $thisMonth->copy()->subMonths($i);
             $label = $date->format('M Y');
 
             $bookings = Booking::whereYear('check_in_date', $date->year)
@@ -146,9 +152,9 @@ class ForecastController extends Controller
         }
 
         $next3Months = [
-            Carbon::now()->addMonth(1)->format('F Y'),
-            Carbon::now()->addMonth(2)->format('F Y'),
-            Carbon::now()->addMonth(3)->format('F Y'),
+            $thisMonth->copy()->addMonths(1)->format('F Y'),
+            $thisMonth->copy()->addMonths(2)->format('F Y'),
+            $thisMonth->copy()->addMonths(3)->format('F Y'),
         ];
 
         return compact('months', 'historicalData', 'next3Months');

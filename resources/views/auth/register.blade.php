@@ -121,6 +121,16 @@
             <i class="bi bi-person-plus me-2"></i> Create Account
         </button>
 
+        {{-- Ang Terms §1 ay nagsasabing ang paggawa ng account ay pagsang-ayon
+             na, pero walang link sa alinmang pahina mula rito. Bagong tab,
+             para hindi mawala ang naitype na sa form. --}}
+        <p class="auth-footer">
+            By creating an account you agree to our
+            <a href="{{ route('portal.terms') }}" target="_blank" rel="noopener">Terms of Service</a>
+            and acknowledge our
+            <a href="{{ route('portal.privacy') }}" target="_blank" rel="noopener">Privacy Policy</a>.
+        </p>
+
     </form>
 
     <div class="auth-footer">

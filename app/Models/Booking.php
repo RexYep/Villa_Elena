@@ -737,10 +737,19 @@ class Booking extends Model
      *    Day ng kinabukasan bilang sarado. Ang paghahalo ng dalawang
      *    konseptong ito ay magbubukas muli ng double-booking.
      *
+     * `$windowDates`: para sa tumatawag na nagtatanong tungkol sa MARAMING
+     * petsa (ang occupancy ng Reports ay isang buong taon). Ipasa ang
+     * resulta ng slotWindowDates() na sumasaklaw sa petsa at doon babasahin
+     * ang window sa halip na mag-query kada petsa. Iisang panuntunan pa rin
+     * — ang pinagkukunan lang ng "may window ba" ang nag-iiba — at parehong
+     * `is_active` at presyo ang sinasala ng slotWindowDates(). Kapag null,
+     * walang nagbago: isang query kada windowed na slot.
+     *
      * @param  \Carbon\Carbon|string  $date  Ang CHECK-IN date.
+     * @param  array<string, array<int, string>>|null  $windowDates
      * @return array<int, string>
      */
-    public static function slotsOfferedOn($date, ?\App\Models\Property $property = null): array
+    public static function slotsOfferedOn($date, ?\App\Models\Property $property = null, ?array $windowDates = null): array
     {
         $property ??= \App\Models\Property::where('type', 'villa')->first();
 
@@ -765,9 +774,11 @@ class Booking extends Model
                 continue;   // Bitag 1: walang presyo, walang bisa ang window.
             }
 
-            $hasWindow = \App\Models\SlotWindow::query()
-                ->offeredOn($property->id, $slot, $dateStr)
-                ->exists();
+            $hasWindow = $windowDates !== null
+                ? in_array($dateStr, $windowDates[$slot] ?? [], true)
+                : \App\Models\SlotWindow::query()
+                    ->offeredOn($property->id, $slot, $dateStr)
+                    ->exists();
 
             if ($hasWindow) {
                 return [$slot];

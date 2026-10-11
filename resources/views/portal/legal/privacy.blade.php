@@ -108,15 +108,24 @@
 
                     <h3>What you write to us</h3>
                     <p>
-                        Contact-form messages, review text and ratings, cancellation reasons, and messages
-                        you type into the chat assistant.
+                        Contact-form messages, review text and ratings, cancellation reasons, problem
+                        reports you file during a stay, and messages you type into the chat assistant.
+                    </p>
+
+                    <h3>Sign-in records</h3>
+                    <p>
+                        Each sign-in to your account is recorded with its date and time, IP address, the
+                        browser and device type, and whether an emailed code was used. If you use
+                        two-factor authentication, we also keep a list of the browsers you have verified —
+                        a device label, an IP address, and a hashed token (never the token itself). You
+                        can see both lists in your profile.
                     </p>
 
                     <h3>Technical and operational records</h3>
                     <p>
                         Server logs (IP address, browser and device information, pages requested, time
-                        stamps), sign-in activity including your last login, and internal staff logs
-                        recording which staff member acted on your booking and when.
+                        stamps), and internal staff logs recording which staff member acted on your
+                        booking and when.
                     </p>
                 </section>
 
@@ -130,9 +139,15 @@
                             entitled to.</li>
                         <li>To send you transactional messages — booking confirmations, payment receipts,
                             reminders, cancellation and refund notices, password resets, and two-factor
-                            codes. These are service messages, not marketing.</li>
+                            codes. These are service messages, not marketing. You can turn booking and
+                            refund emails off in your profile; security emails such as sign-in codes and
+                            password resets are always sent.</li>
                         <li>To show you in-app announcements such as seasonal promos while you are signed
                             in.</li>
+                        <li>To check whether you qualify for a returning-guest promo, by counting the stays
+                            you have completed.</li>
+                        <li>To pass a problem you report during your stay to our front desk and management,
+                            and to tell you when it has been dealt with.</li>
                         <li>To screen reviews before they are published, and to reply to them.</li>
                         <li>To answer your questions through the contact form and the chat assistant.</li>
                         <li>To keep the system secure — rate-limiting sign-in attempts, detecting abuse,
@@ -183,8 +198,8 @@
                                 <tr>
                                     <td><strong>PayMongo</strong></td>
                                     <td>Online payments and refund transfers</td>
-                                    <td>Your name, email, booking reference, amount, and — for a refund —
-                                        the destination account you gave us</td>
+                                    <td>Your name, email, mobile number, booking reference, amount, and — for
+                                        a refund — the destination account you gave us</td>
                                 </tr>
                                 <tr>
                                     <td><strong>Brevo</strong></td>
@@ -193,8 +208,11 @@
                                 </tr>
                                 <tr>
                                     <td><strong>Pusher</strong></td>
-                                    <td>Delivers real-time notifications while you are signed in</td>
-                                    <td>The notification text and the account it belongs to</td>
+                                    <td>Delivers real-time updates: notifications, live availability, and
+                                        payment status</td>
+                                    <td>The notification text and the account it belongs to. Its script also
+                                        loads on the villa page and the payment pages, so it receives your
+                                        IP address there even when you are signed out</td>
                                 </tr>
                                 <tr>
                                     <td><strong>Cloudinary</strong></td>
@@ -202,7 +220,10 @@
                                     <td>Photos uploaded to the system, including your profile photo</td>
                                 </tr>
                                 <tr>
-                                    <td><strong>Groq</strong></td>
+                                    {{-- Mula sa AI_PROVIDER, hindi nakasulat: kapag
+                                         inilipat sa Gemini, sa Google na napupunta
+                                         ang parehong datos. --}}
+                                    <td><strong>{{ $aiProviderName }}</strong></td>
                                     <td>Runs the chat assistant and screens reviews</td>
                                     <td>The message you type into the chat, or the review text being
                                         screened. Please don't type sensitive personal details into the
@@ -218,6 +239,12 @@
                                     <td>Serves the fonts used on this site</td>
                                     <td>Your IP address, as part of the ordinary request for a font file</td>
                                 </tr>
+                                <tr>
+                                    <td><strong>Google Maps</strong></td>
+                                    <td>Shows the location map on our homepage</td>
+                                    <td>Your IP address and browser details, as part of loading the map.
+                                        Google may set its own cookies when it does</td>
+                                </tr>
                             </tbody>
                         </table>
                     </div>
@@ -232,10 +259,10 @@
                 <section id="cookies">
                     <h2><span class="num">06</span>Cookies</h2>
                     <p>
-                        This site uses <strong>strictly necessary cookies only</strong>. We run no
-                        analytics, advertising, or cross-site tracking cookies, and nothing here builds an
-                        advertising profile of you — which is why you are not asked to accept a cookie
-                        banner.
+                        The cookies this site sets are <strong>strictly necessary ones only</strong>. We
+                        run no analytics, advertising, or cross-site tracking cookies of our own, and
+                        nothing here builds an advertising profile of you — which is why you are not asked
+                        to accept a cookie banner.
                     </p>
                     <div class="legal-table-wrap">
                         <table class="legal-table">
@@ -263,13 +290,20 @@
                                     <td>Set only if you tick <em>Remember me</em> at sign-in</td>
                                     <td>Until you sign out or it expires</td>
                                 </tr>
+                                <tr>
+                                    <td><code>{{ $trustedDeviceCookie }}</code></td>
+                                    <td>Set after you sign in with an emailed two-factor code, so this
+                                        browser is not asked for a code again</td>
+                                    <td>{{ $trustedDeviceDays }} days</td>
+                                </tr>
                             </tbody>
                         </table>
                     </div>
                     <p>
                         You can block or delete these in your browser settings, but signing in and booking
-                        will not work without them. Pages hosted by others — for example PayMongo's payment
-                        page — set their own cookies under their own policies.
+                        will not work without them. Pages and content hosted by others — PayMongo's payment
+                        page, and the Google map on our homepage — set their own cookies under their own
+                        policies.
                     </p>
                 </section>
 
@@ -277,20 +311,37 @@
                     <h2><span class="num">07</span>How long we keep it</h2>
                     <ul>
                         <li><strong>Account details</strong> — while your account exists, and afterwards
-                            only where a booking or financial record requires it.</li>
+                            only where a booking or financial record requires it. Deactivating your account
+                            blocks sign-in but does not delete it.</li>
+                        <li><strong>Unverified sign-ups</strong> — an account whose email address is never
+                            verified is deleted after {{ $unverifiedHours }} hours.</li>
                         <li><strong>Booking and payment records</strong> — kept as long as accounting, tax,
                             and audit rules require, because they are proof of a transaction.</li>
                         <li><strong>Refund payout details</strong> — kept with the refund record as proof
                             of where the money was sent.</li>
-                        <li><strong>Published reviews</strong> — kept while published; you may ask us to
-                            take yours down.</li>
-                        <li><strong>Contact-form messages</strong> — kept while the enquiry is being
-                            handled and for a reasonable period afterwards.</li>
+                        <li><strong>Published reviews</strong> — kept while published; you can delete
+                            yours from your account at any time.</li>
+                        <li><strong>Problem reports</strong> — kept with the booking they belong to.</li>
+                        <li><strong>Contact-form messages</strong> — <strong>not stored in our
+                            database.</strong> They are delivered to the resort's email inbox, and kept
+                            there while the enquiry is being handled and for a reasonable period
+                            afterwards.</li>
                         <li><strong>Chat assistant conversations</strong> — <strong>not stored in our
                             database.</strong> The conversation lives in your browser tab only and is gone
                             once you close or refresh it.</li>
-                        <li><strong>Server and staff activity logs</strong> — kept for a limited period for
-                            security and troubleshooting.</li>
+                        <li><strong>Sign-in records</strong> — your sign-in history is kept with your
+                            account. A verified browser is forgotten after {{ $trustedDeviceDays }} days,
+                            or as soon as you remove it from your profile.</li>
+                        {{-- Mula sa config/audit.php; 0 = hindi binubura. May iilang
+                             entry na hindi kailanman binubura dahil binabasa sila ng
+                             sistema bilang estado (`never_prune`). --}}
+                        <li><strong>Staff activity logs</strong> — routine entries are kept
+                            {{ $auditRoutineDays > 0 ? "for {$auditRoutineDays} days" : 'indefinitely' }},
+                            and security-related entries
+                            {{ $auditSecurityDays > 0 ? "for {$auditSecurityDays} days" : 'indefinitely' }}.
+                            A few entries the booking system itself depends on are kept longer.</li>
+                        <li><strong>Server logs</strong> — kept for a limited period for security and
+                            troubleshooting.</li>
                     </ul>
                 </section>
 
@@ -317,6 +368,12 @@
                         something because the law requires us to keep it, we will tell you which record and
                         why.
                     </p>
+                    <p>
+                        Several of these you can do yourself while signed in: edit your details, remove
+                        your profile photo, edit or delete your reviews, turn booking emails off, remove a
+                        verified browser, and deactivate your account. Deactivation is not erasure — to
+                        have your data erased, write to us.
+                    </p>
                 </section>
 
                 <section id="security">
@@ -324,7 +381,7 @@
                     <ul>
                         <li>Passwords are stored as one-way hashes, never in readable form.</li>
                         <li>Optional <strong>two-factor authentication</strong> sends a one-time code to
-                            your email at sign-in.</li>
+                            your email when you sign in from a browser we have not verified.</li>
                         <li>Sign-in, registration, and password-reset attempts are rate-limited.</li>
                         <li>Access is role-based — staff and administrators only reach the areas their
                             role allows.</li>
@@ -352,8 +409,7 @@
                     <h2><span class="num">11</span>Changes</h2>
                     <p>
                         If we change how we handle personal data, we update this page and the date at the
-                        top of it. Significant changes will also be announced in the app the next time you
-                        sign in.
+                        top of it.
                     </p>
                 </section>
 

@@ -605,14 +605,18 @@
                 <div class="kpi-card gold" id="rt-revenue-card">
                     <div class="kpi-label">Revenue Today</div>
                     <div class="kpi-value" id="rt-today-revenue" data-kpi="revenue_today">{{ $stats['formatted']['revenue_today'] }}</div>
-                    <div class="kpi-sub"><i class="bi bi-arrow-up up"></i> <span class="up">Live</span></div>
+                    {{-- Neto ang dalawang revenue card at ang chart (v7.69):
+                         nakolekta bawas ang refund, kapareho ng "Net Revenue"
+                         sa Reports. Sinasabi ito ng sub-line para hindi
+                         mabasa bilang kabuuang nakolekta. --}}
+                    <div class="kpi-sub"><i class="bi bi-arrow-up up"></i> <span class="up">Live</span>, after refunds</div>
                     <i class="bi bi-cash-coin kpi-icon"></i>
                 </div>
 
                 <div class="kpi-card teal" id="rt-month-revenue-card">
                     <div class="kpi-label">Revenue This Month</div>
                     <div class="kpi-value" id="rt-month-revenue" data-kpi="revenue_this_month">{{ $stats['formatted']['revenue_this_month'] }}</div>
-                    <div class="kpi-sub"><i class="bi bi-calendar3"></i> {{ now()->format('F Y') }}</div>
+                    <div class="kpi-sub"><i class="bi bi-calendar3"></i> {{ now()->format('F Y') }}, after refunds</div>
                     <i class="bi bi-graph-up kpi-icon"></i>
                 </div>
 
@@ -664,7 +668,7 @@
                     <div class="card-panel-header">
                         <div>
                             <h3>Revenue Overview</h3>
-                            <p>Monthly revenue for the past 6 months</p>
+                            <p>Net revenue per month for the past 6 months, after refunds</p>
                         </div>
                         <span class="badge-pill tag-green">
                             <i class="bi bi-circle-fill" style="font-size:7px"></i> Live
@@ -935,7 +939,9 @@
                                 },
                                 tooltip: {
                                     callbacks: {
-                                        label: ctx => ' ₱' + ctx.parsed.y.toLocaleString()
+                                        // Neto ang chart (v7.69), kaya maaaring negatibo:
+                                        // "−₱500", hindi "₱-500".
+                                        label: ctx => ' ' + (ctx.parsed.y < 0 ? '−' : '') + '₱' + Math.abs(ctx.parsed.y).toLocaleString()
                                     }
                                 }
                             },
@@ -946,7 +952,7 @@
                                         color: '#ece4d8'
                                     },
                                     ticks: {
-                                        callback: v => '₱' + v.toLocaleString(),
+                                        callback: v => (v < 0 ? '−' : '') + '₱' + Math.abs(v).toLocaleString(),
                                         font: {
                                             size: 11
                                         }

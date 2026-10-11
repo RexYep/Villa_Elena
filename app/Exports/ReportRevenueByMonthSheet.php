@@ -4,9 +4,12 @@ namespace App\Exports;
 
 use Maatwebsite\Excel\Concerns\FromArray;
 use Maatwebsite\Excel\Concerns\WithHeadings;
+use Maatwebsite\Excel\Concerns\WithStrictNullComparison;
 use Maatwebsite\Excel\Concerns\WithTitle;
 
-class ReportRevenueByMonthSheet implements FromArray, WithHeadings, WithTitle
+// WithStrictNullComparison, here and on the other report sheets: without it a
+// month that collected nothing is written as an empty cell instead of 0.
+class ReportRevenueByMonthSheet implements FromArray, WithHeadings, WithStrictNullComparison, WithTitle
 {
     public function __construct(private array $revenueByMonth)
     {
@@ -19,7 +22,7 @@ class ReportRevenueByMonthSheet implements FromArray, WithHeadings, WithTitle
 
     public function headings(): array
     {
-        return ['Month', 'Revenue'];
+        return ['Month', 'Net Revenue (after refunds)'];
     }
 
     public function title(): string

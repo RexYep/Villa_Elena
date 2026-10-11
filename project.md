@@ -1,7 +1,7 @@
 # Villa Elena Private Rental Resort
 ## Resort Management System — Project Documentation
 
-**Version:** 7.68
+**Version:** 7.70
 **Stack:** PHP 8.2 / Laravel 12 / MySQL 8 / Bootstrap 5
 **Local URL:** `http://127.0.0.1:8000` (`php artisan serve`) or `http://localhost:8000` (Docker — see v5.3)
 **Live URL:** `https://villa-elena.onrender.com` (Render, free tier — testing only, not yet handed to real guests)
@@ -185,6 +185,265 @@ through `user_id` and nothing denormalises their name into a booking row.
 from Task 11 · F5 get dropped at the same time — they are empty and reserved
 (`users.id_type` / `users.id_number`, see v7.40), and a schema change for erasure
 is the natural moment to remove them rather than a migration of their own.
+
+---
+
+## What Changed in v7.70 (Read This First)
+
+### Terms of Service and Privacy Policy brought back in line with the code
+
+A review of the two legal pages (2026-10-11) checked every sentence against what
+the system does. The numbers that `legalContext()` already supplied were still
+right; the hand-typed prose around them had fallen behind eight weeks of
+changes. `LEGAL_LAST_UPDATED` is now `2026-10-11`.
+
+**Terms of Service — what was wrong**
+
+| Section | It said | What is true |
+|---|---|---|
+| §2 | "The villa has 6 rooms" | Hardcoded; the local database has 3. The count is gone — the agreement is about the whole villa. |
+| §3 | "ID details where requested" | No ID is collected (v7.40). The Privacy Policy already said so; the two pages contradicted each other. |
+| §5 | One rate table: ₱4,000 / ₱6,000 | The 22-hour slots were listed in §4 with no price. The table is now one row per price-column pair (`legalRateGroups()`): Day, Night and both 22-hour slots. |
+| §5 | "depends only on when your slot starts" | It depends on the slot too. |
+| §8 | Payments appear "under My Bookings, with its reference number" | The page is called Payments, and no guest view prints a reference number. |
+| §11 | "An approved refund", three reasons | There is no approval step (v7.63) and there are four `Payment::REFUND_KINDS`. |
+| §13 | "screened automatically and by our staff before publication" | A review that passes the automatic check is published at once. |
+| §13 | "your account name and the month of your stay" | Name, profile photo, and the month the review was **written** (`created_at`). |
+| §16 | "the version in effect when you booked governs that booking" | Removed. No old version is kept, the booking does not record what was accepted, and every rule is applied from today's code. |
+
+**Terms — what was missing and is now stated:** the advance-booking limit
+(§4, §10), returning-guest promos (§6), what happens to a payment that arrives
+after a hold was released (§7), the 48-hour deletion of unverified sign-ups, the
+remembered browser and self-deactivation (§3), reporting a problem during a stay
+(§12), and that a guest can edit or delete their own review (§13).
+
+**Privacy Policy — what was wrong**
+
+| Section | It said | What is true |
+|---|---|---|
+| §2 | "sign-in activity including your last login" | One `login_activities` row per sign-in (IP, device, whether a code was used) and a `trusted_devices` list. Now its own heading. |
+| §5 | PayMongo receives name, email, reference, amount | Also the mobile number (`billing.phone`). |
+| §5 | Pusher: "while you are signed in" | Its script loads on the public villa page and the payment pages too. |
+| §5 | — | Google Maps (the homepage embed) was not listed. |
+| §5 | "Groq" | Now printed from `AI_PROVIDER`, so switching to Gemini names Google. |
+| §6 | Three cookies | The `trusted_device` cookie (60 days) was missing. The section now says the cookies **this site sets** are strictly necessary, because the Google map may set its own. |
+| §7 | Contact-form messages "kept while the enquiry is being handled" | They are never stored: `submitContact()` only sends an email. |
+| §7 | Logs "kept for a limited period" | 90 / 365 days from `config/audit.php`; unverified sign-ups 48 hours; a verified browser 60 days. |
+| §11 | "Significant changes will also be announced in the app" | Removed — nothing does this. |
+
+Also added: problem reports, the completed-stay count used for returning-guest
+promos, the email on/off switch, and the list of what a guest can do without
+writing to the resort. Deactivation is described as what it is (`status = 0`,
+data kept), not as erasure.
+
+**New values in `legalContext()`**, all read from where the code enforces them:
+`maxAdvanceDays` (from `Booking::latestBookableDate()`), `unverifiedHours`
+(`PruneUnverifiedUsers::DEFAULT_HOURS`, new, and the command's `--hours` default
+now reads it), `trustedDeviceCookie` / `trustedDeviceDays` (the two
+`AuthController` constants, made public), `auditRoutineDays` /
+`auditSecurityDays`, `aiProviderName`, `rateGroups`.
+
+**The registration form now links both pages.** Terms §1 says creating an
+account is agreement, and nothing on that form pointed to either page.
+
+**Known gap, not fixed here:** nothing prunes `login_activities`, so the policy
+says the sign-in history is "kept with your account". If a retention period is
+added, change that sentence with it.
+
+**Rule going forward:** a change to slots, rates, promos, refunds, reviews,
+sign-in, cookies or a third-party service is not finished until these two pages
+have been read against it.
+
+**Verified** by rendering `/terms-of-service`, `/privacy-policy` and `/register`
+through the HTTP kernel (200 each) and reading the output.
+
+---
+
+## What Changed in v7.69 (Read This First)
+
+### Reports: figures that were wrong, and a page that still described a hotel
+
+A review of `/admin/reports` (2026-10-11) found five wrong figures and several
+places where the page had not followed the system to one villa sold by slot.
+Every "before" below was measured on the local database.
+
+**1. Occupancy counts slots.** It was
+`sum(num_nights) ÷ (Property::count() × days)`:
+
+- `Property::count()` is 4 — the villa and the three information-only rooms;
+- a date was one unit, when it holds two slots (Day and Night);
+- `num_nights` is 1 on every row;
+- and `diffInDays()` returns a fraction in Carbon 3, so October was 31.99999 days.
+
+| Period | Before | Now |
+|---|---|---|
+| October 2026 | 12.5% | **28.3%** — 17 of 60 slots |
+| September 2026 | 14.5% | **30.0%** — 18 of 60 slots |
+
+It is now **slots booked ÷ slots offered**, from the class the Recommendations
+page already uses: `OccupancyCalendar::covering($from, $to)->slotCounts()`. Same
+two tests as "booked so far" there — offered by `Booking::slotsOfferedOn()` and
+not closed by a block, taken by datetime overlap — so the two pages cannot
+disagree about one stretch. The card prints both counts ("17 of 60 slots
+booked"), so the percentage can be checked against the calendar by hand.
+
+- `covering()` loads a chosen range instead of the rolling 180-day one. The
+  recommendation rules still build the calendar with `new`, and their path is
+  unchanged.
+- `Booking::slotsOfferedOn()` takes an optional third argument, a
+  `slotWindowDates()` result. With it the 22-hour dates are read from that list
+  instead of one query per date — a year is 365 dates. It is the same rule;
+  only where "is there a window" comes from differs. Checked for every date of
+  2026: 0 differences. Without the argument nothing changed.
+- A blocked date is not offered, so it is not in the denominator (October has
+  one block, hence 60 slots and not 62).
+
+**2. "Revenue by Property" is now "Bookings by Slot".** With one villa the table
+could only hold one row, and its Share column divided *booked value* (by date
+booked) by *net payments collected* (by date paid): October read **130.6%**. The
+table now lists Day / Night / 22 Hours (7PM) / 22 Hours (8AM) from
+`$booking->slotKey()`, with labels from `Booking::SLOTS`. Share is of booked
+value, so the rows add up to 100%. A legacy row with no slot is listed as
+"Other times" rather than dropped. A sentence under the table says that booked
+value is not money collected.
+
+**3. Revenue is net everywhere, with its parts shown once.** The card showed net
+while both revenue charts were gross — so nothing on the page added up to the
+bars. The card now reads *₱49,006 Net Revenue · ₱49,018 collected · −₱12
+refunds*, and **both charts are net** ("Net Revenue, Last 12 Months" and "Net
+Revenue in This Period"), so the period chart's bars add up to the card. See
+item 11 for the definition and for what a bar below zero means.
+
+**4. "Confirmed Bookings" is "Bookings Made".** The old number counted every
+booking that was not cancelled or no-show — pending and checked-out included —
+under the word "Confirmed". The card now shows all bookings made in the period,
+with the cancelled and no-show counts under it.
+
+**5. The three date bases are stated.** Under the period: *"Bookings are counted
+by the date they were made, payments by the date they were paid, and occupancy
+by the date of the stay."* When the period runs past today (This Month on the
+11th), a second sentence says occupancy includes dates still to come.
+
+**6. The period chart covers the whole period.** It stopped at 60 days whatever
+was selected, so "This Year" drew Jan 1 – Mar 1: ₱0, beside a card saying
+₱237,162. `revenueSeries()` now draws a bar per **day** up to 62 days, per
+**week** up to 186, per **month** beyond. The bars and the card's figures are
+read from the same per-day lists, so the bars always add up to Net Revenue.
+
+**7. Months no longer break on the 29th–31st.** `now()->subMonths($i)` overflows
+when the target month is shorter: on Oct 31, minus one month is "Sep 31" =
+Oct 1. Simulated for Oct 31, the 12-month charts showed Dec, Mar, May, Jul and
+Oct twice and skipped Nov, Feb, Apr, Jun and Sep, and "Last Month" returned
+October. **Every month loop now starts from `startOfMonth()`.** Fixed in four
+places, since it was the same line in each:
+
+| Where | What it broke |
+|---|---|
+| `ReportController` | both 12-month charts, and the Last Month period |
+| `DashboardStats::kpis()` | the dashboard's Revenue Overview (October twice, no September) |
+| `ForecastController::gatherHistory()` | the six history months **and** the three forecast months (`addMonth()` on Jan 31 gave March, March, May) |
+| `InsightsController::gatherStats()` | "revenue last month" read this month's |
+
+**8. A custom range is checked.** `?period=custom&from=abc` threw from
+`Carbon::parse()` (a 500); From after To showed a page of zeros; blank dates
+started at the current time of day. `resolvePeriod()` now accepts only real
+`Y-m-d` dates, reads a reversed range the other way round, limits a range to
+three years (occupancy walks it a date at a time), and otherwise **falls back to
+this month and says why** in a notice on the page. An export with an unusable
+range redirects to the page instead of producing a file for a period nobody
+asked for.
+
+**9. Exports.**
+
+- **PDF: every ₱ printed as "?"** ("?49,006.00"). dompdf's built-in fonts have no
+  peso sign. The view now uses DejaVu Sans, which ships with dompdf, with font
+  subsetting on — without it the one-page report was an 880 KB download; it is
+  28 KB.
+- Both exports now carry what the page shows: collected / refunds / net, the
+  slot table, sources and status, and the two occupancy counts. Excel also has a
+  "Net Revenue in Period" sheet (the period chart as rows; they add up to Net
+  Revenue on the Summary sheet).
+- **Excel wrote 0 as an empty cell** and wrote sums as text. Each sheet now
+  implements `WithStrictNullComparison`, and amounts are cast to float.
+- `ReportTopPropertiesSheet` is deleted; `ReportBySlotSheet`,
+  `ReportBreakdownSheet` and `ReportPeriodRevenueSheet` are new.
+
+**10. Smaller.**
+
+- **11 queries a page, from 68 (This Month) and 97 (This Year).** The page ran
+  one query per month, twice, and one per day. Bookings of the period are loaded
+  once and counted in PHP; months are two grouped queries.
+- The two date inputs have an accessible name. Hex colours in the page's CSS
+  are tokens now (Chart.js colours stay hex — a canvas cannot read a variable).
+  The page's `th{}` / `td{}` rules are scoped to `.report-table`; unscoped, they
+  restyled every table on the page.
+- A period with no bookings or no payments shows a sentence in place of an
+  empty donut or chart.
+- Donut colours are looked up by key, so a source keeps its colour whichever
+  others are present; labels come from the server ("Walk-in", as on the
+  dashboard — the page used to build "Walk In" from the enum).
+
+**11. One revenue figure on the dashboard and on Reports: net.** The dashboard's
+Revenue Today, Revenue This Month and Revenue Overview chart *left refunds out*
+(gross, and with no `status = success` filter), so the same admin saw ₱49,018
+for October on the dashboard and ₱49,006 on Reports. All three now subtract
+refunds — and so do the report's own two charts, which were gross as well. Every
+revenue number and bar on both pages is now the same quantity.
+
+- **One definition, on `Payment`:** `scopeCollected()`, `scopeRefunds()` and
+  `Payment::netRevenue($query)` (a single conditional `SUM`, so the dashboard
+  still makes one query per figure). `ReportController` and `DashboardStats`
+  both read them. A refund counts whatever its status — from the moment it is
+  issued, as in `recalculateFinancials()`.
+- **The chart is net as well.** It has to follow the month card beside it, or
+  October's bar would contradict the card on one screen. This is visible on
+  past months: August's bar goes from ₱54,086 to **₱38,068** (₱16,018 was
+  refunded that month).
+- The cards say so: "Live, after refunds", "October 2026, after refunds", and
+  the chart's subtitle.
+- **A day can be negative** — a refund is dated when it was issued, which may be
+  a day that collected less than it gave back (the local data has one in August
+  and one in September). `Payment::formatPesos()` prints "−₱500", not "₱-500",
+  and the chart axes and tooltips do the same. On the report a bar below zero
+  is drawn red, and the chart's subtitle says what a red bar is — only when
+  there is one.
+- **The report reads both sides per day** (`collected()` and `refunds()`, each
+  grouped by date) and subtracts in PHP, so the card's three figures and the
+  period chart come from the same two lists. The 12-month chart uses
+  `Payment::NET_AMOUNT_SQL` in one grouped query.
+- Checked: the two dashboard cards and each of its chart's six months equal the
+  report's net for the same dates; the report's last six monthly bars equal the
+  dashboard's chart; the period chart's bars add up to Net Revenue for every
+  period tried (day, week and month bars). With a pending ₱500 refund and a
+  failed ₱900 payment added for today (in a transaction, rolled back), both
+  pages read −₱500 for the day and ₱48,506 for the month.
+
+**Not changed, and why**
+
+- The AI pages (`/admin/insights`, `/admin/forecast`) still send collected
+  revenue to the model. Not touched.
+- Bookings are still counted by the date they were made. That was a decision
+  (the alternative is the date of the stay), and the page now says which.
+- The PDF has no "Net Revenue in Period" table: up to 62 rows would push the
+  summary off the first page. It is in the Excel file.
+
+**Verified**
+
+- Every period, a reversed range, five unusable ranges (`abc`, blank, an array,
+  `2026-02-31`, more than three years) and an unknown period through
+  `buildReportData()`.
+- The page, both exports and the staff 403 through the full HTTP stack as an
+  admin; the dashboard, insights, forecast and recommendations pages still 200.
+- The PDF was rendered and read: ₱ prints. The Excel file was written and read
+  back with PhpSpreadsheet: amounts are numeric cells, 0 is 0.
+- The month fix with the clock set to Oct 31, 2026 and Jan 31, 2027.
+- The page was opened in headless Chrome at desktop width for This Month, Today
+  (the empty states) and This Year (monthly bars, four-source donut).
+  **Not checked in a real phone-width browser** — headless Chrome would not
+  go below ~500px. The stacked table worked there; the page's phone CSS is
+  otherwise unchanged.
+
+**Deploying:** no migration, no new setting.
 
 ---
 
@@ -7613,7 +7872,7 @@ Every number the two pages quote comes from `PortalController::legalContext()`, 
 
 This is not decoration. The exact bug fixed in v5.5 was **published policy text disagreeing with enforced code** — `portal/booking_form.blade.php` advertised *"Free cancellation 48 hours before check-in"* while `calculateRefundPercentage()` implemented 7 days / 3–6 days / under 3 days. A Terms of Service page is the worst possible place to repeat that mistake, so nothing in it is typed as a literal number that the code also owns. If you add a rule to these pages, wire it to its constant.
 
-The cancellation tiers themselves (100% within 24 hours of booking or 7+ days out, 50% at 3–6 days, none under 3 days) are still written as prose, because they live in `if` branches rather than in named constants — if those tiers ever move, `terms.blade.php` §9 must move with them.
+The cancellation tiers this paragraph used to describe are gone (v7.52): §9 prints `Booking::CANCELLATION_POLICY`. The values added since are listed under v7.70.
 
 `PortalController::LEGAL_LAST_UPDATED` drives the "Last updated" date on both pages. **Bump it by hand when the policy wording changes** — it deliberately does not track deploys or file mtimes, because it tells a guest when the *policy* changed, not when the app was last shipped.
 
@@ -9078,7 +9337,7 @@ ALTER TABLE bookings ADD COLUMN check_out_time TIME NOT NULL DEFAULT '12:00:00' 
 - **🔔 Notification Bell** — dropdown with latest notifications, unread dot, mark-all-read
 - **🔍 Search Modal** — live search across bookings, guests, properties (`Ctrl+K` shortcut)
 
-**Revenue Fix:** `revenue_today` and `revenue_this_month` query from `payments` table using `payment_date` column, excluding refunds.
+**Revenue Fix:** `revenue_today` and `revenue_this_month` query from `payments` table using `payment_date` column. **Net of refunds since v7.69** (`Payment::netRevenue()`), the same figure as Net Revenue on the Reports page; before that they only left refunds out.
 
 ---
 
@@ -9163,12 +9422,13 @@ GET    /admin/bookings/lookup                    → admin.bookings.lookup  (AJA
 **View:** `resources/views/admin/reports/index.blade.php`
 **Route:** `GET /admin/reports` → `admin.reports.index`
 
-**Features:**
-- 6 Chart.js charts: Monthly Revenue, Monthly Bookings, Occupancy Rate, Booking Sources, Revenue by Property, Cancellation Rate
-- 5 Period filters + custom date range
-- KPI summary cards
-- Top properties table
-- **Export PDF / Export Excel (NEW v5.2)** — `GET /admin/reports/export/{pdf,excel}` (`ReportController::exportPdf()`/`exportExcel()`), reusing the same `buildReportData()` the index view uses (respects whatever period/date-range filter is active). PDF via `barryvdh/laravel-dompdf` rendering `admin/reports/pdf.blade.php` (a plain-table layout — dompdf's CSS support is limited, no flexbox/grid). Excel via `maatwebsite/excel`, `App\Exports\ReportExport` (a 3-sheet `WithMultipleSheets` workbook: Summary KPIs, Revenue by Month, Top Properties).
+**Features (as of v7.69 — see that entry for why each is the way it is):**
+- 4 KPI cards: Net Revenue (with collected and refunds under it), Bookings Made (with cancelled / no-show), Occupancy Rate (slots booked ÷ slots offered, both counts shown), Avg. Booking Value
+- 5 Chart.js charts: Net Revenue over the last 12 months, Booking Trend (12 months), Booking Sources, Net Revenue in This Period (a bar per day, week or month depending on the length of the period), Booking Status Mix
+- Bookings by Slot table (Day / Night / 22 Hours), which replaced "Revenue by Property"
+- 5 period filters + a custom date range (validated; at most three years)
+- **Three date bases, stated on the page:** bookings by the date they were made, payments by the date they were paid, occupancy by the date of the stay
+- **Export PDF / Export Excel (v5.2, reworked v7.69)** — `GET /admin/reports/export/{pdf,excel}` (`ReportController::exportPdf()`/`exportExcel()`), reusing the same `buildReportData()` the index view uses (respects whatever period/date-range filter is active). PDF via `barryvdh/laravel-dompdf` rendering `admin/reports/pdf.blade.php` (a plain-table layout — dompdf's CSS support is limited, no flexbox/grid; DejaVu Sans, because the built-in fonts have no ₱). Excel via `maatwebsite/excel`, `App\Exports\ReportExport` (a 5-sheet `WithMultipleSheets` workbook: Summary, Net Revenue in Period, Revenue by Month, Bookings by Slot, Sources and Status).
 
 ---
 

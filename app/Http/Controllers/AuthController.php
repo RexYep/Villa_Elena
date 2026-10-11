@@ -23,8 +23,10 @@ use App\Helpers\NotificationHelper;
 
 class AuthController extends Controller
 {
-    private const TRUSTED_DEVICE_COOKIE = 'trusted_device';
-    private const TRUSTED_DEVICE_DAYS   = 60;
+    // Public: the Privacy Policy's cookie table and the Terms print both
+    // (PortalController::legalContext()).
+    public const TRUSTED_DEVICE_COOKIE = 'trusted_device';
+    public const TRUSTED_DEVICE_DAYS   = 60;
     private const OTP_TTL_MINUTES       = 10;
     // Wrong guesses allowed against ONE code before it is cancelled. The
     // route throttle is per network only, so without this a 6-digit code

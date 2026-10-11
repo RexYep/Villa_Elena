@@ -43,7 +43,7 @@
                     <a class="toc-link" href="#payouts">11. How refunds are paid</a>
                     <a class="toc-link" href="#stay">12. Your stay</a>
                     <a class="toc-link" href="#reviews">13. Reviews</a>
-                    <a class="toc-link" href="#assistant">14. AI assistant</a>
+                    <a class="toc-link" href="#assistant">14. Chatbot</a>
                     <a class="toc-link" href="#liability">15. Liability</a>
                     <a class="toc-link" href="#changes">16. Changes &amp; governing law</a>
                 </div>
@@ -71,10 +71,13 @@
                 <section id="property">
                     <h2><span class="num">02</span>What you are booking</h2>
                     <p>
-                        Villa Elena is a <strong>private, whole-property rental</strong>. The villa has
-                        6 rooms, but they are <strong>not booked individually</strong> — one reservation
-                        rents the entire villa exclusively to one guest group at a time. You will never
-                        share the property with another party during your slot.
+                        {{-- Walang bilang ng kuwarto rito: dating "6 rooms" ang
+                             nakasulat habang 3 ang nasa database. Hindi ito
+                             bahagi ng kasunduan — ang buong villa ang inuupahan. --}}
+                        Villa Elena is a <strong>private, whole-property rental</strong>. Its rooms are
+                        <strong>not booked individually</strong> — one reservation rents the entire villa
+                        exclusively to one guest group at a time. You will never share the property with
+                        another party during your slot.
                     </p>
                     <p>
                         Room photos and descriptions on this site are shown for reference only. They do
@@ -86,15 +89,26 @@
                     <h2><span class="num">03</span>Accounts</h2>
                     <ul>
                         <li>You need a registered account to book online, and your email address must be
-                            <strong>verified</strong> before a booking can be submitted.</li>
-                        <li>The details you provide (name, contact number, address, and ID details where
-                            requested) must be accurate — they are used to identify you at check-in and to
-                            process payments and refunds.</li>
+                            <strong>verified</strong> before a booking can be submitted.
+                        </li>
+                        <li>A sign-up whose email address is not verified within
+                            <strong>{{ $unverifiedHours }} hours</strong> is deleted automatically. The
+                            address can then be registered again.
+                        </li>
+                        <li>The details you provide (name, contact number, and address) must be accurate —
+                            they are used to identify you at check-in and to process payments and
+                            refunds.</li>
                         <li>You are responsible for keeping your password confidential. You may enable
                             <strong>two-factor authentication</strong>, in which case a one-time code is
-                            emailed to you at sign-in.</li>
+                            emailed to you when you sign in from a browser we have not verified. A verified
+                            browser is remembered for {{ $trustedDeviceDays }} days, and you can remove it
+                            from your profile at any time.
+                        </li>
                         <li>Walk-in guests may have an account created for them by our front desk staff
                             using the details they provide on-site.</li>
+                        <li>You may deactivate your own account from your profile. This signs you out and
+                            blocks sign-in until we reactivate it; it does not cancel a booking or delete
+                            your records.</li>
                         <li>We may suspend or deactivate an account that is used for fraudulent bookings,
                             abuse of staff, or repeated no-shows.</li>
                     </ul>
@@ -119,7 +133,10 @@
                             <tbody>
                                 @foreach ($slots as $key => $slot)
                                     @php
-                                        [$slotIn, $slotOut] = \App\Models\Booking::slotDateTimes($key, now()->toDateString());
+                                        [$slotIn, $slotOut] = \App\Models\Booking::slotDateTimes(
+                                            $key,
+                                            now()->toDateString(),
+                                        );
                                     @endphp
                                     <tr>
                                         {{-- `name` mula sa Booking::SLOTS, hindi ucfirst($key):
@@ -128,7 +145,8 @@
                                         <td>{{ $slotIn->format('g:i A') }}</td>
                                         <td>
                                             {{ $slotOut->format('g:i A') }}
-                                            <span class="text-muted-theme">({{ $slot['overnight'] ? 'next day' : 'same day' }})</span>
+                                            <span
+                                                class="text-muted-theme">({{ $slot['overnight'] ? 'next day' : 'same day' }})</span>
                                         </td>
                                         <td>{{ $slotIn->diffInHours($slotOut) }} hours</td>
                                     </tr>
@@ -142,8 +160,8 @@
                          booking form sa halos lahat ng petsa. --}}
                     @php
                         $windowed = collect($windowedSlots ?? [])
-                            ->filter(fn ($k) => isset($slots[$k]))
-                            ->map(fn ($k) => $slots[$k]['name'])
+                            ->filter(fn($k) => isset($slots[$k]))
+                            ->map(fn($k) => $slots[$k]['name'])
                             ->values();
                     @endphp
                     @if ($windowed->isNotEmpty())
@@ -156,6 +174,10 @@
                             date offers Day and Night as usual.
                         </p>
                     @endif
+                    <p>
+                        Online bookings can be made up to <strong>{{ $maxAdvanceDays }} days ahead</strong>.
+                        Dates beyond that are not yet open.
+                    </p>
                     <div class="legal-note">
                         <p>
                             The gap between slots is reserved for cleaning and preparation, so early
@@ -170,36 +192,43 @@
                     <h2><span class="num">05</span>Rates</h2>
                     <p>
                         Villa Elena is charged as a <strong>flat package rate per slot</strong>. The price
-                        does not change with the number of guests — it depends only on when your slot
-                        starts:
+                        does not change with the number of guests — it depends on the slot you choose
+                        and on when that slot starts:
                     </p>
-                    @if ($villa)
+                    {{-- Isang hanay kada pares ng presyo, hindi kada slot
+                         (PortalController::legalRateGroups()). Dating Day/Night
+                         lang ang narito, kaya ang 22-oras ay may slot sa
+                         Section 4 pero walang presyo sa Section 5. --}}
+                    @if (!empty($rateGroups))
                         <div class="legal-table-wrap">
                             <table class="legal-table">
                                 <thead>
                                     <tr>
-                                        <th>Segment</th>
-                                        <th>When your slot starts</th>
-                                        <th>Rate</th>
+                                        <th>Slot</th>
+                                        <th>Regular</th>
+                                        <th>Peak</th>
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    <tr>
-                                        <td><strong>Regular</strong></td>
-                                        <td>Monday to Thursday (any slot), and Sunday from 6:00 PM onwards</td>
-                                        <td>₱{{ number_format($villa->base_price, 2) }}</td>
-                                    </tr>
-                                    <tr>
-                                        <td><strong>Peak</strong></td>
-                                        <td>Friday and Saturday (any slot), and Sunday before 6:00 PM</td>
-                                        <td>₱{{ number_format($villa->weekend_price, 2) }}</td>
-                                    </tr>
+                                    @foreach ($rateGroups as $group)
+                                        <tr>
+                                            <td><strong>{{ implode(', ', $group['names']) }}</strong></td>
+                                            <td>₱{{ number_format($group['regular'], 2) }}</td>
+                                            <td>₱{{ number_format($group['peak'], 2) }}</td>
+                                        </tr>
+                                    @endforeach
                                 </tbody>
                             </table>
                         </div>
+                        <ul>
+                            <li><strong>Regular</strong> applies when your slot starts on Monday to
+                                Thursday, or on Sunday from 6:00 PM onwards.</li>
+                            <li><strong>Peak</strong> applies when your slot starts on Friday or Saturday,
+                                or on Sunday before 6:00 PM.</li>
+                        </ul>
                     @endif
                     <p>
-                        Special dates such as holidays may carry a published override rate. Whatever rate
+                        Special dates such as holidays and busy periods may carry a different rate. Whatever rate
                         applies, the exact total is always shown to you on the booking form
                         <strong>before</strong> you are asked to pay, and that figure is what you are
                         charged. Rates may change at any time, but a change never affects a booking that
@@ -215,12 +244,16 @@
                             the promo period and it covers the slot you selected.</li>
                         <li>A promo advertised on our homepage for a future period does not discount an
                             earlier stay. Only the check-in date decides.</li>
+                        <li>Some promos are for <strong>returning guests only</strong>. Each one states
+                            how many completed stays it needs. Only stays that have been checked out
+                            count, and the booking must be made from the account that made them.</li>
                         <li><strong>Promos never stack.</strong> If more than one applies, the single
                             largest discount is used.</li>
                         <li>Discounts apply to the villa rate only — never to extra charges added during
                             your stay.</li>
-                        <li>We may add, change, or withdraw a promo at any time. A promo already applied
-                            to a confirmed booking stays applied.</li>
+                        <li>We may add, change, or withdraw a promo at any time, including one with no
+                            stated end date. A promo already applied to a confirmed booking stays
+                            applied.</li>
                     </ul>
                 </section>
 
@@ -241,6 +274,12 @@
                             is charged when this happens.
                         </p>
                     </div>
+                    <p>
+                        If a payment reaches us after a booking was released — for example through a QR
+                        code you opened earlier — we restore the booking when its slot is still
+                        available. When it is not, the booking stays cancelled and the payment is returned
+                        to you (<a href="#payouts">Section 11</a>).
+                    </p>
                     <p>
                         Any remaining balance is payable before or at check-in. Check-in may be held until
                         an outstanding balance is settled.
@@ -264,8 +303,8 @@
                         <li>QR Ph payments are confirmed asynchronously. If you close the page after
                             paying, your payment is still recorded — your booking and email notification
                             will reflect it once the payment provider confirms it.</li>
-                        <li>Every payment appears in your account under <em>My Bookings</em>, with its
-                            reference number.</li>
+                        <li>Every payment appears in your account, on the <em>Payments</em> page and on
+                            the booking it belongs to.</li>
                     </ul>
                 </section>
 
@@ -304,12 +343,15 @@
                         <li>Rescheduling must be done at least
                             <strong>{{ $rescheduleCutoff }} days before check-in</strong>. Past that point
                             the booking can no longer be moved, and cancelling it falls under
-                            <a href="#cancellation">Section 9</a>.</li>
-                        <li>The new date and slot must be available.</li>
+                            <a href="#cancellation">Section 9</a>.
+                        </li>
+                        <li>The new date and slot must be available, and no more than
+                            {{ $maxAdvanceDays }} days ahead.</li>
                         <li>If the new slot costs more, the difference is added to your balance. If it
                             costs less than what you have already paid, the difference is
                             <strong>not refunded</strong>; we tell you the amount and ask you to confirm
-                            before the booking is moved.</li>
+                            before the booking is moved.
+                        </li>
                         <li>Promo eligibility is recalculated for the new check-in date — a promo may be
                             gained or lost by moving your stay.</li>
                     </ul>
@@ -320,16 +362,19 @@
                     <p>
                         Refunds are the exception, not the rule (<a href="#cancellation">Section 9</a>).
                         They arise when we cancel your booking, when you were charged more than your
-                        booking's total, or when a payment arrives for a slot that is no longer available.
+                        booking's total, when a payment arrives after the booking was cancelled, or when
+                        we choose to return a payment as a goodwill gesture.
                     </p>
+                    {{-- Walang "approved" dito: walang hakbang ng pag-apruba at
+                         hindi makakahiling ng refund ang guest (v7.63). --}}
                     <p>
-                        A QR Ph payment cannot be reversed back to its source. An approved refund is
-                        therefore sent as a <strong>separate transfer</strong> to a bank or e-wallet
-                        account that you nominate, or handed to you in cash if you were checked in.
+                        A QR Ph payment cannot be reversed back to its source. A refund is therefore sent
+                        as a <strong>separate transfer</strong> to a bank or e-wallet account that you
+                        nominate. A payment made in cash is returned in cash.
                     </p>
                     <ul>
-                        <li>After a refund is approved, we ask you for the destination account —
-                            institution, account number, and account name.</li>
+                        <li>When a refund is issued, we notify you and ask you for the destination
+                            account — institution, account number, and account name.</li>
                         <li>The account name must match the account exactly. There is no way for us to
                             verify a name in advance; an incorrect detail is only discovered when the
                             receiving institution rejects the transfer.</li>
@@ -338,7 +383,7 @@
                             (for example, for a blocked, dormant, or limit-exceeded account).</li>
                         <li>If a transfer is rejected, we retry it and, if it still fails, arrange another
                             payout method with you. <strong>A refund is only complete once the money has
-                            actually been received</strong>, and your booking record shows that status.</li>
+                                actually been received</strong>, and your booking record shows that status.</li>
                         <li>We do not charge you a fee to send a refund. Any fee charged by your own bank
                             or wallet provider is outside our control.</li>
                     </ul>
@@ -360,7 +405,11 @@
                             refund.</li>
                         <li>Check-in and check-out are recorded by the system at the slot times shown in
                             <a href="#slots">Section 4</a>. Staying past your check-out time may be charged
-                            as an extension.</li>
+                            as an extension.
+                        </li>
+                        <li>If something in the villa is not working during your stay, you can report it
+                            from your booking page while you are checked in. The report goes to our front
+                            desk and management at once.</li>
                         <li>Personal belongings are your responsibility. Please check the villa before you
                             leave.</li>
                     </ul>
@@ -369,9 +418,14 @@
                 <section id="reviews">
                     <h2><span class="num">13</span>Reviews</h2>
                     <p>
-                        You may write one review per booking, after you have checked out. Reviews are
-                        screened automatically and by our staff before publication, and are published
-                        together with your account name and the month of your stay.
+                        You may write one review per booking, after you have checked out. Every review is
+                        screened automatically: one that passes is published straight away, and one that
+                        is flagged is held until our staff have read it. A published review shows your
+                        account name, your profile photo if you have one, and the month it was written.
+                    </p>
+                    <p>
+                        You may edit or delete your own review at any time. An edited review is screened
+                        again.
                     </p>
                     <p>
                         We may decline to publish, or later remove, a review that contains abusive
@@ -382,7 +436,7 @@
                 </section>
 
                 <section id="assistant">
-                    <h2><span class="num">14</span>AI assistant</h2>
+                    <h2><span class="num">14</span>Chatbot</h2>
                     <p>
                         The chat assistant on this site answers questions about rates, slots, promos, and
                         the resort in general. Its replies are generated automatically and are
@@ -414,13 +468,12 @@
                 <section id="changes">
                     <h2><span class="num">16</span>Changes &amp; governing law</h2>
                     <p>
-                        We may update these terms. The current version is always published on this page
-                        with its update date, and the version in effect when you booked governs that
-                        booking.
+                        We may update these terms. The current version is always published on this page,
+                        with the date it was last updated.
                     </p>
                     <p>
                         These terms are governed by the laws of the <strong>Republic of the
-                        Philippines</strong>, and any dispute that cannot be settled between us falls
+                            Philippines</strong>, and any dispute that cannot be settled between us falls
                         under the jurisdiction of the courts of Laguna.
                     </p>
                 </section>
@@ -429,8 +482,10 @@
                     <h2>Questions about these terms?</h2>
                     <p>Talk to us before you book — we would rather explain a rule than surprise you with it.</p>
                     <div class="legal-contact-rows">
-                        <span><i class="bi bi-envelope"></i> <a href="mailto:{{ $resortEmail }}">{{ $resortEmail }}</a></span>
-                        <span><i class="bi bi-telephone"></i> <a href="tel:{{ preg_replace('/[^0-9+]/', '', $resortPhone) }}">{{ $resortPhone }}</a></span>
+                        <span><i class="bi bi-envelope"></i> <a
+                                href="mailto:{{ $resortEmail }}">{{ $resortEmail }}</a></span>
+                        <span><i class="bi bi-telephone"></i> <a
+                                href="tel:{{ preg_replace('/[^0-9+]/', '', $resortPhone) }}">{{ $resortPhone }}</a></span>
                         <span><i class="bi bi-geo-alt"></i> {{ $resortAddress }}</span>
                     </div>
                 </div>
@@ -447,3 +502,4 @@
 @push('scripts')
     @include('portal.legal._scripts')
 @endpush
+

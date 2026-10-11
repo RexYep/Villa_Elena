@@ -59,10 +59,36 @@ class OccupancyCalendar
     /** @var array<string, array> */
     private array $quoteCache = [];
 
+    /** @var array{0: Carbon, 1: Carbon}|null set by covering(): load this range, not the rolling one */
+    private ?array $fixedRange = null;
+
+    /** @var array<string, array<int, string>>|null `Booking::slotWindowDates()` for the fixed range */
+    private ?array $windowDates = null;
+
     public function __construct(?Property $villa = null, ?HolidayCalendar $holidays = null)
     {
         $this->villa = $villa ?? Property::where('type', 'villa')->firstOrFail();
         $this->holidays = $holidays ?? new HolidayCalendar;
+    }
+
+    /**
+     * A calendar loaded for one chosen period instead of the rolling range
+     * the recommendation rules read. Reports uses it, so its occupancy is
+     * the same count as "booked so far" on the Recommendations page.
+     */
+    public static function covering(Carbon $from, Carbon $to, ?Property $villa = null): static
+    {
+        $calendar = new static($villa);
+
+        // A day either side: a 22-hour stay from the day before still holds
+        // the first date's Day, and a block on the day after closes the last
+        // date's 22-hour stay.
+        $calendar->fixedRange = [
+            $from->copy()->startOfDay()->subDay(),
+            $to->copy()->startOfDay()->addDay(),
+        ];
+
+        return $calendar;
     }
 
     public function villa(): Property
@@ -98,9 +124,24 @@ class OccupancyCalendar
         $key = $date->format('Y-m-d');
 
         return $this->offeredCache[$key] ??= array_values(array_filter(
-            Booking::slotsOfferedOn($date, $this->villa),
+            Booking::slotsOfferedOn($date, $this->villa, $this->windowDatesFor($date)),
             fn (string $slot) => ! $this->isClosedByBlock($date, $slot)
         ));
+    }
+
+    /**
+     * The 22-hour dates of a covering() range, read once. A year of dates
+     * would otherwise be a query each. Null leaves slotsOfferedOn() to look
+     * the date up itself: always for the rolling range, and for a date
+     * outside the range that was loaded.
+     */
+    private function windowDatesFor(Carbon $date): ?array
+    {
+        if ($this->fixedRange === null || ! $date->betweenIncluded(...$this->fixedRange)) {
+            return null;
+        }
+
+        return $this->windowDates ??= Booking::slotWindowDates($this->villa, ...$this->fixedRange);
     }
 
     public function isTaken(Carbon $date, string $slot): bool
@@ -231,6 +272,32 @@ class OccupancyCalendar
     }
 
     /**
+     * Slots booked and slots offered from one date to another, both
+     * included: the two counts behind "booked so far", without the history
+     * summarise() adds. Build the calendar with covering() for these dates.
+     *
+     * @return array{booked: int, offered: int}
+     */
+    public function slotCounts(Carbon $from, Carbon $to): array
+    {
+        $booked = 0;
+        $offered = 0;
+        $last = $to->copy()->startOfDay();
+
+        for ($date = $from->copy()->startOfDay(); $date->lte($last); $date->addDay()) {
+            foreach ($this->sellableSlots($date) as $slot) {
+                $offered++;
+
+                if ($this->isTaken($date, $slot)) {
+                    $booked++;
+                }
+            }
+        }
+
+        return ['booked' => $booked, 'offered' => $offered];
+    }
+
+    /**
      * The upcoming calendar cut into the stretches the pricing rules judge:
      * each week's weekdays (Mon–Thu) and its weekend (Fri–Sun). Those are
      * the two groups the villa already prices differently.
@@ -334,11 +401,19 @@ class OccupancyCalendar
 
     private function rangeStart(): Carbon
     {
+        if ($this->fixedRange !== null) {
+            return $this->fixedRange[0]->copy();
+        }
+
         return Carbon::today()->subDays($this->historyDays() + 1);
     }
 
     private function rangeEnd(): Carbon
     {
+        if ($this->fixedRange !== null) {
+            return $this->fixedRange[1]->copy();
+        }
+
         $days = max(
             (int) config('prescriptive.lookahead_days', 30) + 7,
             (int) config('prescriptive.maintenance_horizon_days', 60)

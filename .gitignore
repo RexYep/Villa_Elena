@@ -18,6 +18,11 @@
 /public/storage
 /storage/*.key
 /storage/*.pem
+/storage/framework/cache/data/*
+/storage/framework/sessions/*
+/storage/framework/testing/*
+/storage/framework/views/*
+/storage/framework/lsp-*.php
 # Database dumps written by `php artisan db:backup` (v7.41). This MUST stay
 # ignored: a dump is the entire database — every guest name, email, phone,
 # address, booking and payment record — and committing one publishes all of it to
