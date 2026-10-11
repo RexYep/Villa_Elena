@@ -413,4 +413,80 @@ public function images()
             'promo'    => $promo,
         ];
     }
+
+    /**
+     * The rates a guest can be charged, one entry per pair of price columns.
+     *
+     * Day and Night share one pair; both 22-hour slots share another
+     * (priceColumnsFor()). Only priced slots are listed. The villa page's
+     * rate table and Terms §5 both print this, so a rate cannot be shown in
+     * one place and not the other.
+     *
+     * These are list prices. A `pricing_rules` override or a promo for a
+     * particular date is not in here; quoteFor() is what a booking is
+     * charged.
+     *
+     * @return array<int, array{names: array<int, string>, regular: float, peak: float, selected_dates: bool}>
+     */
+    public function rateGroups(): array
+    {
+        $groups = [];
+
+        foreach (\App\Models\Booking::bookableSlotKeys($this) as $key) {
+            [$baseCol, $weekendCol] = static::priceColumnsFor($key);
+
+            $groups[$baseCol] ??= [
+                'names' => [],
+                'regular' => (float) $this->{$baseCol},
+                // Peak falls back to regular when it is blank, as
+                // getPackagePrice() does.
+                'peak' => (float) ($this->{$weekendCol} ?? $this->{$baseCol}),
+                'selected_dates' => \App\Models\Booking::slotRequiresWindow($key),
+            ];
+            $groups[$baseCol]['names'][] = \App\Models\Booking::SLOTS[$key]['name'];
+        }
+
+        return array_values($groups);
+    }
+
+    /**
+     * Words that pick an amenity's icon, first match wins.
+     *
+     * Amenity names are free text the admin types (Settings →
+     * `property_amenities`), so the icon is found by a word inside the name,
+     * never by the whole name. The villa page used to look names up in a list
+     * of short keys (`pool`, `wifi`); the stored names are "Kiddie Swimming
+     * Pool" and "Wifi", so nothing matched and every amenity got the same tick.
+     */
+    private const AMENITY_ICONS = [
+        'pool|swim|jacuzzi'               => 'bi-water',
+        'wi-?fi|internet'                 => 'bi-wifi',
+        'air[ -]?con|a\/c'                => 'bi-snow',
+        'videoke|karaoke|speaker|sound'   => 'bi-mic',
+        'grill|bbq|barbecue'              => 'bi-fire',
+        'refrigerator|fridge|freezer'     => 'bi-thermometer-snow',
+        'stove|burner|kitchen|cook'       => 'bi-cup-hot',
+        'park|garage'                     => 'bi-car-front',
+        '\btv\b|television'               => 'bi-tv',
+        'shower|bath|toilet'              => 'bi-droplet',
+        'wash|laundry'                    => 'bi-basket',
+        'gym'                             => 'bi-bicycle',
+        '\bbar\b'                         => 'bi-cup-straw',
+        'breakfast'                       => 'bi-egg-fried',
+        '\bspa\b|massage'                 => 'bi-flower1',
+        'cctv|security|guard'             => 'bi-shield-check',
+        'generator'                       => 'bi-lightning-charge',
+    ];
+
+    /** The Bootstrap Icons class for an amenity name; a plain tick when no word matches. */
+    public static function amenityIcon(string $name): string
+    {
+        foreach (self::AMENITY_ICONS as $words => $icon) {
+            if (preg_match('/'.$words.'/i', $name)) {
+                return $icon;
+            }
+        }
+
+        return 'bi-check-circle';
+    }
 }

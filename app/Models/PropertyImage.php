@@ -45,6 +45,23 @@ class PropertyImage extends Model
         'is_primary' => 'boolean',
     ];
 
+    /**
+     * Photo size, in pixels. The upload rule, its error message, the hint on
+     * the admin forms and the warning on a preview all read these, so the
+     * form never states a limit the server does not enforce.
+     *
+     * MIN_*: refused below this. Low on purpose: it only stops thumbnails and
+     * icons, and a portrait phone photo (720×960) still passes.
+     * SOFT_BELOW_WIDTH: accepted, but warned about. The villa page shows its
+     * main photo up to about 890px wide, so anything narrower is enlarged.
+     * RECOMMENDED_WIDTH: what the hint asks for; sharp in the full-size viewer
+     * and on a high-density screen.
+     */
+    public const MIN_WIDTH = 600;
+    public const MIN_HEIGHT = 400;
+    public const SOFT_BELOW_WIDTH = 1000;
+    public const RECOMMENDED_WIDTH = 1600;
+
     // ── Relationships ──────────────────────────────────────────────
 
     public function property()

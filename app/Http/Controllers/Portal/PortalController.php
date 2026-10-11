@@ -227,7 +227,7 @@ class PortalController extends Controller
             'depositPct' => (float) Setting::get('deposit_percentage', 50),
             'holdMinutes' => Booking::pendingHoldMinutes(),
             'slots' => $slots,
-            'rateGroups' => $this->legalRateGroups($villa, $slots),
+            'rateGroups' => $this->legalRateGroups($villa),
             'windowedSlots' => Booking::windowedSlotKeys(),
             'maxReschedules' => Booking::MAX_RESCHEDULES,
             'rescheduleCutoff' => Booking::RESCHEDULE_CUTOFF_DAYS,
@@ -257,28 +257,12 @@ class PortalController extends Controller
      *
      * @return array<int, array{names: array<int, string>, regular: float, peak: float}>
      */
-    private function legalRateGroups(?Property $villa, array $slots): array
+    private function legalRateGroups(?Property $villa): array
     {
-        if (! $villa) {
-            return [];
-        }
-
-        $groups = [];
-
-        foreach ($slots as $key => $slot) {
-            [$baseCol, $weekendCol] = Property::priceColumnsFor($key);
-
-            $groups[$baseCol] ??= [
-                'names' => [],
-                'regular' => (float) $villa->{$baseCol},
-                // Bumabagsak sa regular ang peak kapag blangko — gaya ng
-                // ginagawa ng getPackagePrice().
-                'peak' => (float) ($villa->{$weekendCol} ?? $villa->{$baseCol}),
-            ];
-            $groups[$baseCol]['names'][] = $slot['name'];
-        }
-
-        return array_values($groups);
+        // Ang mismong listahan ay nasa Property::rateGroups(), na siya ring
+        // binabasa ng pahina ng villa — iisang pinagmulan, para hindi
+        // magkaiba ang presyong nakalagay doon at dito.
+        return $villa ? $villa->rateGroups() : [];
     }
 
     // ── Contact Form Submission ──────────────────────────────────────

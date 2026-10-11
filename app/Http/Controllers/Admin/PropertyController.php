@@ -11,6 +11,7 @@ use App\Models\StaffLog;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Validation\Rule;
 
 class PropertyController extends Controller
 {
@@ -26,6 +27,38 @@ class PropertyController extends Controller
         'Outdoor Shower', 'Water Heater', 'Generator',
         'CCTV', 'Rice Cooker', 'Dining Area',
     ];
+
+    /**
+     * The rule for one uploaded photo, shared by create and update.
+     *
+     * The size floor is PropertyImage::MIN_*: the villa page crops and
+     * enlarges whatever it is given, so a thumbnail-sized upload is refused
+     * here instead of being shown blurred to guests.
+     */
+    private function photoRule(): array
+    {
+        return [
+            'nullable',
+            'image',
+            'mimes:jpg,jpeg,png,webp',
+            'max:3048',
+            Rule::dimensions()
+                ->minWidth(PropertyImage::MIN_WIDTH)
+                ->minHeight(PropertyImage::MIN_HEIGHT),
+        ];
+    }
+
+    /** `:position` names which photo, so three small files are not three identical lines. */
+    private function photoMessages(): array
+    {
+        return [
+            'images.*.dimensions' => sprintf(
+                'Photo :position is too small. Each photo must be at least %d × %d pixels.',
+                PropertyImage::MIN_WIDTH,
+                PropertyImage::MIN_HEIGHT
+            ),
+        ];
+    }
 
     private function amenityList(): array
     {
@@ -101,8 +134,8 @@ class PropertyController extends Controller
             // reads like a session problem. See docker/php.ini before changing
             // this — all four numbers move together.
             'images'   => 'nullable|array|max:10',
-            'images.*' => 'nullable|image|mimes:jpg,jpeg,png,webp|max:3048',
-        ]);
+            'images.*' => $this->photoRule(),
+        ], $this->photoMessages());
 
         $property = Property::create([
             'property_name'  => $request->property_name,
@@ -204,8 +237,8 @@ class PropertyController extends Controller
             // reads like a session problem. See docker/php.ini before changing
             // this — all four numbers move together.
             'images'   => 'nullable|array|max:10',
-            'images.*' => 'nullable|image|mimes:jpg,jpeg,png,webp|max:3048',
-        ]);
+            'images.*' => $this->photoRule(),
+        ], $this->photoMessages());
 
         // I-kunin ang lumang datos ng property BAGO mag-update, para
         // magamit sa StaffLog (audit trail: "ano bago, ano pagkatapos").

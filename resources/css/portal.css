@@ -325,6 +325,7 @@ body.cust-shell .main { margin-top: 0; }
 .breadcrumb-row { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); margin-bottom: 24px; }
 .breadcrumb-row a { color: var(--muted); text-decoration: none; }
 .breadcrumb-row a:hover { color: var(--stone); }
+.breadcrumb-row [aria-current="page"] { color: var(--stone); font-weight: 500; }
 
 /* ── SHARED PAGE HEADER ──────────────────────────────────────────── */
 .page-title { font-family: var(--font-display); font-size: 28px; font-weight: 600; margin-bottom: 6px; }

@@ -1,7 +1,7 @@
 # Villa Elena Private Rental Resort
 ## Resort Management System — Project Documentation
 
-**Version:** 7.70
+**Version:** 7.71
 **Stack:** PHP 8.2 / Laravel 12 / MySQL 8 / Bootstrap 5
 **Local URL:** `http://127.0.0.1:8000` (`php artisan serve`) or `http://localhost:8000` (Docker — see v5.3)
 **Live URL:** `https://villa-elena.onrender.com` (Render, free tier — testing only, not yet handed to real guests)
@@ -185,6 +185,95 @@ through `user_id` and nothing denormalises their name into a booking row.
 from Task 11 · F5 get dropped at the same time — they are empty and reserved
 (`users.id_type` / `users.id_number`, see v7.40), and a schema change for erasure
 is the natural moment to remove them rather than a migration of their own.
+
+---
+
+## What Changed in v7.71 (Read This First)
+
+### Villa page: photos that fit, and a viewer
+
+A UI review of `portal/property.blade.php` (2026-10-11) measured the gallery in
+a browser. The photos were never distorted (`object-fit: cover`), but the page
+forced whatever it was given into one fixed shape.
+
+| Photos | Before | Now |
+|---|---|---|
+| One (the local villa: 798×600) | Full width, 1240×359: enlarged 1.55×, 39% of the photo visible | In the left column beside the booking card, 3:2 capped at 70vh. Measured 848×410 in a 585px-high window: 1.06×, 64% visible (more on a taller screen) |
+| Two | A 2×2 grid with an empty cell under the second photo | Side by side at full height (`.gallery.is-pair`) |
+| Three or more | One large, two stacked; photos past the third unreachable | Same layout; every tile opens the viewer |
+
+- **Gallery, details and booking card are three cells of one grid**
+  (`.detail-grid`), so the gallery can run across the top or sit in the left
+  column (`.has-one-photo`). The gallery's height is always set in CSS and each
+  image is absolutely positioned inside its tile: a photo can never size the
+  grid. A grid item with `aspect-ratio` is not stretched, so `.gallery.is-single`
+  needs its `width: 100%`.
+- **`partials/photo_viewer`** is a `<dialog>` like `confirm_dialog`. It shows a
+  photo whole and never enlarges it past its own pixels (auto size with
+  `max-width`/`max-height`, in a `minmax(0, 1fr)` cell). Arrow keys, swipe, Esc,
+  and a click beside the photo. Any `<button data-photo-index="N">` opens it.
+  Tiles and viewer read one list (`$photos`: primary first, then display order).
+- The "N photos" badge was not a control, and the admin form accepts ten photos
+  while the page shows three. The badge is now part of the main tile's button.
+
+### Photo size is checked at upload
+
+`PropertyImage` holds the numbers: `MIN_WIDTH` × `MIN_HEIGHT` (600 × 400,
+refused below), `SOFT_BELOW_WIDTH` (1000, accepted but flagged "May look
+blurry" on the preview) and `RECOMMENDED_WIDTH` (1600, the hint). The upload
+rule (`PropertyController::photoRule()`), its message, the hint on both admin
+forms and the preview flag all read them. The floor is low on purpose: it stops
+thumbnails, and a 720×960 phone photo still passes. Existing photos are not
+re-checked. Nothing resizes or compresses an upload yet: the local villa photo
+is an 869 KB PNG.
+
+### Other fixes on the same page
+
+- **"Every date has 4 slots" was false.** The sentence counted
+  `bookableSlotKeys()`, which became four with `day22` (v7.59). A date offers
+  Day and Night, or one long stay. The sentence now names them, and names the
+  long stays only when a `slot_windows` date is coming up.
+- **Every amenity showed the same tick.** The view looked names up in a list of
+  short keys (`pool`, `wifi`); the stored names are free text ("Kiddie Swimming
+  Pool", "Wifi"). `Property::amenityIcon()` matches a word inside the name.
+- The calendar arrows and open slot pills hovered to `--gold-light` with white
+  text (1.6:1), against the v7.54 rule. The text is `--stone` now.
+- The villa name is an `<h1>` and the section titles are `<h2>`; the page had
+  no heading. The rule line above a section is spaced by the title's own
+  margin, so it no longer touches the amenity tiles.
+- The old gold (`rgba(184, 148, 63, …)`) in three places, four hex reds and
+  greens and three inline styles now use tokens.
+
+### The booking card: every rate, and it stays in view
+
+- **The card printed `base_price` alone** ("₱4,000 / package"), so a guest first
+  met the ₱6,000 peak rate and the 22-hour rates in the price preview. It now
+  reads "From ₱4,000" over a small table of every rate, with the peak rule
+  under it. The rows come from **`Property::rateGroups()`**, which Terms §5 now
+  reads too (`PortalController::legalRateGroups()` delegates to it), so the two
+  pages cannot list different rates. These are list prices; `quoteFor()` is
+  still what a booking is charged.
+- **The card was `position: sticky` and never stuck.** Its wrapper was a grid
+  item with `align-items: start`, so the wrapper was exactly as tall as the
+  card and the card had nowhere to travel. `.detail-side` is `align-self:
+  stretch` now.
+- **A card taller than the window is pinned by its bottom, not its top**
+  (`placeBookingCard()`, a `ResizeObserver` writing `--card-top`). Stuck by its
+  top, the total and the Reserve button would sit below the screen until the
+  page ended; the card is 826px with the rate table, 919px with a price preview,
+  in a 585px window. It also keeps clear of the chat button when the two share
+  a column. That block runs first in the `DOMContentLoaded` handler so it does
+  not depend on FullCalendar loading.
+- `pickSlot()` only scrolls to the card when the card is not sticky (a phone).
+  On desktop that scroll would nudge the page on every pick.
+- **Three photos on a phone:** the two smaller photos share one row under the
+  main one (168×140 each) instead of stacking as 343×105 strips. A portrait
+  photo shows 63% of itself, up from 23%.
+
+**Not changed, and known:** nothing resizes or compresses an upload; all four
+slots are offered before a date is picked; today's Day slot is still shown as
+open after 8 AM and only the price preview says it has passed; and on a phone
+the price and Reserve button are about 1,450px down.
 
 ---
 

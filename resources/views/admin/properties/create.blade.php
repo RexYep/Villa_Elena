@@ -177,6 +177,20 @@
             object-fit: cover;
         }
 
+        /* A new photo that is too small for the villa page: amber when it
+           will only look soft, red when the server will refuse it. */
+        .preview-flag {
+            position: absolute;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            padding: 3px 6px;
+            font-size: 12px;
+            font-weight: 600;
+            line-height: 1.3;
+            text-align: center;
+        }
+
         .preview-remove {
             position: absolute;
             top: 4px;
@@ -523,6 +537,12 @@
                                  rather than let them find it. See docker/php.ini. --}}
                             <small>JPG, PNG, WEBP — max 3MB each, up to 10 at a time</small>
                         </div>
+                        <p class="field-hint mb-0">
+                            Landscape photos at least
+                            {{ number_format(\App\Models\PropertyImage::RECOMMENDED_WIDTH) }} px wide look best.
+                            Photos smaller than {{ \App\Models\PropertyImage::MIN_WIDTH }} ×
+                            {{ \App\Models\PropertyImage::MIN_HEIGHT }} px are not accepted.
+                        </p>
                         <div class="image-previews" id="imagePreviews"></div>
                     </div>
                 </div>
@@ -625,6 +645,28 @@
             renderPreviews();
         }
 
+        // Reads the photo's real size once it has loaded and says so on the
+        // preview. The numbers are the server's own (PropertyImage), so the
+        // red flag appears exactly when the upload would be refused.
+        const PHOTO_MIN_W = {{ \App\Models\PropertyImage::MIN_WIDTH }};
+        const PHOTO_MIN_H = {{ \App\Models\PropertyImage::MIN_HEIGHT }};
+        const PHOTO_SOFT_W = {{ \App\Models\PropertyImage::SOFT_BELOW_WIDTH }};
+
+        function flagSmallPhoto(item) {
+            const img = item.querySelector('img');
+            img.addEventListener('load', function() {
+                const tooSmall = img.naturalWidth < PHOTO_MIN_W || img.naturalHeight < PHOTO_MIN_H;
+                if (!tooSmall && img.naturalWidth >= PHOTO_SOFT_W) return;
+                // The Primary badge sits in the same corner.
+                item.querySelector('.primary-badge')?.remove();
+                const flag = document.createElement('span');
+                flag.className = 'preview-flag ' + (tooSmall ? 'tag-red' : 'tag-amber');
+                flag.textContent = tooSmall ? 'Too small' : 'May look blurry';
+                flag.title = img.naturalWidth + ' × ' + img.naturalHeight + ' px';
+                item.appendChild(flag);
+            });
+        }
+
         function renderPreviews() {
             previews.innerHTML = '';
             fileList.forEach((file, index) => {
@@ -637,6 +679,7 @@
                 ${index === 0 ? '<span class="primary-badge">Primary</span>' : ''}
                 <button type="button" class="preview-remove" onclick="removeImage(${index})">✕</button>
             `;
+                    flagSmallPhoto(div);
                     previews.appendChild(div);
                 };
                 reader.readAsDataURL(file);

@@ -32,7 +32,7 @@
             font-family: var(--font-display);
             font-size: 36px;
             font-weight: 700;
-            margin-bottom: 12px;
+            margin: 0 0 12px;
             line-height: 1.1;
         }
 
@@ -50,16 +50,22 @@
             gap: 5px;
         }
 
-        /* ── Gallery (buong lapad — ito ang hero ng page) ──
-           Ang taas ay TINATAKDAAN dito, hindi ipinapasya ng larawan.
-           Dating `min-height: 460px` lang ang nakasulat, at dahil ang
-           taas ng grid ay indefinite, ang `height:100%` ng <img> ay
-           bumabagsak pabalik sa intrinsic nitong sukat — kaya isang
-           798×600 na litrato ang lumalaki nang 1240×932 sa laptop: mas
-           mataas pa sa buong viewport, at ini-upscale nang lampas sa
-           sariling resolusyon (kaya malabo). Ang clamp ay sumusunod sa
-           lapad ng screen; ang `max-height` ang humahawak sa mga pandak
-           na laptop screen, kung saan ang vw lang ay hindi sapat. */
+        /* ── Gallery ──
+           The height is set here, never left to the photo. With an
+           indefinite grid height an image falls back to its own pixel size
+           (a 798×600 photo once rendered 1240×932), and every tile's image
+           is absolutely positioned for the same reason: a photo can never
+           size the grid.
+
+           The layout follows the number of photos:
+           one    beside the booking card, at about its real size. Across
+                  the full width a small photo was enlarged 1.55× and only
+                  39% of it showed.
+           two    side by side at full height. The 2×2 grid left a hole
+                  under the second photo.
+           three  one large and two stacked.
+           Every tile opens the viewer (partials/photo_viewer), which is
+           the only place a photo is shown whole. */
         .gallery {
             display: grid;
             grid-template-columns: 2.1fr 1fr;
@@ -72,17 +78,47 @@
             margin-bottom: 36px;
         }
 
-        .gallery-main {
-            grid-row: 1/-1;
-            position: relative;
-            height: 100%;
+        .gallery.is-pair {
+            grid-template-columns: 1.6fr 1fr;
+            grid-template-rows: 1fr;
         }
 
-        .gallery-main:only-child {
-            grid-column: 1/-1;
+        /* `width: 100%` is needed: a grid item with an aspect ratio is not
+           stretched, so once `max-height` applied the width shrank to match
+           it and left a gap beside the photo. */
+        .gallery.is-single {
+            grid-template-columns: 1fr;
+            grid-template-rows: 1fr;
+            width: 100%;
+            height: auto;
+            aspect-ratio: 3 / 2;
+            max-height: min(560px, 70vh);
+        }
+
+        .gallery.is-empty {
+            aspect-ratio: auto;
+            height: 220px;
+        }
+
+        .gallery-tile {
+            position: relative;
+            display: block;
+            width: 100%;
+            height: 100%;
+            padding: 0;
+            border: 0;
+            background: var(--sand);
+            overflow: hidden;
+            cursor: zoom-in;
+        }
+
+        .gallery-main {
+            grid-row: 1/-1;
         }
 
         .gallery-img {
+            position: absolute;
+            inset: 0;
             width: 100%;
             height: 100%;
             object-fit: cover;
@@ -90,13 +126,25 @@
             transition: transform 0.4s ease;
         }
 
-        .gallery>div {
-            overflow: hidden;
-            position: relative;
+        .gallery-tile:hover .gallery-img {
+            transform: scale(1.03);
         }
 
-        .gallery>div:hover .gallery-img {
-            transform: scale(1.03);
+        /* The gallery clips its children, so the shared outline (drawn
+           outside the button) would be cut off. This one is drawn inside,
+           dark then white, so it shows on any photo. */
+        .gallery-tile:focus-visible {
+            outline: none;
+        }
+
+        .gallery-tile:focus-visible::after {
+            content: '';
+            position: absolute;
+            inset: 0;
+            border: 3px solid var(--stone);
+            outline: 3px solid #fff;
+            outline-offset: -6px;
+            pointer-events: none;
         }
 
         .gallery-placeholder {
@@ -115,34 +163,81 @@
             position: absolute;
             bottom: 14px;
             right: 14px;
+            display: inline-flex;
+            align-items: center;
+            gap: 7px;
             background: rgba(0, 0, 0, .7);
             backdrop-filter: blur(4px);
             color: #fff;
-            padding: 6px 14px;
+            padding: 7px 14px;
             border-radius: 100px;
-            font-size: 12.5px;
+            font-family: var(--font-body);
+            font-size: 13px;
             font-weight: 500;
+            pointer-events: none;
         }
 
-        /* ── Layout ── */
+        /* ── Layout ──
+           Gallery, details and booking card are three cells of one grid,
+           so the gallery can run across the top or sit in the left column.
+           Below 901px everything is one column in source order. */
         .detail-grid {
             display: grid;
-            grid-template-columns: 1fr 360px;
-            gap: 32px;
-            align-items: start;
+            grid-template-columns: minmax(0, 1fr);
         }
 
+        @media (min-width: 901px) {
+            .detail-grid {
+                grid-template-columns: minmax(0, 1fr) 360px;
+                column-gap: 32px;
+                align-items: start;
+            }
+
+            .gallery {
+                grid-column: 1 / -1;
+                grid-row: 1;
+            }
+
+            .detail-info {
+                grid-column: 1;
+                grid-row: 2;
+            }
+
+            /* Stretched, not `start`: the card is sticky inside this box, so
+               the box has to be as tall as the row for the card to have
+               anywhere to travel. At its own height the card never stuck. */
+            .detail-side {
+                grid-column: 2;
+                grid-row: 2;
+                align-self: stretch;
+            }
+
+            .detail-grid.has-one-photo .gallery {
+                grid-column: 1;
+            }
+
+            .detail-grid.has-one-photo .detail-side {
+                grid-row: 1 / span 2;
+            }
+        }
+
+        /* The rule line belongs to the section it opens, so the space above
+           it is the title's own margin. It used to rely on whatever the
+           block before it happened to leave: 16px under a paragraph, none
+           under the amenity tiles. */
         .section-title {
             font-family: var(--font-display);
             font-size: 20px;
             font-weight: 600;
-            margin-bottom: 6px;
+            line-height: 1.3;
+            margin: 28px 0 6px;
             padding-top: 28px;
             border-top: 1px solid var(--border);
         }
 
         .section-title:first-of-type {
             border-top: none;
+            margin-top: 0;
             padding-top: 0;
         }
 
@@ -154,9 +249,10 @@
         }
 
         .description {
-            font-size: 14px;
-            line-height: 1.8;
-            color: #5a4f3e;
+            font-size: 15px;
+            line-height: 1.7;
+            margin: 0;
+            max-width: 68ch;
         }
 
         /* ── Amenities ── */
@@ -176,9 +272,11 @@
             font-size: 13px;
         }
 
+        /* --gold-text, not --gold: the icon now says which amenity it is. */
         .amenity-item i {
-            color: var(--gold);
-            font-size: 14px;
+            flex: none;
+            color: var(--gold-text);
+            font-size: 15px;
         }
 
         /* ── Availability Calendar (FullCalendar, tulad ng sa admin) ──
@@ -242,9 +340,17 @@
             padding: 4px 10px;
         }
 
-        .fc .fc-button:hover {
+        /* Dark text on the gold: white on --gold-light is 1.6:1. */
+        .fc .fc-button:hover,
+        .fc .fc-button-primary:not(:disabled):active {
             background: var(--gold-light);
-            color: #fff;
+            border-color: var(--gold);
+            color: var(--stone);
+        }
+
+        .fc .fc-button-primary:focus,
+        .fc .fc-button-primary:not(:disabled):active:focus {
+            box-shadow: 0 0 0 3px rgba(44, 36, 22, .18);
         }
 
         .fc .fc-button-primary:disabled {
@@ -255,7 +361,7 @@
         }
 
         .fc .fc-daygrid-day.fc-day-today {
-            background: rgba(184, 148, 63, .08);
+            background: color-mix(in srgb, var(--gold) 10%, transparent);
         }
 
         .fc .fc-daygrid-day-number {
@@ -348,14 +454,14 @@
         button.slot-pill.is-open:hover {
             background: var(--gold-light);
             border-color: var(--gold);
-            color: #fff;
+            color: var(--stone);
         }
 
         .slot-pill.is-taken,
         .legend-swatch.is-taken {
-            background: #fee2e2;
-            border-color: #fecaca;
-            color: #b91c1c;
+            background: var(--tag-red-bg);
+            border-color: color-mix(in srgb, var(--tag-red-fg) 20%, var(--tag-red-bg));
+            color: var(--tag-red-fg);
         }
 
         .slot-pill.is-taken .slot-pill-txt {
@@ -429,8 +535,7 @@
             font-weight: 700;
             letter-spacing: 1px;
             text-transform: uppercase;
-            color: var(--stone);
-            opacity: .45;
+            color: var(--muted);
         }
 
         .cal-legend .legend-slot,
@@ -486,7 +591,9 @@
             border: 1px solid var(--border);
             padding: 24px;
             position: sticky;
-            top: calc(var(--nav-h) + 20px);
+            /* --card-top is set by placeBookingCard() below; the fallback is
+               the plain "under the nav" position. */
+            top: var(--card-top, calc(var(--nav-h) + 20px));
             box-shadow: 0 8px 32px rgba(44, 36, 22, .08);
             transition: box-shadow .3s, border-color .3s;
         }
@@ -496,7 +603,7 @@
            at nasa ibaba pa ng calendar. */
         .booking-card.is-flash {
             border-color: var(--gold);
-            box-shadow: 0 8px 32px rgba(184, 148, 63, .35);
+            box-shadow: 0 8px 32px color-mix(in srgb, var(--gold) 40%, transparent);
         }
 
         .booking-price {
@@ -513,10 +620,62 @@
             font-family: var(--font-body);
         }
 
-        .price-weekend {
-            font-size: 14px;
-            color: var(--gold-text);
-            margin-bottom: 18px;
+        /* The rates behind the "From" figure. A real table: two prices for
+           each kind of stay is tabular data, and a screen reader then reads
+           "Peak, ₱6,000" instead of a row of bare numbers. */
+        .rate-table {
+            width: 100%;
+            margin: 10px 0 8px;
+            border-collapse: collapse;
+            font-size: 13px;
+        }
+
+        .rate-table th,
+        .rate-table td {
+            padding: 7px 0 7px 12px;
+            text-align: right;
+            vertical-align: top;
+        }
+
+        .rate-table th:first-child,
+        .rate-table td:first-child {
+            padding-left: 0;
+            text-align: left;
+        }
+
+        .rate-table thead th {
+            padding-top: 0;
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--muted);
+        }
+
+        .rate-table tbody th {
+            font-weight: 600;
+            color: var(--stone);
+        }
+
+        .rate-table tbody tr {
+            border-top: 1px solid var(--border);
+        }
+
+        .rate-table td {
+            font-variant-numeric: tabular-nums;
+            white-space: nowrap;
+        }
+
+        .rate-note {
+            display: block;
+            font-size: 12px;
+            font-weight: 400;
+            color: var(--muted);
+        }
+
+        .rate-foot {
+            font-size: 13px;
+            line-height: 1.5;
+            color: var(--muted);
+            margin: 0 0 18px;
         }
 
         .form-label {
@@ -554,7 +713,7 @@
         }
 
         .price-line.promo {
-            color: #15803d;
+            color: var(--tag-green-fg);
             font-weight: 600;
         }
 
@@ -614,8 +773,8 @@
         }
 
         .unavail-banner {
-            background: #fee2e2;
-            color: #b91c1c;
+            background: var(--tag-red-bg);
+            color: var(--tag-red-fg);
             border-radius: 10px;
             padding: 12px;
             text-align: center;
@@ -623,13 +782,18 @@
             font-weight: 500;
         }
 
+        .unavail-banner a {
+            color: inherit;
+            font-weight: 600;
+        }
+
         .is-invalid {
-            border-color: #dc2626 !important;
+            border-color: var(--tag-red-fg) !important;
         }
 
         .invalid-feedback {
             font-size: 14px;
-            color: #dc2626;
+            color: var(--tag-red-fg);
             margin-top: 4px;
             display: block;
         }
@@ -644,14 +808,14 @@
 
         .duration-note.ok {
             display: block;
-            background: #dcfce7;
-            color: #15803d;
+            background: var(--tag-green-bg);
+            color: var(--tag-green-fg);
         }
 
         .duration-note.warn {
             display: block;
-            background: #fee2e2;
-            color: #b91c1c;
+            background: var(--tag-red-bg);
+            color: var(--tag-red-fg);
         }
 
         .slot-options {
@@ -693,7 +857,7 @@
 
         .slot-option:has(input:checked) {
             border-color: var(--gold);
-            background: rgba(184, 148, 63, .06);
+            background: color-mix(in srgb, var(--gold) 8%, transparent);
         }
 
         .price-preview .estimate-tag {
@@ -713,10 +877,6 @@
         }
 
         @media(max-width:900px) {
-            .detail-grid {
-                grid-template-columns: 1fr;
-            }
-
             /* Isang hanay na ang layout dito, kaya ang mga hilera na ang
                nagtatakda ng taas — sumusukat sa lapad ng screen imbes na
                nakapako sa 240/140, at wala nang vh cap (walang sticky na
@@ -732,8 +892,19 @@
                 border-radius: 16px;
             }
 
+            /* Two photos share one row here, so the row needs a height of
+               its own: `height: auto` above leaves `1fr` with nothing to
+               divide. */
+            .gallery.is-pair {
+                grid-template-rows: min(clamp(190px, 40vw, 320px), 50vh);
+            }
+
             .gallery-main {
                 grid-row: 1/-1;
+            }
+
+            .detail-side {
+                margin-top: 32px;
             }
 
             .booking-card {
@@ -845,23 +1016,34 @@
                 grid-template-columns: 1fr;
             }
 
-            /* Isang explicit na hilera lang — ang pangunahing larawan.
-               Ang mga pangalawa ay pumapasok sa mga IMPLICIT na hilera,
-               kaya lumilitaw lang ang mga ito kung may larawan ngang
-               ilalagay doon. Nakapirming tatlong hilera dati, kaya ang
-               property na may iisang litrato ay may ~200px na blangko sa
-               ilalim nito sa telepono. */
+            /* The main photo takes the first row across both columns; the
+               other two share the row under it. One column gave each of
+               them a 343×105 strip, which showed 23% of a portrait photo.
+               Only the first row is explicit, so the second appears only
+               when there is a photo to put in it. */
             .gallery {
-                grid-template-columns: 1fr;
+                grid-template-columns: 1fr 1fr;
                 grid-template-rows: clamp(180px, 50vw, 260px);
-                grid-auto-rows: clamp(100px, 27vw, 150px);
+                grid-auto-rows: clamp(120px, 36vw, 170px);
                 gap: 8px;
                 border-radius: 14px;
                 margin-bottom: 24px;
             }
 
             .gallery-main {
+                grid-column: 1 / -1;
                 grid-row: auto;
+            }
+
+            /* Two photos stack at the same height: neither is a thumbnail. */
+            .gallery.is-pair {
+                grid-template-columns: 1fr;
+                grid-template-rows: repeat(2, clamp(170px, 50vw, 260px));
+            }
+
+            .gallery-count {
+                bottom: 10px;
+                right: 10px;
             }
         }
 
@@ -900,54 +1082,64 @@
         <span>›</span>
         <a href="{{ route('home') }}#properties">The Villa</a>
         <span>›</span>
-        <span style="color:var(--stone);font-weight:500;">{{ $property->property_name }}</span>
+        <span aria-current="page">{{ $property->property_name }}</span>
     </div>
 
     @if ($errors->any())
-        <div
-            style="background:#fee2e2;color:#b91c1c;border-radius:10px;padding:12px 16px;margin-bottom:20px;font-size:13px;">
-            <i class="bi bi-exclamation-circle me-2"></i>{{ $errors->first() }}
+        <div class="alert alert-danger" role="alert">
+            <i class="bi bi-exclamation-circle me-2" aria-hidden="true"></i>{{ $errors->first() }}
         </div>
     @endif
 
     {{-- Header muna, tapos gallery: dapat mabasa ng bisita kung ano ang
          property bago siya salubungin ng mga larawan. --}}
     <div class="prop-header">
-        <div class="prop-name">{{ $property->property_name }}</div>
+        <h1 class="prop-name">{{ $property->property_name }}</h1>
         <div class="prop-meta">
-            <span><i class="bi bi-people"></i> Up to {{ $property->max_capacity }} guests</span>
+            <span><i class="bi bi-people" aria-hidden="true"></i> Up to {{ $property->max_capacity }} guests</span>
             @if ($property->floor_area)
-                <span><i class="bi bi-arrows-angle-expand"></i> {{ $property->floor_area }} sqm</span>
+                <span><i class="bi bi-arrows-angle-expand" aria-hidden="true"></i> {{ $property->floor_area }} sqm</span>
             @endif
-            <span><i class="bi bi-geo-alt"></i> Villa Elena Resort</span>
+            <span><i class="bi bi-geo-alt" aria-hidden="true"></i> Villa Elena Resort</span>
         </div>
     </div>
 
-    <div class="gallery">
-        <div class="gallery-main">
-            @if ($property->primaryImage)
-                <img src="{{ $property->primaryImage->url }}" class="gallery-img" alt="{{ $property->property_name }}">
-                @if ($property->images->count() > 1)
-                    <div class="gallery-count"><i class="bi bi-images"></i> {{ $property->images->count() }} photos
-                    </div>
-                @endif
-            @else
-                <div class="gallery-placeholder"><i class="bi bi-house"></i></div>
-            @endif
-        </div>
-        @foreach ($property->images->where('is_primary', 0)->take(2) as $img)
-            <div>
-                <img src="{{ $img->url }}" class="gallery-img" alt="">
-            </div>
-        @endforeach
-    </div>
+    @php
+        // The primary photo first, then the rest in display order. This one
+        // list feeds the tiles and the viewer, so a tile's number is always
+        // the photo the viewer opens on.
+        $photos = $property->images->sortByDesc('is_primary')->values();
+        $photoCount = $photos->count();
+        $viewerPhotos = $photos
+            ->map(fn ($photo) => ['src' => $photo->url, 'alt' => $photo->alt_text ?: $property->property_name])
+            ->all();
+    @endphp
 
-    <div class="detail-grid">
+    <div class="detail-grid{{ $photoCount <= 1 ? ' has-one-photo' : '' }}">
+
+        <div class="gallery{{ $photoCount <= 1 ? ' is-single' : '' }}{{ $photoCount === 0 ? ' is-empty' : '' }}{{ $photoCount === 2 ? ' is-pair' : '' }}">
+            @forelse ($photos->take(3) as $i => $photo)
+                <button type="button" class="gallery-tile{{ $i === 0 ? ' gallery-main' : '' }}"
+                    data-photo-index="{{ $i }}"
+                    aria-label="{{ $photoCount > 1 ? 'View photo ' . ($i + 1) . ' of ' . $photoCount . ' full size' : 'View the photo full size' }}">
+                    <img src="{{ $photo->url }}" class="gallery-img" alt=""
+                        @if ($i === 0) fetchpriority="high" @else loading="lazy" @endif>
+                    @if ($i === 0)
+                        <span class="gallery-count">
+                            <i class="bi bi-arrows-fullscreen" aria-hidden="true"></i>
+                            {{ $photoCount > 1 ? 'View all ' . $photoCount . ' photos' : 'View full photo' }}
+                        </span>
+                    @endif
+                </button>
+            @empty
+                <div class="gallery-placeholder"><i class="bi bi-house" aria-hidden="true"></i></div>
+            @endforelse
+        </div>
 
         {{-- Left: Property Info --}}
-        <div>
+        <div class="detail-info">
             @if ($property->description)
-                <div class="section-title">About the Villa</div>
+                <h2 class="section-title">About the Villa</h2>
                 <p class="description">{{ $property->description }}</p>
             @endif
 
@@ -956,28 +1148,14 @@
                 $amenities = is_array($property->amenities)
                     ? $property->amenities
                     : json_decode($property->amenities ?? '[]', true);
-                $amenityIcons = [
-                    'pool' => 'bi-water',
-                    'wifi' => 'bi-wifi',
-                    'ac' => 'bi-thermometer-snow',
-                    'parking' => 'bi-car-front',
-                    'kitchen' => 'bi-cup-hot',
-                    'bbq' => 'bi-fire',
-                    'tv' => 'bi-tv',
-                    'washer' => 'bi-basket',
-                    'gym' => 'bi-bicycle',
-                    'bar' => 'bi-cup-straw',
-                    'breakfast' => 'bi-egg-fried',
-                    'spa' => 'bi-flower1',
-                ];
                 $canBookOnline = $property->status !== 'maintenance' && $allowOnlineBooking;
             @endphp
             @if (count($amenities ?? []))
-                <div class="section-title">Amenities</div>
+                <h2 class="section-title">Amenities</h2>
                 <div class="amenities-grid">
                     @foreach ($amenities as $amenity)
                         <div class="amenity-item">
-                            <i class="bi {{ $amenityIcons[$amenity] ?? 'bi-check-circle' }}"></i>
+                            <i class="bi {{ \App\Models\Property::amenityIcon($amenity) }}" aria-hidden="true"></i>
                             {{ ucwords(str_replace('_', ' ', $amenity)) }}
                         </div>
                     @endforeach
@@ -991,14 +1169,37 @@
                 // sa kanilang magsisinungaling. Ang mga slot na wala pang
                 // presyo ay wala rito (Property::isSlotPriced()).
                 $calSlots = \App\Models\Booking::bookableSlotKeys($property);
-                $calSlotCount = ['', 'one slot', 'two slots', 'three slots'][count($calSlots)] ?? count($calSlots).' slots';
+
+                // What the sentence above the calendar may claim. A date
+                // never offers every slot: it has the everyday ones, or one
+                // long stay the owner opened on it. Counting the slots said
+                // "Every date has 4 slots". The long stays are named only
+                // when a date for them is actually coming up.
+                $windowedSlots = \App\Models\Booking::windowedSlotKeys();
+                $slotWindowDates = \App\Models\Booking::slotWindowDates($property);
+                $slotName = fn ($k) => \App\Models\Booking::SLOTS[$k]['name'];
+                $everydaySlotNames = collect($calSlots)
+                    ->reject(fn ($k) => in_array($k, $windowedSlots, true))
+                    ->map($slotName)
+                    ->join(', ', ' and ');
+                $longStayNames = collect($slotWindowDates)
+                    ->filter(fn ($dates) => count($dates) > 0)
+                    ->keys()
+                    ->map($slotName)
+                    ->join(', ', ' or ');
             @endphp
-            <div class="section-title">Availability</div>
+            <h2 class="section-title">Availability</h2>
             <p class="section-sub">
+                @if ($everydaySlotNames !== '')
+                    Each date offers {{ $everydaySlotNames }}.
+                @endif
+                @if ($longStayNames !== '')
+                    Some dates are offered as one long stay instead: {{ $longStayNames }}.
+                @endif
                 @if ($canBookOnline)
-                    Every date has {{ $calSlotCount }}. Pick an open one and it fills in your booking.
+                    Pick an open slot and it fills in your booking.
                 @else
-                    Every date has {{ $calSlotCount }}. Open slots are shown below.
+                    Open slots are shown below.
                 @endif
             </p>
             <div class="fc-wrap">
@@ -1044,10 +1245,56 @@
         </div>
 
         {{-- Right: Booking Card --}}
-        <div>
+        <div class="detail-side">
             <div class="booking-card" id="bookingCard">
                 @if ($canBookOnline)
-                    <div class="booking-price">₱{{ number_format($property->base_price, 0) }} <span>/ package</span></div>
+                    {{-- The lowest list price, then every rate behind it. The
+                         card used to print `base_price` alone, so a guest
+                         first met the peak and 22-hour rates in the preview. --}}
+                    @php
+                        $rateGroups = $property->rateGroups();
+                        $lowestRate = collect($rateGroups)->min('regular');
+                        $hasPeak = collect($rateGroups)->contains(fn ($g) => $g['peak'] != $g['regular']);
+                    @endphp
+                    <div class="booking-price">
+                        @if (count($rateGroups) > 1 || $hasPeak)<span>From</span>@endif
+                        ₱{{ number_format($lowestRate ?? $property->base_price, 0) }} <span>/ package</span>
+                    </div>
+                    @if (count($rateGroups) > 1 || $hasPeak)
+                        <table class="rate-table">
+                            <caption class="visually-hidden">Package rates</caption>
+                            <thead>
+                                <tr>
+                                    <th scope="col"><span class="visually-hidden">Stay</span></th>
+                                    <th scope="col">{{ $hasPeak ? 'Regular' : 'Rate' }}</th>
+                                    @if ($hasPeak)
+                                        <th scope="col">Peak</th>
+                                    @endif
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach ($rateGroups as $group)
+                                    <tr>
+                                        <th scope="row">
+                                            {{ collect($group['names'])->join(', ', ' or ') }}
+                                            @if ($group['selected_dates'])
+                                                <span class="rate-note">Selected dates only</span>
+                                            @endif
+                                        </th>
+                                        <td>₱{{ number_format($group['regular'], 0) }}</td>
+                                        @if ($hasPeak)
+                                            <td>₱{{ number_format($group['peak'], 0) }}</td>
+                                        @endif
+                                    </tr>
+                                @endforeach
+                            </tbody>
+                        </table>
+                        @if ($hasPeak)
+                            <p class="rate-foot">
+                                Peak applies when your stay starts on Friday or Saturday, or on Sunday before 6:00 PM.
+                            </p>
+                        @endif
+                    @endif
 
                     <form method="GET" action="{{ route('portal.book', $property) }}" id="bookingForm">
                         <div class="mb-12">
@@ -1151,13 +1398,13 @@
                     </form>
                 @elseif ($property->status === 'maintenance')
                     <div class="unavail-banner">
-                        <i class="bi bi-x-circle me-2"></i>
+                        <i class="bi bi-x-circle me-2" aria-hidden="true"></i>
                         The villa is currently unavailable.<br>
-                        <a href="{{ route('home') }}" style="color:#dc2626;font-weight:600;">Back to home →</a>
+                        <a href="{{ route('home') }}">Back to home</a>
                     </div>
                 @else
                     <div class="unavail-banner">
-                        <i class="bi bi-telephone me-2"></i>
+                        <i class="bi bi-telephone me-2" aria-hidden="true"></i>
                         Online booking is temporarily unavailable.<br>
                         Please contact us directly to reserve your stay.
                     </div>
@@ -1169,6 +1416,7 @@
 @endsection
 
 @push('scripts')
+    @include('partials.photo_viewer', ['photos' => $viewerPhotos])
     <script src="https://js.pusher.com/8.2.0/pusher.min.js"></script>
     <script>
         const PRICE_PREVIEW_URL = "{{ route('portal.price-preview', $property) }}";
@@ -1198,8 +1446,8 @@
         //
         // Walang presyo = wala sa listahan: pareho nang nasala ng server ang
         // dalawang payload na ito bago ipadala.
-        const WINDOWED_SLOTS = @json(\App\Models\Booking::windowedSlotKeys());
-        const SLOT_WINDOW_DATES = @json(\App\Models\Booking::slotWindowDates($property));
+        const WINDOWED_SLOTS = @json($windowedSlots);
+        const SLOT_WINDOW_DATES = @json($slotWindowDates);
 
         function slotsOfferedOn(dateStr) {
             for (const s of WINDOWED_SLOTS) {
@@ -1605,10 +1853,15 @@
 
             const card = document.getElementById('bookingCard');
             if (!card) return;
-            card.scrollIntoView({
-                behavior: 'smooth',
-                block: 'nearest'
-            });
+            // On a phone the card is below the calendar and has to be brought
+            // into view. On desktop it is sticky and already there; scrolling
+            // to it would only nudge the page on every pick.
+            if (getComputedStyle(card).position !== 'sticky') {
+                card.scrollIntoView({
+                    behavior: 'smooth',
+                    block: 'nearest'
+                });
+            }
             card.classList.add('is-flash');
             clearTimeout(card._flashTimer);
             card._flashTimer = setTimeout(() => card.classList.remove('is-flash'), 1400);
@@ -1658,6 +1911,46 @@
         }
 
         document.addEventListener('DOMContentLoaded', function() {
+            // ── Booking card that stays in view (desktop) ──────────────────
+            // A card that fits under the nav sticks there. A card taller than
+            // the window cannot: stuck by its top, its lower half (the total
+            // and the Reserve button) would stay below the screen until the
+            // page ended. So its bottom is pinned instead, and the top slides
+            // under the nav. The card grows and shrinks (rates, price
+            // preview, slot note), hence the observer. First in this handler
+            // on purpose: it must not depend on the calendar below loading.
+            const bookingCard = document.getElementById('bookingCard');
+            if (bookingCard && 'ResizeObserver' in window) {
+                const navH = parseFloat(getComputedStyle(document.documentElement)
+                    .getPropertyValue('--nav-h')) || 72;
+
+                const placeBookingCard = function() {
+                    const cardH = bookingCard.offsetHeight;
+                    let top = navH + 20;
+
+                    if (cardH > window.innerHeight - navH - 40) {
+                        // Clear of the chat button when the two share a
+                        // column, so it never sits on the Reserve button.
+                        let gap = 20;
+                        const chat = document.getElementById('chat-bubble');
+                        if (chat) {
+                            const c = chat.getBoundingClientRect();
+                            const b = bookingCard.getBoundingClientRect();
+                            if (c.width && c.left < b.right && c.right > b.left) {
+                                gap = window.innerHeight - c.top + 12;
+                            }
+                        }
+                        top = window.innerHeight - cardH - gap;
+                    }
+
+                    bookingCard.style.setProperty('--card-top', top + 'px');
+                };
+
+                new ResizeObserver(placeBookingCard).observe(bookingCard);
+                window.addEventListener('resize', placeBookingCard);
+                placeBookingCard();
+            }
+
             const el = document.getElementById('availabilityCalendar');
             availCalendar = new FullCalendar.Calendar(el, {
                 plugins: [FullCalendar.dayGridPlugin],
