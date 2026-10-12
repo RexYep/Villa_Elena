@@ -380,7 +380,7 @@
 @section('content')
     <div class="card">
         <div class="card-top">
-            <div class="brand">Villa Elena Resort</div>
+            <div class="brand">{{ \App\Models\Setting::resortName() }}</div>
             <div class="booking-ref-label">Booking Reference</div>
             <div class="booking-ref">{{ $booking->booking_ref }}</div>
             <div class="property-name">{{ $booking->property->property_name }}</div>

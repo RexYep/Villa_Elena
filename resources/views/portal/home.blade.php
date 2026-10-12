@@ -1,6 +1,6 @@
 @extends('layouts.portal')
 
-@section('title', $resortName . ' — Private Pool Resort in Pansol, Calamba')
+@section('title', $resortName . ' — Private pool villa in Pansol, Calamba')
 @section('bare')@endsection
 
 @push('styles')
@@ -2917,7 +2917,9 @@
                 </a>
             @endif
 
-            <h1 class="hero-title">Villa Elena<br><em>Private Pool Resort</em></h1>
+            {{-- The name is the "Resort Name" setting, on two lines
+                 (Setting::resortNameLines()); never type it here. --}}
+            <h1 class="hero-title">{{ $resortNameLines[0] }}@if ($resortNameLines[1] !== '')<br><em>{{ $resortNameLines[1] }}</em>@endif</h1>
             <p class="hero-sub">
                 {{ $resortDesc ?: 'Book the whole villa in Pansol, Calamba — pool, rooms, kitchen and grill, yours alone for a day or a night.' }}
             </p>
@@ -3516,7 +3518,7 @@
                     <div class="section-title reveal reveal-delay-1">The Whole Villa,<br>Just for You</div>
                     <p class="reveal reveal-delay-2 text-muted-theme"
                         style="font-size:16px;line-height:1.8;font-weight:300;margin-bottom:18px;">
-                        Villa Elena Private Pool Resort is a place in Pansol, Calamba made for families and groups of
+                        {{ $resortName }} is a place in Pansol, Calamba made for families and groups of
                         friends who want to enjoy their time together in a space they can call their own. When you book
                         Villa Elena, the resort is yours for your stay.
                     </p>
@@ -3872,7 +3874,7 @@
 
             <div class="footer-bottom">
                 <div class="footer-copy">
-                    © {{ date('Y') }} Villa Elena Resort. All rights reserved.
+                    © {{ date('Y') }} {{ $resortName }}. All rights reserved.
                 </div>
                 <div class="footer-legal">
                     <a href="{{ route('portal.privacy') }}">Privacy Policy</a>

@@ -254,14 +254,23 @@ Check-in **no longer creates a `checkout_clean` task**. The owner decided the ad
 
 Every email to a guest is printed in `emails/layout.blade.php` and has a plain-text copy (`…_text.blade.php`, which prints with `{!! !!}`). The five short account emails (sign-in code, password reset, set your password, confirm your email, sign-up attempt) share `emails/message.blade.php`; their words are written where each is sent from and passed through `App\Support\GuestEmail::message()`.
 
-- **Never type the resort's name, phone or address into an email.** `GuestEmail::resortName()` is `APP_NAME` (the sender name the guest sees, not the `resort_name` setting) and the footer's contact lines come from Settings through `GuestEmail::contact()`.
+- **Never type the resort's name, phone or address into an email.** `GuestEmail::resortName()` is the "Resort Name" setting (v7.73, see *The resort's name* below), every guest email is sent `->from(GuestEmail::sender())` so the sender name matches it, and the footer's contact lines come from Settings through `GuestEmail::contact()`. Put the name last in a subject: it is long, and a phone cuts a subject short from the right.
 - **The sign-in code email must never say "you can ignore this".** A code is only issued after the correct password was entered, so an unexpected one means someone else knows it. That sentence is right only in the password reset email, where anyone can type an address.
-- **A walk-in's new account gets `WelcomeSetPasswordNotification`, not the reset email**, passed as the callback to `Password::sendResetLink()`. Any other place that creates an account for someone must do the same.
+- **A walk-in's new account gets `WelcomeSetPasswordNotification`, not the reset email**, passed as the callback to `Password::sendResetLink()`. Any other place that creates an account for someone must do the same. It is sent **after** `reserveSlot()` returns (v7.73), never from inside its callback: that callback holds the villa's row lock, and a later failure in it would roll the account back after the email had gone.
 - A lifetime written in an email is read from what enforces it (the broker's `expire`, `auth.verification.expire`, `OTP_TTL_MINUTES`), never typed.
 - The booking email's sentences are built in `BookingConfirmedMail`, because two views print them; it describes the booking by slot and prints `Booking::CANCELLATION_POLICY`, never its own copy.
 - A link in a booking or refund email is built with `GuestEmail::url()` (from `APP_URL`).
 - **A login returns the guest to the page they were turned away from, through `App\Support\LoginReturn`** — never `redirect()->intended()` and never a `?redirect=` parameter. The framework's `url.intended` is written for every bounced GET, including a background `fetch()` from a page left open after the session ran out, so a login would land on JSON; `LoginReturn::remember()` keeps only a request with `Sec-Fetch-Mode: navigate` (`Accept` cannot tell them apart: the availability grid asks for `text/html`). The stored value is a path, honoured for 30 minutes, forgotten on every login, and used only if the page's own `role:` middleware admits the user. A new way of completing a login must go through `afterLoginRedirect()`.
 - Check an email by sending it through the `array` mailer and reading both parts, not by reading the Blade.
+
+### The resort's name (v7.73)
+
+**The resort's full name is `Setting::resortName()`** (Admin → Settings → "Resort Name"), never typed and never `config('app.name')`. Emails and their sender, the landing page, the sign-in pages, checkout, the legal pages and the chatbot all read it.
+
+- **It must never throw.** The error pages are printed in `layouts/auth.blade.php`, which shows the name, so the lookup catches a database failure and falls back to `APP_NAME`. Don't replace it with a bare `Setting::get('resort_name')` in a layout.
+- `Setting::resortNameLines()` is the name on two lines (first two words, then the rest) for the landing heading and the sign-in wordmark.
+- **Don't change `APP_NAME` to match the setting.** With no `SESSION_COOKIE` or `CACHE_PREFIX` set, it names the session cookie and prefixes every cache key: changing it signs everyone out and orphans the stored AI reports, rate-limit counters and locks.
+- The short "Villa Elena" beside the logo and the endings of browser tab titles are left as typed.
 
 ### Mail / broadcast failure handling
 

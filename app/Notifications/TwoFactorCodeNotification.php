@@ -39,7 +39,7 @@ class TwoFactorCodeNotification extends Notification
         $resort = GuestEmail::resortName();
         $minutes = $this->expiresInMinutes.' '.($this->expiresInMinutes === 1 ? 'minute' : 'minutes');
 
-        return GuestEmail::message("Your {$resort} login code", [
+        return GuestEmail::message("Your login code for {$resort}", [
             'heading' => 'Your login code',
             'preheader' => "It works for {$minutes}. Do not share it with anyone.",
             'name' => $notifiable->first_name,

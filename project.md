@@ -1,7 +1,7 @@
 # Villa Elena Private Rental Resort
 ## Resort Management System — Project Documentation
 
-**Version:** 7.72
+**Version:** 7.73
 **Stack:** PHP 8.2 / Laravel 12 / MySQL 8 / Bootstrap 5
 **Local URL:** `http://127.0.0.1:8000` (`php artisan serve`) or `http://localhost:8000` (Docker — see v5.3)
 **Live URL:** `https://villa-elena.onrender.com` (Render, free tier — testing only, not yet handed to real guests)
@@ -188,7 +188,89 @@ is the natural moment to remove them rather than a migration of their own.
 
 ---
 
-## What Changed in v7.72 (Read This First)
+## What Changed in v7.73 (Read This First)
+
+### One resort name, from Settings
+
+Three names were in use: `APP_NAME` ("Villa Elena Resort") in the emails and as
+their sender, the "Resort Name" setting ("Villa Elena Private Rental Resort") in
+the legal pages and the chatbot, and "Private Pool Resort" typed into the
+landing page. The owner chose the setting.
+
+- **`Setting::resortName()` is the one source.** `APP_NAME` is only its
+  fallback, for a blank setting and for a database that cannot be read.
+- **The lookup never throws.** The error pages (403, 404, 419, 429, 500) are
+  printed in `layouts/auth.blade.php`, which shows the name. Reading it straight
+  from the database made five tests fail on the 429 page, and would have turned
+  a database outage into an error while printing the error page.
+- **`Setting::resortNameLines()`** is the name on two lines for the two
+  wordmarks that set it that way (the landing heading and the sign-in pages):
+  the first two words, then the rest. For the current name that is exactly what
+  was typed before, "Villa Elena" over "Private Rental Resort".
+- **An email is sent under the name it is signed with.** `GuestEmail::sender()`
+  is the configured address with `resortName()`, set as From on all seven guest
+  emails. Before, the sender name was `MAIL_FROM_NAME`.
+- **The name comes last in a subject**, because it is long and a phone cuts a
+  subject short from the right: "Your login code for …", "Reset your password
+  for …", "Set a password for your account at …", "Someone tried to sign up
+  with your email at …".
+
+| Place | Was | Now |
+|---|---|---|
+| Emails: brand band, footer, sentences, subject, sender | `APP_NAME` | the setting |
+| Landing page heading | "Villa Elena / Private Pool Resort", typed | `resortNameLines()` |
+| Landing page tab title | "… — Private Pool Resort in Pansol, Calamba" | "… — Private pool villa in Pansol, Calamba" (a description, no longer a second name) |
+| Landing page "Our story" and copyright line | typed, two different names | the setting |
+| Sign-in pages and error pages | "Villa Elena / Private Rental Resort", typed | `resortNameLines()` |
+| Checkout page, villa page location label | "Villa Elena Resort", typed | the setting |
+| Legal pages, chatbot | the setting, each with its own typed default | `resortName()` |
+
+**Left as they are:** the short "Villa Elena" beside the logo in the three
+sidebars, the "— Villa Elena Resort" / "— Villa Elena Admin" ending of browser
+tab titles (about 80 views), sentences that say "Villa Elena" in passing, the
+admin report's heading, and PayMongo's `statement_descriptor`.
+
+**`APP_NAME` should not be changed to match.** With no `SESSION_COOKIE`,
+`CACHE_PREFIX` or `REDIS_PREFIX` set, it names the session cookie and prefixes
+every cache key. Changing it signs everyone out and puts the stored AI reports,
+rate-limit counters and cache locks out of reach under the old prefix.
+
+**Checked:** all seven guest emails sent through the `array` mailer with
+`APP_NAME` set to a different value, to prove the name and the sender come from
+the setting; the landing, sign-in, villa and checkout pages rendered and read.
+In Chrome the landing heading was measured at six widths: nothing is clipped
+and the page does not scroll sideways. The second line is two characters
+longer, so the heading takes one more line at 320px and at 480px and is
+unchanged from 360px to 414px. `tests/Feature/ResortNameTest.php` covers the
+setting, the fallbacks, the two lines and the layout without a database.
+
+### The walk-in's set-password email is sent after the booking is saved
+
+`FrontDeskController::storeWalkin()` sent it from inside `reserveSlot()`'s
+callback. Two things were wrong with that:
+
+- the call to the mail provider ran while the villa's row was locked, and that
+  lock is what every booking in the app waits on;
+- a failure later in the callback rolled the new account back after the email
+  had gone, leaving the guest a link to an account that does not exist.
+
+The callback now only remembers the guest (`$invitedGuest`); the email is sent
+after the commit, beside the audit write that was moved out for the same
+reason. It catches `\Throwable`, because the booking and the payment are saved
+by then and an error page would invite the staff member to submit the walk-in
+twice.
+
+**Checked** by running a real walk-in with a new login account inside a
+transaction that was rolled back: the guest, the booking and the reset token
+were saved, and the email went out at the outer transaction level, not the
+callback's.
+
+The walk-in link still lasts 60 minutes; the email says to use Forgot password
+once it has run out.
+
+---
+
+## What Changed in v7.72
 
 ### Guest emails: one frame, one name, and words that are true
 
@@ -216,11 +298,10 @@ one and read it against the code that sends it. Two said something wrong.
   from and passed through `App\Support\GuestEmail::message()`.
 - **Every email has a plain-text part.** A text view prints with `{!! !!}`:
   nothing in it is HTML, and an escaped apostrophe arrives as `&#039;`.
-- **`GuestEmail::resortName()` is the one name an email prints, and it is
-  `APP_NAME`**, not the `resort_name` setting: it is the sender name beside the
-  subject (`MAIL_FROM_NAME`) and the name the site's pages show. Four spellings
-  were in use. Subjects for booking and refund emails no longer end in
-  "| Villa Elena Resort", which repeated the sender.
+- **`GuestEmail::resortName()` is the one name an email prints.** It was
+  `APP_NAME` in this version and is the "Resort Name" setting since v7.73.
+  Four spellings were in use. Subjects for booking and refund emails no longer
+  end in "| Villa Elena Resort", which repeated the sender.
 - **`GuestEmail::url()` builds a link from `APP_URL`**, as the refund email
   already did. Reset and verification links still come from the framework.
 - The booking email's sentences are built in `BookingConfirmedMail`
@@ -281,13 +362,14 @@ not clicked through in a browser.
   and `verifyEmail()` redirects by role.
 - **The walk-in link still lasts 60 minutes.** A longer one needs a second
   password broker and a reset form that knows which broker made the token.
-- The walk-in email is still sent inside `reserveSlot()`'s transaction (it was
-  before), against the "mail belongs after the commit" rule.
+- The walk-in email was still sent inside `reserveSlot()`'s transaction (moved
+  out in v7.73).
 - **No email is sent** when an unpaid hold is auto-cancelled, when a guest
   cancels, or on a reschedule. Each would spend the Brevo quota shared with
   sign-in codes and resets.
 - The Settings "Resort Name" (`Villa Elena Private Rental Resort` by default)
-  and the landing page's "Private Pool Resort" still differ from `APP_NAME`.
+  and the landing page's "Private Pool Resort" differed from `APP_NAME` (one
+  name since v7.73).
 
 ---
 

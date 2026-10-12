@@ -3,6 +3,7 @@
 namespace App\Mail;
 
 use App\Models\Booking;
+use App\Support\GuestEmail;
 use Illuminate\Bus\Queueable;
 use Illuminate\Mail\Mailable;
 use Illuminate\Queue\SerializesModels;
@@ -43,6 +44,7 @@ class RefundNoticeMail extends Mailable
         // mismo ng subject sa inbox. Ang `heading` ay siya ring headline
         // ng email (emails/layout).
         return $this
+            ->from(GuestEmail::sender())
             ->subject("{$this->heading} — {$this->booking->booking_ref}")
             ->view('emails.refund_notice')
             ->text('emails.refund_notice_text')

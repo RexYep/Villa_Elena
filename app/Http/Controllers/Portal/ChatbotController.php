@@ -416,7 +416,7 @@ If no slot is mentioned, leave slot as null.';
         }
 
         // ── Step 4: Resort settings ────────────────────────────────
-        $resortName = Setting::get('resort_name', 'Villa Elena Private Rental Resort');
+        $resortName = Setting::resortName();
         $depositRate = Setting::get('deposit_percentage', '50');
         $maxCapacity = $villa->max_capacity ?? 'N/A';
 

@@ -26,7 +26,7 @@ class WelcomeSetPasswordNotification extends ResetPassword
         $resort = GuestEmail::resortName();
         $lifetime = ResetPasswordNotification::linkLifetime();
 
-        return GuestEmail::message("Set a password for your {$resort} account", [
+        return GuestEmail::message("Set a password for your account at {$resort}", [
             'heading' => 'Your account is ready',
             'preheader' => 'Set a password to see your booking online.',
             'name' => $notifiable->first_name,

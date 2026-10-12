@@ -68,6 +68,47 @@ class Setting extends Model
         return $settings[$key] ?? $default;
     }
 
+    /**
+     * The resort's name: Admin → Settings → "Resort Name".
+     *
+     * Every place that prints the name in full reads it here (emails and
+     * their sender name, the landing page, the sign-in pages, checkout, the
+     * legal pages, the chatbot). Three spellings were in use before, each
+     * typed where it was printed.
+     *
+     * `APP_NAME` is the fallback, for a blank setting and for a database
+     * that cannot be read. The second matters: the error pages are printed
+     * in the sign-in layout, which shows this name, and an error page that
+     * needs the database fails exactly when the database is the error.
+     */
+    public static function resortName(): string
+    {
+        try {
+            $name = trim((string) self::get('resort_name'));
+        } catch (\Throwable) {
+            $name = '';
+        }
+
+        return $name !== '' ? $name : (string) config('app.name');
+    }
+
+    /**
+     * The name on two lines, for the wordmarks that set it that way (the
+     * landing page's heading, the sign-in pages): the first two words, then
+     * the rest. The second line is empty for a name of one or two words.
+     *
+     * @return array{0: string, 1: string}
+     */
+    public static function resortNameLines(): array
+    {
+        $words = preg_split('/\s+/', self::resortName(), -1, PREG_SPLIT_NO_EMPTY);
+
+        return [
+            implode(' ', array_slice($words, 0, 2)),
+            implode(' ', array_slice($words, 2)),
+        ];
+    }
+
     public static function set(string $key, $value): void
     {
         static::updateOrCreate(

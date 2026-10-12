@@ -3,6 +3,7 @@
 namespace App\Support;
 
 use App\Models\Setting;
+use Illuminate\Mail\Mailables\Address;
 use Illuminate\Notifications\Messages\MailMessage;
 
 /**
@@ -16,16 +17,23 @@ use Illuminate\Notifications\Messages\MailMessage;
 class GuestEmail
 {
     /**
-     * The name printed in an email.
-     *
-     * It is `APP_NAME`, not the `resort_name` setting, on purpose: it is the
-     * sender name the guest sees beside the subject (`MAIL_FROM_NAME`), and
-     * the name the site's own pages show. An email signed with a different
-     * name from the one it was sent under reads as a different sender.
+     * The name printed in an email: the "Resort Name" setting, the same one
+     * the site's own pages show.
      */
     public static function resortName(): string
     {
-        return (string) config('app.name', 'Villa Elena Resort');
+        return Setting::resortName();
+    }
+
+    /**
+     * Who a guest email is from: the configured address, under the same name
+     * the email is signed with. Without this the sender name is
+     * `MAIL_FROM_NAME`, and an email signed with a different name from the
+     * one it was sent under reads as a different sender.
+     */
+    public static function sender(): Address
+    {
+        return new Address((string) config('mail.from.address'), self::resortName());
     }
 
     /**
@@ -70,7 +78,10 @@ class GuestEmail
      */
     public static function message(string $subject, array $data): MailMessage
     {
+        $sender = self::sender();
+
         return (new MailMessage)
+            ->from($sender->address, $sender->name)
             ->subject($subject)
             ->view(['emails.message', 'emails.message_text'], $data);
     }

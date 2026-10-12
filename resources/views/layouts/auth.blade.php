@@ -12,6 +12,9 @@
     @vite(['resources/js/auth.js'])
 </head>
 <body>
+    {{-- The wordmark is the "Resort Name" setting on two lines; never type
+         the name here. --}}
+    @php [$brandName, $brandStrap] = \App\Models\Setting::resortNameLines(); @endphp
     <div class="auth-container">
 
         {{-- ========== LEFT: Background Image Panel ========== --}}
@@ -23,8 +26,10 @@
                      "back" link that would compete with its own ("Back to
                      login", which points somewhere else entirely). --}}
                 <a href="{{ route('home') }}" class="auth-brand-link">
-                    <div class="auth-brand-name"><img src="{{ asset('images/logo.png') }}" alt="" class="brand-mark"> Villa Elena</div>
-                    <p>Private Rental Resort</p>
+                    <div class="auth-brand-name"><img src="{{ asset('images/logo.png') }}" alt="" class="brand-mark"> {{ $brandName }}</div>
+                    @if ($brandStrap !== '')
+                        <p>{{ $brandStrap }}</p>
+                    @endif
                 </a>
                 <span class="auth-image-tagline">@yield('auth_tagline', 'Your dream getaway awaits')</span>
             </div>
@@ -39,8 +44,10 @@
                      the image panel is gone, so this is the only wordmark there is. --}}
                 <div class="auth-logo-mobile">
                     <a href="{{ route('home') }}" class="auth-brand-link">
-                        <div class="auth-brand-name"><img src="{{ asset('images/logo.png') }}" alt="" class="brand-mark"> Villa Elena</div>
-                        <p>Private Rental Resort</p>
+                        <div class="auth-brand-name"><img src="{{ asset('images/logo.png') }}" alt="" class="brand-mark"> {{ $brandName }}</div>
+                        @if ($brandStrap !== '')
+                            <p>{{ $brandStrap }}</p>
+                        @endif
                     </a>
                 </div>
 

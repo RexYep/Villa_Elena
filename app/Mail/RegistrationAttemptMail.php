@@ -40,8 +40,11 @@ class RegistrationAttemptMail extends Mailable
 
     public function envelope(): Envelope
     {
+        // The resort's name comes last in every subject: it is long, and a
+        // phone's inbox cuts a subject short from the right.
         return new Envelope(
-            subject: 'Someone tried to sign up with your '.GuestEmail::resortName().' email',
+            from: GuestEmail::sender(),
+            subject: 'Someone tried to sign up with your email at '.GuestEmail::resortName(),
         );
     }
 

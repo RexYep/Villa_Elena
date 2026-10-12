@@ -39,6 +39,7 @@ class BookingConfirmedMail extends Mailable
         $variant = $this->variant($summary);
 
         return $this
+            ->from(GuestEmail::sender())
             ->subject($variant['subject'].' — '.$this->booking->booking_ref)
             ->view('emails.booking_confirmed')
             ->text('emails.booking_confirmed_text')

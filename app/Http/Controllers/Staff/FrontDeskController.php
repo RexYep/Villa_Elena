@@ -714,7 +714,13 @@ class FrontDeskController extends Controller
         // kayang lampasan ito ng online booking o ng admin create.
         // Iisa na ngayon ang pinagdadaanan ng lahat, at ang nilo-lock ay
         // ang tunay na `properties` row. Tingnan ang Booking::reserveSlot().
-        $booking = Booking::reserveSlot($request->property_id, $checkin, $checkout, function () use ($request, $checkin, $checkout, $property, $baseAmount, $discountAmount, $totalAmount, $promo, $amountPaid) {
+        //
+        // `$invitedGuest` is the one thing the callback hands back besides
+        // the booking: the new guest who asked for a login account, so the
+        // set-password email can be sent after the commit (see below).
+        $invitedGuest = null;
+
+        $booking = Booking::reserveSlot($request->property_id, $checkin, $checkout, function () use ($request, $checkin, $checkout, $property, $baseAmount, $discountAmount, $totalAmount, $promo, $amountPaid, &$invitedGuest) {
 
             // Create new guest if needed
             if ($request->guest_type === 'new') {
@@ -737,30 +743,13 @@ class FrontDeskController extends Controller
                     'status' => 1,
                 ]);
 
-                // Password-reset email ipinapadala lang kung talagang
+                // Set-password email ipinapadala lang kung talagang
                 // pumili ang guest na gumawa ng login account — kung
                 // "guest record lang" ang pinili, walang dapat asahan
-                // na email/undangan ng access.
+                // na email/undangan ng access. Dito lang ito TINATANDAAN;
+                // ang pagpapadala ay pagkatapos ng commit, sa ibaba.
                 if ($request->create_account === 'yes') {
-                    // Don't let a mail hiccup block the walk-in booking
-                    // itself (this runs inside the transaction below) — the
-                    // guest can still use "forgot password" later if this
-                    // email doesn't land.
-                    //
-                    // The broker still makes the token; the callback only
-                    // swaps the email it is sent in. The stock one says "we
-                    // received a password reset request", which this guest
-                    // never made.
-                    try {
-                        \Illuminate\Support\Facades\Password::sendResetLink(
-                            ['email' => $user->email],
-                            function ($recipient, $token) {
-                                $recipient->notify(new \App\Notifications\WelcomeSetPasswordNotification($token));
-                            }
-                        );
-                    } catch (\Exception $e) {
-                        \Illuminate\Support\Facades\Log::error('Failed to send walk-in set-password email: '.$e->getMessage());
-                    }
+                    $invitedGuest = $user;
                 }
             } else {
                 $user = User::findOrFail($request->user_id);
@@ -878,6 +867,34 @@ class FrontDeskController extends Controller
         // FrontdeskUpdated broadcast below already uses.
         StaffLog::record('walkin_booking', 'bookings', $booking->id,
             "Walk-in booking {$booking->booking_ref} created by ".Auth::user()->full_name." for guest {$booking->user->full_name}");
+
+        // The new guest's set-password email, sent AFTER the commit for the
+        // same two reasons as the audit write above. Inside the callback, the
+        // call to the mail provider ran while the villa's row was locked, so
+        // every other booking waited on it; and a failure later in the
+        // callback rolled the account back after the email had already gone,
+        // leaving the guest a link to an account that does not exist.
+        //
+        // The broker still makes the token; the callback only swaps the
+        // email it is sent in. The stock one says "we received a password
+        // reset request", which this guest never made.
+        //
+        // \Throwable, not \Exception: the booking and the payment are saved
+        // by now, so nothing here may turn the response into an error page
+        // that invites the staff member to submit the walk-in again. The
+        // guest can still use "Forgot password" if this email does not land.
+        if ($invitedGuest) {
+            try {
+                \Illuminate\Support\Facades\Password::sendResetLink(
+                    ['email' => $invitedGuest->email],
+                    function ($recipient, $token) {
+                        $recipient->notify(new \App\Notifications\WelcomeSetPasswordNotification($token));
+                    }
+                );
+            } catch (\Throwable $e) {
+                \Illuminate\Support\Facades\Log::error('Failed to send walk-in set-password email: '.$e->getMessage());
+            }
+        }
 
         // Realtime broadcast lang ito (admin dashboard toast) — hindi ito
         // dapat maka-block sa buong request. Nagawa na at naka-commit na

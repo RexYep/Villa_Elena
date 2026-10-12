@@ -21,7 +21,7 @@ class ResetPasswordNotification extends ResetPassword
     {
         $resort = GuestEmail::resortName();
 
-        return GuestEmail::message("Reset your {$resort} password", [
+        return GuestEmail::message("Reset your password for {$resort}", [
             'heading' => 'Reset your password',
             'preheader' => 'Choose a new password. The link works for '.self::linkLifetime().'.',
             'name' => $notifiable->first_name,

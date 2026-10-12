@@ -1100,7 +1100,7 @@
             @if ($property->floor_area)
                 <span><i class="bi bi-arrows-angle-expand" aria-hidden="true"></i> {{ $property->floor_area }} sqm</span>
             @endif
-            <span><i class="bi bi-geo-alt" aria-hidden="true"></i> Villa Elena Resort</span>
+            <span><i class="bi bi-geo-alt" aria-hidden="true"></i> {{ \App\Models\Setting::resortName() }}</span>
         </div>
     </div>
 

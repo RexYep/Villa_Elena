@@ -88,7 +88,8 @@ class PortalController extends Controller
             )->values();
         }
 
-        $resortName = Setting::get('resort_name', 'Villa Elena Resort');
+        $resortName = Setting::resortName();
+        $resortNameLines = Setting::resortNameLines();
         $resortDesc = Setting::get('resort_description', 'A private luxury resort getaway.');
         $resortEmail = Setting::get('resort_email', 'hello@villaelena.ph');
         $resortPhone = Setting::get('resort_phone', '+63 917 123 4567');
@@ -152,7 +153,7 @@ class PortalController extends Controller
         $guestsServed = (int) Booking::where('status', 'checked_out')->sum('num_guests');
 
         return view('portal.home', compact(
-            'properties', 'featuredVilla', 'rooms', 'resortName', 'resortDesc', 'reviews',
+            'properties', 'featuredVilla', 'rooms', 'resortName', 'resortNameLines', 'resortDesc', 'reviews',
             'resortEmail', 'resortPhone', 'resortAddress', 'facebookUrl', 'tiktokUrl',
             'promos', 'returningPromoTeaser', 'allowOnlineBooking', 'guestRating', 'guestsServed'
         ));
@@ -219,7 +220,7 @@ class PortalController extends Controller
             ->all();
 
         return [
-            'resortName' => Setting::get('resort_name', 'Villa Elena Private Rental Resort'),
+            'resortName' => Setting::resortName(),
             'resortEmail' => Setting::get('resort_email', config('mail.from.address')),
             'resortPhone' => Setting::get('resort_phone', '+63 917 123 4567'),
             'resortAddress' => Setting::get('resort_address', 'Barangay Pansol, Calamba, Laguna'),
