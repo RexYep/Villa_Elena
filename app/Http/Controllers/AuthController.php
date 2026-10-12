@@ -9,6 +9,7 @@ use App\Models\LoginActivity;
 use App\Helpers\DeviceHelper;
 use App\Mail\RegistrationAttemptMail;
 use App\Notifications\TwoFactorCodeNotification;
+use App\Support\LoginReturn;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Auth;
@@ -241,7 +242,7 @@ class AuthController extends Controller
             $code = $this->issueTwoFactorCode($user);
 
             try {
-                $user->notify(new TwoFactorCodeNotification($code));
+                $user->notify(new TwoFactorCodeNotification($code, self::OTP_TTL_MINUTES));
             } catch (\Exception $e) {
                 Log::error('Failed to send 2FA code: ' . $e->getMessage());
                 return back()->withErrors(['email' => 'The verification code cannot be sent right now. Please try again later.'])->withInput($request->only('email', 'remember'));
@@ -367,7 +368,7 @@ class AuthController extends Controller
         $code = $this->issueTwoFactorCode($user);
 
         try {
-            $user->notify(new TwoFactorCodeNotification($code));
+            $user->notify(new TwoFactorCodeNotification($code, self::OTP_TTL_MINUTES));
         } catch (\Exception $e) {
             Log::error('Failed to resend 2FA code: ' . $e->getMessage());
             return back()->with('error', 'The verification code cannot be sent right now. Please try again later.');
@@ -635,7 +636,8 @@ class AuthController extends Controller
                         Log::error('Failed to notify admins of a new registration: ' . $e->getMessage());
                     }
 
-                    // Sends Laravel's built-in VerifyEmail notification. A
+                    // Sends VerifyEmailNotification (the signed link is still
+                    // Laravel's; see User::sendEmailVerificationNotification()). A
                     // failure here is not flagged to the page: the answer is
                     // the same either way, and the guest can ask for another
                     // link from the verification notice once they sign in.
@@ -701,7 +703,7 @@ class AuthController extends Controller
 
         try {
             Mail::to($user->email)->send(new RegistrationAttemptMail(
-                recipientName: $user->full_name,
+                recipientName: $user->first_name,
                 forgotPasswordUrl: route('password.request'),
             ));
         } catch (\Throwable $e) {
@@ -968,17 +970,30 @@ class AuthController extends Controller
 
     /**
      * Where a completed login goes: back to a verification link that was
-     * opened while signed out, otherwise the role's landing page.
+     * opened while signed out, then back to the page the guest was turned
+     * away from, otherwise the role's landing page.
      */
     private function afterLoginRedirect(User $user)
     {
         $pending = request()->session()->pull(self::PENDING_VERIFICATION_URL);
+
+        // Read (and so forgotten) on every login, whichever branch is taken:
+        // a page remembered before this login must not survive to the next.
+        $returnTo = LoginReturn::pathFor($user, request());
 
         // Only for the account the link is for. Signing in as someone else
         // drops it rather than bouncing them to a page that will refuse them.
         if ($pending && ! $user->hasVerifiedEmail()
             && str_contains((string) parse_url($pending, PHP_URL_PATH), "/email/verify/{$user->id}/")) {
             return redirect()->to($pending);
+        }
+
+        // The page an email button or a bookmark asked for. LoginReturn has
+        // already checked that it is a path on this site and that this role
+        // may open it; whether THIS guest owns that booking is still the
+        // page's own check, as it is for anyone who types the address.
+        if ($returnTo) {
+            return redirect()->to($returnTo);
         }
 
         return $this->redirectByRole($user);

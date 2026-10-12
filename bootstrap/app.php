@@ -70,6 +70,19 @@ return Application::configure(basePath: dirname(__DIR__))
         fn (\Illuminate\Http\Request $request) => route($request->user()?->homeRouteName() ?? 'home')
     );
 
+    // Where the `auth` middleware sends a signed-out visitor: the login page,
+    // as before. What is new is that the page they asked for is remembered
+    // first, so the login can take them back to it. That is what makes a
+    // "View your booking" button in an email end on the booking instead of
+    // the dashboard. See App\Support\LoginReturn for what is and is not
+    // remembered, and AuthController::afterLoginRedirect() for where it is
+    // used.
+    $middleware->redirectGuestsTo(function (\Illuminate\Http\Request $request) {
+        \App\Support\LoginReturn::remember($request);
+
+        return route('login');
+    });
+
     // Global, not `web`-only: routes/cron.php is deliberately outside the web
     // group (see the comment in withRouting above), and a security header
     // that skips a route because of how that route is grouped is the same

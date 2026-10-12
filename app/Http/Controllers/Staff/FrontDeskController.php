@@ -746,10 +746,20 @@ class FrontDeskController extends Controller
                     // itself (this runs inside the transaction below) — the
                     // guest can still use "forgot password" later if this
                     // email doesn't land.
+                    //
+                    // The broker still makes the token; the callback only
+                    // swaps the email it is sent in. The stock one says "we
+                    // received a password reset request", which this guest
+                    // never made.
                     try {
-                        \Illuminate\Support\Facades\Password::sendResetLink(['email' => $user->email]);
+                        \Illuminate\Support\Facades\Password::sendResetLink(
+                            ['email' => $user->email],
+                            function ($recipient, $token) {
+                                $recipient->notify(new \App\Notifications\WelcomeSetPasswordNotification($token));
+                            }
+                        );
                     } catch (\Exception $e) {
-                        \Illuminate\Support\Facades\Log::error('Failed to send walk-in password reset link: '.$e->getMessage());
+                        \Illuminate\Support\Facades\Log::error('Failed to send walk-in set-password email: '.$e->getMessage());
                     }
                 }
             } else {

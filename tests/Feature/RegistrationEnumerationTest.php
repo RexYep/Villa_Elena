@@ -167,7 +167,9 @@ class RegistrationEnumerationTest extends TestCase
 
             $this->assertStringNotContainsString('Impostor', $rendered);
             $this->assertStringNotContainsString('0999', $rendered);
-            $this->assertStringContainsString('Existing Guest', $rendered);
+            // Greets the real owner by their own first name (v7.72), from the
+            // account, never from the form.
+            $this->assertStringContainsString('Hi Existing,', $rendered);
 
             return true;
         });

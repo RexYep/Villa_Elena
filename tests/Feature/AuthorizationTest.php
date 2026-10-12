@@ -129,16 +129,23 @@ class AuthorizationTest extends TestCase
         }
     }
 
-    /** `booking/confirmed/{booking}` is a PUBLIC route — no auth middleware at all. */
-    public function test_the_public_confirmation_page_refuses_a_stranger(): void
+    /**
+     * `booking/confirmed/{booking}` was a PUBLIC route with no auth middleware,
+     * guarded only by an owner check inside the controller. The page was
+     * removed in v7.53 (nothing linked to it), so the address must now answer
+     * 404 for everyone: a route that does not exist cannot show a booking.
+     * If the page ever comes back, this is the test to turn back into
+     * "refuses a stranger".
+     */
+    public function test_the_removed_public_confirmation_page_stays_gone(): void
     {
         $ids = $this->seedTwoGuests();
 
-        // Not logged in at all: Auth::id() is null, so the comparison must fail.
-        $this->get("/booking/confirmed/{$ids['booking']}")->assertForbidden();
+        // Not logged in at all.
+        $this->get("/booking/confirmed/{$ids['booking']}")->assertNotFound();
 
         // Logged in as somebody else.
-        $this->actingAs($this->intruder)->get("/booking/confirmed/{$ids['booking']}")->assertForbidden();
+        $this->actingAs($this->intruder)->get("/booking/confirmed/{$ids['booking']}")->assertNotFound();
     }
 
     // ── Role separation ────────────────────────────────────────────

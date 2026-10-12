@@ -5,6 +5,7 @@ namespace App\Helpers;
 use App\Mail\BookingConfirmedMail;
 use App\Mail\RefundNoticeMail;
 use App\Models\Booking;
+use App\Support\GuestEmail;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
@@ -101,7 +102,7 @@ class BookingMailHelper
                     $body,
                     $amount,
                     $actionLabel,
-                    rtrim((string) config('app.url'), '/') . '/' . ltrim($link, '/'),
+                    GuestEmail::url($link),
                     $actionNote,
                 ));
             } catch (\Throwable $e) {

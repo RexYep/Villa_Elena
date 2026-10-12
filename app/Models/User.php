@@ -67,6 +67,7 @@ use Illuminate\Support\Facades\Schema;
  * @method static \Illuminate\Database\Eloquent\Builder<static>|User whereUpdatedAt($value)
  *
  * @property bool $email_notifications_enabled
+ * @property-read string $first_name
  *
  * @method static \Illuminate\Database\Eloquent\Builder<static>|User whereEmailNotificationsEnabled($value)
  *
@@ -326,6 +327,31 @@ class User extends Authenticatable implements MustVerifyEmail
     public function getFullNameAttribute($value): string
     {
         return ucwords($value);
+    }
+
+    /**
+     * The name a greeting uses ("Hi Rex,"). Empty when no name is stored, so
+     * the caller chooses the fallback.
+     */
+    public function getFirstNameAttribute(): string
+    {
+        return explode(' ', trim($this->full_name))[0];
+    }
+
+    /**
+     * The password reset and verification emails in the resort's own words
+     * and template, in place of Laravel's stock ones ("Reset Password
+     * Notification", "Hello!"). The link, its signature and its expiry are
+     * still built by the framework classes these two extend.
+     */
+    public function sendPasswordResetNotification(#[\SensitiveParameter] $token): void
+    {
+        $this->notify(new \App\Notifications\ResetPasswordNotification($token));
+    }
+
+    public function sendEmailVerificationNotification(): void
+    {
+        $this->notify(new \App\Notifications\VerifyEmailNotification);
     }
 
     public function getProfileImageUrlAttribute(): ?string

@@ -39,8 +39,13 @@ class RefundNoticeMail extends Mailable
 
     public function build()
     {
+        // Walang pangalan ng resort sa subject: nasa "From" na iyon, katabi
+        // mismo ng subject sa inbox. Ang `heading` ay siya ring headline
+        // ng email (emails/layout).
         return $this
-            ->subject("{$this->heading} — {$this->booking->booking_ref} | Villa Elena Resort")
-            ->view('emails.refund_notice');
+            ->subject("{$this->heading} — {$this->booking->booking_ref}")
+            ->view('emails.refund_notice')
+            ->text('emails.refund_notice_text')
+            ->with(['preheader' => '₱'.number_format($this->amount, 2)." for booking {$this->booking->booking_ref}."]);
     }
 }

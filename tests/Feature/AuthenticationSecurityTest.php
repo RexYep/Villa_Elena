@@ -293,7 +293,113 @@ class AuthenticationSecurityTest extends TestCase
         $this->assertGuest();
     }
 
+    // ── Signing in returns to the page that was asked for (v7.72) ──
+
+    /** The email button case: open a booking signed out, sign in, land on it. */
+    public function test_signing_in_returns_to_the_page_that_was_asked_for(): void
+    {
+        $this->makeUser(email: 'guest@example.test');
+
+        $this->get('/my/bookings/5?from=email', self::PAGE_LOAD)->assertRedirect(route('login'));
+
+        $this->post('/login', ['email' => 'guest@example.test', 'password' => 'the-real-password'])
+            ->assertRedirect('/my/bookings/5?from=email');
+    }
+
+    /**
+     * A page left open after the session ran out keeps asking for data in the
+     * background. Remembering one of those would end the next login on a JSON
+     * reply. The availability grid even asks for `text/html`, so only the
+     * browser's own "this is a page load" header can tell them apart.
+     */
+    public function test_a_background_request_is_not_remembered(): void
+    {
+        $this->makeUser(role: 'staff', email: 'desk@example.test');
+
+        $this->get('/staff/availability/grid', ['Accept' => 'text/html', 'Sec-Fetch-Mode' => 'cors', 'Sec-Fetch-Dest' => 'empty'])
+            ->assertRedirect(route('login'));
+        $this->get('/staff/availability/grid', ['Accept' => 'text/html'])->assertRedirect(route('login'));
+
+        $this->post('/login', ['email' => 'desk@example.test', 'password' => 'the-real-password'])
+            ->assertRedirect(route('staff.frontdesk'));
+    }
+
+    /** Signing in must never end on a 403: the page's own role rule decides. */
+    public function test_a_page_this_role_may_not_open_is_not_returned_to(): void
+    {
+        $this->makeUser(role: 'staff', email: 'desk@example.test');
+        $this->makeUser(email: 'guest@example.test');
+
+        $this->get('/admin/users', self::PAGE_LOAD)->assertRedirect(route('login'));
+        $this->post('/login', ['email' => 'desk@example.test', 'password' => 'the-real-password'])
+            ->assertRedirect(route('staff.frontdesk'));
+
+        $this->post('/logout');
+
+        $this->get('/staff/frontdesk', self::PAGE_LOAD)->assertRedirect(route('login'));
+        $this->post('/login', ['email' => 'guest@example.test', 'password' => 'the-real-password'])
+            ->assertRedirect('/my/');
+    }
+
+    /** Staff routes are `role:staff,admin`: an admin is returned to one. */
+    public function test_a_role_listed_second_is_returned_to_the_page(): void
+    {
+        $this->makeUser(role: 'admin', email: 'owner@example.test');
+
+        $this->get('/staff/availability', self::PAGE_LOAD)->assertRedirect(route('login'));
+
+        $this->post('/login', ['email' => 'owner@example.test', 'password' => 'the-real-password'])
+            ->assertRedirect('/staff/availability');
+    }
+
+    /** It is used once, and not at all once it is old. */
+    public function test_a_remembered_page_is_used_once_and_expires(): void
+    {
+        $this->makeUser(email: 'guest@example.test');
+        $login = ['email' => 'guest@example.test', 'password' => 'the-real-password'];
+
+        $this->get('/my/bookings/5', self::PAGE_LOAD)->assertRedirect(route('login'));
+        $this->post('/login', $login)->assertRedirect('/my/bookings/5');
+        $this->post('/logout');
+        $this->post('/login', $login)->assertRedirect('/my/');
+        $this->post('/logout');
+
+        $this->get('/my/bookings/5', self::PAGE_LOAD)->assertRedirect(route('login'));
+        $this->travel(\App\Support\LoginReturn::MINUTES + 1)->minutes();
+        $this->post('/login', $login)->assertRedirect('/my/');
+    }
+
+    /** Whatever is in the session, a login only ever lands on this site. */
+    public function test_a_stored_path_that_leaves_the_site_is_refused(): void
+    {
+        $user = $this->makeUser();
+
+        foreach (['//evil.example/my/', '/\\evil.example', 'https://evil.example/my/', '/login', '/no-such-page'] as $path) {
+            $request = \Illuminate\Http\Request::create('/login', 'POST');
+            $request->setLaravelSession($this->app['session.store']);
+            $request->session()->put('login_return', ['path' => $path, 'at' => now()->timestamp]);
+
+            $this->assertNull(\App\Support\LoginReturn::pathFor($user, $request), "{$path} must not be used.");
+        }
+    }
+
+    /** The unfinished verification still comes first. */
+    public function test_a_verification_link_still_wins_over_a_remembered_page(): void
+    {
+        $user = $this->makeUser(verified: false, email: 'pending@example.test');
+        $url = $this->verificationUrl($user);
+
+        $this->get('/my/bookings/5', self::PAGE_LOAD)->assertRedirect(route('login'));
+        $this->get($url)->assertRedirect(route('login'));
+
+        $this->post('/login', ['email' => 'pending@example.test', 'password' => 'the-real-password'])
+            ->assertRedirect($url);
+    }
+
     // ── Helpers ────────────────────────────────────────────────────
+
+    /** What a browser sends when someone opens a page, as opposed to a fetch(). */
+    private const PAGE_LOAD = ['Sec-Fetch-Mode' => 'navigate', 'Sec-Fetch-Dest' => 'document'];
 
     private function verificationUrl(User $user): string
     {

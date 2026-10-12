@@ -1,7 +1,7 @@
 # Villa Elena Private Rental Resort
 ## Resort Management System — Project Documentation
 
-**Version:** 7.71
+**Version:** 7.72
 **Stack:** PHP 8.2 / Laravel 12 / MySQL 8 / Bootstrap 5
 **Local URL:** `http://127.0.0.1:8000` (`php artisan serve`) or `http://localhost:8000` (Docker — see v5.3)
 **Live URL:** `https://villa-elena.onrender.com` (Render, free tier — testing only, not yet handed to real guests)
@@ -185,6 +185,109 @@ through `user_id` and nothing denormalises their name into a booking row.
 from Task 11 · F5 get dropped at the same time — they are empty and reserved
 (`users.id_type` / `users.id_number`, see v7.40), and a schema change for erasure
 is the natural moment to remove them rather than a migration of their own.
+
+---
+
+## What Changed in v7.72 (Read This First)
+
+### Guest emails: one frame, one name, and words that are true
+
+A wording review of every email a guest can receive (2026-10-12) rendered each
+one and read it against the code that sends it. Two said something wrong.
+
+| Email | Was | Now |
+|---|---|---|
+| Sign-in code | "If you did not try to log in, you can safely ignore this email." A code is only issued **after the correct password was entered** (`login()` and `resendTwoFactor()` both sit behind that check), so an unexpected code means someone else knows the password. | Says so, tells the guest not to share the code, and links to Forgot password. |
+| Walk-in account | The stock reset email: "we received a password reset request for your account", sent to a guest who made no request and did not know they had an account. | `WelcomeSetPasswordNotification`: the front desk created an account, set a password, and what to do once the link has run out. |
+| Password reset, verification | Laravel's untouched defaults: "Reset Password Notification", "Hello!", no expiry on the verification email. | `ResetPasswordNotification` / `VerifyEmailNotification`, sent from `User::sendPasswordResetNotification()` / `sendEmailVerificationNotification()`. The framework classes they extend still build and sign the links. |
+| Booking / payment | No slot, no link, "contact us" with no contact, the balance stated three times, a discount never shown, "Property: Villa Elena", and a `<title>` and footer that said "confirmation" on a later payment's receipt. | Slot row, **View your booking** button, the balance in the table and once in the note, the rate and promo discount when there is one, the cancellation sentence and the reschedule rule on the first confirmation. |
+| Refund | "please contact the resort" with no contact. | Same frame and footer as the others. |
+| Sign-up attempt | A raw URL, a 12px light-grey footnote, and "We will not email you again", which the once-a-day limiter does not promise. | A button to the same Forgot password page; "…again about further attempts today". |
+
+**How it is built.**
+
+- **`emails/layout.blade.php`** (and `layout_text`) is the frame: the resort's
+  name, one headline (`heading`), the message, and a footer with the resort's
+  address, phone and email from Settings. A view may fill `footer_note` to say
+  why the guest received it. `preheader` is the line an inbox shows after the
+  subject.
+- **`emails/message.blade.php`** (and `message_text`) is the one template for
+  the five short account emails. Their words are written where each is sent
+  from and passed through `App\Support\GuestEmail::message()`.
+- **Every email has a plain-text part.** A text view prints with `{!! !!}`:
+  nothing in it is HTML, and an escaped apostrophe arrives as `&#039;`.
+- **`GuestEmail::resortName()` is the one name an email prints, and it is
+  `APP_NAME`**, not the `resort_name` setting: it is the sender name beside the
+  subject (`MAIL_FROM_NAME`) and the name the site's pages show. Four spellings
+  were in use. Subjects for booking and refund emails no longer end in
+  "| Villa Elena Resort", which repeated the sender.
+- **`GuestEmail::url()` builds a link from `APP_URL`**, as the refund email
+  already did. Reset and verification links still come from the framework.
+- The booking email's sentences are built in `BookingConfirmedMail`
+  (`opening()`, `policyLines()`), because two views print them. The policy
+  sentence is `Booking::CANCELLATION_POLICY` and the numbers are the model's
+  constants; the reschedule sentence is printed only while
+  `isReschedulable()`.
+- Lifetimes in the words are read from what enforces them: the reset broker's
+  `expire`, `auth.verification.expire`, `AuthController::OTP_TTL_MINUTES`
+  (passed to the notification), `PruneUnverifiedUsers::DEFAULT_HOURS`.
+- `User::first_name` is the greeting ("Hi Rex,"), as on the guest dashboard.
+
+**Checked by sending all nine variants through the `array` mailer** (nothing
+left the machine): each has an HTML and a text part, and the walk-in, reset and
+verification paths were run inside a rolled-back transaction. The HTML was
+looked at in Chrome at desktop width. Not checked: a real mail client (Gmail,
+Outlook), a phone-width window, and dark mode.
+
+### Signing in returns to the page that was asked for
+
+Every email button opens a page behind the login, and the login always ended on
+the role's landing page: the guest signed in and then had to find the booking
+the email was about. `App\Support\LoginReturn` fixes that in two halves.
+
+- **`remember()`** runs when the `auth` middleware turns a signed-out visitor
+  away (`redirectGuestsTo()` in `bootstrap/app.php`) and stores the path in the
+  session as `login_return`.
+- **`pathFor()`** is read by `AuthController::afterLoginRedirect()`, after the
+  password and, when it applies, the emailed code. An unfinished verification
+  link still comes first.
+
+| Rule | Why |
+|---|---|
+| Only a request with `Sec-Fetch-Mode: navigate` is remembered | A page left open after the session ran out keeps fetching in the background. Remembering one ends the next login on a JSON reply or a fragment. `Accept` cannot tell them apart: the availability grid asks for `text/html`. This is also why the framework's own `url.intended` is not used: it is written for every bounced GET. |
+| A path on this site, never a full address; `//host` and `/\host` refused | There is no `?redirect=` parameter, and nothing a visitor types decides where a login lands. |
+| The page's own `role:` middleware must admit the user | Otherwise a staff member signs in straight into a 403 on a browser that last asked for an admin page. No second list of who may go where. |
+| Honoured for 30 minutes (`LoginReturn::MINUTES`), and forgotten on every login, used or not | The next person to sign in on a shared computer is not sent to a page someone else asked for. |
+
+Whether the guest owns the booking is still the page's own check
+(`abort_if($booking->user_id !== Auth::id(), 403)`), as for anyone who types the
+address. So one case remains: guest A opens their email link signed out, and
+guest B signs in on that browser within 30 minutes. B gets the 403 page.
+
+A browser too old to send `Sec-Fetch-Mode` (Safari before 16.4), or a site
+served over plain `http` on a LAN address, gets the landing page as before.
+
+**Checked:** seven tests in `AuthenticationSecurityTest` run the real login
+(return, background request, role, second role, single use and expiry, a path
+that leaves the site, verification first). In Chrome, opening
+`/my/bookings/478?check=return` signed out on `http://127.0.0.1` wrote that path
+to the session file, so the header is really sent there. The sign-in half was
+not clicked through in a browser.
+
+**Left as they are, deliberately.**
+
+- **After verifying an email the guest still lands on the dashboard.** An
+  unverified guest returned to a booking is sent on to the verification notice,
+  and `verifyEmail()` redirects by role.
+- **The walk-in link still lasts 60 minutes.** A longer one needs a second
+  password broker and a reset form that knows which broker made the token.
+- The walk-in email is still sent inside `reserveSlot()`'s transaction (it was
+  before), against the "mail belongs after the commit" rule.
+- **No email is sent** when an unpaid hold is auto-cancelled, when a guest
+  cancels, or on a reschedule. Each would spend the Brevo quota shared with
+  sign-in codes and resets.
+- The Settings "Resort Name" (`Villa Elena Private Rental Resort` by default)
+  and the landing page's "Private Pool Resort" still differ from `APP_NAME`.
 
 ---
 
