@@ -933,7 +933,7 @@
                         <div>
                             <div class="device-name">Booking and refund emails</div>
                             <div class="hint" style="margin-top:3px;">
-                                We email you a confirmation when a payment is received, and an update when a refund is issued, needs your account details, or is paid out. These always appear in your notifications here, whether this is on or off.
+                                We email you a confirmation when a payment is received, and an update when a booking is cancelled or moved to another date, or when a refund is issued, needs your account details, or is paid out. These always appear in your notifications here, whether this is on or off.
                             </div>
                         </div>
                         <label class="toggle-switch">

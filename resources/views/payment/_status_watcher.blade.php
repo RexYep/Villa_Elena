@@ -31,6 +31,12 @@
                                 figures sa `event.detail`
       villa:payment-received  — MINSAN lang, kapag tumaas ang amount_paid
                                 mula sa halagang na-render sa page
+      villa:payment-watch-ended — MINSAN lang, kapag tumigil ang pagtatanong
+                                dahil naubos ang oras (20 minuto) nang
+                                walang dumating na bayad. Kung walang
+                                makikinig, patuloy na sasabihin ng page na
+                                "we are checking right now" matapos itong
+                                tumigil.
 --}}
 @once
     @push('scripts')
@@ -111,7 +117,11 @@
                     if (stopped) return;
 
                     const every = currentInterval();
-                    if (every === null) return stop();
+                    if (every === null) {
+                        stop();
+                        document.dispatchEvent(new CustomEvent('villa:payment-watch-ended'));
+                        return;
+                    }
 
                     if (timer) clearTimeout(timer);
                     timer = setTimeout(poll, every);

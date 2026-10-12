@@ -141,7 +141,7 @@ class NotificationHelper
         self::notifyAdmin(
             "Booking Auto-Cancelled — {$booking->booking_ref}",
             "{$guestName}'s booking for {$propertyName} was automatically cancelled by the system — " .
-            "the 50% downpayment wasn't completed within the {$holdLabel} hold window. No action needed; " .
+            "its payment wasn't completed within the {$holdLabel} hold window. No action needed; " .
             "the slot has been freed.",
             route('admin.bookings.show', $booking, false)
         );
@@ -284,13 +284,20 @@ class NotificationHelper
     // (v7.52 — non-refundable ang lahat ng bayad). `$forfeited` ang
     // halagang naibayad na hindi na maibabalik; ₱0 kung wala pa siyang
     // naibabayad, at doon ay walang dapat sabihin tungkol sa pera.
+    //
+    // Ginagamit din ito kapag ANG ADMIN ang nag-cancel nang walang refund
+    // (v7.74): sa hiling ng guest, o sa booking na wala pang bayad. Pareho
+    // ang totoo sa guest sa dalawang iyon, kaya iisa ang pangungusap. Ang
+    // pagkansela ng resort na MAY refund ay may sariling preset sa ibaba.
     public static function bookingCancelledForGuest($booking, float $forfeited = 0): void
     {
         $message = "Your booking {$booking->booking_ref} has been cancelled.";
+        $rows    = BookingMailHelper::stayRows($booking);
 
         if ($forfeited > 0) {
             $message .= ' The ₱' . number_format($forfeited, 2)
                 . ' you paid is non-refundable under our booking policy, so no refund will be sent.';
+            $rows[] = ['Paid, not refunded', '₱' . number_format($forfeited, 2)];
         }
 
         self::notifyGuest(
@@ -299,6 +306,124 @@ class NotificationHelper
             $message,
             route('customer.bookings.show', $booking, false)
         );
+
+        BookingMailHelper::bookingNotice($booking, 'Booking Cancelled', $message, $rows);
+    }
+
+    // ── Preset: Lumipas ang hold nang walang bayad (guest) ────────
+    // Ang abiso at ang email ng isang booking na kinansela ng system dahil
+    // hindi nabayaran sa loob ng hold (Booking::releaseAsExpiredHold()).
+    //
+    // Walang binabanggit na porsiyento ng downpayment: setting iyon, at
+    // buong bayad ang hinihingi sa guest na madalas mag-cancel. Ang haba ng
+    // hold ay binabasa mula sa nagpapatupad nito.
+    //
+    // "You can book again" ay sinasabi LANG kapag totoo: pagkatapos ng
+    // ilang ganitong pagkansela ay may cooldown ang guest
+    // (Booking::bookingCooldownEndsAt()), at doon ay ang oras ng pagtatapos
+    // nito ang sinasabi.
+    public static function holdExpiredForGuest($booking): void
+    {
+        $minutes = \App\Models\Booking::pendingHoldMinutes();
+        $within  = match (true) {
+            $minutes === 60      => '1 hour',
+            $minutes % 60 === 0  => ($minutes / 60) . ' hours',
+            default              => "{$minutes} minutes",
+        };
+
+        $message = "Your booking {$booking->booking_ref} was cancelled because its payment was not completed within {$within}. "
+            . 'No payment was received for it.';
+
+        $blockedUntil = \App\Models\Booking::bookingCooldownEndsAt($booking->user_id);
+
+        $message .= $blockedUntil
+            ? ' Several of your recent bookings were not paid in time, so you can book again after '
+                . $blockedUntil->format('M j, Y g:i A') . '.'
+            : ' You can book again if the date is still open.';
+
+        self::notifyGuest(
+            $booking->user_id,
+            "Unpaid Booking Cancelled — {$booking->booking_ref}",
+            $message,
+            route('customer.bookings.show', $booking, false)
+        );
+
+        // Ang pangungusap sa kahon ay para sa guest na nagbabayad na nang
+        // lumipas ang hold: naitatala pa rin ang bayad na iyon, at ibinabalik
+        // ang booking kapag bakante pa (reinstateAfterLatePayment()). Walang
+        // ipinapangakong refund: tao ang nagpapasya niyon.
+        BookingMailHelper::bookingNotice(
+            $booking,
+            'Unpaid Booking Cancelled',
+            $message,
+            BookingMailHelper::stayRows($booking),
+            'Already paid? A payment that arrives after this is still recorded, and your booking is restored '
+                . 'if that date and slot are still available. Open your booking to check.'
+        );
+    }
+
+    // ── Preset: Inilipat ang booking sa ibang petsa (guest) ───────
+    // Dating WALANG natatanggap ang guest dito: flash message lang sa
+    // sarili niyang reschedule, at wala talaga kapag ang admin ang
+    // nag-drag ng booking sa calendar. Ang pangungusap ay ibinabalik para
+    // magamit din bilang flash, kaya iisa ang sinasabi ng tatlo.
+    //
+    // `$was` ay ang `stay_phrase` ng booking BAGO ilipat; ang bago ay
+    // binabasa mula sa booking mismo. `$oldTotal` ay ang kabuuan bago
+    // ilipat (nagbabago ang presyo sa reschedule ng guest; hindi sa drag ng
+    // admin, na hindi muling nagpepresyo).
+    public static function bookingRescheduledForGuest($booking, string $was, ?float $oldTotal = null, float $excess = 0, bool $byResort = false): string
+    {
+        $ref   = $booking->booking_ref;
+        $total = (float) $booking->total_amount;
+        $due   = (float) $booking->balance_due;
+        $rows  = array_merge([['Previously', $was]], BookingMailHelper::stayRows($booking));
+
+        if ($byResort) {
+            $message = "The resort moved your booking {$ref} from {$was} to {$booking->stay_phrase}. "
+                . 'If you did not ask for this change, please contact us.';
+        } else {
+            $message = "Your booking {$ref} has been moved from {$was} to {$booking->stay_phrase}.";
+
+            if ($oldTotal !== null && round($oldTotal, 2) !== round($total, 2)) {
+                $message .= ' The total is now ₱' . number_format($total, 2)
+                    . ' (it was ₱' . number_format($oldTotal, 2) . ').';
+            }
+
+            if ($booking->status === 'pending' && (float) $booking->amount_paid <= 0) {
+                $message .= ' It is not confirmed until its payment is completed.';
+            } elseif ($due > 0) {
+                $message .= ' ₱' . number_format($due, 2)
+                    . ' is still due, to be paid on or before the day of check-in.';
+            } elseif ($excess > 0) {
+                $message .= ' As you confirmed, the ₱' . number_format($excess, 2)
+                    . ' price difference is not refunded.';
+            }
+
+            $remaining = $booking->reschedulesRemaining();
+            $message .= $remaining > 0
+                ? " You have {$remaining} reschedule" . ($remaining === 1 ? '' : 's') . ' left for this booking.'
+                : ' This was your last reschedule for this booking.';
+
+            $rows[] = ['Total', '₱' . number_format($total, 2)];
+
+            if ($due > 0) {
+                $rows[] = ['Balance due', '₱' . number_format($due, 2), true];
+            }
+        }
+
+        $heading = $byResort ? 'Booking Moved by the Resort' : 'Booking Rescheduled';
+
+        self::notifyGuest(
+            $booking->user_id,
+            "{$heading} — {$ref}",
+            $message,
+            route('customer.bookings.show', $booking, false)
+        );
+
+        BookingMailHelper::bookingNotice($booking, $heading, $message, $rows);
+
+        return $message;
     }
 
     /**

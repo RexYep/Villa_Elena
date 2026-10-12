@@ -1,0 +1,4 @@
+# The plain-text copies of the guest emails. A text view prints its whitespace
+# exactly as written, so formatting one (indenting each line inside its
+# section) arrives in the guest's inbox as indented, ragged text.
+resources/views/emails/*_text.blade.php

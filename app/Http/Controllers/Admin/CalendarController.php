@@ -322,6 +322,8 @@ class CalendarController extends Controller
 
         $oldIn  = $booking->check_in_date->format('M d, Y');
         $oldOut = $booking->check_out_date->format('M d, Y');
+        // Para sa abiso at email ng guest sa ibaba, bago ilipat ang booking.
+        $oldStay = $booking->stay_phrase;
 
         $newIn = \Carbon\Carbon::parse($request->check_in_date);
 
@@ -404,6 +406,16 @@ class CalendarController extends Controller
             'moved_booking', 'bookings', $booking->id,
             "Moved {$booking->booking_ref} from {$oldIn}–{$oldOut} to {$newIn->format('M d, Y')}–{$newOut->format('M d, Y')} via calendar"
         );
+
+        // Sabihin sa guest (v7.74). Dati, ang pag-drag ng admin ay
+        // nagpapalit ng petsa ng guest nang WALANG anumang abiso sa kanya —
+        // audit log lang ang nakakaalam. Naka-commit na ang paglipat sa
+        // puntong ito, kaya hindi dapat masira ng abiso ang sagot sa admin.
+        try {
+            \App\Helpers\NotificationHelper::bookingRescheduledForGuest($booking->fresh(), $oldStay, byResort: true);
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::error("Failed to notify guest of calendar move for {$booking->booking_ref}: " . $e->getMessage());
+        }
 
         // Realtime broadcast lang ito — hindi dapat maka-block sa AJAX
         // response (na-move na ang booking sa DB sa puntong ito) kung

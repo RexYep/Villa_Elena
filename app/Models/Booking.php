@@ -1108,6 +1108,18 @@ class Booking extends Model
         return $this->checkInDateTime()->format('g:i A');
     }
 
+    /**
+     * The stay in one phrase, for a sentence that names it:
+     * "Sat, Oct 17, 2026 (Day, 8:00 AM)". A notice about a moved booking
+     * reads this before and after the move.
+     */
+    public function getStayPhraseAttribute(): string
+    {
+        $detail = array_filter([$this->slot_name, $this->check_in_time_label]);
+
+        return $this->check_in_date->format('D, M j, Y') . ' (' . implode(', ', $detail) . ')';
+    }
+
     public function getCheckOutTimeLabelAttribute(): string
     {
         return $this->checkOutDateTime()->format('g:i A');
@@ -1584,12 +1596,14 @@ class Booking extends Model
         \Illuminate\Support\Facades\DB::afterCommit(function () use ($booking, $holdLabel) {
             $booking->loadMissing(['user', 'property']);
 
-            \App\Helpers\NotificationHelper::notifyGuest(
-                $booking->user_id,
-                'Booking Auto-Cancelled — Grace Period Expired',
-                "Your booking {$booking->booking_ref} for {$booking->property->property_name} was automatically cancelled because the required 50% downpayment wasn't completed within the {$holdLabel} grace period. Feel free to book again if the dates are still available.",
-                route('customer.bookings.show', $booking, false)
-            );
+            // Ang pananalita sa guest (abiso at email) ay nasa preset na,
+            // hindi na rito (v7.74). Dalawang bagay na hindi totoo ang
+            // sinasabi ng dating pangungusap: "the required 50%
+            // downpayment" (setting ang porsiyento, at buong bayad ang
+            // hinihingi sa guest na madalas mag-cancel) at "feel free to
+            // book again" (naka-block nang 24 oras ang guest pagkatapos ng
+            // ikatlong ganito — tingnan ang bookingCooldownEndsAt()).
+            \App\Helpers\NotificationHelper::holdExpiredForGuest($booking);
 
             \App\Helpers\NotificationHelper::bookingAutoCancelled($booking, $holdLabel);
         });
@@ -2418,10 +2432,25 @@ class Booking extends Model
      */
     public function paymentProgressDisplay(): array
     {
+        // Sa isang CANCELLED na booking, walang "magkano pa ang utang":
+        // wala nang babayaran. Ang cancelled na sangay ng
+        // recalculateFinancials() ay tumatawag na 'paid' sa kahit anong
+        // bayad, kaya ang ₱2,000 na dumating sa ₱4,000 na booking na
+        // nakansela na ay lumalabas na berdeng "Fully Paid"; at ang walang
+        // bayad ay "Not yet received", na para bang may hinihintay pa.
+        if ($this->status === 'cancelled' && $this->payment_status !== 'refunded') {
+            return (float) $this->amount_paid > 0
+                ? ['text' => '₱' . number_format((float) $this->amount_paid, 2) . ' received', 'class' => 'status-partial']
+                : ['text' => 'No payment', 'class' => 'status-unpaid'];
+        }
+
         return match($this->payment_status) {
             'paid'     => ['text' => 'Fully Paid', 'class' => 'status-confirmed'],
+            // Dating "Partial — ₱X remaining". Inuulit ng "Partial" ang
+            // "remaining", at sa lapad ng telepono ay napuputol sa dalawang
+            // linya ang pill dahil doon.
             'partial'  => [
-                'text'  => 'Partial — ₱' . number_format((float) $this->balance_due, 2) . ' remaining',
+                'text'  => '₱' . number_format((float) $this->balance_due, 2) . ' remaining',
                 'class' => 'status-partial',
             ],
             // Dating nahuhulog ang 'refunded' sa default at nagsasabing
@@ -2434,5 +2463,28 @@ class Booking extends Model
             // nakakalito iyon kaysa sa pagsasabi mismo.
             default    => ['text' => 'Not yet received', 'class' => 'status-unpaid'],
         };
+    }
+
+    /**
+     * The text and CSS class of "Booking status" on the payment result page.
+     *
+     * On the model for the same reason as paymentProgressDisplay(): the
+     * first render and the polled JSON both print it. The view used
+     * `ucfirst($status)` and the JSON its own `str_replace`, so a
+     * checked-in booking read "Checked_in" on one and "Checked in" on the
+     * other, and only `confirmed` was ever styled.
+     *
+     * @return array{text: string, class: string}
+     */
+    public function statusDisplay(): array
+    {
+        return [
+            'text'  => ucfirst(str_replace('_', ' ', (string) $this->status)),
+            'class' => match ($this->status) {
+                'confirmed', 'checked_in', 'checked_out' => 'status-confirmed',
+                'cancelled', 'no_show'                   => 'status-cancelled',
+                default                                  => 'status-partial',
+            },
+        ];
     }
 }

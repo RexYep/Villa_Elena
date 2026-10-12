@@ -1,7 +1,7 @@
 # Villa Elena Private Rental Resort
 ## Resort Management System — Project Documentation
 
-**Version:** 7.73
+**Version:** 7.75
 **Stack:** PHP 8.2 / Laravel 12 / MySQL 8 / Bootstrap 5
 **Local URL:** `http://127.0.0.1:8000` (`php artisan serve`) or `http://localhost:8000` (Docker — see v5.3)
 **Live URL:** `https://villa-elena.onrender.com` (Render, free tier — testing only, not yet handed to real guests)
@@ -188,7 +188,149 @@ is the natural moment to remove them rather than a migration of their own.
 
 ---
 
-## What Changed in v7.73 (Read This First)
+## What Changed in v7.75 (Read This First)
+
+### The page after PayMongo: four states, not two
+
+`payment/success.blade.php` knew two states, paid and waiting. A review
+(2026-10-12) rendered it from six kinds of booking and fed its script fake
+status replies. It worked in the ordinary case and was wrong in the others.
+
+| Found | Was | Now |
+|---|---|---|
+| A cancelled, unpaid booking | "Waiting for Payment … keep this page open, we are checking", on a fresh load and when the hold ran out with the page open. The second also kept "Amount Due ₱4,000.00" and the retry link. | A fourth state, **Booking Cancelled**: "nothing is due", no retry link. |
+| The payment deadline | Shown on checkout and the booking details, not on the page the guest actually waits on. | `partials/hold_deadline` is included while waiting. |
+| "We are checking right now" | Stayed after the watcher stopped at 20 minutes. | The watcher fires `villa:payment-watch-ended`; the page says it has stopped and offers **Check again** (a reload, which asks PayMongo directly). |
+| "Amount Due" | The booking's whole balance, shown to a guest paying a 50% deposit. | A "Booking balance" row; the large box is only for money received. |
+| A payment on a cancelled booking | A green "Fully Paid" for ₱2,000 of ₱4,000, and "the resort will contact you" with no way to reach it. | "₱2,000.00 received", and the resort's phone and email from Settings as links. |
+| The booking's description | "Check-in Nov 29 / Check-out Nov 29" for a Day booking, and a "Property" row. | Slot, and both dates with their times; no Property row. |
+| Statuses | `ucfirst($status)` ("Checked_in"); only `confirmed` was styled. | `Booking::statusDisplay()`, read by the page and by `payment.status`. |
+| The main button | At 753px (paid) and 988px (waiting) on a 667px-tall phone. | At 353px and 597px: the header is shorter, the emoji are gone, and the actions come before the details. |
+| The sentence under the headline | 4.26:1 at 13px. | 10.3:1 at 14px. |
+| Screen readers | Not told when the page changed. | The header is `role="status"`; icons are `aria-hidden`; the card is in `<main>`. |
+
+**How it is built.**
+
+- **One `$state`** (`paid`, `waiting`, `late`, `cancelled`) is worked out at
+  the top of the view, and `$heads` holds the header for each. The script gets
+  the same array (`Js::from`) and one `setState()` moves the whole page, so the
+  first render and a live change cannot say different things.
+- **The page watches only while something can still arrive:** while waiting,
+  and for a cancelled booking only when it still has a
+  `paymongo_session_id`. `closeCheckoutSession()` keeps that id exactly when
+  PayMongo refused to close the session (paid, or being paid) or could not be
+  asked. With no id the session is closed and the page is static.
+- **`partials/hold_deadline` takes `['holdStaysOnPage' => true]`.** On
+  checkout and the booking details it polls and leaves for the booking page
+  when the clock ends. Here the page already shows the result in place, and two
+  scripts reacting to one change showed a message and then replaced the page.
+  The box now also hides on `villa:payment-received` on every page: on
+  checkout it used to keep counting beside "Payment Received".
+- **`Booking::paymentProgressDisplay()` has a cancelled branch** ("₱X
+  received" / "No payment"), and its partial text is "₱X remaining" (was
+  "Partial — ₱X remaining", which wrapped at phone width). Checkout reads the
+  same method.
+- `payment.status` also returns `booking_status_display`.
+- The no-session branch of `success()` passes `amountIsTotal`, and the label
+  reads "Total paid": there it is everything paid on the booking, not one
+  payment.
+
+**Checked** by rendering seven states from bookings made in a rolled-back
+transaction and serving them with the built CSS: measured at 375px and 320px
+(no element overflows, no sideways scroll), and stepped one open page through
+hold ended → cancelled → payment arrived while cancelled → booking restored by
+changing the status reply. The stopped-checking message was shown by firing
+its event. `tests/Feature/PaymentResultPageTest.php` (6 tests) renders each
+state. Not checked: a real PayMongo payment, and a real 20-minute wait.
+
+### Plain-text emails and the formatter
+
+`.prettierrc` formats every `*.blade.php`, and a save re-indented the three
+`_text` email views. A text view prints its whitespace as written, so those
+emails went out with every line indented 4 to 12 spaces. The views are
+restored, and **`.prettierignore` now lists
+`resources/views/emails/*_text.blade.php`**. The emails' footer reads "under
+Settings ---> Booking emails" (the page is called Settings, not My Account).
+
+---
+
+## What Changed in v7.74
+
+### Emails for a hold that ran out, a cancellation and a moved booking
+
+A guest was emailed when a payment was received and when a refund moved, and
+for nothing else that happened to a booking. A review before building
+(2026-10-12) found four things in the existing code.
+
+| Found | Was | Now |
+|---|---|---|
+| A guest who reschedules | A one-time flash message. No bell notice, no email, so no record of the new date after one page load. | Bell notice and email; the flash is the same sentence. |
+| An admin dragging a booking on the calendar | `CalendarController::moveBooking()` changed the guest's date and told the guest nothing. | "Booking Moved by the Resort": bell notice and email. |
+| The auto-cancel notice | "the required 50% downpayment" (the percentage is a setting, and a guest with 3+ cancellations must pay in full) and "Feel free to book again" (after a third unpaid hold the guest is blocked for 24 hours). | Names the hold length read from Settings, no percentage, and either "You can book again if the date is still open" or the time the block ends. |
+| The reschedule flash | "An additional ₱X is now due" for the whole balance, even when the price had not changed: a guest with 50% left to pay was told of an extra charge. | The new total only when it changed ("The total is now … (it was …)"), and the balance as a balance. |
+
+**The three notices.** Each is one preset in `NotificationHelper` that creates
+the bell notice and calls `BookingMailHelper::bookingNotice()` with the **same
+title and sentence**, as the refund notices do.
+
+| Preset | Called from | Title |
+|---|---|---|
+| `holdExpiredForGuest()` | `Booking::releaseAsExpiredHold()` (the sweeper, and `reserveSlot()`) | Unpaid Booking Cancelled |
+| `bookingCancelledForGuest()` | the guest's own cancel, and an admin cancel **with no refund** (at the guest's request, or nothing paid) | Booking Cancelled |
+| `bookingRescheduledForGuest()` | the guest's reschedule, and the admin calendar move (`byResort: true`) | Booking Rescheduled / Booking Moved by the Resort |
+
+A resort cancellation **with** a refund is unchanged: it already had its own
+email (`bookingCancelledByResortForGuest()`). So every cancellation now sends
+exactly one email.
+
+**How it is built.**
+
+- **`App\Mail\BookingNoticeMail`** and `emails/booking_notice` (+ `_text`): the
+  sentence, the booking reference, the slot and dates as rows
+  (`BookingMailHelper::stayRows()`), an optional highlighted note, and "View
+  your booking". The moved email adds a "Previously" row, the total and any
+  balance due.
+- **`Booking::stay_phrase`** is the stay in one phrase for a sentence, "Sat,
+  Oct 17, 2026 (Day, 8:00 AM)". A caller reads it **before** moving the
+  booking and passes it as `$was`.
+- **`bookingNotice()` waits for the commit, then sends in `defer()`.** An
+  expired hold can be released inside another guest's booking request
+  (`reserveSlot()`), and that guest must not wait on the mail provider.
+- **`BookingMailHelper::DAILY_NOTICE_LIMIT` = 5 emails per guest per day**,
+  counted across the three kinds. A guest can book and cancel an unpaid booking
+  30 times an hour, and every email draws on the Brevo quota shared with
+  sign-in codes and resets. Past the limit the bell notice is still created.
+  Unpaid holds were already bounded by the 24-hour block, and reschedules by
+  two per booking; guest cancellations were bounded by nothing.
+- It obeys `email_notifications_enabled`; the profile's hint for that switch
+  now names these emails.
+- **The hold email does not mention refunds.** Its note says a payment that
+  arrives after the cancel is still recorded and the booking is restored if the
+  date and slot are still available, which is what
+  `reinstateAfterLatePayment()` does. When it is not restored a person decides,
+  so nothing is promised. A guest who pays seconds after the cut-off can get
+  this email and then "Booking Confirmed".
+- An admin cancel with no refund used a hand-written "Booking Status Updated …
+  Cancelled" row with no toast. It now goes through the same preset as the
+  guest's own cancel. The admin's own auto-cancel notice also lost its "50%".
+
+**Checked** by running the real code in a rolled-back transaction with the
+`array` mailer: the sweeper's `releaseAsExpiredHold()` (first hold, and third
+hold with the block), the guest's `cancelBooking()`, the guest's reschedule
+`update()`, the admin's `moveBooking()` and the admin's `updateStatus()`
+cancel. Each produced one bell notice and one email with the same sentence;
+the sixth email of the day and a guest with the switch off produced a bell
+notice only. Three of the emails were looked at in Chrome at desktop width.
+`tests/Feature/BookingNoticeEmailTest.php` (9 tests) sends each through the
+mailer and reads both parts. Not checked: a real mail client, phone width, dark
+mode, and a real run of the scheduled sweeper end to end.
+
+The Privacy Policy already listed "cancellation … notices" among the emails
+sent; that is now true, and no wording changed.
+
+---
+
+## What Changed in v7.73
 
 ### One resort name, from Settings
 
@@ -364,9 +506,9 @@ not clicked through in a browser.
   password broker and a reset form that knows which broker made the token.
 - The walk-in email was still sent inside `reserveSlot()`'s transaction (moved
   out in v7.73).
-- **No email is sent** when an unpaid hold is auto-cancelled, when a guest
-  cancels, or on a reschedule. Each would spend the Brevo quota shared with
-  sign-in codes and resets.
+- **No email was sent** when an unpaid hold was auto-cancelled, when a guest
+  cancelled, or on a reschedule (added in v7.74, with a daily limit per
+  guest).
 - The Settings "Resort Name" (`Villa Elena Private Rental Resort` by default)
   and the landing page's "Private Pool Resort" differed from `APP_NAME` (one
   name since v7.73).

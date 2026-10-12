@@ -23,9 +23,20 @@
     The countdown runs on the SERVER's clock: the page is given the server's
     "now" and measures its own offset from it, so a phone set five minutes
     fast does not show five minutes too few.
+
+    ON A PAGE THAT WATCHES THE BOOKING ITSELF
+    Pass `['holdStaysOnPage' => true]` (the "Waiting for Payment" page does).
+    Then nothing here polls or leaves the page at zero: that page already
+    asks payment.status and shows the cancelled booking in place, and two
+    scripts reacting to the same change would show one message and then
+    replace it with another page.
+
+    A `villa:payment-received` event hides the box on any page: once a
+    payment has arrived there is no deadline left to show.
 --}}
 @php
     $holdEndsAt = $booking->holdExpiresAt();
+    $holdStays = $holdStaysOnPage ?? false;
 @endphp
 
 @if ($holdEndsAt)
@@ -43,6 +54,7 @@
         data-now="{{ now()->getTimestampMs() }}"
         data-status-url="{{ route('payment.status', $booking) }}"
         data-booking-url="{{ route('customer.bookings.show', $booking) }}"
+        data-stay="{{ $holdStays ? '1' : '0' }}"
         data-over-title="{{ $holdOverTitle }}"
         data-over-note="{{ $holdOverNote }}">
         <i class="bi bi-clock-history" aria-hidden="true"></i>
@@ -79,6 +91,11 @@
                     font-size: 13px;
                     line-height: 1.5;
                     text-align: left;
+                }
+
+                /* `display: flex` above would otherwise beat the attribute. */
+                .hold-deadline[hidden] {
+                    display: none;
                 }
 
                 .hold-deadline > i {
@@ -140,12 +157,26 @@
                     const URGENT_MS = 2 * 60 * 1000;
                     const WATCH_EVERY = 10000;
                     const WATCH_TRIES = 18;
+                    // The page watches the booking itself and shows the
+                    // result in place (see the comment at the top).
+                    const STAY = box.dataset.stay === '1';
 
                     const title = box.querySelector('[data-hold-title]');
                     const left = box.querySelector('[data-hold-left]');
                     const note = box.querySelector('[data-hold-note]');
 
                     let ticker = null;
+                    let paid = false;
+
+                    // A payment arrived: there is no deadline left to show,
+                    // and nothing below may act on a clock that no longer
+                    // applies.
+                    document.addEventListener('villa:payment-received', function () {
+                        paid = true;
+                        if (ticker !== null) clearInterval(ticker);
+                        ticker = null;
+                        box.hidden = true;
+                    });
 
                     function remaining() {
                         return ENDS - (Date.now() + SKEW);
@@ -165,9 +196,12 @@
                     // The booking is cancelled by the sweeper, up to a minute
                     // after the clock stops. Wait for that, then show it.
                     function watch() {
+                        if (STAY) return;
+
                         let tries = 0;
 
                         const poll = setInterval(function () {
+                            if (paid) return clearInterval(poll);
                             if (document.hidden) return;
                             if (++tries > WATCH_TRIES) return clearInterval(poll);
 
@@ -187,6 +221,7 @@
                     }
 
                     function end() {
+                        if (paid) return;
                         if (ticker !== null) clearInterval(ticker);
 
                         box.classList.remove('is-urgent');

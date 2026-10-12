@@ -299,6 +299,10 @@ class PaymentController extends Controller
             return view('payment.success', [
                 'booking' => $booking,
                 'amountPaid' => $booking->amount_paid,
+                // Dito, ang halaga ay ang KABUUANG naibayad sa booking, hindi
+                // isang bayad na kadarating lang (walang session na
+                // mapagkukunan niyon) — kaya iba ang label sa page.
+                'amountIsTotal' => true,
                 'paymentType' => $booking->paymongo_payment_type ?? 'payment',
                 'paymentConfirmed' => $booking->amount_paid > 0,
             ]);
@@ -1307,6 +1311,9 @@ class PaymentController extends Controller
             'payment_display' => $booking->paymentProgressDisplay(),
             'booking_status' => $booking->status,
             'booking_status_label' => ucfirst(str_replace('_', ' ', (string) $booking->status)),
+            // Ang text at class na ipinakita rin ng unang render ng
+            // success page — tingnan ang Booking::statusDisplay().
+            'booking_status_display' => $booking->statusDisplay(),
         ]);
     }
 }

@@ -17,5 +17,5 @@ Booking: {!! $booking->booking_ref !!}
 @endsection
 
 @section('footer_note')
-You are receiving this because booking emails are switched on for your account. You can turn them off under My Account, Booking emails. Sign-in and password emails are always sent.
+You are receiving this because booking emails are switched on for your account. You can turn them off under Settings ---> Booking emails. Sign-in and password emails are always sent.
 @endsection

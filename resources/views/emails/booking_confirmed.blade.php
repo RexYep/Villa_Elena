@@ -29,12 +29,14 @@
         <tr>
             <td class="label">Check-in</td>
             <td class="value">{{ $booking->check_in_date->format('D, M j, Y') }},
-                <span style="white-space:nowrap;">{{ $booking->check_in_time_label }}</span></td>
+                <span style="white-space:nowrap;">{{ $booking->check_in_time_label }}</span>
+            </td>
         </tr>
         <tr>
             <td class="label">Check-out</td>
             <td class="value">{{ $booking->check_out_date->format('D, M j, Y') }},
-                <span style="white-space:nowrap;">{{ $booking->check_out_time_label }}</span></td>
+                <span style="white-space:nowrap;">{{ $booking->check_out_time_label }}</span>
+            </td>
         </tr>
         <tr>
             <td class="label">Guests</td>
@@ -69,7 +71,8 @@
 
     <p style="margin:6px 0 8px;">
         <a href="{{ $bookingUrl }}"
-            style="display:inline-block;background:#2c2416;color:#ffffff;text-decoration:none;font-size:15px;font-weight:700;padding:13px 26px;border-radius:8px;">View your booking</a>
+            style="display:inline-block;background:#2c2416;color:#ffffff;text-decoration:none;font-size:15px;font-weight:700;padding:13px 26px;border-radius:8px;">View
+            your booking</a>
     </p>
     <p class="small">You will be asked to sign in first.</p>
 
@@ -84,5 +87,6 @@
 
 @section('footer_note')
     You are receiving this because booking emails are switched on for your account. You can turn them off
-    under My Account, Booking emails. Sign-in and password emails are always sent.
+    under Settings ---> Booking emails. Sign-in and password emails are always sent.
 @endsection
+

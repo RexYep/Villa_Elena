@@ -482,13 +482,15 @@ class BookingController extends Controller
             // pamagat nito, at ang tanong na "saan ipapadala?" ay
             // nakabaon sa dulo ng isang status update.
             NotificationHelper::bookingCancelledByResortForGuest($booking, $refundAmount, $refundPayment);
+        } elseif ($newStatus === 'cancelled') {
+            // Kinansela nang walang refund: sa hiling ng guest, o booking na
+            // wala pang bayad. Kapareho na ito ng natatanggap ng guest na
+            // siya mismo ang nag-cancel — abiso at email (v7.74). Dating
+            // "Booking Status Updated … Cancelled" na walang email at walang
+            // toast.
+            NotificationHelper::bookingCancelledForGuest($booking, $forfeited);
         } else {
             $statusMessage = "Your booking {$booking->booking_ref} status has been updated to: " . ucfirst(str_replace('_', ' ', $newStatus));
-
-            if ($newStatus === 'cancelled' && $forfeited > 0) {
-                $statusMessage .= '. The ₱' . number_format($forfeited, 2)
-                    . ' you paid is non-refundable under our booking policy, so no refund will be sent.';
-            }
 
             Notification::create([
                 'user_id' => $booking->user_id,

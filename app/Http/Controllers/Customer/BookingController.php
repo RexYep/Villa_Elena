@@ -68,6 +68,10 @@ class BookingController extends Controller
 
         $oldRef   = $booking->booking_ref;
         $oldDates = $booking->check_in_date->format('M d, Y') . ' — ' . $booking->check_out_date->format('M d, Y');
+        // Para sa abiso at email ng guest sa ibaba: ang dating petsa at
+        // slot, at ang dating kabuuan, bago pa baguhin ang booking.
+        $oldStay  = $booking->stay_phrase;
+        $oldTotal = (float) $booking->total_amount;
 
         // Muling pinepresyuhan ang booking para sa BAGONG petsa/slot,
         // kasama ang promong tumatama roon. Ibig sabihin, puwedeng
@@ -187,17 +191,18 @@ class BookingController extends Controller
             route('admin.bookings.show', $booking, false)
         );
 
-        $message = "Booking {$booking->booking_ref} has been rescheduled to " . $checkin->format('M d, Y') . '.';
-        if ($booking->balance_due > 0) {
-            $message .= ' An additional ₱' . number_format($booking->balance_due, 2) . ' is now due.';
-        } elseif ($excess > 0) {
-            $message .= ' As you confirmed, the ₱' . number_format($excess, 2) . ' price difference is not refunded.';
-        }
-
-        $remaining = $booking->reschedulesRemaining();
-        $message .= $remaining > 0
-            ? " You have {$remaining} reschedule" . ($remaining === 1 ? '' : 's') . ' left for this booking.'
-            : ' This was your last available reschedule for this booking.';
+        // Ang guest ay dating flash message lang ang natatanggap dito:
+        // walang abiso sa kampana at walang email, kaya walang natitirang
+        // tala ng bagong petsa pagkatapos ng isang page load. Iisang
+        // pangungusap na ngayon ang tatlo (v7.74) — ang preset ang
+        // bumubuo nito at ibinabalik para sa flash.
+        //
+        // Ang dating flash ay nagsasabing "An additional ₱X is now due"
+        // para sa BUONG balanse, kahit hindi nagbago ang presyo — ang
+        // guest na may natitirang 50% ay nasabihang may dagdag siyang
+        // babayaran. Ang preset ay nagsasabi ng bagong kabuuan lang kapag
+        // nagbago ito, at ng balanse bilang balanse.
+        $message = NotificationHelper::bookingRescheduledForGuest($booking, $oldStay, $oldTotal, $excess);
 
         return redirect()->route('customer.bookings.show', $booking)->with('success', $message);
     }
