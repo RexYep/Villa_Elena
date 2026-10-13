@@ -72,13 +72,13 @@
     }
 
     .confirm-dialog-btn.is-primary {
-        border-color: #dc2626;
-        background: #dc2626;
+        border-color: var(--state-red);
+        background: var(--state-red);
         color: #fff;
     }
 
     .confirm-dialog-btn.is-primary:hover {
-        background: #b91c1c;
+        background: var(--tag-red-fg);
     }
 
     .confirm-dialog-btn.is-primary.is-neutral {
@@ -92,7 +92,7 @@
     }
 
     .confirm-dialog-btn:focus-visible {
-        outline: 2px solid #1d4ed8;
+        outline: 2px solid var(--tag-blue-fg);
         outline-offset: 2px;
     }
 </style>

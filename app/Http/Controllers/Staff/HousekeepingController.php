@@ -47,7 +47,7 @@ class HousekeepingController extends Controller
             taskId: $task->id, actor: Auth::user()->full_name);
         NotificationHelper::housekeepingDone("Task \"{$task->headline}\"", 'done');
 
-        return back()->with('tab', 'housekeeping')->with('success', "✅ Task \"{$task->headline}\" marked done.");
+        return back()->with('tab', 'housekeeping')->with('success', "Task \"{$task->headline}\" marked done.");
     }
 
     // ── Issue reports ──────────────────────────────────────────────
@@ -95,6 +95,6 @@ class HousekeepingController extends Controller
             reportId: $report->id, actor: Auth::user()->full_name);
         NotificationHelper::housekeepingDone("{$report->category_label} issue from {$report->source_label}", 'fixed');
 
-        return back()->with('tab', 'housekeeping')->with('success', "✅ {$report->category_label} issue marked fixed.");
+        return back()->with('tab', 'housekeeping')->with('success', "{$report->category_label} issue marked fixed.");
     }
 }

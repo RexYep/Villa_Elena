@@ -213,6 +213,14 @@ class AppServiceProvider extends ServiceProvider
             ]);
         });
 
+        // The count beside "Frontdesk" in the staff sidebar. It used to be a
+        // section only the frontdesk page filled in, so it vanished on every
+        // other staff page. Two COUNT queries, through the same scopes the
+        // Today list reads.
+        View::composer('layouts.staff', function ($view) {
+            $view->with('frontdeskBadge', Auth::check() ? \App\Models\Booking::frontdeskTodayCount() : 0);
+        });
+
         // The customer topbar bell (layouts/customer.blade.php) needs this on
         // every guest-facing page, not just the dashboard — share it globally
         // so pages that don't already pass it still show the unread dot.
@@ -288,6 +296,9 @@ class AppServiceProvider extends ServiceProvider
                 'customer.profile.password' => ['updatePassword', 'current_password'],
                 'customer.profile.2fa.toggle' => ['twoFactor', 'password'],
                 'customer.profile.deactivate' => ['deactivate', 'password'],
+                // The staff form has one bag and prints each error under
+                // its field; the password it asks for is `current_password`.
+                'staff.profile.password' => ['default', 'current_password'],
                 default => ['default', 'password'],
             };
 

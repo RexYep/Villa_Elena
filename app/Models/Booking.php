@@ -1440,6 +1440,32 @@ class Booking extends Model
             });
     }
 
+    /**
+     * Today's arrivals still to be checked in, and today's departures still
+     * to be checked out: the two halves of the frontdesk's Today list, and
+     * together the count beside "Frontdesk" in the staff sidebar.
+     *
+     * Scopes so the list and the count read one definition. The count is
+     * drawn on every staff page (AppServiceProvider's layouts.staff
+     * composer) and by GET /staff/frontdesk/badge; if those restated the
+     * two conditions, the sidebar could show a number the list beside it
+     * does not have.
+     */
+    public function scopeArrivingToday($query)
+    {
+        return $query->where('check_in_date', today())->where('status', 'confirmed');
+    }
+
+    public function scopeDepartingToday($query)
+    {
+        return $query->where('check_out_date', today())->where('status', 'checked_in');
+    }
+
+    public static function frontdeskTodayCount(): int
+    {
+        return static::arrivingToday()->count() + static::departingToday()->count();
+    }
+
     // ── Atomic Slot Reservation ─────────────────────────────────────
 
     /**

@@ -1,0 +1,1329 @@
+/*
+ * The frontdesk page: staff/frontdesk.blade.php and its partials
+ * (staff/partials/_today_list, _pending_list, _villa_strip,
+ * _frontdesk_stats, _urgent_housekeeping, _issue_reports, _admin_tasks,
+ * task_deadline).
+ *
+ * This was a 1,150-line <style> block inside the view until v7.76. It is
+ * its own Vite entry, linked by that view alone, and not part of the staff
+ * bundle: several names here are plain ones (.card, .badge, .empty,
+ * .btn-sm, .tab-content) that Bootstrap or another staff page could give
+ * a different meaning, and loading them on one page keeps that from
+ * mattering. It is linked after the bundle, so it still wins where the
+ * two meet, as the inline block did.
+ *
+ * No colour is written here as a hex value. They come from base.css,
+ * the state shades (the pale red behind "Booked", the amber of a warning)
+ * being its --state-* tokens. White is #fff.
+ *
+ * It does not import base.css, unlike the section stylesheets: the page
+ * already has it through the staff bundle, and importing it again would
+ * ship every shared rule twice.
+ */
+
+.topbar-right {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.live-clock {
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--navy);
+    font-family: var(--font-display);
+    white-space: nowrap;
+}
+
+/* On a phone the clock is one short line: with its caption it
+   wrapped to three, taller than the bar it sits in. */
+@media (max-width:560px) {
+    .live-clock {
+        font-size: 15px;
+    }
+
+    .live-date {
+        display: none;
+    }
+}
+
+.live-date {
+    font-size: 13px;
+    color: var(--muted);
+    text-align: right;
+}
+
+/* ── Stats ── */
+/* The row's columns follow the room the row has (a container query
+   on its wrapper), not the window: the sidebar takes 260px of a
+   desktop window and none of a tablet's. By the window, four cards
+   were kept in about 670px at 1000px wide and ran off the page.
+   minmax(0,1fr) for the same reason as the Availability grid: a bare
+   1fr track cannot go below the width of a name that does not wrap. */
+.stats-wrap {
+    container: stats / inline-size;
+}
+
+.stats-row {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 14px;
+    margin-bottom: 18px;
+}
+
+@container stats (max-width: 880px) {
+    .stats-row {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+/* The phone-width version of the cards is at the end of this file,
+   after the rules it overrides. */
+
+/* ── Villa status strip ──
+       Pumalit sa dating "Occupied / Available" na counters, na binibilang
+       ang lahat ng property row (1 villa + 3 walang-pangalang info-only na
+       room). Nagpapakita iyon ng "Available 3" kahit isa lang ang totoong
+       bookable at kuha na ito — mapanlinlang sa frontdesk. */
+.villa-strip {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    background: #fff;
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 18px 22px;
+    margin-bottom: 24px;
+}
+
+.villa-badge {
+    width: 52px;
+    height: 52px;
+    border-radius: 13px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 23px;
+    flex-shrink: 0;
+}
+
+.villa-badge.occupied {
+    background: var(--tag-red-bg);
+    color: var(--tag-red-fg);
+}
+
+.villa-badge.available {
+    background: var(--tag-green-bg);
+    color: var(--tag-green-fg);
+}
+
+.villa-badge.maintenance {
+    background: var(--state-amber-tint);
+    color: var(--tag-amber-fg);
+}
+
+.villa-main {
+    flex: 1;
+    min-width: 0;
+}
+
+.villa-name {
+    font-family: var(--font-display);
+    font-size: 17px;
+    font-weight: 600;
+    color: var(--navy);
+}
+
+.villa-state {
+    font-size: 13px;
+    margin-top: 3px;
+}
+
+.villa-state.occupied {
+    color: var(--state-red);
+}
+
+.villa-state.available {
+    color: var(--tag-green-fg);
+}
+
+.villa-state.maintenance {
+    color: var(--tag-amber-fg);
+}
+
+.villa-next {
+    display: flex;
+    gap: 10px;
+    flex-shrink: 0;
+    flex-wrap: wrap;
+}
+
+.next-slot {
+    border: 1.5px solid var(--border);
+    border-radius: 10px;
+    padding: 8px 13px;
+    text-align: center;
+    text-decoration: none;
+    min-width: 104px;
+    transition: all .2s;
+}
+
+.next-slot-lbl {
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: .5px;
+    color: var(--muted);
+}
+
+.next-slot-val {
+    font-size: 14px;
+    font-weight: 700;
+    margin-top: 2px;
+}
+
+.next-slot.free {
+    background: var(--tag-emerald-bg);
+    border-color: var(--state-green-line);
+}
+
+.next-slot.free .next-slot-val {
+    color: var(--tag-green-fg);
+}
+
+.next-slot.free:hover {
+    border-color: var(--state-green);
+    transform: translateY(-1px);
+}
+
+.next-slot.taken {
+    background: var(--state-red-soft);
+    border-color: var(--state-red-line);
+}
+
+.next-slot.taken .next-slot-val {
+    color: var(--tag-red-fg);
+}
+
+/* Wraps: the badge and the name share the first line, and the
+   next-slot chips take the second. */
+@media (max-width:760px) {
+    .villa-strip {
+        flex-wrap: wrap;
+        padding: 14px 16px;
+        gap: 12px;
+    }
+
+    .villa-next {
+        width: 100%;
+        gap: 8px;
+    }
+
+    /* Three to a line. At their desktop minimum of 104px only two
+       fitted across a phone, and the third took a line to itself. */
+    .next-slot {
+        flex: 1 1 28%;
+        min-width: 0;
+        padding: 8px 6px;
+    }
+}
+
+/* ── Housekeeping banner ──
+       Ang pinaka-madaliang item (ulat ng guest, o task na overdue/urgent/
+       malapit na deadline) ay ipinapakita dito sa itaas, na may pindutang
+       Start / Done — kung nasa tab lang, naiipon at nakakaligtaan. */
+.clean-banner {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    border-radius: 14px;
+    padding: 15px 20px;
+    margin-bottom: 20px;
+    border: 1.5px solid;
+}
+
+.clean-banner.urgent {
+    background: var(--state-red-soft);
+    border-color: var(--state-red-edge);
+}
+
+.clean-banner.soon {
+    background: var(--state-amber-soft);
+    border-color: var(--state-amber-line);
+}
+
+.clean-banner.calm {
+    background: var(--state-blue-soft);
+    border-color: var(--state-blue-line);
+}
+
+.clean-icon {
+    width: 42px;
+    height: 42px;
+    border-radius: 11px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 19px;
+    flex-shrink: 0;
+}
+
+.clean-banner.urgent .clean-icon {
+    background: var(--tag-red-bg);
+    color: var(--tag-red-fg);
+}
+
+.clean-banner.soon .clean-icon {
+    background: var(--state-amber-tint);
+    color: var(--tag-amber-fg);
+}
+
+.clean-banner.calm .clean-icon {
+    background: var(--tag-cyan-bg);
+    color: var(--tag-cyan-fg);
+}
+
+.clean-main {
+    flex: 1;
+    min-width: 0;
+}
+
+.clean-title {
+    font-weight: 700;
+    font-size: 14px;
+}
+
+/* --tag-red-fg on the pale red: var(--state-red) there was 4.4:1. */
+.clean-banner.urgent .clean-title {
+    color: var(--tag-red-fg);
+}
+
+.clean-banner.soon .clean-title {
+    color: var(--tag-amber-fg);
+}
+
+.clean-banner.calm .clean-title {
+    color: var(--tag-cyan-fg);
+}
+
+.clean-sub {
+    font-size: 14px;
+    color: var(--muted);
+    margin-top: 2px;
+}
+
+/* The green of a button with white text on it is --tag-green-fg
+   (5:1). The brighter var(--state-green) it replaces was 3.3:1. */
+.btn-clean {
+    background: var(--tag-green-fg);
+    color: #fff;
+    border: none;
+    border-radius: 9px;
+    padding: 10px 18px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    font-family: var(--font-body);
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    flex-shrink: 0;
+    transition: all .2s;
+}
+
+.btn-clean:hover {
+    background: color-mix(in srgb, var(--tag-green-fg) 82%, black);
+}
+
+.task-ready {
+    font-size: 13px;
+    margin-top: 3px;
+    font-weight: 600;
+}
+
+.task-ready.late {
+    color: var(--state-red);
+}
+
+.task-ready.soon {
+    color: var(--tag-amber-fg);
+}
+
+.task-ready.ok {
+    color: var(--tag-green-fg);
+}
+
+.banner-actions {
+    display: flex;
+    gap: 8px;
+    flex-shrink: 0;
+}
+
+.btn-clean-start {
+    background: var(--tag-blue-fg);
+}
+
+.btn-clean-start:hover {
+    background: var(--state-blue-deep);
+}
+
+/* ── Housekeeping tab (v7.11) ── */
+.hk-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 14px;
+}
+
+.hk-toolbar p {
+    font-size: 13px;
+    color: var(--muted);
+    margin: 0;
+}
+
+.btn-report {
+    background: var(--state-red);
+    color: #fff;
+    border: none;
+    border-radius: 9px;
+    padding: 10px 16px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    font-family: var(--font-body);
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    flex-shrink: 0;
+}
+
+.btn-report:hover {
+    background: var(--tag-red-fg);
+}
+
+.task-actions {
+    display: flex;
+    gap: 6px;
+    flex-shrink: 0;
+}
+
+.ws-badge {
+    display: inline-block;
+    margin-left: 6px;
+    padding: 1px 8px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 600;
+    vertical-align: 1px;
+}
+
+.ws-pending { background: var(--state-amber-tint); color: var(--state-amber-deep); }
+.ws-in-progress { background: var(--tag-blue-bg); color: var(--tag-blue-fg); }
+.ws-completed { background: var(--tag-green-bg); color: var(--tag-green-fg); }
+.ws-cancelled { background: var(--border); color: var(--muted); }
+.ws-urgent { background: var(--tag-red-bg); color: var(--tag-red-fg); }
+
+.category-pick {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 8px;
+}
+
+.category-pick label {
+    border: 1.5px solid var(--border);
+    border-radius: 9px;
+    padding: 10px 4px;
+    text-align: center;
+    font-size: 13px;
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+}
+
+.category-pick label i {
+    font-size: 18px;
+}
+
+.category-pick input {
+    position: absolute;
+    opacity: 0;
+}
+
+.category-pick label:has(input:checked) {
+    border-color: var(--state-red);
+    background: var(--state-red-soft);
+    color: var(--tag-red-fg);
+    font-weight: 600;
+}
+
+.category-pick label:has(input:focus-visible) {
+    outline: 2px solid var(--state-red);
+    outline-offset: 2px;
+}
+
+@media (max-width:640px) {
+    .clean-banner {
+        flex-wrap: wrap;
+    }
+
+    .banner-actions {
+        width: 100%;
+    }
+
+    .banner-actions form {
+        flex: 1;
+    }
+
+    .btn-clean {
+        width: 100%;
+        justify-content: center;
+    }
+
+    .hk-toolbar {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .task-row {
+        flex-wrap: wrap;
+    }
+
+    .task-actions {
+        width: 100%;
+        padding-left: 46px;
+    }
+
+    .category-pick {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+
+.stat-card {
+    position: relative;
+    background: #fff;
+    border-radius: 12px;
+    border: 1px solid var(--border);
+    padding: 16px 18px;
+}
+
+/* A card that leads somewhere: one link or button laid over the
+   whole card, so the card's own text stays plain text. The chevron
+   is the sign that it can be pressed. */
+.stat-link {
+    position: absolute;
+    inset: 0;
+    padding: 0;
+    border: none;
+    border-radius: 12px;
+    background: none;
+    cursor: pointer;
+}
+
+.stat-card:has(.stat-link):hover {
+    border-color: var(--border-strong);
+}
+
+.stat-go {
+    position: absolute;
+    top: 14px;
+    right: 14px;
+    font-size: 13px;
+    color: var(--muted);
+}
+
+.stat-card:has(.stat-link) .stat-lbl-top {
+    padding-right: 18px;
+}
+
+.stat-icon {
+    width: 36px;
+    height: 36px;
+    border-radius: 9px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+    margin-bottom: 10px;
+}
+
+.stat-val {
+    font-size: 26px;
+    font-weight: 700;
+    font-family: var(--font-display);
+    color: var(--navy);
+    line-height: 1;
+}
+
+.stat-lbl {
+    font-size: 13px;
+    color: var(--muted);
+    margin-top: 3px;
+}
+
+/* Label sa itaas ng halaga, para sa mga card na pangalan ang laman */
+.stat-lbl-top {
+    margin: 0 0 4px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    font-size: 12px;
+}
+
+.stat-name {
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--navy);
+    line-height: 1.25;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.stat-sub {
+    font-size: 13px;
+    color: var(--muted);
+    margin-top: 3px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.stat-empty {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--muted);
+}
+
+.stat-ok {
+    color: var(--tag-green-fg);
+    font-weight: 600;
+}
+
+.stat-warn {
+    color: var(--state-amber-strong);
+    font-weight: 600;
+}
+
+/* Arrival/Departure na tatak sa Today tab — ito ang kapalit ng
+   dating dalawang hiwalay na card head. */
+.row-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    padding: 2px 8px;
+    border-radius: 999px;
+    margin-bottom: 5px;
+}
+
+.row-tag.arrival {
+    background: var(--tag-green-bg);
+    color: var(--tag-green-fg);
+}
+
+.row-tag.departure {
+    background: var(--tag-blue-bg);
+    color: var(--tag-blue-fg);
+}
+
+.row-tag.inhouse {
+    background: var(--state-violet-soft);
+    color: var(--state-violet);
+}
+
+.stat-danger {
+    color: var(--state-red);
+    font-weight: 600;
+    white-space: normal;
+}
+
+/* ── Tabs ── */
+.tab-bar {
+    display: flex;
+    gap: 4px;
+    margin-bottom: 20px;
+    background: #fff;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 5px;
+    width: fit-content;
+    max-width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    /* A stat card scrolls here; stop below the fixed top bar. */
+    scroll-margin-top: calc(var(--topbar-h) + 12px);
+}
+
+.tab-btn {
+    padding: 8px 18px;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 500;
+    border: none;
+    background: none;
+    cursor: pointer;
+    color: var(--muted);
+    font-family: var(--font-body);
+    display: flex;
+    flex-shrink: 0;
+    align-items: center;
+    gap: 7px;
+    transition: all .2s;
+}
+
+.tab-btn.active {
+    background: var(--navy);
+    color: #fff;
+}
+
+.tab-btn .cnt {
+    background: rgba(255, 255, 255, .2);
+    padding: 0 6px;
+    border-radius: 10px;
+    font-size: 13px;
+}
+
+.tab-btn:not(.active) .cnt {
+    background: var(--sand);
+    color: var(--muted);
+}
+
+.tab-content {
+    display: none;
+}
+
+.tab-content.active {
+    display: block;
+}
+
+/* ── Cards ── */
+.card {
+    background: #fff;
+    border-radius: 14px;
+    border: 1px solid var(--border);
+    overflow: hidden;
+}
+
+.card-head {
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.card-head h3 {
+    font-family: var(--font-display);
+    font-size: 16px;
+    font-weight: 600;
+}
+
+.card-body {
+    padding: 0;
+}
+
+/* ── Booking Row ── */
+.booking-row {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 14px 20px;
+    border-bottom: 1px solid var(--cream);
+    transition: background .15s;
+}
+
+.booking-row:last-child {
+    border-bottom: none;
+}
+
+.booking-row:hover {
+    background: var(--cream);
+}
+
+.guest-avatar {
+    width: 40px;
+    height: 40px;
+    border-radius: 10px;
+    background: var(--bg);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--navy);
+    flex-shrink: 0;
+}
+
+.booking-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.booking-name {
+    font-weight: 600;
+    font-size: 14px;
+}
+
+.booking-ref {
+    font-size: 14px;
+    color: var(--muted);
+}
+
+.booking-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 2px 10px;
+    font-size: 13px;
+    color: var(--muted);
+    margin-top: 3px;
+}
+
+.booking-meta a,
+.booking-ref a {
+    color: inherit;
+}
+
+/* What the guest asked for when booking. */
+.booking-note {
+    display: flex;
+    gap: 6px;
+    margin-top: 5px;
+    font-size: 13px;
+    color: var(--text-main);
+    overflow-wrap: anywhere;
+}
+
+.booking-note i {
+    color: var(--muted);
+    flex-shrink: 0;
+}
+
+.booking-action {
+    flex-shrink: 0;
+}
+
+/* Buttons */
+.btn-checkin {
+    background: var(--tag-green-fg);
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    padding: 8px 16px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    font-family: var(--font-body);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    transition: all .2s;
+}
+
+.btn-checkin:hover {
+    background: color-mix(in srgb, var(--tag-green-fg) 82%, black);
+}
+
+.btn-checkout {
+    background: var(--navy);
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    padding: 8px 16px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    font-family: var(--font-body);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    transition: all .2s;
+}
+
+.btn-checkout:hover {
+    background: var(--navy-mid);
+}
+
+/* Stands where Check In / Check Out will be, until the booking's
+   own time arrives and the server would accept the action. */
+.row-wait {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 12px;
+    border-radius: 8px;
+    background: var(--sand);
+    color: var(--muted);
+    font-size: 13px;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+/* A refused payment, shown inside the form it belongs to. */
+.modal-error {
+    margin-bottom: 14px;
+    padding: 10px 14px;
+    border-radius: 9px;
+    background: var(--tag-red-bg);
+    color: var(--tag-red-fg);
+    font-size: 13px;
+    line-height: 1.5;
+}
+
+.btn-sm {
+    padding: 6px 12px;
+    font-size: 13px;
+    border-radius: 7px;
+    border: none;
+    cursor: pointer;
+    font-family: var(--font-body);
+    font-weight: 600;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+}
+
+.btn-start {
+    background: var(--tag-blue-bg);
+    color: var(--tag-blue-fg);
+}
+
+.btn-complete {
+    background: var(--tag-green-bg);
+    color: var(--tag-green-fg);
+}
+
+.btn-start:hover {
+    background: var(--state-blue-tint);
+}
+
+.btn-complete:hover {
+    background: var(--state-green-line);
+}
+
+/* Badges */
+.badge {
+    padding: 3px 10px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .3px;
+    white-space: nowrap;
+}
+
+.b-pending {
+    background: var(--tag-amber-bg);
+    color: var(--tag-amber-fg);
+}
+
+.b-checked_in {
+    background: var(--tag-blue-bg);
+    color: var(--tag-blue-fg);
+}
+
+/* Housekeeping */
+.task-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 20px;
+    border-bottom: 1px solid var(--cream);
+}
+
+.task-row:last-child {
+    border-bottom: none;
+}
+
+.task-type-icon {
+    width: 34px;
+    height: 34px;
+    border-radius: 9px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 15px;
+    flex-shrink: 0;
+}
+
+.task-info {
+    flex: 1;
+}
+
+.task-prop {
+    font-weight: 600;
+    font-size: 13px;
+}
+
+.task-details {
+    font-size: 14px;
+    color: var(--muted);
+    margin-top: 1px;
+}
+
+.task-date {
+    font-size: 13px;
+    margin-top: 3px;
+}
+
+/* Empty state */
+.empty {
+    text-align: center;
+    padding: 40px;
+    color: var(--muted);
+}
+
+.empty i {
+    font-size: 36px;
+    display: block;
+    margin-bottom: 10px;
+    opacity: .35;
+}
+
+.empty p {
+    font-size: 13px;
+}
+
+@media(max-width:900px) {
+    .tab-bar {
+        width: 100%;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    .tab-btn {
+        flex-shrink: 0;
+    }
+}
+
+@media(max-width:560px) {
+    /* Three equal tabs across the screen, each with its count under
+       its name. Side by side at full width they needed 503px and the
+       bar scrolled, with Housekeeping out of sight. */
+    .tab-bar {
+        overflow-x: visible;
+    }
+
+    .tab-btn {
+        flex: 1 1 0;
+        min-width: 0;
+        flex-direction: column;
+        gap: 3px;
+        padding: 8px 6px;
+        line-height: 1.2;
+        text-align: center;
+    }
+
+    .tab-btn > i {
+        display: none;
+    }
+
+    .booking-row {
+        flex-wrap: wrap;
+    }
+
+    .booking-action {
+        width: 100%;
+        flex-direction: row !important;
+        justify-content: flex-end;
+    }
+}
+
+/* ── Pieces that were inline style="" attributes ────────────────────
+   Each of these was written on the element itself. They are classes
+   now so the values come from tokens and one rule covers every copy. */
+
+/* The avatar's tint says what the row is: in the villa, or leaving. An
+   arrival keeps the plain one. */
+.guest-avatar.is-inhouse {
+    background: var(--state-violet-soft);
+    color: var(--tag-purple-fg);
+}
+
+.guest-avatar.is-departure {
+    background: var(--tag-blue-bg);
+    color: var(--tag-blue-fg);
+}
+
+/* A Today row's buttons, one above the other on a wide screen. The
+   phone rule above turns them into a row, and needs its !important to
+   outrank this two-class selector. */
+.booking-action.is-stacked {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 8px;
+}
+
+.btn-sm.btn-pay {
+    padding: 6px 11px;
+    border: 1px solid var(--state-green-line);
+    background: var(--tag-emerald-bg);
+    color: var(--tag-green-fg);
+}
+
+.next-slot.see-all .next-slot-val {
+    color: var(--navy);
+}
+
+/* ── Modals ── */
+.modal-report {
+    width: 460px;
+}
+
+.modal-payment {
+    width: 420px;
+}
+
+.modal-checkin {
+    width: 440px;
+}
+
+.report-label {
+    margin-bottom: 8px;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--stone);
+}
+
+.report-label-details {
+    display: block;
+    margin: 16px 0 6px;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--stone);
+}
+
+.report-error {
+    margin-top: 6px;
+    font-size: 13px;
+    color: var(--state-red);
+}
+
+.report-note {
+    margin: 12px 0 16px;
+    font-size: 13px;
+    color: var(--muted);
+}
+
+/* The full-width button that ends a modal form. */
+.btn-modal {
+    width: 100%;
+    padding: 13px;
+    border: none;
+    border-radius: 9px;
+    color: #fff;
+    font-family: var(--font-body);
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.btn-modal.is-danger {
+    background: var(--state-red);
+}
+
+.btn-modal.is-danger:hover {
+    background: var(--tag-red-fg);
+}
+
+/* Hovers to the shared primary hover. Until v7.76 an inline handler
+   turned it the old gold (#b8943f), which no token has held since the
+   palette was unified. */
+.btn-modal.is-primary {
+    background: var(--btn-primary);
+    transition: all .2s;
+}
+
+.btn-modal.is-primary:hover {
+    background: var(--btn-primary-hover);
+}
+
+/* "Balance Due", label on the left and the amount on the right. */
+.modal-balance {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 18px;
+    padding: 12px 16px;
+    border-radius: 10px;
+    background: var(--cream);
+}
+
+.modal-balance.is-due {
+    border: 1px solid var(--state-red-line);
+    background: var(--state-red-soft);
+}
+
+.modal-balance-lbl {
+    font-size: 13px;
+    color: var(--state-red-deep);
+}
+
+.modal-balance-val {
+    font-family: var(--font-display);
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--state-red);
+}
+
+.pay-notes {
+    margin-bottom: 18px;
+}
+
+/* A tick box with a sentence beside it. */
+.modal-check {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    margin-bottom: 18px;
+    font-size: 13px;
+    color: var(--muted);
+}
+
+/* The "separate payment" box is hidden with the `hidden` attribute until
+   the server asks. Stated here because the `display: flex` above would
+   otherwise outrank the attribute, as with .modal-overlay in staff.css. */
+.modal-check[hidden] {
+    display: none;
+}
+
+.modal-check input {
+    margin-top: 3px;
+}
+
+.modal-check.is-strong {
+    margin-bottom: 10px;
+    font-size: 14px;
+    color: var(--stone);
+    cursor: pointer;
+}
+
+.modal-check.is-strong input {
+    margin-top: 2px;
+}
+
+/* Check-in with a balance still owed: the two ways forward. */
+.checkin-lead {
+    margin-bottom: 16px;
+    font-size: 12.5px;
+    line-height: 1.6;
+    color: var(--muted);
+}
+
+.choice {
+    padding: 14px 16px;
+    border: 1.5px solid;
+    border-radius: 10px;
+}
+
+.choice.is-pay {
+    width: 100%;
+    margin-bottom: 10px;
+    border-color: var(--state-green-line);
+    background: var(--tag-emerald-bg);
+    font-family: var(--font-body);
+    text-align: left;
+    cursor: pointer;
+}
+
+.choice.is-later {
+    border-color: var(--state-amber-line);
+    background: var(--state-amber-soft);
+}
+
+.choice-icon {
+    width: 32px;
+    height: 32px;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 8px;
+    color: #fff;
+    font-size: 14px;
+}
+
+.choice.is-pay .choice-icon {
+    background: var(--state-green);
+}
+
+.choice.is-later .choice-icon {
+    background: var(--state-amber);
+}
+
+.choice-title {
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.choice.is-pay .choice-title {
+    color: var(--tag-green-fg);
+}
+
+.choice.is-later .choice-title {
+    color: var(--state-amber-deep);
+}
+
+.choice-sub {
+    margin-top: 1px;
+    font-size: 12px;
+    color: var(--muted);
+}
+
+/* Disabled until the tick box above it is ticked. */
+.btn-defer {
+    width: 100%;
+    padding: 10px;
+    border: none;
+    border-radius: 8px;
+    background: var(--tag-amber-fg);
+    color: #fff;
+    font-family: var(--font-body);
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.btn-defer:disabled {
+    opacity: .5;
+}
+
+/* A phone keeps two columns of smaller cards, not one column of
+   full ones: stacked, the four cards pushed the Today list more
+   than a screen and a half down (1,077px on a 667px phone). The
+   icon tile goes, and a name or a line wraps instead of being cut.
+   Last in the file on purpose: these have the same weight as the
+   card rules above, so they only win by coming after them. */
+@container stats (max-width: 560px) {
+    .stats-row {
+        gap: 10px;
+    }
+
+    .stat-card {
+        padding: 12px;
+    }
+
+    .stat-icon {
+        display: none;
+    }
+
+    .stat-go {
+        top: 12px;
+        right: 10px;
+    }
+
+    .stat-val {
+        font-size: 22px;
+    }
+
+    .stat-name,
+    .stat-sub {
+        white-space: normal;
+        overflow-wrap: anywhere;
+    }
+}

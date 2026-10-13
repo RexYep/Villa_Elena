@@ -1,6 +1,10 @@
         {{-- Isang villa, dalawang slot kada araw: halos laging 0–2 ang mga
              bilang, kaya ang ipinapakita ay ang mismong guest at ang
              kailangang gawin, hindi ang bilang. --}}
+        {{-- Each card leads to what it summarises (v7.76): the next arrival
+             to that booking, the other three to their list below. The link
+             or button is `.stat-link`, laid over the card; `data-goto-tab` is
+             read by the click listener in staff/frontdesk. --}}
         <div class="stat-card">
             <div class="stat-icon tag-green"><i class="bi bi-box-arrow-in-right"></i></div>
             <div class="stat-lbl stat-lbl-top">Next Arrival</div>
@@ -23,6 +27,9 @@
                         <span class="stat-ok">Fully paid</span>
                     @endif
                 </div>
+                <i class="bi bi-chevron-right stat-go" aria-hidden="true"></i>
+                <a class="stat-link" href="{{ route('staff.bookings.show', $nextArrival) }}"
+                    aria-label="Open the booking of {{ $nextArrival->user->full_name ?? 'the next guest' }}"></a>
             @else
                 <div class="stat-name stat-empty">No upcoming bookings</div>
             @endif
@@ -39,6 +46,11 @@
                         · ₱{{ number_format($b->balance_due, 0) }}
                     </div>
                 @endforeach
+                {{-- Only with something to collect: those guests are on the
+                     Today list, each with a Payment button. --}}
+                <i class="bi bi-chevron-right stat-go" aria-hidden="true"></i>
+                <button type="button" class="stat-link" data-goto-tab="today"
+                    aria-label="Show today's list, where these payments are recorded"></button>
             @else
                 <div class="stat-name stat-ok"><i class="bi bi-check-circle-fill"></i> All paid</div>
                 <div class="stat-sub">In-house and today's arrivals</div>
@@ -62,10 +74,16 @@
                     {{ $paidPending->count() }} paid, slot conflict — admin review
                 </div>
             @endif
+            <i class="bi bi-chevron-right stat-go" aria-hidden="true"></i>
+            <button type="button" class="stat-link" data-goto-tab="pending"
+                aria-label="Show bookings awaiting payment"></button>
         </div>
         <div class="stat-card">
             <div class="stat-icon tag-purple"><i class="bi bi-brush"></i></div>
             <div class="stat-lbl stat-lbl-top">Housekeeping</div>
             <div class="stat-val" id="fdHousekeepingStat">{{ $stats['pending_tasks'] }}</div>
             <div class="stat-sub">Open tasks and reports</div>
+            <i class="bi bi-chevron-right stat-go" aria-hidden="true"></i>
+            <button type="button" class="stat-link" data-goto-tab="housekeeping"
+                aria-label="Show housekeeping tasks and reports"></button>
         </div>

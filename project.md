@@ -1,7 +1,7 @@
 # Villa Elena Private Rental Resort
 ## Resort Management System — Project Documentation
 
-**Version:** 7.75
+**Version:** 7.76
 **Stack:** PHP 8.2 / Laravel 12 / MySQL 8 / Bootstrap 5
 **Local URL:** `http://127.0.0.1:8000` (`php artisan serve`) or `http://localhost:8000` (Docker — see v5.3)
 **Live URL:** `https://villa-elena.onrender.com` (Render, free tier — testing only, not yet handed to real guests)
@@ -188,7 +188,428 @@ is the natural moment to remove them rather than a migration of their own.
 
 ---
 
-## What Changed in v7.75 (Read This First)
+## What Changed in v7.76 (Read This First)
+
+### Staff portal: eight things that were broken
+
+A review of the staff portal (2026-10-13) read every staff view and rendered
+the four pages at 1366px and 375px. It listed 24 items; the owner approved the
+eight broken ones, then the rest in four more passes (the sections below). All
+24 are done.
+
+| Found | Was | Now |
+|---|---|---|
+| Availability grid, desktop | The card was 902px and every row 910–1036px: the last column was cut off, and no row's cells lined up with the header or with another row. | Columns are `minmax(0,1fr)`, so one template fits every row. The page may grow to 1280px when more than two slots are priced. |
+| Availability grid, between phone and desktop | Four columns were squeezed into whatever was left. | The grid stacks by its **own** width (a container query on `#availabilityGrid`): below 860px with more than two slot columns, below 600px otherwise. |
+| Availability range bar, phone | The date was a 36px column five lines tall, and Next stuck 11px out of the card. | The bar wraps: date on one line, three equal buttons under it. |
+| A cell's second line | Cut with "…" (the price, or the guest and reference). | Wraps. Guest and reference are two pieces with no separator left hanging. |
+| Modals | The overlay could not scroll. Report Issue is 698px tall; on a 667px phone its top and bottom were out of reach. | `.modal-overlay` scrolls and the box is centred by `margin:auto`. |
+| Messages | Every `.alert` on the frontdesk was hidden after 5 seconds, errors included. | `staff/partials/flash`: only a success message may hide itself (8 seconds, frontdesk only). An error or a warning stays until dismissed. |
+| The balance reminder at check-in | The second sentence of the success message, so it vanished with it. | Its own `warning` flash. |
+| A refused payment | A closed, emptied form and one line at the top of the page. | The Record Payment form reopens as it was left, with the reason inside it. |
+| "This is a separate payment" | A tick box on every payment. | Shown only after the server has refused a look-alike payment. |
+| Check In / Check Out | Clickable before the booking's time, when `checkIn()` / `checkOut()` always refuse: confirm, then an error. | "Check-in opens 7:00 PM" stands in the button's place until then. |
+| Live frontdesk | The Today list and stats refreshed; the Awaiting Payment rows, the villa strip, Tasks from Admin and the sidebar count did not. | All of them refetch. |
+| "Refresh to see the latest" banner | Shown on every frontdesk event, after the page had already updated. | Removed. |
+| Too many password attempts | The 429 error page. | Back to the form, with the message under Current Password. |
+
+**How it is built.**
+
+- **`staff/partials/flash.blade.php` prints `success`, `warning`, `error` and
+  the first validation error**, each with a dismiss button. Pass
+  `['autohide' => true]` to let a success message hide itself, and
+  `['validation' => false]` on a page that prints each error under its field
+  (My Account). The dismiss click and the timer are in `resources/js/staff.js`.
+  Never hide an error on a timer: the frontdesk is a shared monitor.
+- **A refused payment travels in the `payment` error bag** with
+  `session('payment_retry')` (`booking`, `ask_separate`).
+  `restorePaymentAttempt()` reopens the form through the row's own Payment
+  button (`data-pay-booking`), so the reference and balance are current. When
+  that row is gone, the copy of the message at the top of the page
+  (`#paymentErrorAlert`) is what the staff member sees; the script removes it
+  only after the form is up.
+- **`ask_separate` is asked of the model, not restated:** the look-alike is the
+  last check in `Payment::manualEntryProblem()`, so if the same payment passes
+  with the box treated as ticked, that was the reason. `openPaymentModal()`
+  resets the form, so nothing typed for one booking carries to the next.
+- **The "opens at" test in `_today_list` is the controller's**
+  (`checkInDateTime()->isFuture()`, `checkOutDateTime()->isFuture()`). The
+  list is re-rendered every minute, so the button appears within a minute of
+  the time. Change the two together.
+- **Three more partials have two render paths each**, like `_today_list`:
+  `_pending_list` and `_villa_strip` (page and `staff.frontdesk.today`), and
+  `_admin_tasks` (page and `staff.frontdesk.housekeeping`).
+  `FrontDeskController::villaStripData()` is the one source for the strip.
+- **A task has no `issues.changed`.** What announces one is the
+  `frontdesk.updated` toast with a `task_…` action, so the housekeeping
+  refetch listens for that as well.
+- **The staff password route uses the `password-confirm` limiter** (5 a minute
+  per user, was a numeric `throttle:6,1`), which picks the field from the
+  route name. `PUT admin/profile/password` has no limit at all; that is
+  unchanged and still open.
+- The stacking width and the page's maximum width are chosen in
+  `availability.blade.php` from `count($slotDefs)`. A slot priced while the
+  page is open changes the grid on the next refetch but not those two numbers
+  until a reload.
+
+**Checked** through the real kernel as the staff user, with the session in
+memory: the four pages render; both live endpoints return the new parts; an
+over-balance payment is refused with nothing recorded and comes back with the
+typed values; the sixth password attempt is a redirect with the message under
+the field. Then in a browser with the built CSS and JS: the grid at 1366px (all
+14 rows aligned, none overflowing, no text cut) and at 320, 375, 768 and
+1024px (no sideways scroll); each modal's last button reachable at 375×667;
+the payment form reopened, refilled and reset; one message of each kind
+dismissed and timed. Today's rows were rendered from a booking changed in
+memory, because the local database had no arrival today. **Not checked:** a
+real duplicate payment (so `ask_separate = true` was shown in the form by hand,
+not produced by the server), and two browsers receiving a real Pusher event.
+
+### Staff portal: the stat cards, and the wording
+
+A second pass the same day: one layout fault found while checking the first
+eight, and review items 9 to 12.
+
+| Found | Was | Now |
+|---|---|---|
+| Frontdesk stat cards, just above 992px wide | Seen at 1000px: four cards kept in about 670px (the sidebar takes 260px of the window), so the fourth ran off the page and it scrolled sideways. | The row follows its **own** width (a container query on `.stats-wrap`): four columns from 880px, two below it, one below 380px. Measured at thirteen widths from 320 to 1600px: no sideways scroll, no text cut. |
+| Three error messages | Tagalog, in an English screen (walk-in overpayment, missing payment method, slot already booked). | English. The walk-in form's own overpayment line says the same thing as the server's. |
+| Walk-in, "create an account" note | "A password-reset email". | "Emailed a link to set their own password", which is what `WelcomeSetPasswordNotification` sends (v7.72). |
+| Walk-in labels | "Property"; "No Villa is currently available." | "Villa"; "The villa is not open for booking right now." |
+| Walk-in price breakdown | A gold ★ with no explanation; "9.0 hrs". | "· peak rate" in words (`--gold-text`); "9 hrs". |
+| Check-in balance choice | "Defer (Deferred)". | "Pay Later". The stored value is still `balance_arrangement = deferred`. |
+| Awaiting Payment heading | Followed by "Awaiting payment from guest". | Followed by "Unpaid holds are released after N minutes" (`$holdMinutes`). |
+| Awaiting Payment rows | "Oct 13 – Oct 13, 2026". | "Tue, Oct 13 · Day, 8:00 AM – 5:00 PM" (`slot_name`, `stay_hours`). |
+| Today and Awaiting Payment rows | A "Villa Elena" line on every row. | Removed: there is one villa. |
+| Success messages | "✅" beside the message's own icon, in six places. | No emoji. |
+| Record Payment, line under the title | The booking reference from a row, the guest's name from "Pay Now". | "Guest name · VE-…" from both. |
+
+**How it is built.**
+
+- **A row's Payment button carries `data-pay-booking`, `data-pay-label` and
+  `data-pay-balance`, and one delegated click listener opens the form.** It
+  has no inline handler: the label holds the guest's name (see the rule on
+  inline handlers in `CLAUDE.md`), and a delegated listener keeps working
+  after the live refresh replaces the list. "Pay Now" and a refused payment
+  both open the form by clicking that button, so there is one way in.
+- The wording of `StaffLog` entries, broadcasts and guest notifications was
+  not touched; only what the staff member reads on the page.
+
+**Checked** by the same kernel run (30 checks) and in a browser: the stat row
+at thirteen widths, the Record Payment form opened from a row and from "Pay
+Now", and the walk-in price breakdown drawn from four sample quotes. **Not
+checked:** the three translated errors and the six success messages were read
+in the source, not produced, because producing them means writing a booking
+or a payment.
+
+### Staff portal: keyboard, contrast and one field style
+
+Review items 20 to 23, the same day.
+
+| Found | Was | Now |
+|---|---|---|
+| The three frontdesk modals | Shown by setting `display`: focus stayed on the page behind, Tab walked through that page, Esc did nothing. Two had no `role="dialog"` and an unnamed ✕. | Focus moves into the form, Tab stays in it, Esc closes it, and focus returns to the button that opened it. All three are `role="dialog"` with a title and a named close button. |
+| Frontdesk tabs | Three buttons with `onclick`. | A tablist: `aria-selected`, `aria-controls`, one stop in the Tab order, and ←/→/Home/End between tabs. |
+| Availability, "Previous" on the first page | A link styled as disabled, still reachable with Tab and followable. | A `<span aria-disabled="true">`. |
+| Walk-in labels | Five `<label>`s with no control. | "Select Guest" has `for`. The other four captioned a group or a fixed value, so they are plain elements tied by `aria-labelledby` (`role="group"`, `role="radiogroup"`, `role="status"`). |
+| Walk-in toggles | The dark fill was the only sign of the choice. | `aria-pressed`, kept in step by `setGuestType()` / `setCreateAccount()`. |
+| Sign out | A 27px icon. | A 40px button with an `aria-label`. |
+| Fields | My Account fell through to Bootstrap (16px, a `#dee2e6` edge at 1.3:1); Walk-in had its own rule; two frontdesk modal fields had an inline `--border` edge. | `.form-control` / `.form-select` are in `staff.css`, and the two modal fields use `.input-plain`. |
+| Walk-in selects | No chevron: the rule's `background` shorthand cleared it, so a select looked like a text box. | `background-color`, so the chevron is back. |
+
+**Contrast.** Ten places were under 4.5:1. Six were measured in the review;
+four more came out of a scan of the rendered pages.
+
+| Where | Was | Now |
+|---|---|---|
+| "Today" tag | white on `--gold`, 2.29 | `--stone` on `--gold`, 6.7 |
+| Confirm and Check In | white on `#d97706`, 3.19 | white on `--tag-amber-fg`, 4.92 |
+| Check In, Mark done, Mark fixed | white on `#16a34a`, 3.3 | white on `--tag-green-fg`, 5.02 |
+| "Fully paid", "All paid" | `#16a34a` on white, 3.3 | `--tag-green-fg`, 5.02 |
+| "Not offered" | `--muted` at .8 opacity, 3.44 | `--muted`, 5.15 |
+| Line under a modal's title | white at .4 on `--stone`, 3.67 | `.modal-sub`, white at .7, 8.2 |
+| "Booked" (Availability, villa strip) | `#dc2626` on `#fef2f2`, 4.41 | `--tag-red-fg`, 5.91 |
+| Urgent banner title | `#dc2626` on `#fef2f2`, 4.41 | `--tag-red-fg`, 5.91 |
+| Walk-in "Full Payment", "Amount Paid" | `#16a34a` on `--cream`, 3.19 | `--tag-green-fg`, 4.85 |
+
+**How it is built.**
+
+- **`showModal(id, focusSelector)` and `hideModal(id)` in
+  `staff/frontdesk.blade.php` are the only way a modal is shown or hidden.**
+  A new modal there needs `class="modal-overlay"`, an entry in
+  `MODAL_CLOSERS`, and to open through `showModal()`; Esc, the focus trap and
+  the return of focus then come with it. The confirm dialog is a native
+  `<dialog>` above them and keeps its own handling.
+- **`switchTab(name, focus)` takes the tab's name**, not the button. It sets
+  the panel, `aria-selected` and `tabindex` together.
+- **White text goes on `--tag-green-fg` / `--tag-amber-fg` / `--tag-red-fg`,
+  never on the brighter `#16a34a` / `#d97706`.** Those are 3.2 to 3.3:1 and
+  are how most of the table above happened. The hover is
+  `color-mix(… 82%, black)`, so no second hex is needed.
+- **Red text on the pale red (`#fef2f2`) is `--tag-red-fg`.** `#dc2626`
+  passes on white (4.83) and fails there (4.41).
+
+**Checked** in a browser with the built CSS: a scan that composites every
+piece of text over the backgrounds behind it (868 pieces across the four
+pages, with each modal open and each walk-in state shown) reports nothing
+under AA. With real key presses: Shift+Tab from the first control of Record
+Payment wraps to its last and stays inside, Esc closes it, and focus is back
+on the row's Payment button. The arrow keys, Home and End on the tabs were
+driven by dispatched events. **Not checked:** a screen reader; placeholder,
+hover and focus colours; and an issue report's rows, because the local
+database has none (the banner's three tones were computed from their colour
+pairs instead). A disabled Create Walk-in Booking button is 3.94:1, which the
+rule exempts.
+
+### Staff portal: booking lookup, the Availability rows, and the phone
+
+Review items 13 to 19, the same day. Three were design choices the owner
+made first: a Bookings page with details and payment; Day and Night columns
+with one wide row for a 22-hour date; and the payment type worked out by the
+server.
+
+**Booking lookup (new).** `Staff\BookingController`, two pages, read-only
+apart from Record Payment.
+
+- **`/staff/bookings`** lists what is still ahead (`pending`, `confirmed`,
+  `checked_in`, check-out today or later), soonest first. A search (`?q=`, two
+  characters or more) covers every booking, past and cancelled included, by
+  reference or by the guest's name, email or phone, newest stay first. Fifty
+  rows, then it says there are more. `%` and `_` in the search are escaped.
+- **`/staff/bookings/{booking}`** shows the stay by slot and stored times,
+  special requests, the guest's phone and email as links, stays completed,
+  the payments (`orderBy payment_date, id`; a refund with a minus), and the
+  balance as stored in `balance_due`.
+- **Its payment form posts to the same `staff.payment`** as the frontdesk, so
+  the same `Payment::manualEntryProblem()` applies. A refusal comes back in
+  the `payment` bag and is printed inside the form with what was typed. The
+  form is offered only when the booking is not cancelled or a no-show and
+  `balance_due > 0`.
+- It is reached from the sidebar, a booked cell on Availability, the
+  reference on a Today or Awaiting Payment row, and the Next Arrival card.
+- Nothing here creates, moves or cancels a booking.
+
+**Availability.** `gridSlotDefs()` now returns only the slots sold on an
+ordinary date. A 22-hour date is the only thing sold that day, so
+`buildSlotGrid()` gives its row one cell with `span` = the number of columns,
+and the cell carries the slot's name and times. Before, each priced slot had a
+column and 28 of 56 cells read "Not offered"; a fortnight on a phone was
+5,817px tall and is 3,382px. `unoffered` is kept as a state a column could still take, so such
+a cell would say so. The span is a CSS variable (`--span`), because a literal
+`grid-column: span 2` would add a second column to the stacked layout.
+
+**Payment type.** `FrontDeskController::paymentTypeFor()`: less than the
+balance is `partial`; the whole balance is `full_payment` when nothing was
+paid before and `balance` after a deposit. The Type field is gone from both
+payment forms, and `payment_type` is no longer read from the request.
+
+| Also changed | Was | Now |
+|---|---|---|
+| Today rows | No phone number, no special requests. | The phone as a `tel:` link, and the special requests the walk-in form collects. |
+| Stat cards | Not clickable. | Next Arrival opens that booking; To Collect, Awaiting Payment and Housekeeping open their tab (`data-goto-tab`). |
+| Frontdesk on a 375px phone | Tab bar at 1,077px; one stat card per line; tabs scrolled sideways with Housekeeping hidden; the clock on three lines. | Tab bar at 532px; two smaller cards per line; three equal tabs; the clock on one. The first Today row starts at 710px, still under a 667px fold. |
+| Sidebar count | Only on the frontdesk page. | On every staff page (a `layouts.staff` composer), and updated live on the others by `staff.frontdesk.badge`. |
+| An admin in the staff portal | Tagged "Staff", with no way back. | Tagged "Admin", with an Admin Panel link. |
+| Walk-in guest picker | A dropdown of every customer. | A search box above it narrows the list by name, email or phone; one match is selected. |
+| Walk-in Amount Received | Started at "0". | Starts empty. |
+| Walk-in Payment Type | Text in a field's box. | Plain text. |
+| Walk-in submit | Disabled with the reason in another card; no sign it had been pressed. | The reason is beside the button, and it reads "Creating booking…" once pressed. |
+
+**How it is built.**
+
+- **`Booking::scopeArrivingToday()` and `scopeDepartingToday()` are the Today
+  list's two queries and, through `Booking::frontdeskTodayCount()`, the
+  sidebar count.** Don't restate either condition where a count is needed.
+- **A form marked `data-submit-once`** (walk-in, the details page's payment
+  form) has its button relabelled from `data-busy-label` and ignores a second
+  submit (`resources/js/staff.js`). The server is still the guard against a
+  repeat.
+- **The phone-width card rules are last in `resources/css/staff/frontdesk.css`.** They
+  have the same weight as the card rules, so they only win by coming after
+  them; placed above, they did nothing.
+- The walk-in guest search removes and re-adds `<option>`s. It does not hide
+  them, because some phone browsers still show a hidden option.
+
+**Checked** through the kernel (43 checks, nothing written): the list, four
+searches, three details pages, a refused payment returning to the details
+form, the four payment-type cases, the grid with a real 22-hour date
+(2026-11-11) and its refetch, and the admin's view. In a browser: the wide row
+ends at the card's edge and ordinary rows line up; Bookings, details and
+Availability have no sideways scroll at 320, 375 and 768px; the contrast scan
+is clean on the new and changed pages; a stat card switches the tab; the guest
+search by name and by phone; three presses of the walk-in button reach the
+browser once. **Not checked:** a payment actually recorded from the details
+page (it would write one and send its email and broadcast), the sidebar count
+changing on a live event, and a booking list longer than fifty.
+
+### Staff portal: the frontdesk's styles and handlers leave the view
+
+Review item 24, the same day. No change to how the page looks or works, with
+two exceptions listed below.
+
+| | Was | Now |
+|---|---|---|
+| `staff/frontdesk.blade.php` | 1,951 lines, about 1,150 of them a `<style>` block. | 826 lines, no `<style>`. |
+| The styles | In the view. | `resources/css/staff/frontdesk.css`, its own Vite entry, linked by that view alone. |
+| Inline `style=""` in the page and its partials | 42 | 0 |
+| Inline handlers (`onclick`, `onsubmit`, `onmouseover`, `onmouseout`) | 9 | 0 |
+| Hex colours in those views | 108 at the review | 0 |
+| Dead rules | The removed Properties tab's (`.property-grid`, `.prop-card…`, `.dot-…`), `.b-confirmed`, `.b-checked_out`, `.next-slot.past`, two `.task-date` modifiers, `.topbar-date`. | Deleted. |
+
+**The two visible changes.** Record Payment hovers to `--btn-primary-hover`
+(terracotta, white text): an inline `onmouseover` used to turn it `#b8943f`, a
+gold no token has held since the palette was unified. A row on the Today list
+hovers to `--cream`, not the off-palette `#fafbfc`.
+
+**How it is built.**
+
+- **Its own entry, not part of the staff bundle** (`vite.config.js`, and
+  `@vite` in the view's `styles` stack). Several of its names are plain ones
+  (`.card`, `.badge`, `.empty`, `.btn-sm`, `.tab-content`) that Bootstrap or
+  another staff page could mean differently, and one page loading them keeps
+  that from mattering. It is linked after the bundle, as the inline block was,
+  so it still wins where the two meet. It does not import `base.css`; the
+  bundle already brought it.
+- **`--state-*` tokens in `base.css`** hold the shades its tag pairs do not:
+  the pale surface behind a state (`-soft`), its edge (`-line`), the strong
+  colour, and the darkest text on the soft surface (`-deep`). They were
+  declared in `staff.css` at first and moved the same day (see the follow-up
+  below), so any section can use them. The Walk-in view still writes some of
+  the same values out.
+- **A modal is shown with the `hidden` attribute**, not an inline `display`,
+  so `openModal()` reads a property. `.modal-overlay[hidden]` is stated in
+  `staff.css` because the overlay's own `display: flex` would otherwise
+  outrank the attribute.
+- **Buttons carry data attributes and one listener serves each kind:**
+  `data-close-modal`, `data-open-report`, `data-pay-booking`, `data-goto-tab`.
+  A Check In form is `form[data-checkin]` with `data-guest` and
+  `data-balance`; the guest's name is no longer an argument in an inline
+  `onsubmit`. All of them are delegated, so they survive the live refresh
+  replacing the lists.
+- **The page's `<script>` is still in the view.** It reads routes, the session
+  and the error bags through Blade, so moving it is a separate piece of work.
+- The disabled look of Confirm and Check In is `.btn-defer:disabled`; the
+  script only sets `disabled`.
+
+**Checked** by rendering the page before and after with the clock frozen,
+filling it with every state its partials have (all five kinds of Today row,
+both Awaiting Payment rows, the three banner tones, tasks, reports, the stat
+cards busy and quiet, the strip occupied and under maintenance), and comparing
+56 computed properties and the position of every element in the two: 573
+elements in each of five states and 250 in a sixth, at 1366, 1000, 768 and
+375px. The only differences were the focus ring on whichever of the two pages
+held focus. A deliberately changed padding was reported, so the comparison
+does detect a change. Then, on the new page: a check-in with a balance opens
+the choice, Pay Now and Confirm and Check In do what they did, a check-in with
+none asks once and then submits, each close button and Esc close their form,
+and the contrast scan is clean. **Not checked:** the build on Render, where
+the new entry is compiled for the first time.
+
+**Left as it was:** the styles inside `walkin.blade.php`,
+`availability.blade.php`, `profile.blade.php`, the two Bookings pages and
+`partials/realtime.blade.php`. They are much smaller, and the review item was
+the frontdesk.
+
+**Follow-up, the same day** (a second review of item 24). Five small things
+and the walk-in page, none of which changes how a page works.
+
+- **The `--state-*` tokens moved from `staff.css` to `base.css`**, beside the
+  `--tag-*` pairs. A move, not a change: the names and values are the same.
+- **`partials/realtime.blade.php` has no `<style>` block.** The toast is on
+  every staff page, so its rules are in `staff.css` (REALTIME TOAST). The
+  sticky toast is edged in `--state-red`; it was `#ef4444`, a red no token
+  holds, so it is one shade darker (3.2:1 against the toast, as an edge).
+- **`availability.blade.php` writes no colour but white.** 20 hex values
+  became the tokens that already held them. Two had none and took the
+  nearest: today's row is `--cream` (was `#fffdf5`), and the price line of a
+  free slot is `--tag-green-fg`, the same green as the word above it (was
+  `#4d7c0f`). Its `<style>` block stays in the view, because two of its
+  numbers are worked out in Blade. The struck-through list price is
+  `.slot-sub s`, not an inline `opacity`; the two inline styles left in
+  `_availability_grid` set `--slot-cols` and `--span`, which are values and
+  have to travel with the markup.
+- **The sign-out form in `layouts/staff` has no inline style**
+  (`.staff-info form`), and `.modal-check[hidden]` is stated in
+  `frontdesk.css` so the "separate payment" box does not depend on Bootstrap
+  to stay hidden.
+- **`partials/confirm_dialog` writes no colour but white.** Its red button,
+  that button's hover and the focus ring are `--state-red`, `--tag-red-fg`
+  and `--tag-blue-fg`: the same three values, so the dialog looks as it did
+  in all three portals. This is what the token move was needed for; the
+  admin and customer portals do not load `staff.css`.
+
+Checked by building and rendering the frontdesk, Availability, its grid
+endpoint, Walk-in and Bookings as a staff user: all 200, every token used is
+defined, and the tokens are in every section's built stylesheet. The dialog
+was read out of one rendered page per portal (frontdesk, admin dashboard,
+customer home), each against the stylesheet that page links. **Not
+checked:** the pages in a browser, and a toast actually shown.
+
+**The walk-in page, the same way as the frontdesk.**
+
+| | Was | Now |
+|---|---|---|
+| `staff/walkin.blade.php` | 1,039 lines, 320 of them a `<style>` block. | 734 lines, no `<style>`. |
+| The styles | In the view. | `resources/css/staff/walkin.css`, its own Vite entry, linked by that view alone. |
+| Inline `style=""` (three of them inside the script's templates) | 14 | 0 |
+| Inline handlers (`onclick` ×4, `oninput`) | 5 | 0 |
+| `element.style` set by the script | 17 places | 0 |
+| Hex colours other than white | 9 | 0 |
+| Dead rules | `.three-col`. | Deleted. |
+
+- **Something that comes and goes uses the `hidden` attribute** (the new-guest
+  fields, the two account notes, the price preview, the payment summary), not
+  an inline `display`. None of those classes sets a `display` of its own, so
+  the attribute needs no extra rule.
+- **The payment-type line is coloured by a class**, set in one place
+  (`setPayTone()`): `.pay-type.is-over`, `.is-full`, `.is-partial`.
+- **The four toggle buttons carry `data-guest-type` / `data-create-account`**
+  and are bound by listeners in the page's script.
+- **One visible change.** The note under the slots on a 22-hour date is
+  `--tag-cyan-fg`; it was `#0f766e`, a teal no token holds.
+
+Checked three ways. (1) The page before and after, driven through the same 14
+steps in jsdom with the quote endpoint stubbed (both toggles, four payment
+amounts, a quote with a promo at the peak rate, a taken slot, an invalid one, a
+network failure): 24 observed values per step, no difference, and a
+deliberately removed `hidden` was reported. (2) The two pages side by side in
+Chrome with the real stylesheets, 52 computed properties and the position of
+all 231 elements, in six states at 1366, 1000, 768 and 375px: the only
+difference is the colour of that note. (3) Rendered as a staff user: 200, no
+inline style, no inline handler. **Not checked:** a walk-in booking actually
+submitted, and the page signed in to in a browser (the comparison used saved
+copies of the rendered page).
+
+**Fixed: the walk-in script stopped after a failed submit with New Guest
+chosen.** Blade then printed `setGuestType('new')` near the top of the
+script. It calls `updatePrice()`, which reads `PROPERTY_ID`, a `const`
+declared further down, and threw (`Cannot access 'PROPERTY_ID' before
+initialization`). The `typeof updatePrice === 'function'` guard around the
+call never helped: a function declaration is hoisted, so the test was always
+true. Nothing after that line ran, so the reloaded form had no price, no
+availability check, no payment-type line and no overpayment warning, and
+**Create Account went back to "No"** (the line that restores it is further
+down), so pressing the button again made a guest record with no login. The
+server still checked the slot and the amount on submit. It was there before
+the stylesheet work and was found by it.
+
+The restore call is now the last thing in the script, after every declaration
+it reaches, in place of the plain `updatePrice()` that ended it (one quote
+request either way). The guard and its comment are gone. **A call at the top
+of that script must not reach `updatePrice()` or `updatePaymentPreview()`:**
+both read `let`/`const` declared lower down.
+
+Checked from a real render with old input flashed the way a failed submit
+leaves it (New Guest, Create Account, ₱1,000 received), run in jsdom. Before:
+the error above, no quote requested, Create Account "no". After: no error, the
+New Guest form and Create Account restored with the email required, the
+quote requested and shown, ₱1,000 read as a partial payment, and the amount
+and slot checks working afterwards. The ordinary load was run through the same
+14 steps as before against the original page: no difference.
+
+---
+
+## What Changed in v7.75
 
 ### The page after PayMongo: four states, not two
 
@@ -6901,7 +7322,7 @@ An audit of every route found the same problem worse elsewhere. The limits were 
 | `two-factor-resend` | `POST /two-factor/resend` | 2/min and 6/hour per pending login, 20/hour per IP |
 | `verification-send` | `POST /email/verification-notification` | 2/min, 6/hour, 10/day per user |
 | `chatbot` | `POST /chatbot` | 10/min, 60/hour, 150/day per user or IP |
-| `password-confirm` | `PUT my/profile/password`, `PUT my/profile/2fa`, `DELETE my/profile` | 5/min per user |
+| `password-confirm` | `PUT my/profile/password`, `PUT my/profile/2fa`, `DELETE my/profile`, `PUT staff/profile/password` (v7.76) | 5/min per user |
 | `review-write` | `POST my/bookings/{booking}/review`, `PUT my/reviews/{review}` | 10/min per user |
 | `contact` | `POST /contact` | 5/hour per IP |
 | `payment-checkout` | `POST /pay/{booking}/checkout` | 8/min per user; over the limit → back to the checkout page with an `error` flash |
@@ -10917,6 +11338,9 @@ GET    /staff/walkin                          staff.walkin
 GET    /staff/walkin/quote                    staff.walkin.quote  (AJAX)         ← NEW v6.0
 POST   /staff/walkin                          staff.walkin.store
 POST   /staff/bookings/{booking}/payment      staff.payment
+GET    /staff/bookings                        staff.bookings.index    ← NEW v7.76 (?q= search; upcoming by default)
+GET    /staff/bookings/{booking}              staff.bookings.show     ← NEW v7.76 (read-only details + Record Payment)
+GET    /staff/frontdesk/badge                 staff.frontdesk.badge   ← NEW v7.76 (AJAX: sidebar count)
 PATCH  /staff/tasks/{task}/start              staff.tasks.start
 PATCH  /staff/tasks/{task}/complete           staff.tasks.complete
 GET    /staff/frontdesk/housekeeping          staff.frontdesk.housekeeping ← NEW v7.14 (AJAX: urgent banner + Issue Reports HTML + count)

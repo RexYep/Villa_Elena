@@ -1,0 +1,392 @@
+/*
+ * The walk-in booking page: staff/walkin.blade.php.
+ *
+ * This was a 320-line <style> block inside the view until v7.76. Like
+ * css/staff/frontdesk.css it is its own Vite entry, linked by that view
+ * alone and after the staff bundle: it narrows .main for this page, and
+ * gives its own meaning to names Bootstrap also has (.form-label,
+ * .is-invalid, .invalid-feedback).
+ *
+ * No colour is written here as a hex value. They come from base.css.
+ * White is #fff.
+ *
+ * It does not import base.css: the page already has it through the staff
+ * bundle, and importing it again would ship every shared rule twice.
+ */
+
+.main {
+    max-width: 900px;
+}
+
+/* Wide screens: payment and the submit button sit beside the guest and
+   stay details instead of below them, and stay in view while the
+   longer left column scrolls. */
+@media (min-width: 1200px) {
+    .main {
+        max-width: 1280px;
+    }
+
+    .walkin-grid {
+        display: grid;
+        grid-template-columns: minmax(0, 1.55fr) minmax(320px, 1fr);
+        gap: 20px;
+        align-items: start;
+    }
+
+    .walkin-side {
+        position: sticky;
+        top: calc(var(--topbar-h) + 28px);
+    }
+
+    .walkin-side .two-col {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .walkin-side .walkin-actions {
+        flex-direction: column-reverse;
+        align-items: stretch;
+    }
+
+    .walkin-side .walkin-actions > * {
+        justify-content: center;
+        text-align: center;
+    }
+}
+
+.walkin-actions {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+}
+
+/* Form */
+.section-card {
+    background: #fff;
+    border-radius: 14px;
+    border: 1px solid var(--border);
+    overflow: hidden;
+    margin-bottom: 20px;
+}
+
+.section-head {
+    padding: 16px 22px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.section-icon {
+    width: 34px;
+    height: 34px;
+    border-radius: 9px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 15px;
+    flex-shrink: 0;
+}
+
+.section-head h3 {
+    font-family: var(--font-display);
+    font-size: 16px;
+    font-weight: 600;
+}
+
+/* "(optional — can be recorded later)" beside a heading: the heading's
+   size is not its own, and neither is the display face. */
+.section-head h3 .optional-tag {
+    font-family: var(--font-body);
+}
+
+.section-body {
+    padding: 22px;
+}
+
+.form-label {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--stone);
+    margin-bottom: 6px;
+    display: block;
+    letter-spacing: .2px;
+}
+
+/* .form-control and .form-select are in staff.css: My Account uses
+   the same fields. */
+
+.guest-search {
+    margin-bottom: 8px;
+}
+
+.guest-count {
+    margin-top: 6px;
+    font-size: 13px;
+    color: var(--muted);
+}
+
+.guest-count:empty {
+    display: none;
+}
+
+/* The payment type, as text. The script (updatePaymentPreview) adds the
+   modifier that says which it is. */
+.pay-type {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--muted);
+}
+
+.pay-type.is-over {
+    color: var(--state-red);
+}
+
+.pay-type.is-full {
+    color: var(--tag-green-fg);
+}
+
+.pay-type.is-partial {
+    color: var(--tag-amber-fg);
+}
+
+/* Why the submit button is disabled. */
+.submit-reason {
+    margin-bottom: 12px;
+    padding: 9px 13px;
+    border-radius: 8px;
+    background: var(--tag-amber-bg);
+    color: var(--tag-amber-fg);
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.two-col {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 14px;
+}
+
+/* .mb-14 is in base.css. */
+
+.is-invalid {
+    border-color: var(--state-red) !important;
+}
+
+.invalid-feedback {
+    font-size: 13px;
+    color: var(--state-red);
+    margin-top: 3px;
+}
+
+/* Guest toggle */
+.guest-toggle {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 18px;
+}
+
+.toggle-btn {
+    flex: 1;
+    padding: 10px;
+    border-radius: 9px;
+    border: 1.5px solid var(--border);
+    background: #fff;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    font-family: var(--font-body);
+    color: var(--muted);
+    transition: all .2s;
+    text-align: center;
+}
+
+.toggle-btn.active {
+    background: var(--navy);
+    color: #fff;
+    border-color: var(--navy);
+}
+
+/* The villa: a fixed value drawn like a field, not a field. `background`,
+   not `background-color`, as the inline style it replaces was. */
+.villa-fixed {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: var(--cream);
+}
+
+/* The slots offered, as many to a line as fit. */
+.slot-options {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+    gap: 12px;
+}
+
+/* Why a 22-hour date offers one slot only. */
+.slot-only-note {
+    margin-top: 6px;
+    font-size: 13px;
+    color: var(--tag-cyan-fg);
+}
+
+/* "Pre-filled from the Availability page". */
+.prefill-note {
+    margin-top: 10px;
+    padding: 9px 13px;
+    border-radius: 8px;
+    background: var(--tag-green-bg);
+    color: var(--tag-green-fg);
+    font-size: 14px;
+}
+
+/* Price preview */
+.price-preview {
+    background: var(--cream);
+    border-radius: 10px;
+    border: 1px solid var(--border);
+    padding: 16px;
+    margin-top: 14px;
+}
+
+.price-title {
+    margin-bottom: 10px;
+    font-size: 14px;
+}
+
+.price-row {
+    display: flex;
+    justify-content: space-between;
+    font-size: 13px;
+    padding: 5px 0;
+    border-bottom: 1px solid var(--sand);
+}
+
+.price-row:last-child {
+    border-bottom: none;
+}
+
+.price-row.total {
+    font-weight: 700;
+    font-size: 15px;
+    border-top: 2px solid var(--border);
+    padding-top: 10px;
+    margin-top: 4px;
+}
+
+.price-row.balance {
+    color: var(--state-red);
+    font-weight: 600;
+}
+
+.price-row.paid {
+    color: var(--tag-green-fg);
+}
+
+/* The promo that lowered the price. */
+.price-row.promo {
+    color: var(--tag-green-fg);
+    font-weight: 600;
+}
+
+.peak-rate {
+    color: var(--gold-text);
+}
+
+/* Buttons */
+.btn-submit {
+    background: var(--btn-primary);
+    color: #fff;
+    border: none;
+    border-radius: 9px;
+    padding: 13px 28px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    font-family: var(--font-body);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    transition: all .2s;
+}
+
+.btn-submit:hover {
+    background: var(--btn-primary-hover);
+    color: #fff;
+}
+
+.availability-status {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 14px;
+    font-weight: 600;
+    padding: 9px 13px;
+    border-radius: 8px;
+    margin-top: 10px;
+    background: var(--sand);
+    color: var(--muted);
+}
+
+.availability-status.is-available {
+    background: var(--tag-green-bg);
+    color: var(--tag-green-fg);
+}
+
+.availability-status.is-unavailable {
+    background: var(--tag-red-bg);
+    color: var(--tag-red-fg);
+}
+
+.btn-submit:disabled {
+    background: var(--border);
+    color: var(--muted);
+    cursor: not-allowed;
+}
+
+.btn-back {
+    background: #fff;
+    color: var(--muted);
+    border: 1.5px solid var(--border);
+    border-radius: 9px;
+    padding: 13px 24px;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    font-family: var(--font-body);
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    transition: all .2s;
+}
+
+.btn-back:hover {
+    border-color: var(--navy);
+    color: var(--navy);
+}
+
+.optional-tag {
+    color: var(--muted);
+    font-weight: 400;
+    font-size: 13px;
+}
+
+.new-guest-password-note {
+    background: var(--tag-amber-bg);
+    border-radius: 8px;
+    padding: 10px 14px;
+    font-size: 14px;
+    color: var(--tag-amber-fg);
+    margin-top: 10px;
+}
+
+@media (max-width: 560px) {
+
+    .two-col {
+        grid-template-columns: 1fr;
+    }
+
+    .guest-toggle {
+        flex-direction: column;
+    }
+}

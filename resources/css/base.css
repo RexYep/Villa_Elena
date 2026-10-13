@@ -48,6 +48,34 @@
     --tag-red-bg:#fee2e2;     --tag-red-fg:#b91c1c;
     --tag-emerald-bg:#f0fdf4; --tag-emerald-fg:#15803d; /* payment type: deposit */
     --tag-slate-bg:#f1f5f9;   --tag-slate-fg:#475569;   /* booking status: checked_out */
+
+    /* State shades: what a status looks like beyond the tag pairs above.
+     * "soft" is the pale surface behind a state, "line" its edge, the bare
+     * name the strong colour, "deep" the darkest text on the soft surface.
+     * Text in the strong red or amber passes on white but not on its own
+     * soft surface: there, use --tag-red-fg / --tag-amber-fg (see
+     * project.md v7.76). These were declared in staff.css until the staff
+     * Availability page and the realtime toast started using them too;
+     * they are here so any section can. */
+    --state-red: #dc2626;
+    --state-red-soft: #fef2f2;
+    --state-red-line: #fecaca;
+    --state-red-edge: #fca5a5;
+    --state-red-deep: #991b1b;
+    --state-green: #16a34a;
+    --state-green-line: #bbf7d0;
+    --state-amber: #d97706;
+    --state-amber-soft: #fffbeb;
+    --state-amber-tint: #fef3c7;
+    --state-amber-line: #fde68a;
+    --state-amber-strong: #b45309;
+    --state-amber-deep: #92400e;
+    --state-blue-soft: #f0f9ff;
+    --state-blue-line: #bae6fd;
+    --state-blue-tint: #bfdbfe;
+    --state-blue-deep: #1e40af;
+    --state-violet-soft: #ede9fe;
+    --state-violet: #6d28d9;
 }
 
 *, *::before, *::after { box-sizing: border-box; }

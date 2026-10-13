@@ -4,6 +4,7 @@
 //  REPLACE ENTIRE: routes/staff.php
 // ════════════════════════════════════════════════════════════════
 
+use App\Http\Controllers\Staff\BookingController;
 use App\Http\Controllers\Staff\FrontDeskController;
 use App\Http\Controllers\Staff\HousekeepingController;
 use App\Http\Controllers\Staff\ProfileController;
@@ -29,6 +30,17 @@ Route::prefix('staff')
         Route::get('/frontdesk/today', [FrontDeskController::class, 'todayLive'])
             ->middleware('throttle:60,1,staff-today')
             ->name('frontdesk.today');
+
+        // The count beside "Frontdesk" in the sidebar, for the other staff
+        // pages (v7.76). Refetched on the same events as the lists above.
+        Route::get('/frontdesk/badge', [FrontDeskController::class, 'badge'])
+            ->middleware('throttle:60,1,staff-badge')
+            ->name('frontdesk.badge');
+
+        // Booking lookup (v7.76): search, and one booking's details. Read
+        // only; the details page posts payments to `staff.payment` below.
+        Route::get('/bookings', [BookingController::class, 'index'])->name('bookings.index');
+        Route::get('/bookings/{booking}', [BookingController::class, 'show'])->name('bookings.show');
 
         // Check in / out
         Route::patch('/checkin/{booking}', [FrontDeskController::class, 'checkIn'])->name('checkin');
@@ -59,8 +71,11 @@ Route::prefix('staff')
         // My Account — sariling pangalan, numero at password ng staff.
         Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
         Route::put('/profile', [ProfileController::class, 'update'])->name('profile.update');
+        // Named limiter, not a numeric `throttle:6,1`: over the limit, a
+        // numeric one answers with the 429 error page, and this one sends the
+        // message back to the form's Current Password field.
         Route::put('/profile/password', [ProfileController::class, 'updatePassword'])
-            ->middleware('throttle:6,1,staff-password')
+            ->middleware('throttle:password-confirm')
             ->name('profile.password');
 
     });

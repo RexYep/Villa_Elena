@@ -4,323 +4,18 @@
 @section('page-title', 'Walk-in Booking')
 @section('page-subtitle', 'Create a new booking for a walk-in guest')
 
+{{-- This page's stylesheet: its own Vite entry, linked here and nowhere
+     else, after the staff bundle (see the note at the top of
+     resources/css/staff/walkin.css). --}}
 @push('styles')
-    <style>
-        .main {
-            max-width: 900px;
-        }
-
-        /* Wide screens: payment and the submit button sit beside the guest and
-           stay details instead of below them, and stay in view while the
-           longer left column scrolls. */
-        @media (min-width: 1200px) {
-            .main {
-                max-width: 1280px;
-            }
-
-            .walkin-grid {
-                display: grid;
-                grid-template-columns: minmax(0, 1.55fr) minmax(320px, 1fr);
-                gap: 20px;
-                align-items: start;
-            }
-
-            .walkin-side {
-                position: sticky;
-                top: calc(var(--topbar-h) + 28px);
-            }
-
-            .walkin-side .two-col {
-                grid-template-columns: minmax(0, 1fr);
-            }
-
-            .walkin-side .walkin-actions {
-                flex-direction: column-reverse;
-                align-items: stretch;
-            }
-
-            .walkin-side .walkin-actions > * {
-                justify-content: center;
-                text-align: center;
-            }
-        }
-
-        .walkin-actions {
-            display: flex;
-            gap: 12px;
-            align-items: center;
-        }
-
-        /* Form */
-        .section-card {
-            background: #fff;
-            border-radius: 14px;
-            border: 1px solid var(--border);
-            overflow: hidden;
-            margin-bottom: 20px;
-        }
-
-        .section-head {
-            padding: 16px 22px;
-            border-bottom: 1px solid var(--border);
-            display: flex;
-            align-items: center;
-            gap: 12px;
-        }
-
-        .section-icon {
-            width: 34px;
-            height: 34px;
-            border-radius: 9px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 15px;
-            flex-shrink: 0;
-        }
-
-        .section-head h3 {
-            font-family: var(--font-display);
-            font-size: 16px;
-            font-weight: 600;
-        }
-
-        .section-body {
-            padding: 22px;
-        }
-
-        .form-label {
-            font-size: 14px;
-            font-weight: 600;
-            color: var(--stone);
-            margin-bottom: 6px;
-            display: block;
-            letter-spacing: .2px;
-        }
-
-        .form-control,
-        .form-select {
-            border: 1.5px solid var(--border-strong);
-            border-radius: 8px;
-            padding: 10px 14px;
-            font-size: 13px;
-            font-family: var(--font-body);
-            width: 100%;
-            background: #fff;
-            transition: border-color .2s;
-        }
-
-        .form-control:focus,
-        .form-select:focus {
-            outline: none;
-            border-color: var(--navy);
-            box-shadow: 0 0 0 3px rgba(44, 36, 22, .06);
-        }
-
-        .two-col {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 14px;
-        }
-
-        .three-col {
-            display: grid;
-            grid-template-columns: 1fr 1fr 1fr;
-            gap: 14px;
-        }
-
-        .mb-14 {
-            margin-bottom: 14px;
-        }
-
-        .is-invalid {
-            border-color: #dc2626 !important;
-        }
-
-        .invalid-feedback {
-            font-size: 13px;
-            color: #dc2626;
-            margin-top: 3px;
-        }
-
-        /* Guest toggle */
-        .guest-toggle {
-            display: flex;
-            gap: 8px;
-            margin-bottom: 18px;
-        }
-
-        .toggle-btn {
-            flex: 1;
-            padding: 10px;
-            border-radius: 9px;
-            border: 1.5px solid var(--border);
-            background: #fff;
-            font-size: 13px;
-            font-weight: 500;
-            cursor: pointer;
-            font-family: var(--font-body);
-            color: var(--muted);
-            transition: all .2s;
-            text-align: center;
-        }
-
-        .toggle-btn.active {
-            background: var(--navy);
-            color: #fff;
-            border-color: var(--navy);
-        }
-
-        /* Price preview */
-        .price-preview {
-            background: var(--cream);
-            border-radius: 10px;
-            border: 1px solid var(--border);
-            padding: 16px;
-            margin-top: 14px;
-        }
-
-        .price-row {
-            display: flex;
-            justify-content: space-between;
-            font-size: 13px;
-            padding: 5px 0;
-            border-bottom: 1px solid var(--sand);
-        }
-
-        .price-row:last-child {
-            border-bottom: none;
-        }
-
-        .price-row.total {
-            font-weight: 700;
-            font-size: 15px;
-            border-top: 2px solid var(--border);
-            padding-top: 10px;
-            margin-top: 4px;
-        }
-
-        .price-row.balance {
-            color: #dc2626;
-            font-weight: 600;
-        }
-
-        .price-row.paid {
-            color: #16a34a;
-        }
-
-        /* Buttons */
-        .btn-submit {
-            background: var(--btn-primary);
-            color: #fff;
-            border: none;
-            border-radius: 9px;
-            padding: 13px 28px;
-            font-size: 14px;
-            font-weight: 600;
-            cursor: pointer;
-            font-family: var(--font-body);
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            transition: all .2s;
-        }
-
-        .btn-submit:hover {
-            background: var(--btn-primary-hover);
-            color: #fff;
-        }
-
-        .availability-status {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            font-size: 14px;
-            font-weight: 600;
-            padding: 9px 13px;
-            border-radius: 8px;
-            margin-top: 10px;
-            background: var(--sand);
-            color: var(--muted);
-        }
-
-        .availability-status.is-available {
-            background: var(--tag-green-bg);
-            color: var(--tag-green-fg);
-        }
-
-        .availability-status.is-unavailable {
-            background: var(--tag-red-bg);
-            color: var(--tag-red-fg);
-        }
-
-        .btn-submit:disabled {
-            background: var(--border);
-            color: var(--muted);
-            cursor: not-allowed;
-        }
-
-        .btn-back {
-            background: #fff;
-            color: var(--muted);
-            border: 1.5px solid var(--border);
-            border-radius: 9px;
-            padding: 13px 24px;
-            font-size: 14px;
-            font-weight: 500;
-            cursor: pointer;
-            font-family: var(--font-body);
-            text-decoration: none;
-            display: inline-flex;
-            align-items: center;
-            gap: 8px;
-            transition: all .2s;
-        }
-
-        .btn-back:hover {
-            border-color: var(--navy);
-            color: var(--navy);
-        }
-
-        .optional-tag {
-            color: var(--muted);
-            font-weight: 400;
-            font-size: 13px;
-        }
-
-        .new-guest-password-note {
-            background: #fef9c3;
-            border-radius: 8px;
-            padding: 10px 14px;
-            font-size: 14px;
-            color: #a16207;
-            margin-top: 10px;
-        }
-
-        @media (max-width: 560px) {
-
-            .two-col,
-            .three-col {
-                grid-template-columns: 1fr;
-            }
-
-            .guest-toggle {
-                flex-direction: column;
-            }
-        }
-    </style>
+    @vite(['resources/css/staff/walkin.css'])
 @endpush
 
 @section('content')
 
-    @if ($errors->any())
-        <div class="alert alert-danger">
-            <i class="bi bi-exclamation-circle me-2"></i>
-            {{ $errors->first() }}
-        </div>
-    @endif
+    @include('staff.partials.flash')
 
-    <form method="POST" action="{{ route('staff.walkin.store') }}" id="walkinForm">
+    <form method="POST" action="{{ route('staff.walkin.store') }}" id="walkinForm" data-submit-once>
         @csrf
 
         <div class="walkin-grid">
@@ -333,11 +28,11 @@
                 <h3>Guest Information</h3>
             </div>
             <div class="section-body">
-                <div class="guest-toggle">
-                    <button type="button" class="toggle-btn active" id="btnExisting" onclick="setGuestType('existing')">
+                <div class="guest-toggle" role="group" aria-label="Guest type">
+                    <button type="button" class="toggle-btn active" id="btnExisting" aria-pressed="true" data-guest-type="existing">
                         <i class="bi bi-person-check me-1"></i> Existing Guest
                     </button>
-                    <button type="button" class="toggle-btn" id="btnNew" onclick="setGuestType('new')">
+                    <button type="button" class="toggle-btn" id="btnNew" aria-pressed="false" data-guest-type="new">
                         <i class="bi bi-person-plus me-1"></i> New Guest
                     </button>
                 </div>
@@ -345,26 +40,36 @@
 
                 {{-- Existing Guest --}}
                 <div id="existingGuestFields">
-                    <label class="form-label">Select Guest</label>
+                    <label for="guestSelect" class="form-label">Select Guest</label>
+                    {{-- Narrows the list below as it is typed in. The list is
+                         every customer on record, and a plain dropdown of them
+                         has no search of its own. `data-search` carries the
+                         phone number too, which the option's text may not
+                         show. The script is in this file (filterGuests). --}}
+                    <input type="search" id="guestSearch" class="form-control guest-search" autocomplete="off"
+                        placeholder="Type a name, email or phone to narrow the list" aria-label="Search guests"
+                        aria-controls="guestSelect" aria-describedby="guestSearchCount">
                     {{-- May id dahil ginagamit ng live quote: nakakaapekto sa
                          presyo kung sino ang guest (promo para sa regular). --}}
                     <select name="user_id" id="guestSelect"
                         class="form-select {{ $errors->has('user_id') ? 'is-invalid' : '' }}">
                         <option value="">Select existing guest</option>
                         @foreach ($customers as $customer)
-                            <option value="{{ $customer->id }}" {{ old('user_id') == $customer->id ? 'selected' : '' }}>
+                            <option value="{{ $customer->id }}" {{ old('user_id') == $customer->id ? 'selected' : '' }}
+                                data-search="{{ mb_strtolower($customer->full_name . ' ' . $customer->email . ' ' . $customer->phone) }}">
                                 {{ $customer->full_name }} —
                                 {{ $customer->email ?? ($customer->phone ?? 'No email or phone number on record.') }}
                             </option>
                         @endforeach
                     </select>
+                    <div class="guest-count" id="guestSearchCount" role="status"></div>
                     @error('user_id')
                         <div class="invalid-feedback">{{ $message }}</div>
                     @enderror
                 </div>
 
                 {{-- New Guest --}}
-                <div id="newGuestFields" style="display:none;">
+                <div id="newGuestFields" hidden>
                     <div class="mb-14">
                         <label for="f_full_name" class="form-label">Full Name</label>
                         <input id="f_full_name" type="text" name="full_name"
@@ -376,12 +81,12 @@
                     </div>
 
                     <div class="mb-14">
-                        <label class="form-label">Create a login account for this guest?</label>
-                        <div class="guest-toggle" style="margin-bottom:0;">
-                            <button type="button" class="toggle-btn" id="btnNoAccount" onclick="setCreateAccount('no')">
+                        <div class="form-label" id="createAccountLabel">Create a login account for this guest?</div>
+                        <div class="guest-toggle mb-0" role="group" aria-labelledby="createAccountLabel">
+                            <button type="button" class="toggle-btn" id="btnNoAccount" aria-pressed="false" data-create-account="no">
                                 <i class="bi bi-person-lines-fill me-1"></i> No — Guest Record Only
                             </button>
-                            <button type="button" class="toggle-btn" id="btnYesAccount" onclick="setCreateAccount('yes')">
+                            <button type="button" class="toggle-btn" id="btnYesAccount" aria-pressed="false" data-create-account="yes">
                                 <i class="bi bi-person-plus me-1"></i> Yes — Create Account
                             </button>
                         </div>
@@ -415,10 +120,10 @@
                         in
                         — no login account will be created and no email will be sent.
                     </div>
-                    <div class="new-guest-password-note" id="yesAccountNote" style="display:none;">
+                    <div class="new-guest-password-note" id="yesAccountNote" hidden>
                         <i class="bi bi-info-circle me-1"></i>
-                        A guest account will be created with a randomly generated password —
-                        the guest will receive a password-reset email so they can set their own password.
+                        A login account will be created, and the guest will be emailed a link to set their own
+                        password.
                     </div>
                 </div>
             </div>
@@ -432,12 +137,14 @@
             </div>
             <div class="section-body">
                 <div class="mb-14">
-                    <label class="form-label">Property</label>
+                    <div class="form-label" id="villaLabel">Villa</div>
                     @if ($availableProperties->count() > 0)
                         @php($villa = $availableProperties->first())
                         <input type="hidden" name="property_id" value="{{ old('property_id', $villa->id) }}">
-                        <div class="form-control"
-                            style="background:var(--cream);display:flex;align-items:center;justify-content:space-between;"
+                        {{-- A fixed value, not a field: there is one villa. Its
+                             caption above is a plain element tied to it by
+                             aria-labelledby, since a label needs a control. --}}
+                        <div class="form-control villa-fixed" role="group" aria-labelledby="villaLabel"
                             data-base="{{ $villa->base_price }}"
                             data-weekend="{{ $villa->weekend_price ?? $villa->base_price }}"
                             data-max="{{ $villa->max_capacity }}" id="propertySelect">
@@ -447,7 +154,7 @@
                                 guests</span>
                         </div>
                     @else
-                        <div class="alert alert-danger">No Villa is currently available.</div>
+                        <div class="alert alert-danger">The villa is not open for booking right now.</div>
                     @endif
                     @error('property_id')
                         <div class="invalid-feedback">{{ $message }}</div>
@@ -463,7 +170,7 @@
                     @enderror
                 </div>
                 <div class="mb-14">
-                    <label class="form-label">Slot</label>
+                    <div class="form-label" id="slotLabel">Slot</div>
                     {{-- Sinasadyang one-line na anyo lang ng PHP directive ang
                          ginagamit sa file na ito: ang paghahalo ng block na anyo ay
                          ipinapares ng compiler sa naunang one-liner at nilalamon
@@ -480,7 +187,7 @@
                     @php($slotKeys = \App\Models\Booking::bookableSlotKeys())
                     @php($selectedSlot = old('slot', $prefill['slot'] ?? ($slotKeys[0] ?? null)))
                     @php($selectedSlot = in_array($selectedSlot, $slotKeys, true) ? $selectedSlot : ($slotKeys[0] ?? null))
-                    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:12px;">
+                    <div class="slot-options" role="radiogroup" aria-labelledby="slotLabel">
                         @foreach ($slotKeys as $slotKey)
                             <div class="form-check">
                                 <input type="radio" name="slot" value="{{ $slotKey }}" id="slot_{{ $slotKey }}"
@@ -491,8 +198,7 @@
                     </div>
                     {{-- Ipinapaliwanag kung bakit iisa lang ang pagpipilian sa
                          isang 22-oras na petsa. --}}
-                    <div id="slotOnlyNote" class="form-text" hidden
-                        style="margin-top:6px; color:#0f766e; font-size:13px;"></div>
+                    <div id="slotOnlyNote" class="form-text slot-only-note" hidden></div>
                     @error('slot')
                         <div class="invalid-feedback d-block">{{ $message }}</div>
                     @enderror
@@ -500,8 +206,7 @@
                         <i class="bi bi-calendar-event"></i> <span>Pick a date and slot to check availability.</span>
                     </div>
                     @if (($prefill['date'] ?? null) && !old('check_in_date'))
-                        <div
-                            style="background:var(--tag-green-bg);color:var(--tag-green-fg);border-radius:8px;padding:9px 13px;font-size: 14px;margin-top:10px;">
+                        <div class="prefill-note">
                             <i class="bi bi-check-circle me-1"></i>
                             Pre-filled from the Availability page — this slot was free when you picked it.
                         </div>
@@ -531,8 +236,8 @@
                 </div>
 
                 {{-- Price Preview --}}
-                <div class="price-preview" id="pricePreview" style="display:none;">
-                    <div class="text-muted-theme section-label" style="font-size: 14px;margin-bottom:10px;">Price
+                <div class="price-preview" id="pricePreview" hidden>
+                    <div class="text-muted-theme section-label price-title">Price
                         Breakdown
                     </div>
                     <div id="nightBreakdown"></div>
@@ -552,7 +257,7 @@
         <div class="section-card">
             <div class="section-head">
                 <div class="section-icon tag-amber"><i class="bi bi-cash-stack"></i></div>
-                <h3>Payment <span class="optional-tag" style="font-size:13px;font-family: var(--font-body);">(optional
+                <h3>Payment <span class="optional-tag">(optional
                         — can be recorded later)</span></h3>
             </div>
             <div class="section-body">
@@ -561,8 +266,8 @@
                         <label for="paymentAmount" class="form-label">Amount Received</label>
                         <input type="number" name="payment_amount" id="paymentAmount"
                             class="form-control {{ $errors->has('payment_amount') ? 'is-invalid' : '' }}"
-                            value="{{ old('payment_amount', 0) }}" min="0" step="0.01" placeholder="0.00"
-                            oninput="updatePaymentPreview()">
+                            value="{{ old('payment_amount') }}" min="0" step="0.01" placeholder="0.00"
+                            inputmode="decimal">
                         @error('payment_amount')
                             <div class="invalid-feedback">{{ $message }}</div>
                         @enderror
@@ -582,16 +287,19 @@
                     </div>
                 </div>
                 <div class="mb-14">
-                    <label class="form-label">Payment Type <span class="optional-tag"></span></label>
+                    <div class="form-label" id="paymentTypeLabel">Payment Type</div>
                     <input type="hidden" name="payment_type" id="paymentTypeHidden"
                         value="{{ old('payment_type', 'partial') }}">
-                    <div class="form-control text-muted-theme" id="paymentTypeDisplay" style="background:var(--cream);">
+                    {{-- Plain text, not a boxed field: it is worked out from
+                         the amount, and in a field's box it read as something
+                         to type into. --}}
+                    <div class="pay-type" id="paymentTypeDisplay" role="status" aria-labelledby="paymentTypeLabel">
                         No payment received yet
                     </div>
                 </div>
 
                 {{-- Payment summary --}}
-                <div id="paymentSummary" style="display:none;" class="price-preview">
+                <div id="paymentSummary" class="price-preview" hidden>
                     <div class="price-row total"><span>Total</span><span id="psTotalAmount">₱0.00</span></div>
                     <div class="price-row paid"><span>Amount Paid</span><span id="psPaidAmount">₱0.00</span></div>
                     <div class="price-row balance"><span>Balance Due</span><span id="psBalanceAmount">₱0.00</span></div>
@@ -599,12 +307,17 @@
             </div>
         </div>
 
+        {{-- Why the button below is disabled, beside the button. The slot's
+             status line is in the other card, which on a phone is some 680px
+             above this one. Filled by syncSubmit(). --}}
+        <div class="submit-reason" id="submitReason" role="status" hidden></div>
+
         {{-- Actions --}}
         <div class="walkin-actions">
             <a href="{{ route('staff.frontdesk') }}" class="btn-back">
                 <i class="bi bi-arrow-left"></i> Back to Frontdesk
             </a>
-            <button type="submit" class="btn-submit">
+            <button type="submit" class="btn-submit" data-busy-label="Creating booking…">
                 <i class="bi bi-calendar-check"></i> Create Walk-in Booking
             </button>
         </div>
@@ -619,45 +332,52 @@
         // ── Guest type toggle ──────────────────────────────────────────
         function setGuestType(type) {
             document.getElementById('guestType').value = type;
-            document.getElementById('existingGuestFields').style.display = type === 'existing' ? 'block' : 'none';
-            document.getElementById('newGuestFields').style.display = type === 'new' ? 'block' : 'none';
+            // Shown and hidden with the `hidden` attribute, here and for
+            // every other part of this form that comes and goes.
+            document.getElementById('existingGuestFields').hidden = type !== 'existing';
+            document.getElementById('newGuestFields').hidden = type !== 'new';
             document.getElementById('btnExisting').classList.toggle('active', type === 'existing');
             document.getElementById('btnNew').classList.toggle('active', type === 'new');
+            // The dark fill is the only sign of which one is chosen; say it too.
+            document.getElementById('btnExisting').setAttribute('aria-pressed', type === 'existing');
+            document.getElementById('btnNew').setAttribute('aria-pressed', type === 'new');
 
             // Nagbabago ang presyo kapag nagpalit sa pagitan ng umiiral na
             // guest (na baka regular na customer) at bagong guest (na hindi
-            // puwedeng maging regular). Nasa guard ito dahil tinatawag din
-            // ang setGuestType() bago pa madepinisyon ang updatePrice().
-            if (typeof updatePrice === 'function') updatePrice();
+            // puwedeng maging regular).
+            updatePrice();
         }
 
-        // Restore on validation error
-        @if (old('guest_type') === 'new')
-            setGuestType('new');
-        @endif
+        // The two pairs of toggle buttons name their choice in a data
+        // attribute.
+        document.querySelectorAll('[data-guest-type]').forEach(function(button) {
+            button.addEventListener('click', function() {
+                setGuestType(button.dataset.guestType);
+            });
+        });
+        document.querySelectorAll('[data-create-account]').forEach(function(button) {
+            button.addEventListener('click', function() {
+                setCreateAccount(button.dataset.createAccount);
+            });
+        });
 
         // ── Create-account toggle (bagong guest lang) ───────────────────
         function setCreateAccount(choice) {
             document.getElementById('createAccount').value = choice;
             document.getElementById('btnNoAccount').classList.toggle('active', choice === 'no');
             document.getElementById('btnYesAccount').classList.toggle('active', choice === 'yes');
+            document.getElementById('btnNoAccount').setAttribute('aria-pressed', choice === 'no');
+            document.getElementById('btnYesAccount').setAttribute('aria-pressed', choice === 'yes');
 
             const emailInput = document.getElementById('newGuestEmail');
             const emailTag = document.getElementById('emailOptionalTag');
             const noNote = document.getElementById('noAccountNote');
             const yesNote = document.getElementById('yesAccountNote');
 
-            if (choice === 'yes') {
-                emailInput.required = true;
-                emailTag.textContent = '(required)';
-                noNote.style.display = 'none';
-                yesNote.style.display = 'block';
-            } else {
-                emailInput.required = false;
-                emailTag.textContent = '(optional)';
-                noNote.style.display = 'block';
-                yesNote.style.display = 'none';
-            }
+            emailInput.required = choice === 'yes';
+            emailTag.textContent = choice === 'yes' ? '(required)' : '(optional)';
+            noNote.hidden = choice === 'yes';
+            yesNote.hidden = choice !== 'yes';
         }
 
         // Default sa "Hindi" (guest record lang, walang account) — pati na rin
@@ -682,9 +402,22 @@
         // Iisang lugar na nagpapasya sa submit button — dating dalawang
         // function ang parehong nag-toggle nito, kaya ang isang ay kayang
         // i-enable muli ang button na idinisable ng isa.
+        // It also says WHY, beside the button: the two reasons live in two
+        // other cards, and a disabled button with no reason in sight reads
+        // as a broken one.
+        let availabilityText = '';
+
         function syncSubmit() {
             const submitBtn = document.querySelector('.btn-submit');
             if (submitBtn) submitBtn.disabled = overpaid || slotAvailable === false;
+
+            const reason = document.getElementById('submitReason');
+            if (!reason) return;
+            const text = overpaid
+                ? 'The amount received is more than the total.'
+                : (slotAvailable === false ? availabilityText : '');
+            reason.textContent = text;
+            reason.hidden = !text;
         }
 
         function setAvailability(state, icon, text) {
@@ -696,7 +429,57 @@
             const span = document.createElement('span');
             span.textContent = text;
             el.append(i, ' ', span);
+
+            // The same sentence is the button's reason while the slot is
+            // not confirmed open.
+            availabilityText = text;
+            syncSubmit();
         }
+
+        // ── Guest search ───────────────────────────────────────────────
+        // Narrows the Select Guest list to the options whose name, email or
+        // phone contains what was typed. The options are taken out of the
+        // list and put back, not hidden: a hidden <option> is still shown
+        // by some phone browsers. One match is selected for the staff
+        // member; none says so and points at New Guest.
+        (function() {
+            const search = document.getElementById('guestSearch');
+            const select = document.getElementById('guestSelect');
+            const count = document.getElementById('guestSearchCount');
+            if (!search || !select) return;
+
+            const everyone = Array.from(select.options).filter(o => o.value !== '');
+
+            function filterGuests() {
+                const term = search.value.trim().toLowerCase();
+                const chosen = select.value;
+                const matches = term ? everyone.filter(o => (o.dataset.search || '').includes(term)) : everyone;
+
+                everyone.forEach(o => o.remove());
+                matches.forEach(o => select.append(o));
+
+                if (term && matches.length === 1) {
+                    select.value = matches[0].value;
+                } else {
+                    select.value = matches.some(o => o.value === chosen) ? chosen : '';
+                }
+
+                if (!term) {
+                    count.textContent = '';
+                } else if (!matches.length) {
+                    count.textContent = 'No guest matches. Check the spelling, or choose New Guest above.';
+                } else if (matches.length === 1) {
+                    count.textContent = '1 guest matches, and is selected.';
+                } else {
+                    count.textContent = matches.length + ' of ' + everyone.length + ' guests match. Pick one from the list.';
+                }
+
+                // Who the guest is can change the price.
+                if (select.value !== chosen && typeof updatePrice === 'function') updatePrice();
+            }
+
+            search.addEventListener('input', filterGuests);
+        })();
 
         const QUOTE_URL = "{{ route('staff.walkin.quote') }}";
         const PROPERTY_ID = "{{ $availableProperties->first()->id ?? '' }}";
@@ -712,7 +495,7 @@
             const preview = document.getElementById('pricePreview');
 
             if (!propDiv || !PROPERTY_ID || !ci || !slotInput) {
-                preview.style.display = 'none';
+                preview.hidden = true;
                 return;
             }
 
@@ -750,7 +533,7 @@
                 .then(res => res.json())
                 .then(data => {
                     if (!data.valid) {
-                        preview.style.display = 'none';
+                        preview.hidden = true;
                         setAvailability('unavailable', 'bi-exclamation-circle', 'Select a valid date and slot.');
                         return;
                     }
@@ -767,7 +550,7 @@
                     // Hindi puwedeng manghula ng presyo kapag hindi umabot
                     // ang server — mas mabuting walang ipakita kaysa sa
                     // isang numerong baka mali.
-                    preview.style.display = 'none';
+                    preview.hidden = true;
                     calculatedTotal = 0;
                     slotAvailable = null;
                     setAvailability('', 'bi-wifi-off', 'Couldn’t check availability. It will be verified on submit.');
@@ -783,20 +566,20 @@
             // tama sa guest, dahil hindi ito isang promong para sa lahat.
             const scopeNote = data.promo_scope ? ` — ${data.promo_scope}` : '';
             const promoRow = data.discount > 0 ? `
-    <div class="price-row" style="color:#15803d;font-weight:600;">
+    <div class="price-row promo">
         <span><i class="bi bi-tag-fill fs-13"></i> ${data.promo_label} (${data.promo_value})${scopeNote}</span>
         <span>−${peso(data.discount)}</span>
     </div>` : '';
 
             preview.innerHTML =
-                `<div class="text-muted-theme section-label" style="font-size: 14px;margin-bottom:10px;">Price Breakdown</div>
+                `<div class="text-muted-theme section-label price-title">Price Breakdown</div>
     <div id="nightBreakdown">
     <div class="price-row">
-        <span class="text-muted-theme">${data.day_label} check-in${data.is_peak ? ' <span style="color:#b8943f;">★</span>' : ''}</span>
+        <span class="text-muted-theme">${data.day_label} check-in${data.is_peak ? ' · <span class="peak-rate">peak rate</span>' : ''}</span>
         <span>${peso(data.base)}</span>
     </div>
     <div class="price-row text-muted-theme fs-13">
-        <span>Flat package rate (${data.hours.toFixed(1)} hrs)</span>
+        <span>Flat package rate (${Number(data.hours.toFixed(1))} hrs)</span>
     </div>
     ${promoRow}
     </div>
@@ -806,9 +589,15 @@
     </div>`;
 
             calculatedTotal = data.total;
-            preview.style.display = 'block';
+            preview.hidden = false;
 
             updatePaymentPreview();
+        }
+
+        // The colour of the payment-type line: `.pay-type.is-over`, `.is-full`
+        // or `.is-partial` in css/staff/walkin.css, or none for the plain one.
+        function setPayTone(el, tone) {
+            el.className = 'pay-type' + (tone ? ' is-' + tone : '');
         }
 
         function updatePaymentPreview() {
@@ -825,17 +614,17 @@
             if (overpaid) {
                 paidInput.classList.add('is-invalid');
                 typeDisplay.textContent =
-                    `Exceeds the total (₱${calculatedTotal.toLocaleString('en-PH',{minimumFractionDigits:2})}). If there is change, just type the net amount received..`;
-                typeDisplay.style.color = '#dc2626';
-                summary.style.display = 'none';
+                    `More than the total (₱${calculatedTotal.toLocaleString('en-PH',{minimumFractionDigits:2})}). If you gave change, enter only what the resort kept.`;
+                setPayTone(typeDisplay, 'over');
+                summary.hidden = true;
                 return;
             }
             paidInput.classList.remove('is-invalid');
 
             if (paid <= 0 || calculatedTotal <= 0) {
-                summary.style.display = 'none';
+                summary.hidden = true;
                 typeDisplay.textContent = 'No payment received yet';
-                typeDisplay.style.color = 'var(--muted)';
+                setPayTone(typeDisplay, '');
                 typeHidden.value = 'partial';
                 return;
             }
@@ -846,11 +635,11 @@
             if (paid >= calculatedTotal) {
                 typeHidden.value = 'full_payment';
                 typeDisplay.textContent = 'Full Payment';
-                typeDisplay.style.color = '#16a34a';
+                setPayTone(typeDisplay, 'full');
             } else {
                 typeHidden.value = 'partial';
                 typeDisplay.textContent = 'Partial Payment';
-                typeDisplay.style.color = '#a16207';
+                setPayTone(typeDisplay, 'partial');
             }
 
             const balance = Math.max(0, calculatedTotal - paid);
@@ -863,7 +652,7 @@
             document.getElementById('psBalanceAmount').textContent = '₱' + balance.toLocaleString('en-PH', {
                 minimumFractionDigits: 2
             });
-            summary.style.display = 'block';
+            summary.hidden = false;
         }
 
         // ── Aling slot ang inaalok sa piniling petsa ──────────────────
@@ -926,13 +715,25 @@
             updatePrice();
         });
         document.querySelectorAll('input[name="slot"]').forEach(el => el.addEventListener('change', updatePrice));
+        document.getElementById('paymentAmount').addEventListener('input', updatePaymentPreview);
         // Ang pagpili ng ibang guest ay maaaring magpalit ng presyo.
         document.getElementById('guestSelect')?.addEventListener('change', updatePrice);
 
         // Run on load — may default check-in date + slot na naka-preset,
         // para agad makita ni staff ang price preview.
         refreshSlotOptions();
-        updatePrice();
+
+        // After a failed submit with New Guest chosen, show that form again.
+        // Last in the script on purpose: setGuestType() ends in
+        // updatePrice(), which reads constants declared above this line.
+        // Called from the top of the script it threw on the first of them
+        // and nothing below it ran, so the reloaded form had no price, no
+        // availability check, and Create Account went back to "No".
+        @if (old('guest_type') === 'new')
+            setGuestType('new');
+        @else
+            updatePrice();
+        @endif
     </script>
 @endpush
 

@@ -27,16 +27,6 @@ class FrontDeskController extends Controller
     {
         $data = $this->todayData();
 
-        // Villa lang ang ipinapakita sa frontdesk. Ang mga `type=room`
-        // na record ay info-only na simula v4.0 (hindi na hiwalay na
-        // bookable, at wala na ngang pangalan) — lumalabas dati bilang
-        // mga blangkong card dito, at binibilang pa sa "Available" na
-        // stat, kaya mukhang may 3 pang bakanteng unit gayong isa lang
-        // talaga ang pwedeng i-book at kuha na ito.
-        $villa = Property::with(['currentBooking.user'])
-            ->where('type', 'villa')
-            ->first();
-
         // Villa para sa walk-in form — Villa lang, hindi yung mga
         // individual Room A-F (info-only records na sila simula v4.0,
         // hindi na hiwalay na bookable). Bug fix: hindi dapat
@@ -55,14 +45,8 @@ class FrontDeskController extends Controller
             ->orderBy('property_name')
             ->get();
 
-        // Susunod na dalawang slot mula ngayon — ito ang pinakamadalas
-        // na tanong sa frontdesk ("libre pa ba mamaya/bukas?"), kaya
-        // nasa stats row na mismo imbes na kailangan pang pumunta sa
-        // Availability page.
-        $nextSlots = $villa ? $this->buildSlotGrid($villa, today(), 2) : [];
-
-        return view('staff.frontdesk', array_merge($data, compact(
-            'villa', 'availableProperties', 'nextSlots'
+        return view('staff.frontdesk', array_merge($data, $this->villaStripData(), compact(
+            'availableProperties'
         )));
     }
 
@@ -76,6 +60,12 @@ class FrontDeskController extends Controller
      * takdang oras), ang bayad na dumaan sa PayMongo webhook, at ang
      * aksiyon ng ibang staff sa ibang makina. Dati, kailangan pang
      * i-refresh ni staff ang page bago lumitaw ang alinman sa mga ito.
+     *
+     * The Awaiting Payment rows, the villa strip and the sidebar count are
+     * here too. They are moved by the same booking changes, and while only
+     * the Today list refreshed, the page could contradict itself: a guest
+     * checked in by the scheduler beside "Vacant right now", or a tab
+     * counting 2 above "No pending bookings".
      */
     public function todayLive()
     {
@@ -86,7 +76,50 @@ class FrontDeskController extends Controller
             'today_html' => view('staff.partials._today_list', $data)->render(),
             'stats_html' => view('staff.partials._frontdesk_stats', $data)->render(),
             'pending_count' => $data['pendingBookings']->count(),
+            'pending_html' => view('staff.partials._pending_list', $data)->render(),
+            'villa_html' => view('staff.partials._villa_strip', $this->villaStripData())->render(),
+            'badge_count' => $data['stats']['check_ins_today'] + $data['stats']['check_outs_today'],
         ]);
+    }
+
+    /**
+     * GET /staff/frontdesk/badge — the count beside "Frontdesk" in the
+     * sidebar, for the staff pages that are not the frontdesk. Those pages
+     * hear the same events but have no Today list to refetch, and fetching
+     * that list for one number would render it and the slot grid each time.
+     */
+    public function badge()
+    {
+        return response()->json(['count' => Booking::frontdeskTodayCount()]);
+    }
+
+    /**
+     * The villa strip: what the villa is doing right now, and its next two
+     * days of slots. One source for index() and todayLive(), so the first
+     * render and the refetch cannot disagree.
+     *
+     * @return array{villa: ?Property, nextSlots: array<int, array<string, mixed>>}
+     */
+    private function villaStripData(): array
+    {
+        // Villa lang ang ipinapakita sa frontdesk. Ang mga `type=room`
+        // na record ay info-only na simula v4.0 (hindi na hiwalay na
+        // bookable, at wala na ngang pangalan) — lumalabas dati bilang
+        // mga blangkong card dito, at binibilang pa sa "Available" na
+        // stat, kaya mukhang may 3 pang bakanteng unit gayong isa lang
+        // talaga ang pwedeng i-book at kuha na ito.
+        $villa = Property::with(['currentBooking.user'])
+            ->where('type', 'villa')
+            ->first();
+
+        return [
+            'villa' => $villa,
+            // Susunod na dalawang slot mula ngayon — ito ang pinakamadalas
+            // na tanong sa frontdesk ("libre pa ba mamaya/bukas?"), kaya
+            // nasa stats row na mismo imbes na kailangan pang pumunta sa
+            // Availability page.
+            'nextSlots' => $villa ? $this->buildSlotGrid($villa, today(), 2) : [],
+        ];
     }
 
     /**
@@ -100,14 +133,14 @@ class FrontDeskController extends Controller
     {
         $today = today();
 
-        $checkIns = Booking::where('check_in_date', $today)
-            ->where('status', 'confirmed')
+        // The two scopes are also what the sidebar count reads
+        // (Booking::frontdeskTodayCount()).
+        $checkIns = Booking::arrivingToday()
             ->with(['property', 'user'])
             ->orderBy('created_at')
             ->get();
 
-        $checkOuts = Booking::where('check_out_date', $today)
-            ->where('status', 'checked_in')
+        $checkOuts = Booking::departingToday()
             ->with(['property', 'user'])
             ->orderBy('check_out_date')
             ->get();
@@ -226,15 +259,24 @@ class FrontDeskController extends Controller
      * GET /staff/frontdesk/housekeeping — ang urgent banner, ang Issue
      * Reports card at ang bilang, muling ni-render ng parehong partial ng
      * frontdesk. Tinatawag kapag may `issues.changed`, at tuwing 60s.
+     *
+     * The Tasks from Admin card comes back with it. It was the one list on
+     * the Housekeeping tab that waited for a reload, which is why a new task
+     * needed a "refresh to see it" banner.
      */
     public function housekeepingLive()
     {
-        ['openTasks' => $openTasks, 'openReports' => $openReports, 'urgentItem' => $urgentItem] = $this->housekeeping();
+        $housekeeping = $this->housekeeping();
+        ['openTasks' => $openTasks, 'openReports' => $openReports, 'urgentItem' => $urgentItem] = $housekeeping;
 
         return response()->json([
             'count' => $openTasks->count() + $openReports->count(),
             'urgent_html' => view('staff.partials._urgent_housekeeping', compact('urgentItem'))->render(),
             'reports_html' => view('staff.partials._issue_reports', compact('openReports'))->render(),
+            'tasks_html' => view('staff.partials._admin_tasks', [
+                'inProgressTasks' => $housekeeping['inProgressTasks'],
+                'pendingTasks' => $housekeeping['pendingTasks'],
+            ])->render(),
         ]);
     }
 
@@ -290,6 +332,9 @@ class FrontDeskController extends Controller
             // ng header at nagtatakda ng bilang ng column — kung isa lang
             // ang magpapasa, iba ang hitsura ng refetch sa reload.
             'slotDefs' => $this->gridSlotDefs($villa),
+            // Whether any row can be a wide one, for the legend.
+            'hasWideDates' => collect(Booking::bookableSlotKeys($villa))
+                ->contains(fn (string $slot) => Booking::slotRequiresWindow($slot)),
             'start' => $start,
             'end' => $start->copy()->addDays($days - 1),
             'days' => $days,
@@ -321,15 +366,20 @@ class FrontDeskController extends Controller
     }
 
     /**
-     * Ang mga COLUMN ng grid — bawat slot na may presyo, kahit hindi ito
-     * inaalok sa bawat petsa.
+     * The grid's COLUMNS: the priced slots that are sold on an ordinary date
+     * (Day and Night), and not the 22-hour slots.
      *
-     * Sinasadyang `bookableSlotKeys()` at hindi `slotsOfferedOn()`: kung
-     * kada petsa magbabago ang column, hindi na parisukat ang talahanayan.
-     * Nananatili ang lahat ng column, at ang mga cell na hindi inaalok sa
-     * petsang iyon ay minamarkahang `unoffered` ng buildSlotGrid(). Iyon
-     * din ang nagpapakita kay staff — sa isang sulyap — kung aling petsa
-     * ang may 22-oras na alok.
+     * Until v7.76 every priced slot had a column. A 22-hour slot is sold only
+     * on the dates the owner nominates, and on such a date it is the only
+     * slot sold, so on any one row either its column or the Day and Night
+     * columns read "Not offered": 28 of 56 cells in a fortnight. A 22-hour
+     * date is now ONE cell across all the columns (`span` in
+     * buildSlotGrid()), which is also what it is: one offer for that date.
+     * The table stays square, and a 22-hour date still stands out at a
+     * glance, by its shape.
+     *
+     * Still `bookableSlotKeys()` and never a per-date list: the columns must
+     * be the same for every row.
      *
      * @return array<string, array<string, mixed>>
      */
@@ -338,7 +388,9 @@ class FrontDeskController extends Controller
         $defs = [];
 
         foreach (Booking::bookableSlotKeys($villa) as $slotKey) {
-            $defs[$slotKey] = Booking::SLOTS[$slotKey];
+            if (! Booking::slotRequiresWindow($slotKey)) {
+                $defs[$slotKey] = Booking::SLOTS[$slotKey];
+            }
         }
 
         return $defs;
@@ -411,7 +463,14 @@ class FrontDeskController extends Controller
             // sagot kada hilera.
             $offered = Booking::slotsOfferedOn($date, $villa);
 
-            foreach (array_keys($slotColumns) as $slotKey) {
+            // A 22-hour date offers exactly one slot, and it is not one of
+            // the columns: the row is that one slot, drawn across all of
+            // them. Every other date is one cell per column.
+            $wide = count($offered) === 1 && Booking::slotRequiresWindow($offered[0]);
+            $rowSlots = $wide ? $offered : array_keys($slotColumns);
+            $span = $wide ? max(1, count($slotColumns)) : 1;
+
+            foreach ($rowSlots as $slotKey) {
                 [$checkin, $checkout] = Booking::slotDateTimes($slotKey, $date->format('Y-m-d'));
 
                 [$claimFrom, $claimTo] = Booking::blockSpan($checkin, $checkout);
@@ -425,16 +484,19 @@ class FrontDeskController extends Controller
                     $state = 'unoffered';
                     $label = 'Not offered';
                     $guest = null;
+                    $taken = null;
                 } elseif ($block) {
                     $state = 'blocked';
                     $label = ucfirst(str_replace('_', ' ', $block->reason));
                     $guest = null;
+                    $taken = null;
                 } elseif ($checkin->isPast()) {
                     // Lumagpas na ang check-in oras ng slot — hindi na ito
                     // maibe-book pa, kahit walang kumuha.
                     $state = 'past';
                     $label = 'Passed';
                     $guest = null;
+                    $taken = null;
                 } elseif (Booking::hasConflict($villa->id, $checkin, $checkout)) {
                     $taken = Booking::where('property_id', $villa->id)
                         ->whereNotIn('status', ['cancelled', 'no_show'])
@@ -451,6 +513,7 @@ class FrontDeskController extends Controller
                     $state = 'free';
                     $label = 'Available';
                     $guest = null;
+                    $taken = null;
                 }
 
                 // Ipinapakita ang presyong AKTWAL na sisingilin (may bawas
@@ -478,6 +541,12 @@ class FrontDeskController extends Controller
                     'base' => $quote['base'] ?? null,
                     'promo' => $quote['promo']->label ?? null,
                     'check_in' => $checkin,
+                    // How many columns the cell covers: all of them on a
+                    // 22-hour date, one otherwise.
+                    'span' => $span,
+                    // The booking behind a `booked` cell, so the cell can
+                    // open it (staff.bookings.show).
+                    'booking_id' => $taken?->id,
                 ];
             }
 
@@ -686,7 +755,7 @@ class FrontDeskController extends Controller
         // → i-type na lang ₱4,000), hindi ang buong ₱5,000.
         if ($amountPaid > $totalAmount) {
             return back()
-                ->withErrors(['payment_amount' => 'Ang natanggap na bayad (₱'.number_format($amountPaid, 2).') ay lampas sa kabuuang halaga (₱'.number_format($totalAmount, 2).'). Kung may sukli, i-type na lang ang netong natanggap.'])
+                ->withErrors(['payment_amount' => 'The amount received (₱'.number_format($amountPaid, 2).') is more than the total (₱'.number_format($totalAmount, 2).'). If you gave change, enter only what the resort kept.'])
                 ->withInput();
         }
 
@@ -699,7 +768,7 @@ class FrontDeskController extends Controller
         // booking na ganito ang nangyari — VE-OLRWMOGX.)
         if ($amountPaid > 0 && ! $request->payment_method) {
             return back()
-                ->withErrors(['payment_method' => 'Pumili ng paraan ng bayad — kailangan ito para maitala nang maayos ang ₱'.number_format($amountPaid, 2).' na natanggap.'])
+                ->withErrors(['payment_method' => 'Choose a payment method. Without one, the ₱'.number_format($amountPaid, 2).' received cannot be recorded.'])
                 ->withInput();
         }
 
@@ -829,7 +898,7 @@ class FrontDeskController extends Controller
             return back()
                 ->withErrors(['check_in_date' => Booking::unavailableMessage(
                     $request->property_id, $checkin,
-                    'Naka-book na ang Villa sa napiling petsa/slot. Pumili ng ibang slot.',
+                    'The villa is already booked for that date and slot. Choose another slot or date.',
                     forStaff: true,
                     checkOut: $checkout
                 )])
@@ -927,42 +996,69 @@ class FrontDeskController extends Controller
         }
 
         return redirect()->route('staff.frontdesk')
-            ->with('success', "✅ Walk-in booking {$booking->booking_ref} created for {$booking->user->full_name}. ".
+            ->with('success', "Walk-in booking {$booking->booking_ref} created for {$booking->user->full_name}. ".
                 ($booking->amount_paid > 0 ? 'Payment of ₱'.number_format($booking->amount_paid, 2).' recorded.' : ''));
     }
 
     // ── Record Payment for Existing Booking ───────────────────────
     public function recordPayment(Request $request, Booking $booking)
     {
-        $request->validate([
+        // A refusal goes back in its own `payment` error bag, with what was
+        // typed and which booking it was for, and the frontdesk reopens the
+        // Record Payment form from that (restorePaymentAttempt() in
+        // staff/frontdesk.blade.php). In the default bag it was one line at
+        // the top of the page above a closed, emptied form.
+        //
+        // `ask_separate` is what shows the "this is a separate payment" tick
+        // box: only when the server has just asked that question.
+        $refuse = fn ($errors, bool $askSeparate = false) => back()
+            ->withErrors($errors, 'payment')
+            ->withInput()
+            ->with('payment_retry', ['booking' => $booking->id, 'ask_separate' => $askSeparate]);
+
+        // No `payment_type`: it is worked out below, as on the walk-in form.
+        $validator = validator($request->all(), [
             'amount' => 'required|numeric|min:1',
             'payment_method' => 'required|in:cash,qrph',
-            'payment_type' => 'required|in:full_payment,partial,balance',
             'notes' => 'nullable|string|max:300',
             'confirm_duplicate' => 'nullable|boolean',
         ]);
+
+        if ($validator->fails()) {
+            return $refuse($validator);
+        }
 
         // May overpayment guard na ang paggawa ng walk-in booking sa
         // itaas, pero WALA ang path na ito — kaya ang pagtatala ng
         // bayad na naibayad na online ng guest ay tahimik na nagiging
         // pangalawang bayad. Iisang tsek na ngayon ang pinagdadaanan ng
         // tatlong manwal na path (tingnan ang Payment::manualEntryProblem()).
+        $current = $booking->fresh();
+        $amount = (float) $request->amount;
+
         $problem = Payment::manualEntryProblem(
-            $booking->fresh(),
-            (float) $request->amount,
+            $current,
+            $amount,
             $request->payment_method,
             $request->boolean('confirm_duplicate'),
         );
 
         if ($problem) {
-            return back()->withErrors($problem)->withInput();
+            // The look-alike is the one refusal the tick box answers, and it
+            // is the last check in manualEntryProblem(): if the same payment
+            // passes once the box is treated as ticked, that was the reason.
+            // Asked of the model rather than restated here, so this cannot
+            // drift from the rule.
+            $onlyNeedsConfirming = Payment::manualEntryProblem($current, $amount, $request->payment_method, true) === null;
+
+            return $refuse($problem, $onlyNeedsConfirming);
         }
 
         $payment = Payment::create([
             'booking_id' => $booking->id,
             'amount' => $request->amount,
             'payment_method' => $request->payment_method,
-            'payment_type' => $request->payment_type,
+            'payment_type' => $this->paymentTypeFor($current, $amount),
             'status' => 'success',
             'payment_date' => today(),
             'received_by' => Auth::id(),
@@ -995,7 +1091,29 @@ class FrontDeskController extends Controller
             \Illuminate\Support\Facades\Log::error('Failed to broadcast FrontdeskUpdated (payment): '.$e->getMessage());
         }
 
-        return back()->with('success', '✅ Payment of ₱'.number_format($request->amount, 2)." recorded for {$booking->booking_ref}.");
+        return back()->with('success', 'Payment of ₱'.number_format($request->amount, 2)." recorded for {$booking->booking_ref}.");
+    }
+
+    /**
+     * What kind of payment a frontdesk entry is, from the amount and what
+     * the booking still owes. The form used to ask the staff member to pick
+     * one of three, and opened on "Balance Payment" even for a booking with
+     * nothing paid; the walk-in form has always worked it out.
+     *
+     *   less than the balance             partial
+     *   the whole balance, nothing before full_payment
+     *   the whole balance, after a deposit balance
+     *
+     * Payment::manualEntryProblem() has already refused an amount above the
+     * balance, so "the whole balance" is the only other case.
+     */
+    private function paymentTypeFor(Booking $booking, float $amount): string
+    {
+        if (round($amount, 2) < round((float) $booking->balance_due, 2)) {
+            return 'partial';
+        }
+
+        return (float) $booking->amount_paid > 0 ? 'balance' : 'full_payment';
     }
 
     // ── Check In ──────────────────────────────────────────────────
@@ -1063,12 +1181,16 @@ class FrontDeskController extends Controller
             \Illuminate\Support\Facades\Log::error('Failed to broadcast FrontdeskUpdated (checkin): '.$e->getMessage());
         }
 
-        $successMsg = "✅ {$booking->user->full_name} checked in to {$booking->property->property_name}.";
+        $redirect = back()->with('success', "{$booking->user->full_name} checked in to {$booking->property->property_name}.");
+
+        // Its own message, not a second sentence of the success: a success
+        // message hides itself after a few seconds, and the reminder that
+        // money is still owed is the part that must stay on the screen.
         if ($booking->balance_due > 0) {
-            $successMsg .= ' ⚠️ There is an outstanding balance of ₱'.number_format($booking->balance_due, 2).' — must be paid before check-out.';
+            $redirect->with('warning', 'There is an outstanding balance of ₱'.number_format($booking->balance_due, 2).' — it must be paid before check-out.');
         }
 
-        return back()->with('success', $successMsg);
+        return $redirect;
     }
 
     // ── Check Out ─────────────────────────────────────────────────
@@ -1127,7 +1249,7 @@ class FrontDeskController extends Controller
             ->get()
             ->first(fn ($b) => $b->checkInDateTime()->gte($booking->checkOutDateTime()));
 
-        $message = "✅ {$booking->user->full_name} checked out.";
+        $message = "{$booking->user->full_name} checked out.";
         $message .= $nextIn
             ? ' Next guest arrives '.$nextIn->checkInDateTime()->format('M j, g:i A').'.'
             : ' No booking follows yet.';

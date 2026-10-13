@@ -25,10 +25,17 @@
         <div class="nav-label">Operations</div>
         <a href="{{ route('staff.frontdesk') }}" class="nav-item {{ request()->routeIs('staff.frontdesk') ? 'active' : '' }}">
             <i class="bi bi-house-door"></i> Frontdesk
-            @yield('frontdesk-badge')
+            {{-- Today's arrivals and departures still to be handled. From
+                 the layouts.staff composer, so it is on every staff page;
+                 always in the page and hidden at zero, so the live update
+                 (staff/partials/realtime) has an element to write to. --}}
+            <span class="nav-badge" id="fdNavBadge" @if (($frontdeskBadge ?? 0) === 0) hidden @endif>{{ $frontdeskBadge ?? 0 }}</span>
         </a>
         <a href="{{ route('staff.availability') }}" class="nav-item {{ request()->routeIs('staff.availability') ? 'active' : '' }}">
             <i class="bi bi-calendar3"></i> Availability
+        </a>
+        <a href="{{ route('staff.bookings.index') }}" class="nav-item {{ request()->routeIs('staff.bookings.*') ? 'active' : '' }}">
+            <i class="bi bi-journal-text"></i> Bookings
         </a>
         <a href="{{ route('staff.walkin') }}" class="nav-item {{ request()->routeIs('staff.walkin') ? 'active' : '' }}">
             <i class="bi bi-person-plus"></i> Walk-in Booking
@@ -38,18 +45,25 @@
         <a href="{{ route('staff.profile.edit') }}" class="nav-item {{ request()->routeIs('staff.profile.*') ? 'active' : '' }}">
             <i class="bi bi-person-gear"></i> My Account
         </a>
+        {{-- An admin may use the staff portal (role:staff,admin) and had no
+             way back from it except the address bar. --}}
+        @if (Auth::user()->role === 'admin')
+            <a href="{{ route('admin.dashboard') }}" class="nav-item">
+                <i class="bi bi-arrow-left-circle"></i> Admin Panel
+            </a>
+        @endif
     </nav>
     <div class="sidebar-footer">
         <div class="staff-info">
             <div class="staff-avatar">{{ strtoupper(substr(Auth::user()->full_name, 0, 1)) }}</div>
             <div>
                 <div class="staff-name">{{ Auth::user()->full_name }}</div>
-                <div class="staff-tag">Staff</div>
+                <div class="staff-tag">{{ Auth::user()->role === 'admin' ? 'Admin' : 'Staff' }}</div>
             </div>
-            <form method="POST" action="{{ route('logout') }}" style="margin:0;margin-left:auto;">
+            <form method="POST" action="{{ route('logout') }}">
                 @csrf
-                <button type="submit" class="logout-btn" title="Sign out">
-                    <i class="bi bi-box-arrow-right"></i>
+                <button type="submit" class="logout-btn" title="Sign out" aria-label="Sign out">
+                    <i class="bi bi-box-arrow-right" aria-hidden="true"></i>
                 </button>
             </form>
         </div>

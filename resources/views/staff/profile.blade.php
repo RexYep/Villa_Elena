@@ -96,9 +96,9 @@
 
 @section('content')
 
-    @if (session('success'))
-        <div class="alert alert-success"><i class="bi bi-check-circle me-2"></i>{{ session('success') }}</div>
-    @endif
+    {{-- Each field prints its own error below it, so the first validation
+         error is not repeated up here. --}}
+    @include('staff.partials.flash', ['validation' => false])
 
     <div class="account-layout">
 

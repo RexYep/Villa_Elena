@@ -15,6 +15,8 @@ export default defineConfig({
                 'resources/js/portal-calendar.js',
                 'resources/js/auth.js',
                 'resources/js/staff.js',
+                'resources/css/staff/frontdesk.css',
+                'resources/css/staff/walkin.css',
                 'resources/js/payment.js',
             ],
             refresh: true,

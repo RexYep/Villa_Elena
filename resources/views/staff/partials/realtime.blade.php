@@ -2,53 +2,7 @@
      check-in/check-out/payment/housekeeping actions instantly, so two
      people can't act on the same stale booking or task at once. --}}
 
-<style>
-#rt-fd-container {
-    position: fixed; bottom: 24px; right: 24px; z-index: 99999;
-    display: flex; flex-direction: column-reverse; gap: 10px; max-width: 360px;
-}
-.rt-fd-toast {
-    background: var(--stone); color: #fff; border-radius: 14px; padding: 14px 16px;
-    display: flex; align-items: flex-start; gap: 12px;
-    box-shadow: 0 8px 32px rgba(0,0,0,.25);
-    animation: rtFdSlideIn .35s cubic-bezier(.34,1.56,.64,1);
-    border-left: 4px solid var(--gold); min-width: 300px;
-    transition: opacity .3s, transform .3s;
-}
-.rt-fd-toast.removing { opacity: 0; transform: translateX(40px); }
-.rt-fd-icon {
-    width: 34px; height: 34px; border-radius: 9px; flex-shrink: 0;
-    display: flex; align-items: center; justify-content: center;
-    font-size: 15px; background: rgba(201,168,76,.2); color: var(--gold);
-}
-.rt-fd-body { flex: 1; min-width: 0; font-size: 12.5px; line-height: 1.5; }
-.rt-fd-sticky { border-left-color: #ef4444; }
-.rt-fd-sticky .rt-fd-icon { background: rgba(239,68,68,.2); color: #fca5a5; }
-.rt-fd-dismiss {
-    background: rgba(255,255,255,.1); border: none; color: #fff;
-    width: 26px; height: 26px; border-radius: 7px; cursor: pointer; flex-shrink: 0;
-}
-@keyframes rtFdSlideIn {
-    from { opacity: 0; transform: translateX(60px) scale(.9); }
-    to   { opacity: 1; transform: translateX(0) scale(1); }
-}
-
-#rt-fd-banner {
-    display: none; position: sticky; top: 0; z-index: 500;
-    background: #fffbeb; border: 1px solid #fde68a; color: #92400e;
-    border-radius: 10px; padding: 10px 16px; margin-bottom: 16px;
-    font-size: 12.5px; font-weight: 500;
-    align-items: center; justify-content: space-between; gap: 12px;
-}
-#rt-fd-banner button {
-    background: #d97706; color: #fff; border: none; border-radius: 7px;
-    padding: 6px 14px; font-size: 14px; font-weight: 600; cursor: pointer;
-    font-family: var(--font-body);
-}
-.rt-fd-handled {
-    font-size: 13px; color: var(--muted); font-style: italic;
-}
-</style>
+{{-- The toast's styles are in resources/css/staff.css (REALTIME TOAST). --}}
 
 <div id="rt-fd-container"></div>
 
@@ -104,22 +58,37 @@
             disableForms('.report-form-' + data.report_id, data.actor);
         }
 
-        // Ang mga ulat ng problema (issue_*) ay live na sa frontdesk — ang
-        // listahan, banner at bilang ay kinukuha muli sa `issues.changed`
-        // — kaya walang "refresh to see it" para sa mga iyon.
-        if (/^issue_/.test(data.action || '')) return;
-
-        // Full row/stat data (counts, new pending bookings, property grid)
-        // isn't patched live to avoid duplicating the whole page's Blade
-        // logic in JS — surface a lightweight prompt instead.
-        showRefreshBanner(NEW_WORK[data.action]);
+        // There is no "refresh to see the latest" banner any more. It dated
+        // from when the page was drawn once; every part of the frontdesk now
+        // refetches itself from the server on this same event (see the two
+        // live blocks in staff/frontdesk.blade.php), so the banner was
+        // asking for a reload of a page that had already updated.
     });
 
-    // Bagong gawain para sa staff (v7.11) na HINDI pa live sa page — kaya
-    // may "refresh" na banner.
-    const NEW_WORK = {
-        task_assigned:  'The admin sent a new task — refresh to see it.',
-    };
+    // The count beside "Frontdesk" in the sidebar. The frontdesk page
+    // updates it from its own Today refetch; every other staff page hears
+    // the same two events and has nothing else to refetch, so it asks for
+    // the number alone. No timer here: a missed event is corrected by the
+    // next page load, which draws the count on the server.
+    const navBadge = document.getElementById('fdNavBadge');
+    if (navBadge && !document.getElementById('fdTodayLive')) {
+        const BADGE_URL = @json(route('staff.frontdesk.badge'));
+        let badgeTimer = null;
+        const refreshBadge = function () {
+            clearTimeout(badgeTimer);
+            badgeTimer = setTimeout(function () {
+                fetch(BADGE_URL, { headers: { 'Accept': 'application/json' }, credentials: 'same-origin' })
+                    .then(res => { if (!res.ok) throw new Error(res.status); return res.json(); })
+                    .then(data => {
+                        navBadge.textContent = data.count;
+                        navBadge.hidden = !data.count;
+                    })
+                    .catch(() => {});
+            }, 400);
+        };
+        channel.bind('availability.changed', refreshBadge);
+        channel.bind('frontdesk.updated', refreshBadge);
+    }
 
     // Ang toast ay nananatili hanggang isara — ang frontdesk ay isang
     // monitor na hindi laging tinitingnan, at ang 6 na segundong toast ay
@@ -178,21 +147,5 @@
         div.textContent = str ?? '';
         return div.innerHTML;
     }
-
-    let bannerShown = false;
-    function showRefreshBanner(text) {
-        const banner = document.getElementById('rt-fd-banner');
-        if (!banner) return;
-        // Ang mensahe tungkol sa bagong gawain ay pumapalit sa pangkalahatang
-        // "Another staff member made changes" — hindi staff ang nagpadala.
-        if (text) {
-            const label = banner.querySelector('span');
-            if (label) label.innerHTML = '<i class="bi bi-bell-fill me-1"></i> ' + escapeHtml(text);
-        }
-        if (bannerShown) return;
-        bannerShown = true;
-        banner.style.display = 'flex';
-    }
-    window.rtFdRefresh = function () { window.location.reload(); };
 })();
 </script>

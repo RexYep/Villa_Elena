@@ -6,9 +6,7 @@
                         $outAt = $item['at'];
                     @endphp
                     <div class="booking-row">
-                        <div class="guest-avatar"
-                            @if ($isInHouse) style="background:#ede9fe;color:#7c3aed;"
-                            @elseif (!$isArrival) style="background:#dbeafe;color:#1d4ed8;" @endif>
+                        <div class="guest-avatar {{ $isInHouse ? 'is-inhouse' : ($isArrival ? '' : 'is-departure') }}">
                             {{ strtoupper(substr($booking->user->full_name, 0, 1)) }}
                         </div>
                         <div class="booking-info">
@@ -26,10 +24,17 @@
                                 </div>
                             @endif
                             <div class="booking-name">{{ $booking->user->full_name }}</div>
-                            <div class="booking-ref">{{ $booking->booking_ref }}</div>
-                            <div class="booking-prop"><i
-                                    class="bi bi-house me-1"></i>{{ $booking->property->property_name }}</div>
+                            {{-- The reference opens the booking (staff.bookings.show). --}}
+                            <div class="booking-ref">
+                                <a href="{{ route('staff.bookings.show', $booking) }}">{{ $booking->booking_ref }}</a>
+                            </div>
                             <div class="booking-meta">
+                                {{-- The number to ring when the guest is late; a link,
+                                     so a phone at the frontdesk can dial it. --}}
+                                @if (filled($booking->user->phone))
+                                    <span><i class="bi bi-telephone" aria-hidden="true"></i>
+                                        <a href="tel:{{ preg_replace('/[^0-9+]/', '', $booking->user->phone) }}">{{ $booking->user->phone }}</a></span>
+                                @endif
                                 @if ($isArrival)
                                     <span><i class="bi bi-people"></i> {{ $booking->num_guests }} guests</span>
                                 @else
@@ -45,20 +50,52 @@
                                     @endif
                                 </span>
                             </div>
+                            {{-- What the guest asked for when booking. The walk-in
+                                 form collects it, and until v7.76 no staff screen
+                                 showed it. --}}
+                            @if (filled($booking->special_requests))
+                                <div class="booking-note">
+                                    <i class="bi bi-chat-left-text" aria-hidden="true"></i>
+                                    <span><span class="visually-hidden">Special requests: </span>{{ $booking->special_requests }}</span>
+                                </div>
+                            @endif
                         </div>
-                        <div class="booking-action"
-                            style="display:flex; gap:8px; flex-direction:column; align-items:flex-end;"
+                        <div class="booking-action is-stacked"
                             @if (!$isArrival && !$isInHouse) data-checkout-row="{{ $booking->id }}" @endif>
-                            @if ($isArrival)
+                            {{-- No button before the booking's own time: checkIn() and
+                                 checkOut() refuse an early one, so it was a button
+                                 that asked "Check in …?" and then always failed —
+                                 all day, for a Night arrival. Same tests as the
+                                 controller. This list is re-rendered every minute,
+                                 so the button appears when the time comes. --}}
+                            @if ($isArrival && $booking->checkInDateTime()->isFuture())
+                                <span class="row-wait">
+                                    <i class="bi bi-clock" aria-hidden="true"></i>
+                                    Check-in opens {{ $item['at']->format('g:i A') }}
+                                </span>
+                            @elseif (!$isArrival && !$isInHouse && $booking->checkOutDateTime()->isFuture())
+                                <span class="row-wait">
+                                    <i class="bi bi-clock" aria-hidden="true"></i>
+                                    Check-out opens {{ $item['at']->format('g:i A') }}
+                                </span>
+                            @elseif ($isArrival)
                                 {{-- Kapag may natitirang balance ang booking na ito,
                                  hindi na basta magsu-submit ang form na ito —
                                  hahadlangan muna ito ng handleCheckInSubmit()
                                  para bumukas ang Check-in Confirmation modal,
                                  na siyang mag-a-attach ng "balance_arrangement"
                                  hidden input bago ipasa ang totoong submit. --}}
+                                {{-- `data-checkin` marks the form for the submit listener
+                                     in staff/frontdesk, which reads the guest and the
+                                     balance from these attributes. Until v7.76 they were
+                                     arguments in an inline onsubmit, the guest's name
+                                     among them; the project keeps a name out of inline
+                                     handlers (see the note on the Check Out form below). --}}
                                 <form method="POST" action="{{ route('staff.checkin', $booking) }}"
                                     id="checkinForm_{{ $booking->id }}"
-                                    onsubmit="return handleCheckInSubmit(event, {{ $booking->id }}, {{ Illuminate\Support\Js::from($booking->user->full_name) }}, {{ $booking->balance_due ?? 0 }})">
+                                    data-checkin="{{ $booking->id }}"
+                                    data-guest="{{ $booking->user->full_name }}"
+                                    data-balance="{{ $booking->balance_due ?? 0 }}">
                                     @csrf @method('PATCH')
                                     <button type="submit" class="btn-checkin">
                                         <i class="bi bi-box-arrow-in-right"></i> Check In
@@ -93,9 +130,14 @@
                                  pindutang laging nabibigo. Babalik ito kapag
                                  may bagong balance (hal. dinagdagan ng extras). --}}
                             @if ($booking->balance_due > 0)
-                                <button type="button" class="btn-sm"
-                                    style="background:#f0fdf4;color:#15803d;border:1px solid #bbf7d0;border-radius:7px;padding:6px 11px;font-size: 13px;font-weight:600;cursor:pointer;"
-                                    onclick="openPaymentModal({{ $booking->id }}, {{ Illuminate\Support\Js::from($booking->booking_ref) }}, {{ $booking->balance_due ?? 0 }})">
+                                {{-- Opened by the click listener in staff/frontdesk, which
+                                     reads these attributes. The guest's name is in a data
+                                     attribute and not in an inline handler: see the note on
+                                     the Check Out form above. data-pay-booking is also how
+                                     a refused payment and "Pay Now" find this button. --}}
+                                <button type="button" class="btn-sm btn-pay" data-pay-booking="{{ $booking->id }}"
+                                    data-pay-label="{{ $booking->user->full_name }} · {{ $booking->booking_ref }}"
+                                    data-pay-balance="{{ $booking->balance_due ?? 0 }}">
                                     <i class="bi bi-cash"></i> Payment
                                 </button>
                             @endif

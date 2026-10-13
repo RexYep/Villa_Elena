@@ -17,11 +17,15 @@
  *
  * Only tokens NOT defined in base.css are declared below. The --navy /
  * --navy-mid names are kept as aliases pointing at the earth tokens:
- * a dozen `var(--navy)` references still live in the staff blades'
- * page-local <style> blocks, and aliasing means they all recolour
- * correctly instead of silently falling back to an unset variable.
- * Page-specific content (forms, tabs, stat cards, modals, etc.) stays in
- * each view's @push('styles').
+ * `var(--navy)` references still live in css/staff/frontdesk.css,
+ * css/staff/walkin.css and the Availability view's <style> block, and
+ * aliasing means they all recolour correctly instead of silently falling
+ * back to an unset variable.
+ * What several staff pages share is here (the shell, form fields, alerts,
+ * the modal overlay and box, the realtime toast). Page-specific content
+ * is not: the frontdesk's and the walk-in page's are css/staff/frontdesk.css
+ * and css/staff/walkin.css, each its own Vite entry linked by that view
+ * alone, and the other pages' is still in each view's @push('styles').
  */
 :root {
     --text-main: #2c2416;
@@ -31,6 +35,9 @@
     /* Compatibility aliases — see note above. */
     --navy: var(--stone);
     --navy-mid: var(--stone-mid);
+
+    /* The --state-* shades (the pale red behind "Booked", the amber of a
+       warning) are in base.css with the --tag-* pairs. */
 
     --bg: var(--sand);
     --white: #fff;
@@ -104,6 +111,8 @@ body {
 .nav-badge.red { background: var(--tag-red-bg); color: var(--tag-red-fg); }
 .sidebar-footer { margin-top: auto; padding: 16px 20px; border-top: 1px solid var(--sb-line); }
 .staff-info { display: flex; align-items: center; gap: 10px; }
+/* The sign-out form, pushed to the right edge of the footer. */
+.staff-info form { margin-left: auto; }
 .staff-avatar {
     width: 34px; height: 34px; border-radius: 50%; background: var(--terracotta);
     color: #fff; display: flex; align-items: center; justify-content: center;
@@ -111,8 +120,11 @@ body {
 }
 .staff-name { color: var(--sb-text-strong); font-size: 13px; font-weight: 500; }
 .staff-tag  { color: var(--sb-text); font-size: 13px; }
+/* 40px square: the icon alone was a 27px target, beside the user's name. */
 .logout-btn {
     margin-left: auto; color: var(--sb-text); font-size: 18px;
+    width: 40px; height: 40px; margin-right: -8px; border-radius: 8px;
+    display: flex; align-items: center; justify-content: center; flex-shrink: 0;
     text-decoration: none; transition: color .2s; background: none; border: none; cursor: pointer;
 }
 .logout-btn:hover { color: var(--terracotta); }
@@ -126,7 +138,7 @@ body {
 }
 .topbar-left { display: flex; align-items: center; gap: 14px; min-width: 0; }
 .topbar-title { font-family: var(--font-display); font-size: 20px; line-height: 1.2; margin: 0; color: var(--navy); font-weight: 700; }
-.topbar-sub, .topbar-date { font-size: 13px; color: var(--muted); margin-top: 2px; }
+.topbar-sub { font-size: 13px; color: var(--muted); margin-top: 2px; }
 
 /* ── MAIN ── */
 .main { margin-left: var(--sidebar-w); margin-top: var(--topbar-h); padding: 28px; }
@@ -167,23 +179,114 @@ body {
     .main { padding: 14px; }
 }
 
-/* ── ALERT ── */
-.alert { border-radius: 10px; font-size: 13px; padding: 12px 16px; border: none; margin-bottom: 20px; }
-.alert-success { background: #dcfce7; color: #15803d; }
-.alert-danger  { background: #fee2e2; color: #b91c1c; }
+/* ── FORM FIELDS ── */
+/* One field for every staff page. Walk-in carried this in its own style
+   block while My Account fell through to Bootstrap's defaults: 16px text
+   and a #dee2e6 edge, 1.3:1 against white, which is the faint border
+   --border-strong exists to replace.
+   background-color, not the background shorthand: the shorthand also
+   cleared Bootstrap's chevron, so a select looked like a text box. */
+.form-control,
+.form-select {
+    width: 100%;
+    border: 1.5px solid var(--border-strong);
+    border-radius: 8px;
+    padding: 10px 14px;
+    font-size: 13px;
+    font-family: var(--font-body);
+    background-color: #fff;
+    transition: border-color .2s;
+}
+.form-select { padding-right: 36px; }
+.form-control:focus,
+.form-select:focus {
+    outline: none;
+    border-color: var(--stone);
+    box-shadow: 0 0 0 3px rgba(181, 90, 49, .3);
+}
 
-/* ── MODAL (overlay visibility itself stays inline/JS-toggled — this is
-   just the chrome around it) ── */
+/* A submit button while its form is on its way (data-submit-once). */
+button[aria-busy="true"] { opacity: .7; cursor: progress; }
+
+/* ── PANEL + STATUS PILL ── */
+/* Shared by the two Bookings pages (staff/bookings). */
+.panel {
+    background: #fff;
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    overflow: hidden;
+    margin-bottom: 20px;
+}
+.panel-head {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--border);
+}
+.panel-head h2 {
+    margin: 0;
+    font-family: var(--font-display); font-size: 16px; font-weight: 600; color: var(--stone);
+}
+.panel-body { padding: 20px; }
+
+/* A booking's status. The modifier is the stored status itself. */
+.status-pill {
+    display: inline-block;
+    padding: 3px 10px;
+    border-radius: 20px;
+    font-size: 12px; font-weight: 700; white-space: nowrap;
+    background: var(--tag-slate-bg); color: var(--tag-slate-fg);
+}
+.status-pill.is-pending    { background: var(--tag-amber-bg); color: var(--tag-amber-fg); }
+.status-pill.is-confirmed  { background: var(--tag-green-bg); color: var(--tag-green-fg); }
+.status-pill.is-checked_in { background: var(--tag-blue-bg);  color: var(--tag-blue-fg); }
+.status-pill.is-cancelled,
+.status-pill.is-no_show    { background: var(--tag-red-bg);   color: var(--tag-red-fg); }
+
+/* ── ALERT ── */
+/* Markup comes from staff/partials/flash.blade.php: icon, text, dismiss
+   button. Only a success message may hide itself (resources/js/staff.js);
+   an error or a warning stays until it is dismissed. */
+.alert {
+    display: flex; align-items: flex-start; gap: 10px;
+    border-radius: 10px; font-size: 13px; padding: 12px 16px; border: none; margin-bottom: 20px;
+}
+.alert-text { flex: 1; min-width: 0; }
+.alert-success { background: var(--tag-green-bg); color: var(--tag-green-fg); }
+.alert-danger  { background: var(--tag-red-bg); color: var(--tag-red-fg); }
+.alert-warning { background: var(--tag-amber-bg); color: var(--tag-amber-fg); }
+.alert-close {
+    flex-shrink: 0;
+    width: 28px; height: 28px; margin: -4px -6px -4px auto;
+    display: flex; align-items: center; justify-content: center;
+    border: none; border-radius: 7px; background: none;
+    color: inherit; font-size: 12px; cursor: pointer;
+}
+.alert-close:hover { background: rgba(0, 0, 0, .08); }
+
+/* ── MODAL (the overlay and the box; what is inside a form is in
+   css/staff/frontdesk.css) ── */
 .modal-overlay {
     position: fixed; inset: 0; z-index: 9999;
     background: rgba(0,0,0,.5);
     backdrop-filter: blur(4px);
-    align-items: center; justify-content: center;
+    /* The overlay scrolls, and the box is centred by its own auto margins
+       rather than by align-items: centring a box taller than the screen
+       that way puts its top above the scroll area, where nothing can reach
+       it. The Report Issue form is taller than a small phone. */
+    display: flex; align-items: flex-start; justify-content: center;
+    padding: 16px;
+    overflow-y: auto;
+    overscroll-behavior: contain;
 }
+/* Shown and hidden with the `hidden` attribute (showModal / hideModal in
+   staff/frontdesk.blade.php), not an inline display. Stated here because
+   the `display: flex` above would otherwise outrank the attribute. */
+.modal-overlay[hidden] { display: none; }
 .modal-box {
     background: #fff;
     border-radius: 18px;
-    max-width: calc(100vw - 32px);
+    margin: auto;
+    max-width: 100%;
     overflow: hidden;
     box-shadow: 0 24px 64px rgba(0,0,0,.2);
 }
@@ -193,6 +296,11 @@ body {
     display: flex; align-items: center; justify-content: space-between;
 }
 .modal-title { font-family: var(--font-display); color: #fff; font-size: 17px; font-weight: 600; }
+/* The line under a modal's title. .7 is 8:1 on the dark head; the inline
+   .4 it replaces was 3.7:1. */
+.modal-sub { color: rgba(255, 255, 255, .7); font-size: 14px; margin-top: 2px; }
+/* The default focus ring is blue, about 2:1 on the dark head. */
+.modal-head :where(button):focus-visible { outline-color: var(--gold-light); }
 .modal-close {
     background: rgba(255,255,255,.1);
     border: none;
@@ -203,3 +311,43 @@ body {
     font-size: 15px;
 }
 .modal-body { padding: 22px; }
+
+/* ── REALTIME TOAST ── */
+/* Markup and script are in staff/partials/realtime.blade.php, which the
+   layout includes on every staff page. A toast is dark, so its colours
+   are the ones that read on --stone. */
+#rt-fd-container {
+    position: fixed; bottom: 24px; right: 24px; z-index: 99999;
+    display: flex; flex-direction: column-reverse; gap: 10px; max-width: 360px;
+}
+.rt-fd-toast {
+    background: var(--stone); color: #fff; border-radius: 14px; padding: 14px 16px;
+    display: flex; align-items: flex-start; gap: 12px;
+    box-shadow: 0 8px 32px rgba(0,0,0,.25);
+    animation: rtFdSlideIn .35s cubic-bezier(.34,1.56,.64,1);
+    border-left: 4px solid var(--gold); min-width: 300px;
+    transition: opacity .3s, transform .3s;
+}
+.rt-fd-toast.removing { opacity: 0; transform: translateX(40px); }
+.rt-fd-icon {
+    width: 34px; height: 34px; border-radius: 9px; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 15px; background: rgba(201,168,76,.2); color: var(--gold);
+}
+.rt-fd-body { flex: 1; min-width: 0; font-size: 12.5px; line-height: 1.5; }
+/* A toast that stays until dismissed: new work for the staff. */
+.rt-fd-sticky { border-left-color: var(--state-red); }
+.rt-fd-sticky .rt-fd-icon {
+    background: color-mix(in srgb, var(--state-red) 20%, transparent);
+    color: var(--state-red-edge);
+}
+.rt-fd-dismiss {
+    background: rgba(255,255,255,.1); border: none; color: #fff;
+    width: 26px; height: 26px; border-radius: 7px; cursor: pointer; flex-shrink: 0;
+}
+@keyframes rtFdSlideIn {
+    from { opacity: 0; transform: translateX(60px) scale(.9); }
+    to   { opacity: 1; transform: translateX(0) scale(1); }
+}
+/* The note put after a form that someone else has already handled. */
+.rt-fd-handled { font-size: 13px; color: var(--muted); font-style: italic; }
