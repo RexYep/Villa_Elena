@@ -28,10 +28,12 @@
             gap: 10px;
         }
 
-        .form-card-head h3 {
+        .form-card-head h2 {
+            margin: 0;
             font-family: var(--font-display);
             font-size: 17px;
             font-weight: 600;
+            line-height: 1.3;
         }
 
         .form-card-body {
@@ -52,8 +54,17 @@
             padding: 11px 14px;
         }
 
+        /* Bootstrap paints a disabled field cool grey, off the palette. */
+        .form-control:disabled {
+            background: var(--sand);
+            color: var(--muted);
+            opacity: 1;
+        }
+
+        /* !important like the base.css spacing helpers: `.hint` below resets
+           its own margin and would otherwise win. */
         .mb-16 {
-            margin-bottom: 16px;
+            margin-bottom: 16px !important;
         }
 
         .two-col {
@@ -63,18 +74,22 @@
         }
 
         .is-invalid {
-            border-color: #dc2626 !important;
-        }
-
-        .field-error {
-            font-size: 13px;
-            color: #dc2626;
-            margin-top: 4px;
+            border-color: var(--tag-red-fg) !important;
         }
 
         .hint {
             font-size: 14px;
             color: var(--muted);
+            margin: 0;
+        }
+
+        .hint a {
+            color: var(--stone);
+            font-weight: 600;
+        }
+
+        .hint-below {
+            margin-top: 6px;
         }
 
         .avatar-row {
@@ -114,8 +129,8 @@
         }
 
         /* Nakatago ang tunay na input pero hindi `display:none`: kailangan pa
-               rin siyang maabot ng keyboard at ng screen reader sa pamamagitan ng
-               <label for>. */
+           rin siyang maabot ng keyboard at ng screen reader sa pamamagitan ng
+           <label for>. */
         .avatar-input {
             position: absolute;
             width: 1px;
@@ -126,6 +141,13 @@
             clip: rect(0, 0, 0, 0);
             white-space: nowrap;
             border: 0;
+        }
+
+        /* The input above is 1px and invisible, so its keyboard focus is
+           drawn on the button that stands in for it. */
+        .avatar-input:focus-visible~.avatar-actions .btn-choose {
+            outline: 2px solid var(--stone);
+            outline-offset: 2px;
         }
 
         .avatar-actions {
@@ -163,8 +185,8 @@
         }
 
         /* Lumilitaw lang ito kapag may napiling larawan — doon lang naman ito
-               may kahulugan, at doon ito hinahanap ng mata: katabi ng larawan,
-               hindi sa dulo ng form. */
+           may kahulugan, at doon ito hinahanap ng mata: katabi ng larawan,
+           hindi sa dulo ng form. */
         .btn-upload {
             background: var(--btn-primary);
             border: 1px solid var(--stone);
@@ -173,7 +195,7 @@
 
         .btn-upload:hover {
             background: var(--btn-primary-hover);
-            border-color: var(--gold);
+            border-color: var(--btn-primary-hover);
             color: #fff;
         }
 
@@ -189,14 +211,14 @@
             cursor: pointer;
             transition: all .2s;
             background: #fff;
-            border: 1px solid #fecaca;
-            color: #b91c1c;
+            border: 1px solid var(--state-red-line);
+            color: var(--tag-red-fg);
         }
 
         .btn-delete-avatar:hover {
-            background: #fef2f2;
-            border-color: #f87171;
-            color: #b91c1c;
+            background: var(--state-red-soft);
+            border-color: var(--state-red-edge);
+            color: var(--tag-red-fg);
         }
 
         .btn-link-cancel {
@@ -212,7 +234,7 @@
 
         .avatar-chosen {
             font-size: 13px;
-            color: #15803d;
+            color: var(--tag-green-fg);
             margin-top: 8px;
             overflow-wrap: anywhere;
         }
@@ -240,18 +262,23 @@
         }
 
         .danger-card {
-            border: 1px solid #fecaca;
-            background: #fef2f2;
+            border: 1px solid var(--state-red-line);
+            background: var(--state-red-soft);
             border-radius: 16px;
             overflow: hidden;
         }
 
         .danger-card .form-card-head {
-            border-bottom: 1px solid #fecaca;
+            border-bottom: 1px solid var(--state-red-line);
+        }
+
+        .danger-card a {
+            color: var(--stone);
+            font-weight: 600;
         }
 
         .btn-danger {
-            background: #dc2626;
+            background: var(--state-red);
             color: #fff;
             border: none;
             border-radius: 10px;
@@ -263,7 +290,13 @@
         }
 
         .btn-danger:hover {
-            background: #b91c1c;
+            background: var(--tag-red-fg);
+            color: #fff;
+        }
+
+        .btn-danger.is-small {
+            padding: 9px 16px;
+            font-size: 13px;
         }
 
         .delete-facts {
@@ -273,7 +306,7 @@
             color: var(--muted);
         }
 
-        .delete-facts li + li {
+        .delete-facts li+li {
             margin-top: 6px;
         }
 
@@ -292,7 +325,7 @@
             padding-left: 20px;
         }
 
-        .delete-blockers li + li {
+        .delete-blockers li+li {
             margin-top: 6px;
         }
 
@@ -330,25 +363,43 @@
             gap: 16px;
         }
 
+        .toggle-title {
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--stone);
+            margin-bottom: 3px;
+        }
+
+        /* The checkbox covers the whole switch: invisible, but it is what
+           the finger, the mouse and the Tab key reach. It used to be 0×0,
+           so a keyboard user landed on it and saw nothing at all. Its
+           focus ring is drawn on the track. */
         .toggle-switch {
             position: relative;
+            display: inline-block;
             width: 44px;
             height: 24px;
             flex-shrink: 0;
         }
 
         .toggle-switch input {
+            position: absolute;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+            margin: 0;
             opacity: 0;
-            width: 0;
-            height: 0;
+            cursor: pointer;
+            z-index: 1;
         }
 
+        /* Off is --border-strong, 3:1 on white. The old --border was
+           1.3:1: an off switch was close to invisible. */
         .toggle-slider {
             position: absolute;
             inset: 0;
-            background: var(--border);
+            background: var(--border-strong);
             border-radius: 24px;
-            cursor: pointer;
             transition: .2s;
         }
 
@@ -372,13 +423,34 @@
             transform: translateX(20px);
         }
 
+        .toggle-switch input:focus-visible+.toggle-slider {
+            outline: 2px solid var(--stone);
+            outline-offset: 2px;
+        }
+
+        /* Turning two-factor login off asks for the password first. */
+        .confirm-box {
+            margin-top: 16px;
+            background: var(--sand);
+            border-radius: 10px;
+            padding: 14px;
+        }
+
+        .confirm-box .pw-field {
+            margin-bottom: 10px;
+        }
+
+        .confirm-box .field-error {
+            margin-bottom: 8px !important;
+        }
+
         .device-row {
             display: flex;
             align-items: center;
             justify-content: space-between;
             gap: 12px;
             padding: 12px 0;
-            border-bottom: 1px solid #f4efe6;
+            border-bottom: 1px solid var(--border);
         }
 
         .device-row:last-child {
@@ -386,7 +458,7 @@
         }
 
         .device-name {
-            font-size: 13px;
+            font-size: 14px;
             font-weight: 600;
             color: var(--stone);
         }
@@ -398,8 +470,8 @@
         }
 
         .this-device-tag {
-            background: #dcfce7;
-            color: #15803d;
+            background: var(--tag-green-bg);
+            color: var(--tag-green-fg);
             font-size: 12px;
             font-weight: 600;
             padding: 2px 8px;
@@ -413,17 +485,22 @@
             color: var(--muted);
             cursor: pointer;
             font-size: 14px;
-            padding: 4px 8px;
+            padding: 8px;
+            min-height: 44px;
         }
 
         .btn-remove-device:hover {
-            color: #dc2626;
+            color: var(--tag-red-fg);
         }
 
         .empty-hint {
             font-size: 14px;
             color: var(--muted);
             padding: 8px 0;
+        }
+
+        .panel-intro {
+            margin-bottom: 8px;
         }
 
         /* ── Settings shell ───────────────────────────────────────────
@@ -445,17 +522,6 @@
             overflow: hidden;
             position: sticky;
             top: calc(var(--nav-h) + 24px);
-        }
-
-        .rail-head {
-            padding: 15px 20px;
-            border-bottom: 1px solid var(--border);
-        }
-
-        .rail-head h3 {
-            font-family: var(--font-display);
-            font-size: 16px;
-            font-weight: 600;
         }
 
         .rail-group {
@@ -498,13 +564,15 @@
             color: var(--stone);
         }
 
+        /* Stone, not gold: a focus ring needs 3:1 against white, and gold
+           is about 2.2:1. */
         .rail-item:focus-visible {
-            outline: 2px solid var(--gold);
+            outline: 2px solid var(--stone);
             outline-offset: -2px;
         }
 
         .rail-item.active {
-            background: #faf5ea;
+            background: color-mix(in srgb, var(--gold) 12%, #fff);
             color: var(--stone);
             font-weight: 600;
             border-left-color: var(--terracotta);
@@ -527,33 +595,31 @@
             color: var(--muted);
         }
 
+        .rail-item.is-danger,
         .rail-item.is-danger i {
-            color: #dc2626;
+            color: var(--tag-red-fg);
         }
 
-        /* Ang mga bagay na iisang pindot lang — ang switch ay nasa
-           mismong listahan, hindi kailangang buksan ang panel. Ang
-           pangalan ay pindutan pa rin: doon nakatira ang paliwanag. */
-        .rail-row {
-            display: flex;
-            align-items: center;
+        /* A setting's current state, in words, where the list used to carry
+           a second switch for it. The switch lives in the section, next to
+           the sentence that explains it. */
+        .rail-state {
+            margin-left: auto;
+            padding: 2px 8px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+            background: var(--sand);
+            color: var(--muted);
         }
 
-        .rail-row .rail-item {
-            flex: 1;
-            min-width: 0;
+        .rail-state.is-on {
+            background: var(--tag-green-bg);
+            color: var(--tag-green-fg);
         }
 
-        .rail-row .rail-item span {
-            overflow: hidden;
-            text-overflow: ellipsis;
-            white-space: nowrap;
-        }
-
-        .rail-row-switch {
-            display: flex;
-            align-items: center;
-            padding: 0 18px 0 6px;
+        .rail-state~.chev {
+            margin-left: 8px;
         }
 
         .settings-panel {
@@ -583,6 +649,7 @@
             border: none;
             padding: 6px 2px;
             margin-bottom: 12px;
+            min-height: 44px;
             font-family: var(--font-body);
             font-size: 14px;
             font-weight: 600;
@@ -617,6 +684,18 @@
                 display: none;
             }
 
+            /* The list is the whole screen here and nothing is open, so
+               nothing in it is marked as the open section. */
+            .settings-shell[data-view="list"] .rail-item.active {
+                background: none;
+                font-weight: 400;
+                border-left-color: transparent;
+            }
+
+            .settings-shell[data-view="list"] .rail-item.active i {
+                color: var(--muted);
+            }
+
             .panel-back {
                 display: inline-flex;
             }
@@ -643,9 +722,9 @@
             }
 
             /* Dating `flex-wrap: wrap` ang dalawang ito. Ang switch at ang
-                   pindutang "Remove" ay bumabagsak sa ilalim ng talata at
-                   naiiwang mag-isa — malayo sa bagay na kinokontrol nila. Ang
-                   grid ay pumipigil sa pagbagsak nang hindi nag-o-overflow. */
+               pindutang "Remove" ay bumabagsak sa ilalim ng talata at
+               naiiwang mag-isa — malayo sa bagay na kinokontrol nila. Ang
+               grid ay pumipigil sa pagbagsak nang hindi nag-o-overflow. */
             .toggle-row,
             .device-row {
                 display: grid;
@@ -657,23 +736,16 @@
             .toggle-switch {
                 margin-top: 2px;
             }
-
-            /* Ang switch sa listahan ay laging katabi ng pangalan; ang
-               `margin-top` sa itaas ay para sa mga nasa loob ng panel,
-               kung saan may paliwanag sa ibaba ng pangalan. */
-            .rail-row-switch .toggle-switch {
-                margin-top: 0;
-            }
         }
     </style>
 @endpush
 
 @section('content')
-    <div class="page-title">Settings</div>
-    <div class="page-sub mb-20">Manage your account information and security</div>
+    <h1 class="page-title">Settings</h1>
+    <p class="page-sub mb-20">Manage your account information and security</p>
 
     @if (session('success'))
-        <div class="alert alert-success"><i class="bi bi-check-circle me-2"></i>{{ session('success') }}</div>
+        <div class="alert alert-success"><i class="bi bi-check-circle me-2" aria-hidden="true"></i>{{ session('success') }}</div>
     @endif
 
     {{-- Kung may bumalik na error, ang panel na pinanggalingan nito ang
@@ -686,530 +758,639 @@
             $openPanel = 'two-factor';
         } elseif ($errors->updatePassword->any()) {
             $openPanel = 'password';
+        } elseif ($errors->signOutOthers->any()) {
+            $openPanel = 'activity';
         } elseif ($errors->deleteAccount->any() || session('delete_code_sent')) {
             $openPanel = 'delete';
         } elseif ($errors->getBag('default')->any()) {
             $openPanel = 'profile';
         }
+
+        $trustedDays = \App\Http\Controllers\AuthController::TRUSTED_DEVICE_DAYS;
     @endphp
 
     <div class="settings-shell" id="settingsShell" data-view="list" data-open="{{ $openPanel }}">
 
-        {{-- ── Ang listahan ─────────────────────────────────────────── --}}
+        {{-- ── The list ──────────────────────────────────────────────
+             Every row opens a section. A setting that is a switch shows
+             its state here in words; the switch itself is in the section,
+             beside the sentence that says what it does. --}}
         <nav class="settings-rail" aria-label="Settings sections">
-            <div class="rail-head">
-                <h3>Settings</h3>
-            </div>
-
             <div class="rail-group">
                 <div class="rail-group-label">Account</div>
                 <button type="button" class="rail-item" data-panel="profile">
-                    <i class="bi bi-person"></i> <span>Profile</span> <span class="chev">›</span>
+                    <i class="bi bi-person" aria-hidden="true"></i> <span>Profile</span>
+                    <span class="chev" aria-hidden="true">›</span>
                 </button>
                 <button type="button" class="rail-item" data-panel="password">
-                    <i class="bi bi-key"></i> <span>Change password</span> <span class="chev">›</span>
-                </button>
-                <button type="button" class="rail-item is-danger" data-panel="delete">
-                    <i class="bi bi-exclamation-triangle"></i> <span>Delete account</span> <span
-                        class="chev">›</span>
+                    <i class="bi bi-key" aria-hidden="true"></i> <span>Change password</span>
+                    <span class="chev" aria-hidden="true">›</span>
                 </button>
             </div>
 
             <div class="rail-group">
                 <div class="rail-group-label">Security</div>
-                <div class="rail-row">
-                    <button type="button" class="rail-item" data-panel="two-factor">
-                        <i class="bi bi-shield-lock"></i> <span>Two-factor login</span>
-                    </button>
-                    <div class="rail-row-switch">
-                        @if ($user->two_factor_enabled)
-                            {{-- Ang pagpatay nito ay humihingi ng password, kaya
-                                 hindi ito kayang tapusin ng switch mag-isa: ang
-                                 panel ang nagtatanong. Pinipigilan ng
-                                 `preventDefault()` ang switch na magmukhang
-                                 patay na gayong buhay pa. --}}
-                            <label class="toggle-switch" title="Turn off two-factor login">
-                                <input type="checkbox" checked aria-label="Two-factor login is on. Turn it off."
-                                    data-2fa-off>
-                                <span class="toggle-slider"></span>
-                            </label>
-                        @else
-                            <form method="POST" action="{{ route('customer.profile.2fa.toggle') }}" data-keep-panel>
-                                @csrf @method('PUT')
-                                <label class="toggle-switch" title="Turn on two-factor login">
-                                    <input type="checkbox" aria-label="Two-factor login is off. Turn it on."
-                                        onchange="this.form.submit()">
-                                    <span class="toggle-slider"></span>
-                                </label>
-                            </form>
-                        @endif
-                    </div>
-                </div>
+                <button type="button" class="rail-item" data-panel="two-factor">
+                    <i class="bi bi-shield-lock" aria-hidden="true"></i> <span>Two-factor login</span>
+                    <span class="rail-state {{ $user->two_factor_enabled ? 'is-on' : '' }}">{{ $user->two_factor_enabled ? 'On' : 'Off' }}</span>
+                    <span class="chev" aria-hidden="true">›</span>
+                </button>
                 @if ($user->two_factor_enabled)
                     <button type="button" class="rail-item" data-panel="devices">
-                        <i class="bi bi-laptop"></i> <span>Trusted devices</span> <span class="chev">›</span>
+                        <i class="bi bi-laptop" aria-hidden="true"></i> <span>Trusted devices</span>
+                        <span class="chev" aria-hidden="true">›</span>
                     </button>
                 @endif
                 <button type="button" class="rail-item" data-panel="activity">
-                    <i class="bi bi-clock-history"></i> <span>Login activity</span> <span class="chev">›</span>
+                    <i class="bi bi-clock-history" aria-hidden="true"></i> <span>Login activity</span>
+                    <span class="chev" aria-hidden="true">›</span>
                 </button>
             </div>
 
             <div class="rail-group">
                 <div class="rail-group-label">Notifications</div>
-                <div class="rail-row">
-                    <button type="button" class="rail-item" data-panel="notifications">
-                        <i class="bi bi-envelope"></i> <span>Booking emails</span>
-                    </button>
-                    <div class="rail-row-switch">
-                        <form method="POST" action="{{ route('customer.profile.email-notifications') }}"
-                            data-keep-panel>
-                            @csrf @method('PUT')
-                            <label class="toggle-switch" title="Booking and refund emails">
-                                <input type="checkbox" name="email_notifications_enabled" value="1"
-                                    aria-label="Booking and refund emails"
-                                    {{ $user->email_notifications_enabled ? 'checked' : '' }}
-                                    onchange="this.form.submit()">
-                                <span class="toggle-slider"></span>
-                            </label>
-                        </form>
-                    </div>
-                </div>
+                <button type="button" class="rail-item" data-panel="notifications">
+                    <i class="bi bi-envelope" aria-hidden="true"></i> <span>Booking emails</span>
+                    <span class="rail-state {{ $user->email_notifications_enabled ? 'is-on' : '' }}">{{ $user->email_notifications_enabled ? 'On' : 'Off' }}</span>
+                    <span class="chev" aria-hidden="true">›</span>
+                </button>
+            </div>
+
+            {{-- Last and on its own: the one row that cannot be undone. --}}
+            <div class="rail-group">
+                <button type="button" class="rail-item is-danger" data-panel="delete">
+                    <i class="bi bi-exclamation-triangle" aria-hidden="true"></i> <span>Delete account</span>
+                    <span class="chev" aria-hidden="true">›</span>
+                </button>
             </div>
         </nav>
 
-        {{-- ── Ang binuksan ─────────────────────────────────────────── --}}
+        {{-- ── The open section ──────────────────────────────────────── --}}
         <div class="settings-panels">
             <button type="button" class="panel-back" id="panelBack">‹ Settings</button>
 
-            {{-- ── Profile Info ─────────────────────────────────────── --}}
+            {{-- ── Profile ──────────────────────────────────────────── --}}
             <div class="settings-panel" id="panel-profile">
-                <form id="deleteAvatarForm" method="POST" data-confirm="Delete your profile photo?" data-confirm-label="Delete" action="{{ route('customer.profile.avatar.destroy') }}" style="display:none;">
+                {{-- The photo has its own two forms, so uploading it does not
+                     also submit the name and phone (and lose the photo when
+                     one of them fails). The file input sits in the profile
+                     card but belongs to avatarForm through `form=`. --}}
+                <form id="avatarForm" method="POST" action="{{ route('customer.profile.avatar.update') }}"
+                    enctype="multipart/form-data" hidden>
+                    @csrf
+                </form>
+                <form id="deleteAvatarForm" method="POST" data-confirm="Delete your profile photo?"
+                    data-confirm-label="Delete" action="{{ route('customer.profile.avatar.destroy') }}" hidden>
                     @csrf
                     @method('DELETE')
                 </form>
-                <form method="POST" action="{{ route('customer.profile.update') }}" enctype="multipart/form-data">
+                @php $contact = \App\Support\GuestEmail::contact(); @endphp
+                <form method="POST" action="{{ route('customer.profile.update') }}">
                     @csrf
                     @method('PUT')
-            <div class="form-card">
-                <div class="form-card-head">
-                    <i class="bi bi-person"></i>
-                    <h3>Profile Information</h3>
-                </div>
-                <div class="form-card-body">
-
-                    {{-- Dating isang hubad na `<input type="file">` lang ito:
-                         "Choose File / No file chosen", walang label kung para
-                         saan, walang nakikitang pagbabago pagkatapos pumili, at
-                         ang tanging pindutan ay ang "Save Changes" sa dulo ng
-                         mahabang form. Hindi alam ng bisita kung na-upload na
-                         ba o hindi. Ngayon: may pangalan ang kontrol, agad
-                         nakikita ang piniling larawan sa mismong bilog, at
-                         lumilitaw ang "Upload Photo" katabi mismo nito. --}}
-                    <div class="avatar-row">
-                        <div class="avatar-preview-wrap">
-                            <img id="avatarImg" class="avatar-preview" alt="Profile photo"
-                                src="{{ $user->profile_image ? $user->profile_image_url : '' }}"
-                                data-original="{{ $user->profile_image ? $user->profile_image_url : '' }}"
-                                @unless ($user->profile_image) hidden @endunless>
-                            <div id="avatarInitial" class="avatar-preview" @if ($user->profile_image) hidden @endif>
-                                {{ strtoupper(substr($user->full_name, 0, 1)) }}
-                            </div>
+                    <div class="form-card">
+                        <div class="form-card-head">
+                            <i class="bi bi-person" aria-hidden="true"></i>
+                            <h2>Profile</h2>
                         </div>
-                        <div class="avatar-controls">
-                            <div class="avatar-title">Profile photo</div>
-                            <div class="hint">JPG, PNG or WEBP · Max 3MB</div>
+                        <div class="form-card-body">
 
-                            {{-- Ang totoong input ay itinatago (hindi
-                                 `display:none`, para maabot pa rin ito ng
-                                 keyboard at ng screen reader sa pamamagitan ng
-                                 label nito). --}}
-                            <input type="file" name="avatar" id="avatarInput" accept="image/png,image/jpeg,image/webp"
-                                class="avatar-input">
+                            {{-- Dating isang hubad na `<input type="file">` lang ito:
+                                 "Choose File / No file chosen", walang label kung para
+                                 saan, walang nakikitang pagbabago pagkatapos pumili, at
+                                 ang tanging pindutan ay ang "Save Changes" sa dulo ng
+                                 mahabang form. Ngayon: may pangalan ang kontrol, agad
+                                 nakikita ang piniling larawan sa mismong bilog, at
+                                 lumilitaw ang "Upload photo" katabi mismo nito. --}}
+                            <div class="avatar-row">
+                                <div class="avatar-preview-wrap">
+                                    <img id="avatarImg" class="avatar-preview" alt="Profile photo"
+                                        src="{{ $user->profile_image ? $user->profile_image_url : '' }}"
+                                        data-original="{{ $user->profile_image ? $user->profile_image_url : '' }}"
+                                        @unless ($user->profile_image) hidden @endunless>
+                                    <div id="avatarInitial" class="avatar-preview" aria-hidden="true"
+                                        @if ($user->profile_image) hidden @endif>
+                                        {{ strtoupper(substr($user->full_name, 0, 1)) }}
+                                    </div>
+                                </div>
+                                <div class="avatar-controls">
+                                    <div class="avatar-title">Profile photo</div>
+                                    <p class="hint">JPG, PNG or WEBP, up to 3 MB</p>
 
-                            <div class="avatar-actions">
-                                <label for="avatarInput" class="btn-choose">
-                                    <i class="bi bi-image"></i> {{ $user->profile_image ? 'Change photo' : 'Choose photo' }}
-                                </label>
-                                <button type="submit" class="btn-upload" id="avatarUploadBtn" hidden>
-                                    <i class="bi bi-upload"></i> Upload photo
-                                </button>
-                                <button type="button" class="btn-link-cancel" id="avatarCancelBtn" hidden>Cancel</button>
-                                @if ($user->profile_image)
-                                    <button type="submit" form="deleteAvatarForm" class="btn-delete-avatar" id="avatarDeleteBtn">
-                                        <i class="bi bi-trash3"></i> Delete photo
-                                    </button>
-                                @endif
-                            </div>
+                                    <input type="file" name="avatar" id="avatarInput" form="avatarForm"
+                                        accept="image/png,image/jpeg,image/webp" class="avatar-input">
 
-                            <div class="avatar-chosen" id="avatarChosen" hidden></div>
-                            @error('avatar')
-                                <div class="field-error">{{ $message }}</div>
-                            @enderror
-                        </div>
-                    </div>
-
-                    <div class="mb-16">
-                        <label for="f_full_name" class="form-label">Full Name</label>
-                        <input id="f_full_name" type="text" name="full_name" class="form-control @error('full_name') is-invalid @enderror"
-                            value="{{ old('full_name', $user->full_name) }}" required>
-                        @error('full_name')
-                            <div class="field-error">{{ $message }}</div>
-                        @enderror
-                    </div>
-
-                    <div class="mb-16">
-                        <label class="form-label">Email Address</label>
-                        <input type="email" class="form-control" value="{{ $user->email }}" disabled>
-                        <div class="hint" style="margin-top:6px;">Contact the resort to change your email address.</div>
-                    </div>
-
-                    <div class="mb-16">
-                        <label for="f_phone" class="form-label">Phone Number</label>
-                        <input id="f_phone" type="text" name="phone" class="form-control @error('phone') is-invalid @enderror"
-                            value="{{ old('phone', $user->phone) }}" placeholder="09XX-XXX-XXXX" required>
-                        @error('phone')
-                            <div class="field-error">{{ $message }}</div>
-                        @enderror
-                    </div>
-
-                    <div class="mb-16">
-                        <label for="f_address" class="form-label">Home Address</label>
-                        <textarea id="f_address" name="address" class="form-control" rows="2">{{ old('address', $user->address) }}</textarea>
-                    </div>
-
-                    <button type="submit" class="btn-submit"><i class="bi bi-check-circle"></i> Save Changes</button>
-                </div>
-            </div>
-        </form>
-            </div>
-
-            {{-- ── Change Password ──────────────────────────────────── --}}
-            <div class="settings-panel" id="panel-password">
-                <form method="POST" action="{{ route('customer.profile.password') }}">
-            @csrf
-            @method('PUT')
-            <div class="form-card">
-                <div class="form-card-head">
-                    <i class="bi bi-shield-lock"></i>
-                    <h3>Change Password</h3>
-                </div>
-                <div class="form-card-body">
-                    <div class="mb-16">
-                        <label for="f_current_password" class="form-label">Current Password</label>
-                        <div class="pw-field">
-                            <input id="f_current_password" type="password" autocomplete="current-password" name="current_password"
-                            class="form-control @error('current_password', 'updatePassword') is-invalid @enderror">
-                            <button type="button" class="pw-toggle" data-pw-toggle="f_current_password" aria-label="Show password">
-                                <i class="bi bi-eye" aria-hidden="true"></i>
-                            </button>
-                        </div>
-                        @error('current_password', 'updatePassword')
-                            <div class="field-error">{{ $message }}</div>
-                        @enderror
-                    </div>
-                    <div class="two-col mb-16">
-                        <div>
-                            <label for="f_password" class="form-label">New Password</label>
-                            <div class="pw-field">
-                                <input id="f_password" type="password" name="password"
-                                class="form-control @error('password', 'updatePassword') is-invalid @enderror"
-                                autocomplete="new-password" >
-                                <button type="button" class="pw-toggle" data-pw-toggle="f_password" aria-label="Show password">
-                                    <i class="bi bi-eye" aria-hidden="true"></i>
-                                </button>
-                            </div>
-                            @error('password', 'updatePassword')
-                                <div class="field-error">{{ $message }}</div>
-                            @enderror
-                                @include('partials.password_rules', ['for' => 'f_password'])
-                        </div>
-                        <div>
-                            <label for="f_password_confirmation" class="form-label">Confirm New Password</label>
-                            <div class="pw-field">
-                                <input id="f_password_confirmation" type="password" name="password_confirmation" class="form-control"
-                                autocomplete="new-password">
-                                <button type="button" class="pw-toggle" data-pw-toggle="f_password_confirmation" aria-label="Show password">
-                                    <i class="bi bi-eye" aria-hidden="true"></i>
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                    <button type="submit" class="btn-submit"><i class="bi bi-shield-check"></i> Update Password</button>
-                </div>
-            </div>
-        </form>
-            </div>
-
-            {{-- ── Delete Account ───────────────────────────────────── --}}
-            {{-- Erases the account's personal details and keeps its booking
-                 and payment records (App\Services\AccountErasure). The
-                 reasons it is refused are listed here BEFORE the password
-                 is typed; the server asks the same question again. --}}
-            <div class="settings-panel" id="panel-delete">
-            <div class="danger-card">
-                <div class="form-card-head">
-                    <i class="bi bi-exclamation-triangle text-red"></i>
-                    <h3 class="text-red">Delete Account</h3>
-                </div>
-                <div class="form-card-body">
-                    <p class="hint mb-16">
-                        Deleting your account removes your name, email address, phone number, address,
-                        profile photo and sign-in history. <strong>It cannot be undone.</strong>
-                    </p>
-
-                    <ul class="delete-facts">
-                        <li>Records of your bookings and payments are kept without your name, because the law
-                            requires us to keep proof of every transaction.</li>
-                        <li>Your reviews stay up under “{{ \App\Models\User::ANONYMIZED_NAME }}”. To remove one,
-                            delete it from <a href="{{ route('customer.reviews.index') }}">My Reviews</a> first.</li>
-                        <li>You can sign up again with the same email address, but the new account starts fresh:
-                            your past bookings and completed stays do not carry over, including toward
-                            returning-guest promos.</li>
-                    </ul>
-
-                    @if ($errors->deleteAccount->has('account'))
-                        <div class="delete-blockers" role="alert">
-                            @foreach ($errors->deleteAccount->get('account') as $message)
-                                <div>{{ $message }}</div>
-                            @endforeach
-                        </div>
-                    @endif
-
-                    @if (count($deletionProblems))
-                        <div class="delete-blockers">
-                            <div class="delete-blockers-title">Your account can't be deleted yet:</div>
-                            <ul>
-                                @foreach ($deletionProblems as $problem)
-                                    <li>
-                                        {{ $problem['message'] }}
-                                        @if ($problem['booking'])
-                                            <a href="{{ route('customer.bookings.show', $problem['booking']) }}">View booking</a>
+                                    <div class="avatar-actions">
+                                        <label for="avatarInput" class="btn-choose">
+                                            <i class="bi bi-image" aria-hidden="true"></i>
+                                            {{ $user->profile_image ? 'Change photo' : 'Choose photo' }}
+                                        </label>
+                                        <button type="submit" form="avatarForm" class="btn-upload" id="avatarUploadBtn" hidden>
+                                            <i class="bi bi-upload" aria-hidden="true"></i> Upload photo
+                                        </button>
+                                        <button type="button" class="btn-link-cancel" id="avatarCancelBtn" hidden>Cancel</button>
+                                        @if ($user->profile_image)
+                                            <button type="submit" form="deleteAvatarForm" class="btn-delete-avatar"
+                                                id="avatarDeleteBtn">
+                                                <i class="bi bi-trash3" aria-hidden="true"></i> Delete photo
+                                            </button>
                                         @endif
-                                    </li>
-                                @endforeach
-                            </ul>
-                        </div>
-                    @else
-                        @if ($holdsToCancel->isNotEmpty())
-                            <p class="hint mb-16">
-                                Your unpaid {{ Str::plural('booking', $holdsToCancel->count()) }}
-                                {{ $holdsToCancel->pluck('booking_ref')->implode(', ') }}
-                                will be cancelled.
-                            </p>
-                        @endif
+                                    </div>
 
-                        @if ($user->two_factor_enabled)
-                            {{-- Its own form: a form cannot sit inside the delete form. --}}
-                            <form method="POST" action="{{ route('customer.profile.delete-code') }}" class="mb-16">
-                                @csrf
-                                <div class="field-label">Code from your email</div>
-                                <p class="hint">Two-factor login is on, so we email you a code to confirm this.</p>
-                                <button type="submit" class="btn-code"><i class="bi bi-envelope"></i>
-                                    {{ session('delete_code_sent') ? 'Send another code' : 'Email me a code' }}</button>
-                                @if (session('delete_code_sent'))
-                                    <div class="hint mt-8">Code sent. It works for {{ \App\Support\AccountDeletionCode::TTL_MINUTES }} minutes.</div>
-                                @endif
-                            </form>
-                        @endif
-
-                        <form method="POST" action="{{ route('customer.profile.destroy') }}"
-                            data-confirm="Delete your account? This cannot be undone." data-confirm-label="Delete account">
-                            @csrf
-                            @method('DELETE')
-
-                            @if ($user->two_factor_enabled)
-                                <div class="mb-16">
-                                    <label for="f_delete_code" class="form-label">Code</label>
-                                    <input id="f_delete_code" type="text" name="code" inputmode="numeric"
-                                        autocomplete="one-time-code" maxlength="6"
-                                        class="form-control @error('code', 'deleteAccount') is-invalid @enderror">
-                                    @error('code', 'deleteAccount')
+                                    <div class="avatar-chosen" id="avatarChosen" hidden></div>
+                                    @error('avatar')
                                         <div class="field-error">{{ $message }}</div>
                                     @enderror
                                 </div>
-                            @endif
+                            </div>
 
                             <div class="mb-16">
-                                <label for="f_password_2" class="form-label">Your Password</label>
+                                <label for="f_full_name" class="form-label">Full name</label>
+                                <input id="f_full_name" type="text" name="full_name" autocomplete="name"
+                                    class="form-control @error('full_name') is-invalid @enderror"
+                                    value="{{ old('full_name', $user->full_name) }}" required>
+                                @error('full_name')
+                                    <div class="field-error">{{ $message }}</div>
+                                @enderror
+                            </div>
+
+                            <div class="mb-16">
+                                <label for="f_email" class="form-label">Email address</label>
+                                <input id="f_email" type="email" class="form-control" value="{{ $user->email }}"
+                                    aria-describedby="f_email_hint" disabled>
+                                {{-- Says how, not only who: the resort's own
+                                     phone and email from Settings. --}}
+                                @php
+                                    // Each one a link; "or" between them, and a full stop
+                                    // straight after the last, whichever are set.
+                                    $contactLinks = array_filter([
+                                        $contact['phone'] ? '<a href="tel:'.e(preg_replace('/[^0-9+]/', '', $contact['phone'])).'">'.e($contact['phone']).'</a>' : null,
+                                        $contact['email'] ? '<a href="mailto:'.e($contact['email']).'">'.e($contact['email']).'</a>' : null,
+                                    ]);
+                                @endphp
+                                <p class="hint hint-below" id="f_email_hint">
+                                    To change it, contact the resort{!! $contactLinks ? ' at '.implode(' or ', $contactLinks) : '' !!}.
+                                </p>
+                            </div>
+
+                            <div class="mb-16">
+                                <label for="f_phone" class="form-label">Phone number</label>
+                                <input id="f_phone" type="tel" name="phone" autocomplete="tel" inputmode="tel"
+                                    class="form-control @error('phone') is-invalid @enderror"
+                                    value="{{ old('phone', $user->phone) }}" placeholder="09XX-XXX-XXXX" required>
+                                @error('phone')
+                                    <div class="field-error">{{ $message }}</div>
+                                @enderror
+                            </div>
+
+                            <div class="mb-16">
+                                <label for="f_address" class="form-label">Home address</label>
+                                <textarea id="f_address" name="address" class="form-control" rows="2" autocomplete="street-address">{{ old('address', $user->address) }}</textarea>
+                            </div>
+
+                            <button type="submit" class="btn-submit"><i class="bi bi-check-circle" aria-hidden="true"></i>
+                                Save changes</button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+
+            {{-- ── Change password ──────────────────────────────────── --}}
+            <div class="settings-panel" id="panel-password">
+                <form method="POST" action="{{ route('customer.profile.password') }}">
+                    @csrf
+                    @method('PUT')
+                    <div class="form-card">
+                        <div class="form-card-head">
+                            <i class="bi bi-key" aria-hidden="true"></i>
+                            <h2>Change password</h2>
+                        </div>
+                        <div class="form-card-body">
+                            <div class="mb-16">
+                                <label for="f_current_password" class="form-label">Current password</label>
                                 <div class="pw-field">
-                                    <input id="f_password_2" type="password" autocomplete="current-password" name="password"
-                                    class="form-control @error('password', 'deleteAccount') is-invalid @enderror">
-                                    <button type="button" class="pw-toggle" data-pw-toggle="f_password_2" aria-label="Show password">
+                                    <input id="f_current_password" type="password" autocomplete="current-password"
+                                        name="current_password"
+                                        class="form-control @error('current_password', 'updatePassword') is-invalid @enderror">
+                                    <button type="button" class="pw-toggle" data-pw-toggle="f_current_password"
+                                        aria-label="Show password">
                                         <i class="bi bi-eye" aria-hidden="true"></i>
                                     </button>
                                 </div>
-                                @error('password', 'deleteAccount')
+                                @error('current_password', 'updatePassword')
                                     <div class="field-error">{{ $message }}</div>
                                 @enderror
                             </div>
+                            <div class="two-col mb-16">
+                                <div>
+                                    <label for="f_password" class="form-label">New password</label>
+                                    <div class="pw-field">
+                                        <input id="f_password" type="password" name="password"
+                                            class="form-control @error('password', 'updatePassword') is-invalid @enderror"
+                                            autocomplete="new-password">
+                                        <button type="button" class="pw-toggle" data-pw-toggle="f_password"
+                                            aria-label="Show password">
+                                            <i class="bi bi-eye" aria-hidden="true"></i>
+                                        </button>
+                                    </div>
+                                    @error('password', 'updatePassword')
+                                        <div class="field-error">{{ $message }}</div>
+                                    @enderror
+                                    @include('partials.password_rules', ['for' => 'f_password'])
+                                </div>
+                                <div>
+                                    <label for="f_password_confirmation" class="form-label">Confirm new password</label>
+                                    <div class="pw-field">
+                                        <input id="f_password_confirmation" type="password" name="password_confirmation"
+                                            class="form-control" autocomplete="new-password">
+                                        <button type="button" class="pw-toggle" data-pw-toggle="f_password_confirmation"
+                                            aria-label="Show password">
+                                            <i class="bi bi-eye" aria-hidden="true"></i>
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                            <p class="hint mb-16">Changing it signs you out on every other device.</p>
+                            <button type="submit" class="btn-submit"><i class="bi bi-shield-check" aria-hidden="true"></i>
+                                Update password</button>
+                        </div>
+                    </div>
+                </form>
+            </div>
 
-                            <div class="mb-16">
-                                <label for="f_confirm_text" class="form-label">Type DELETE to confirm</label>
-                                <input id="f_confirm_text" type="text" name="confirm_text" autocomplete="off"
-                                    class="form-control @error('confirm_text', 'deleteAccount') is-invalid @enderror">
-                                @error('confirm_text', 'deleteAccount')
-                                    <div class="field-error">{{ $message }}</div>
-                                @enderror
+            {{-- ── Two-factor login ─────────────────────────────────── --}}
+            <div class="settings-panel" id="panel-two-factor">
+                <div class="form-card">
+                    <div class="form-card-head">
+                        <i class="bi bi-shield-lock" aria-hidden="true"></i>
+                        <h2>Two-factor login</h2>
+                    </div>
+                    <div class="form-card-body">
+                        <div class="toggle-row">
+                            <div>
+                                <div class="toggle-title" id="tfTitle">Email me a code when I sign in on a new device</div>
+                                <p class="hint" id="tfHint">
+                                    You enter the code once on each device. After that the device is trusted for
+                                    {{ $trustedDays }} days.
+                                </p>
                             </div>
 
-                            <button type="submit" class="btn-danger"><i class="bi bi-trash"></i> Delete My Account</button>
-                        </form>
-                    @endif
+                            @if ($user->two_factor_enabled)
+                                {{-- Turning it off asks for the password, so this
+                                     switch only opens the form below; the script
+                                     stops it from flipping on its own. --}}
+                                <label class="toggle-switch">
+                                    <input type="checkbox" role="switch" checked data-2fa-off
+                                        aria-labelledby="tfTitle" aria-describedby="tfHint"
+                                        aria-controls="disable2faForm">
+                                    <span class="toggle-slider"></span>
+                                </label>
+                            @else
+                                <form method="POST" action="{{ route('customer.profile.2fa.toggle') }}">
+                                    @csrf @method('PUT')
+                                    <label class="toggle-switch">
+                                        <input type="checkbox" role="switch" data-autosubmit
+                                            aria-labelledby="tfTitle" aria-describedby="tfHint">
+                                        <span class="toggle-slider"></span>
+                                    </label>
+                                </form>
+                            @endif
+                        </div>
+
+                        @if ($user->two_factor_enabled)
+                            <form method="POST" action="{{ route('customer.profile.2fa.toggle') }}" id="disable2faForm"
+                                class="confirm-box" @unless ($errors->twoFactor->any()) hidden @endunless>
+                                @csrf @method('PUT')
+                                <label for="f_password_3" class="form-label">Enter your password to turn this off</label>
+                                <div class="pw-field">
+                                    <input id="f_password_3" type="password" autocomplete="current-password" name="password"
+                                        class="form-control @error('password', 'twoFactor') is-invalid @enderror">
+                                    <button type="button" class="pw-toggle" data-pw-toggle="f_password_3"
+                                        aria-label="Show password">
+                                        <i class="bi bi-eye" aria-hidden="true"></i>
+                                    </button>
+                                </div>
+                                @error('password', 'twoFactor')
+                                    <div class="field-error">{{ $message }}</div>
+                                @enderror
+                                <button type="submit" class="btn-danger is-small">Turn off</button>
+                            </form>
+                        @endif
+                    </div>
                 </div>
             </div>
+
+            {{-- ── Trusted devices ──────────────────────────────────── --}}
+            @if ($user->two_factor_enabled)
+                <div class="settings-panel" id="panel-devices">
+                    <div class="form-card">
+                        <div class="form-card-head">
+                            <i class="bi bi-laptop" aria-hidden="true"></i>
+                            <h2>Trusted devices</h2>
+                        </div>
+                        <div class="form-card-body">
+                            <p class="hint panel-intro">
+                                These devices sign in without an email code, each for {{ $trustedDays }} days from
+                                when it was verified. Remove one you no longer use or don't recognise; it will need a
+                                code next time.
+                            </p>
+                            @forelse($trustedDevices as $device)
+                                <div class="device-row">
+                                    <div>
+                                        <div class="device-name">
+                                            {{ $device->device_label ?: 'Unknown device' }}
+                                            {{-- The row stores a hash, so this can't be a
+                                                 string comparison any more — the model
+                                                 hashes the cookie value to compare. --}}
+                                            @if ($device->matchesToken($currentDeviceToken))
+                                                <span class="this-device-tag">This device</span>
+                                            @endif
+                                        </div>
+                                        <div class="device-meta">
+                                            Last used {{ $device->last_used_at?->diffForHumans() ?? 'never' }}
+                                            · trusted until {{ $device->expires_at?->format('M j, Y') }}
+                                            · {{ $device->ip_address }}
+                                        </div>
+                                    </div>
+                                    <form method="POST" action="{{ route('customer.profile.devices.destroy', $device) }}"
+                                        data-confirm="Remove this device? It will need to verify again next time it logs in."
+                                        data-confirm-label="Remove">
+                                        @csrf @method('DELETE')
+                                        <button type="submit" class="btn-remove-device"
+                                            aria-label="Remove {{ $device->device_label ?: 'this device' }}">
+                                            <i class="bi bi-trash" aria-hidden="true"></i> Remove</button>
+                                    </form>
+                                </div>
+                            @empty
+                                <div class="empty-hint">No trusted devices yet. A device is added here the first time you
+                                    sign in on it with an email code.</div>
+                            @endforelse
+                        </div>
+                    </div>
+                </div>
+            @endif
+
+            {{-- ── Login activity ───────────────────────────────────── --}}
+            <div class="settings-panel" id="panel-activity">
+                <div class="form-card">
+                    <div class="form-card-head">
+                        <i class="bi bi-clock-history" aria-hidden="true"></i>
+                        <h2>Login activity</h2>
+                    </div>
+                    <div class="form-card-body">
+                        <p class="hint panel-intro">
+                            Your last {{ $loginActivities->count() ?: 10 }} sign-ins. Don't recognise one?
+                            <a href="#password">Change your password</a>, which also signs you out everywhere else.
+                        </p>
+                        @forelse($loginActivities as $activity)
+                            <div class="device-row">
+                                <div>
+                                    <div class="device-name">{{ $activity->device_label ?: 'Unknown device' }}</div>
+                                    <div class="device-meta">
+                                        {{-- The date and time first: four rows of
+                                             "5 days ago" told the guest nothing. --}}
+                                        <time datetime="{{ $activity->created_at->toIso8601String() }}">
+                                            {{ $activity->created_at->timezone(config('app.timezone'))->format('M j, Y, g:i A') }}
+                                        </time>
+                                        ({{ $activity->created_at->diffForHumans() }})
+                                        · {{ $activity->ip_address }}
+                                        @if ($activity->via_new_device_otp)
+                                            · verified with an email code
+                                        @endif
+                                    </div>
+                                </div>
+                            </div>
+                        @empty
+                            <div class="empty-hint">No sign-ins recorded yet.</div>
+                        @endforelse
+                    </div>
+                </div>
+
+                {{-- Only where the server can end other sessions: with file
+                     sessions (local development) nothing would be signed
+                     out, and the button would say it had been. --}}
+                @if ($canSignOutOthers)
+                    <form method="POST" action="{{ route('customer.profile.sessions.destroy') }}">
+                        @csrf
+                        @method('DELETE')
+                        <div class="form-card">
+                            <div class="form-card-head">
+                                <i class="bi bi-box-arrow-right" aria-hidden="true"></i>
+                                <h2>Sign out everywhere else</h2>
+                            </div>
+                            <div class="form-card-body">
+                                <p class="hint mb-16">
+                                    Ends your sign-ins on every other phone and computer. You stay signed in here.
+                                    @if ($user->two_factor_enabled)
+                                        Every trusted device, this one included, will need an email code again.
+                                    @endif
+                                </p>
+                                <div class="mb-16">
+                                    <label for="f_password_4" class="form-label">Your password</label>
+                                    <div class="pw-field">
+                                        <input id="f_password_4" type="password" autocomplete="current-password"
+                                            name="password"
+                                            class="form-control @error('password', 'signOutOthers') is-invalid @enderror">
+                                        <button type="button" class="pw-toggle" data-pw-toggle="f_password_4"
+                                            aria-label="Show password">
+                                            <i class="bi bi-eye" aria-hidden="true"></i>
+                                        </button>
+                                    </div>
+                                    @error('password', 'signOutOthers')
+                                        <div class="field-error">{{ $message }}</div>
+                                    @enderror
+                                </div>
+                                <button type="submit" class="btn-submit"><i class="bi bi-box-arrow-right"
+                                        aria-hidden="true"></i> Sign out other devices</button>
+                            </div>
+                        </div>
+                    </form>
+                @endif
             </div>
 
             {{-- ── Booking emails ───────────────────────────────────── --}}
             <div class="settings-panel" id="panel-notifications">
                 <div class="form-card">
-            <div class="form-card-head">
-                <i class="bi bi-envelope"></i>
-                <h3>Notifications</h3>
-            </div>
-            <div class="form-card-body">
-                <form method="POST" action="{{ route('customer.profile.email-notifications') }}">
-                    @csrf @method('PUT')
-                    <div class="toggle-row" style="margin-bottom:0;">
-                        <div>
-                            <div class="device-name">Booking and refund emails</div>
-                            <div class="hint" style="margin-top:3px;">
-                                We email you a confirmation when a payment is received, and an update when a booking is cancelled or moved to another date, or when a refund is issued, needs your account details, or is paid out. These always appear in your notifications here, whether this is on or off.
-                            </div>
-                        </div>
-                        <label class="toggle-switch">
-                            <input type="checkbox" name="email_notifications_enabled" value="1"
-                                {{ $user->email_notifications_enabled ? 'checked' : '' }} onchange="this.form.submit()">
-                            <span class="toggle-slider"></span>
-                        </label>
+                    <div class="form-card-head">
+                        <i class="bi bi-envelope" aria-hidden="true"></i>
+                        <h2>Booking emails</h2>
                     </div>
-                </form>
-            </div>
-        </div>
-            </div>
-
-            {{-- ── Two-Factor Authentication ────────────────────────── --}}
-            <div class="settings-panel" id="panel-two-factor">
-                <div class="form-card">
-            <div class="form-card-head">
-                <i class="bi bi-fingerprint"></i>
-                <h3>Two-Factor Authentication</h3>
-            </div>
-            <div class="form-card-body">
-                <div class="toggle-row" style="margin-bottom:{{ $user->two_factor_enabled ? '16px' : '0' }};">
-                    <div>
-                        <div class="device-name">Verify new devices by email</div>
-                        <div class="hint" style="margin-top:3px;">
-                            When enabled, you will first need to verify the new device using a code sent to your email
-                            before you can log in on it. You won't need to do this again on the same device.
-                        </div>
-                    </div>
-
-                    @if ($user->two_factor_enabled)
-                        <label class="toggle-switch">
-                            <input type="checkbox" checked
-                                onclick="event.preventDefault(); document.getElementById('disable2faForm').style.display='block';">
-                            <span class="toggle-slider"></span>
-                        </label>
-                    @else
-                        <form method="POST" action="{{ route('customer.profile.2fa.toggle') }}">
+                    <div class="form-card-body">
+                        <form method="POST" action="{{ route('customer.profile.email-notifications') }}">
                             @csrf @method('PUT')
-                            <label class="toggle-switch">
-                                <input type="checkbox" onchange="this.form.submit()">
-                                <span class="toggle-slider"></span>
-                            </label>
+                            <div class="toggle-row">
+                                <div>
+                                    <div class="toggle-title" id="emTitle">Email me about my bookings and refunds</div>
+                                    <p class="hint" id="emHint">
+                                        A confirmation when a payment is received, and an update when a booking is
+                                        cancelled or moved, or when a refund is issued, needs your account details, or is
+                                        paid out. Everything also appears in your notifications here, whether this is on
+                                        or off.
+                                    </p>
+                                </div>
+                                <label class="toggle-switch">
+                                    <input type="checkbox" role="switch" name="email_notifications_enabled" value="1"
+                                        aria-labelledby="emTitle" aria-describedby="emHint" data-autosubmit
+                                        {{ $user->email_notifications_enabled ? 'checked' : '' }}>
+                                    <span class="toggle-slider"></span>
+                                </label>
+                            </div>
                         </form>
-                    @endif
-                </div>
-
-                @if ($user->two_factor_enabled)
-                    <form method="POST" action="{{ route('customer.profile.2fa.toggle') }}" id="disable2faForm"
-                        style="{{ $errors->twoFactor->any() ? '' : 'display:none;' }}background:#f9f5ee;border-radius:10px;padding:14px;">
-                        @csrf @method('PUT')
-                        <label for="f_password_3" class="form-label">Enter your password to turn this off</label>
-                        <div class="pw-field" style="margin-bottom:10px;">
-                            <input id="f_password_3" type="password" autocomplete="current-password" name="password"
-                            class="form-control @error('password', 'twoFactor') is-invalid @enderror">
-                            <button type="button" class="pw-toggle" data-pw-toggle="f_password_3" aria-label="Show password">
-                                <i class="bi bi-eye" aria-hidden="true"></i>
-                            </button>
-                        </div>
-                        @error('password', 'twoFactor')
-                            <div class="field-error" style="margin-bottom:8px;">{{ $message }}</div>
-                        @enderror
-                        <button type="submit" class="btn-danger" style="padding:9px 16px;font-size:13px;">Turn
-                            Off</button>
-                    </form>
-                @endif
-            </div>
-        </div>
-            </div>
-
-            {{-- ── Trusted Devices ──────────────────────────────────── --}}
-            @if ($user->two_factor_enabled)
-                <div class="settings-panel" id="panel-devices">
-                    <div class="form-card">
-                <div class="form-card-head">
-                    <i class="bi bi-laptop"></i>
-                    <h3>Trusted Devices</h3>
-                </div>
-                <div class="form-card-body">
-                    @forelse($trustedDevices as $device)
-                        <div class="device-row">
-                            <div>
-                                <div class="device-name">
-                                    {{ $device->device_label ?: 'Unknown device' }}
-                                    {{-- The row stores a hash, so this can't be a
-                                         string comparison any more — the model
-                                         hashes the cookie value to compare. --}}
-                                    @if ($device->matchesToken($currentDeviceToken))
-                                        <span class="this-device-tag">This device</span>
-                                    @endif
-                                </div>
-                                <div class="device-meta">
-                                    {{ $device->ip_address }} · Last used {{ $device->last_used_at?->diffForHumans() }}
-                                </div>
-                            </div>
-                            <form method="POST" action="{{ route('customer.profile.devices.destroy', $device) }}"
-                                data-confirm="Remove this device? It will need to verify again next time it logs in." data-confirm-label="Remove">
-                                @csrf @method('DELETE')
-                                <button type="submit" class="btn-remove-device"><i class="bi bi-trash"></i>
-                                    Remove</button>
-                            </form>
-                        </div>
-                    @empty
-                        <div class="empty-hint">No trusted devices yet.</div>
-                    @endforelse
-                </div>
-            </div>
-                </div>
-            @endif
-
-            {{-- ── Recent Login Activity ────────────────────────────── --}}
-            <div class="settings-panel" id="panel-activity">
-                <div class="form-card">
-            <div class="form-card-head">
-                <i class="bi bi-clock-history"></i>
-                <h3>Recent Login Activity</h3>
-            </div>
-            <div class="form-card-body">
-                @forelse($loginActivities as $activity)
-                    <div class="device-row">
-                        <div>
-                            <div class="device-name">{{ $activity->device_label ?: 'Unknown device' }}</div>
-                            <div class="device-meta">
-                                {{ $activity->ip_address }} · {{ $activity->created_at->diffForHumans() }}
-                                @if ($activity->via_new_device_otp)
-                                    · verified via email code
-                                @endif
-                            </div>
-                        </div>
                     </div>
-                @empty
-                    <div class="empty-hint">No login activity recorded yet.</div>
-                @endforelse
+                </div>
             </div>
-        </div>
+
+            {{-- ── Delete account ───────────────────────────────────── --}}
+            {{-- Erases the account's personal details and keeps its booking
+                 and payment records (App\Services\AccountErasure). The
+                 reasons it is refused are listed here BEFORE the password
+                 is typed; the server asks the same question again. --}}
+            @php
+                // Upcoming stays are summarised past a few: one line per
+                // booking turned a guest with many into a page of red.
+                $upcomingProblems = collect($deletionProblems)->where('upcoming', true)->values();
+                $otherProblems = collect($deletionProblems)->where('upcoming', false)->values();
+                $summariseUpcoming = $upcomingProblems->count() > 3;
+            @endphp
+            <div class="settings-panel" id="panel-delete">
+                <div class="danger-card">
+                    <div class="form-card-head">
+                        <i class="bi bi-exclamation-triangle text-red" aria-hidden="true"></i>
+                        <h2 class="text-red">Delete account</h2>
+                    </div>
+                    <div class="form-card-body">
+                        <p class="hint mb-16">
+                            Deleting your account removes your name, email address, phone number, address,
+                            profile photo and sign-in history. <strong>It cannot be undone.</strong>
+                        </p>
+
+                        {{-- The refusal comes first when there is one: it is the
+                             first thing the guest needs to know. The submitted
+                             form's own refusal is shown only when this live list
+                             is empty (something changed since the page loaded);
+                             otherwise it would repeat the list below. --}}
+                        @if ($errors->deleteAccount->has('account') && ! count($deletionProblems))
+                            <div class="delete-blockers" role="alert">
+                                @foreach ($errors->deleteAccount->get('account') as $message)
+                                    <div>{{ $message }}</div>
+                                @endforeach
+                            </div>
+                        @endif
+
+                        @if (count($deletionProblems))
+                            <div class="delete-blockers" @if ($errors->deleteAccount->has('account')) role="alert" @endif>
+                                <div class="delete-blockers-title">Your account can't be deleted yet:</div>
+                                <ul>
+                                    @if ($summariseUpcoming)
+                                        <li>
+                                            You have {{ $upcomingProblems->count() }} upcoming bookings, the first on
+                                            {{ $upcomingProblems->first()['booking']->stay_phrase }}. Cancel them, or wait
+                                            until the stays are over.
+                                            <a href="{{ route('customer.bookings') }}">See my bookings</a>
+                                        </li>
+                                    @else
+                                        @foreach ($upcomingProblems as $problem)
+                                            <li>
+                                                {{ $problem['message'] }}
+                                                <a href="{{ route('customer.bookings.show', $problem['booking']) }}">View booking</a>
+                                            </li>
+                                        @endforeach
+                                    @endif
+                                    @foreach ($otherProblems as $problem)
+                                        <li>
+                                            {{ $problem['message'] }}
+                                            @if ($problem['booking'])
+                                                <a href="{{ route('customer.bookings.show', $problem['booking']) }}">View booking</a>
+                                            @endif
+                                        </li>
+                                    @endforeach
+                                </ul>
+                            </div>
+                        @endif
+
+                        <ul class="delete-facts">
+                            <li>Records of your bookings and payments are kept without your name, because the law
+                                requires us to keep proof of every transaction.</li>
+                            <li>Your reviews stay up under “{{ \App\Models\User::ANONYMIZED_NAME }}”. To remove one,
+                                delete it from <a href="{{ route('customer.reviews.index') }}">My Reviews</a> first.</li>
+                            <li>You can sign up again with the same email address, but the new account starts fresh:
+                                your past bookings and completed stays do not carry over, including toward
+                                returning-guest promos.</li>
+                        </ul>
+
+                        @unless (count($deletionProblems))
+                            @if ($holdsToCancel->isNotEmpty())
+                                <p class="hint mb-16">
+                                    Your unpaid {{ Str::plural('booking', $holdsToCancel->count()) }}
+                                    {{ $holdsToCancel->pluck('booking_ref')->implode(', ') }}
+                                    will be cancelled.
+                                </p>
+                            @endif
+
+                            @if ($user->two_factor_enabled)
+                                {{-- Its own form: a form cannot sit inside the delete form. --}}
+                                <form method="POST" action="{{ route('customer.profile.delete-code') }}" class="mb-16">
+                                    @csrf
+                                    <div class="field-label">Code from your email</div>
+                                    <p class="hint">Two-factor login is on, so we email you a code to confirm this.</p>
+                                    <button type="submit" class="btn-code"><i class="bi bi-envelope" aria-hidden="true"></i>
+                                        {{ session('delete_code_sent') ? 'Send another code' : 'Email me a code' }}</button>
+                                    @if (session('delete_code_sent'))
+                                        <p class="hint mt-8">Code sent. It works for
+                                            {{ \App\Support\AccountDeletionCode::TTL_MINUTES }} minutes.</p>
+                                    @endif
+                                </form>
+                            @endif
+
+                            <form method="POST" action="{{ route('customer.profile.destroy') }}"
+                                data-confirm="Delete your account? This cannot be undone."
+                                data-confirm-label="Delete account">
+                                @csrf
+                                @method('DELETE')
+
+                                @if ($user->two_factor_enabled)
+                                    <div class="mb-16">
+                                        <label for="f_delete_code" class="form-label">Code</label>
+                                        <input id="f_delete_code" type="text" name="code" inputmode="numeric"
+                                            autocomplete="one-time-code" maxlength="6"
+                                            class="form-control @error('code', 'deleteAccount') is-invalid @enderror">
+                                        @error('code', 'deleteAccount')
+                                            <div class="field-error">{{ $message }}</div>
+                                        @enderror
+                                    </div>
+                                @endif
+
+                                <div class="mb-16">
+                                    <label for="f_password_2" class="form-label">Your password</label>
+                                    <div class="pw-field">
+                                        <input id="f_password_2" type="password" autocomplete="current-password"
+                                            name="password"
+                                            class="form-control @error('password', 'deleteAccount') is-invalid @enderror">
+                                        <button type="button" class="pw-toggle" data-pw-toggle="f_password_2"
+                                            aria-label="Show password">
+                                            <i class="bi bi-eye" aria-hidden="true"></i>
+                                        </button>
+                                    </div>
+                                    @error('password', 'deleteAccount')
+                                        <div class="field-error">{{ $message }}</div>
+                                    @enderror
+                                </div>
+
+                                <div class="mb-16">
+                                    <label for="f_confirm_text" class="form-label">Type DELETE to confirm</label>
+                                    <input id="f_confirm_text" type="text" name="confirm_text" autocomplete="off"
+                                        class="form-control @error('confirm_text', 'deleteAccount') is-invalid @enderror">
+                                    @error('confirm_text', 'deleteAccount')
+                                        <div class="field-error">{{ $message }}</div>
+                                    @enderror
+                                </div>
+
+                                <button type="submit" class="btn-danger"><i class="bi bi-trash" aria-hidden="true"></i>
+                                    Delete my account</button>
+                            </form>
+                        @endunless
+                    </div>
+                </div>
             </div>
 
         </div>{{-- .settings-panels --}}
@@ -1232,11 +1413,11 @@
             const FALLBACK = 'profile';
             const LIST = 'settings';
             const STORE = 've-settings-panel';
+            const narrow = window.matchMedia('(max-width: 900px)');
 
-            // Hindi lahat ng form ay nasa loob ng panel (nasa listahan ang
-            // dalawang switch), at ang sagot ng server ay isang redirect na
-            // hindi nagdadala ng `#hash`. Kaya inaalala kung saan tayo
-            // nanggaling, at minsan lang itong binabasa.
+            // Ang sagot ng server ay isang redirect na hindi nagdadala ng
+            // `#hash`, kaya inaalala kung saang panel nanggaling ang form, at
+            // minsan lang itong binabasa.
             function remember(key) {
                 try {
                     sessionStorage.setItem(STORE, key);
@@ -1281,9 +1462,10 @@
                 if (!key || key === LIST) {
                     // Nananatiling pili ang isang panel para sa desktop, kung
                     // saan laging may nasa kanan; sa telepono ay ang listahan
-                    // ang nasa harap.
+                    // ang nasa harap, at walang nakabukas doon.
                     show(FALLBACK, false);
                     shell.dataset.view = 'list';
+                    if (narrow.matches) items.forEach(el => el.removeAttribute('aria-current'));
                     return;
                 }
                 show(key, false);
@@ -1298,30 +1480,35 @@
                 location.hash = LIST;
             });
 
-            // Ang switch ng 2FA ay hindi kayang patayin ang sarili: password
-            // muna. Ang panel ang humihingi nito, kaya doon tayo dinadala —
-            // at bukas na agad ang form, dahil iyon ang hiniling ng pindot.
+            // Turning two-factor login off asks for the password, so the
+            // switch opens the form instead of flipping.
             const offSwitch = shell.querySelector('[data-2fa-off]');
             if (offSwitch) offSwitch.addEventListener('click', function(e) {
                 e.preventDefault();
-                show('two-factor', true);
                 const form = document.getElementById('disable2faForm');
-                if (form) {
-                    form.style.display = 'block';
-                    const field = form.querySelector('input[name="password"]');
-                    if (field) field.focus();
-                }
+                if (!form) return;
+                form.hidden = false;
+                const field = form.querySelector('input[name="password"]');
+                if (field) field.focus();
+            });
+
+            // A switch saves as soon as it is flipped. requestSubmit(), not
+            // submit(): only the first fires the submit event below, which
+            // is what brings the guest back to this section afterwards.
+            shell.querySelectorAll('[data-autosubmit]').forEach(input => {
+                input.addEventListener('change', () => {
+                    if (input.form.requestSubmit) {
+                        input.form.requestSubmit();
+                    } else {
+                        input.form.submit();
+                    }
+                });
             });
 
             shell.querySelectorAll('form').forEach(form => {
                 form.addEventListener('submit', () => {
                     const panel = form.closest('.settings-panel');
-                    if (panel) {
-                        remember(panel.id.replace('panel-', ''));
-                    } else if (form.hasAttribute('data-keep-panel')) {
-                        // Isang switch sa listahan — doon din tayo babalik.
-                        remember(LIST);
-                    }
+                    if (panel) remember(panel.id.replace('panel-', ''));
                 });
             });
 
@@ -1333,11 +1520,7 @@
             if (!location.hash && forced) {
                 show(forced, true); // may error — dapat itong makita agad
             } else if (!location.hash && recalled) {
-                if (recalled === LIST) {
-                    fromHash();
-                } else {
-                    show(recalled, true);
-                }
+                show(recalled, true);
             } else {
                 fromHash();
             }
@@ -1397,7 +1580,7 @@
                 img.hidden = false;
                 initial.hidden = true;
 
-                chosen.textContent = 'Upload ' + file.name;
+                chosen.textContent = 'Ready to upload: ' + file.name;
                 chosen.hidden = false;
                 uploadBtn.hidden = false;
                 cancelBtn.hidden = false;
@@ -1411,4 +1594,3 @@
         })();
     </script>
 @endpush
-

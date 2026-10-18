@@ -31,6 +31,10 @@ class ProfileController extends Controller
             // its booking instead of arriving as a surprise after submit.
             'deletionProblems' => AccountErasure::problems($user),
             'holdsToCancel' => AccountErasure::holdsToCancel($user),
+            // Other sessions can only be ended where they are stored in the
+            // database (production). With file sessions the button would
+            // report success and sign nobody out, so it is not offered.
+            'canSignOutOthers' => config('session.driver') === 'database',
         ]);
     }
 
@@ -43,21 +47,34 @@ class ProfileController extends Controller
             'full_name' => 'required|string|max:150',
             'phone' => 'required|string|max:20',
             'address' => 'nullable|string',
-            'avatar' => 'nullable|image|mimes:jpg,jpeg,png,webp|max:3048',
         ]);
 
-        $data = $request->only(['full_name', 'phone', 'address']);
+        $user->update($request->only(['full_name', 'phone', 'address']));
 
-        if ($request->hasFile('avatar')) {
-            if ($user->profile_image) {
-                Storage::disk('public')->delete($user->profile_image);
-            }
-            $data['profile_image'] = $request->file('avatar')->store('avatars', 'public');
+        return back()->with('success', 'Profile updated.');
+    }
+
+    // ── Upload Profile Photo ─────────────────────────────────────────
+    // Its own form and route. It used to ride on the profile form, so a
+    // photo chosen alongside a phone number that failed validation was
+    // thrown away with the rest of the request.
+    public function updateAvatar(Request $request)
+    {
+        $user = Auth::user();
+
+        $request->validate([
+            'avatar' => 'required|image|mimes:jpg,jpeg,png,webp|max:3048',
+        ], [
+            'avatar.required' => 'Choose a photo first.',
+        ]);
+
+        if ($user->profile_image) {
+            Storage::disk('public')->delete($user->profile_image);
         }
 
-        $user->update($data);
+        $user->update(['profile_image' => $request->file('avatar')->store('avatars', 'public')]);
 
-        return back()->with('success', 'Profile updated successfully.');
+        return back()->with('success', 'Profile photo updated.');
     }
 
     // ── Delete Profile Photo ─────────────────────────────────────────
@@ -70,7 +87,7 @@ class ProfileController extends Controller
             $user->update(['profile_image' => null]);
         }
 
-        return back()->with('success', 'Profile photo removed successfully.');
+        return back()->with('success', 'Profile photo removed.');
     }
 
     // ── Change Password ─────────────────────────────────────────────
@@ -132,9 +149,11 @@ class ProfileController extends Controller
     // — never 2FA/verification/password-reset, which always send.
     public function toggleEmailNotifications(Request $request)
     {
-        Auth::user()->update(['email_notifications_enabled' => $request->boolean('email_notifications_enabled')]);
+        $on = $request->boolean('email_notifications_enabled');
 
-        return back()->with('success', 'Notification preference updated.');
+        Auth::user()->update(['email_notifications_enabled' => $on]);
+
+        return back()->with('success', $on ? 'Booking emails are on.' : 'Booking emails are off.');
     }
 
     // ── Toggle Two-Factor Authentication ────────────────────────────
@@ -162,7 +181,7 @@ class ProfileController extends Controller
             StaffLog::record('two_factor_disabled', 'users', $user->id,
                 'Two-factor authentication turned OFF by the account holder');
 
-            return back()->with('success', 'Two-factor authentication has been turned off.');
+            return back()->with('success', 'Two-factor login is off.');
         }
 
         $user->update(['two_factor_enabled' => true]);
@@ -170,7 +189,50 @@ class ProfileController extends Controller
         StaffLog::record('two_factor_enabled', 'users', $user->id,
             'Two-factor authentication turned on by the account holder');
 
-        return back()->with('success', 'Two-factor authentication is now on. A new device will need to verify via email before logging in.');
+        return back()->with('success', 'Two-factor login is on. Signing in on a new device now needs a code from your email.');
+    }
+
+    // ── Sign Out Everywhere Else ─────────────────────────────────────
+    // What changing the password already did, without changing it: for a
+    // guest who sees a sign-in they don't recognise but is not sure their
+    // password is known. Asks for the password, like turning 2FA off: a
+    // stolen session must not be able to sign the real owner out.
+    public function signOutOtherSessions(Request $request)
+    {
+        $user = Auth::user();
+
+        $request->validateWithBag('signOutOthers', ['password' => 'required|string']);
+
+        if (! Hash::check($request->password, $user->password)) {
+            return back()->withErrors(['password' => 'Password is incorrect.'], 'signOutOthers');
+        }
+
+        $revoked = $user->revokeOtherLogins($request->session()->getId());
+
+        // Deleting the session rows is not enough on its own: a device with
+        // a "keep me signed in" cookie would sign straight back in with it.
+        // A new remember token voids every such cookie, and this browser,
+        // if it had one, is given a fresh one so it is not the one signed
+        // out.
+        $user->forceFill(['remember_token' => Str::random(60)])->save();
+
+        $guard = Auth::guard();
+        if ($request->cookies->has($guard->getRecallerName())) {
+            $guard->login($user, true);
+        }
+
+        StaffLog::record('signed_out_other_sessions', 'users', $user->id,
+            "Guest signed out everywhere else — ended {$revoked['sessions']} other session(s) and {$revoked['devices']} trusted device(s)");
+
+        $message = $revoked['sessions'] > 0
+            ? 'You have been signed out everywhere else ('.$revoked['sessions'].' other '.Str::plural('sign-in', $revoked['sessions']).').'
+            : 'No other sign-ins were active.';
+
+        if ($revoked['devices'] > 0) {
+            $message .= ' Trusted devices will need an email code again.';
+        }
+
+        return back()->with('success', $message);
     }
 
     // ── Remove A Trusted Device ──────────────────────────────────────

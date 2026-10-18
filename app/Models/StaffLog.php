@@ -101,6 +101,7 @@ class StaffLog extends Model
         'password_changed',
         'password_reset_completed',
         'trusted_device_removed',
+        'signed_out_other_sessions',
         // Kept for the rows written before v7.79, when self-service was a
         // deactivation; nothing writes it now.
         'account_self_deactivated',

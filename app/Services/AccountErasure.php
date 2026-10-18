@@ -62,16 +62,19 @@ class AccountErasure
      * password) and again inside erase()'s lock, so a booking made in
      * another tab meanwhile still counts.
      *
-     * @return list<array{message: string, booking: ?Booking}>
+     * `upcoming` marks a stay that has not happened yet, so the profile page
+     * can summarise a long run of them instead of listing each one.
+     *
+     * @return list<array{message: string, booking: ?Booking, upcoming: bool}>
      */
     public static function problems(User $user): array
     {
         if (! User::anonymizedColumnExists()) {
-            return [['message' => 'Account deletion is not available right now. Please try again later.', 'booking' => null]];
+            return [['message' => 'Account deletion is not available right now. Please try again later.', 'booking' => null, 'upcoming' => false]];
         }
 
         if ($user->role !== 'customer') {
-            return [['message' => 'Only guest accounts can be deleted this way.', 'booking' => null]];
+            return [['message' => 'Only guest accounts can be deleted this way.', 'booking' => null, 'upcoming' => false]];
         }
 
         $problems = [];
@@ -102,7 +105,13 @@ class AccountErasure
             };
 
             if ($message) {
-                $problems[] = ['message' => $message, 'booking' => $booking];
+                $problems[] = [
+                    'message' => $message,
+                    'booking' => $booking,
+                    // The same test as the second arm of the match above.
+                    'upcoming' => $booking->status === 'confirmed'
+                        || ($booking->status === 'pending' && (float) $booking->amount_paid > 0),
+                ];
             }
         }
 
@@ -113,6 +122,7 @@ class AccountErasure
                 'message' => 'New bookings are paused on this account after several unpaid holds. The account can be deleted after '
                     .$endsAt->format('M j, g:i A').'.',
                 'booking' => null,
+                'upcoming' => false,
             ];
         }
 

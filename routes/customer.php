@@ -57,6 +57,7 @@ Route::prefix('my')
 
     Route::get('profile',          [ProfileController::class, 'edit'])->name('profile.edit');
     Route::put('profile',          [ProfileController::class, 'update'])->name('profile.update');
+    Route::post('profile/avatar',  [ProfileController::class, 'updateAvatar'])->name('profile.avatar.update');
     Route::delete('profile/avatar',[ProfileController::class, 'deleteAvatar'])->name('profile.avatar.destroy');
     Route::put('profile/password', [ProfileController::class, 'updatePassword'])->middleware('throttle:password-confirm')->name('profile.password');
     Route::delete('profile',       [ProfileController::class, 'destroy'])->middleware('throttle:password-confirm')->name('profile.destroy');
@@ -64,6 +65,7 @@ Route::prefix('my')
 
     Route::put('profile/2fa',                 [ProfileController::class, 'toggleTwoFactor'])->middleware('throttle:password-confirm')->name('profile.2fa.toggle');
     Route::delete('profile/devices/{device}', [ProfileController::class, 'removeTrustedDevice'])->name('profile.devices.destroy');
+    Route::delete('profile/sessions',        [ProfileController::class, 'signOutOtherSessions'])->middleware('throttle:password-confirm')->name('profile.sessions.destroy');
 
     Route::put('profile/email-notifications', [ProfileController::class, 'toggleEmailNotifications'])->name('profile.email-notifications');
 

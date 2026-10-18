@@ -1,7 +1,7 @@
 # Villa Elena Private Rental Resort
 ## Resort Management System — Project Documentation
 
-**Version:** 7.79
+**Version:** 7.80
 **Stack:** PHP 8.2 / Laravel 12 / MySQL 8 / Bootstrap 5
 **Local URL:** `http://127.0.0.1:8000` (`php artisan serve`) or `http://localhost:8000` (Docker — see v5.3)
 **Live URL:** `https://villa-elena.onrender.com` (Render, free tier — testing only, not yet handed to real guests)
@@ -124,6 +124,83 @@ tune:
 camera=(), microphone=(), geolocation=(), payment=(), usb=(),
 magnetometer=(), gyroscope=(), accelerometer=()
 ```
+
+---
+
+## What Changed in v7.80 (Read This First)
+
+### Guest Settings page: switches, structure, and two new actions
+
+A UI/UX review of `customer/profile.blade.php` (2026-10-18), measured in a
+browser at desktop and 390px.
+
+**Accessibility fixes**
+
+- **The switches had no keyboard focus.** The checkbox was `width: 0; height: 0`,
+  so Tab landed on it and nothing showed. It now covers the switch (invisible,
+  `position: absolute; inset: 0`) and the ring is drawn on the track. The photo
+  picker had the same fault (a 1px input behind a `<label>`); its ring is drawn
+  on the "Choose photo" button.
+- The switches inside the sections had no accessible name. They are
+  `role="switch"` with `aria-labelledby` / `aria-describedby` pointing at the
+  sentence beside them.
+- An off switch was `--border` on white (1.3:1). It is `--border-strong` (3:1).
+- The list's focus ring was gold (about 2.2:1 on white). It is `--stone`.
+
+**Structure**
+
+- **One switch per setting.** The list carried a second switch for two-factor
+  login and booking emails, beside the one in the open section. The list now
+  shows the state in words ("On" / "Off") and every row only opens a section.
+  That also removed the special "switch that opens the password form" in the
+  list, and the selected highlight that stopped short of the switch.
+- Two-factor login has one name ("Two-factor login"); the switch says what it
+  does ("Email me a code when I sign in on a new device") and how long a device
+  stays trusted (`AuthController::TRUSTED_DEVICE_DAYS`).
+- `Settings` is the page's `<h1>`; the list's own "Settings" heading is gone;
+  section titles are `<h2>` in sentence case, matching the list.
+- Delete account is last, in a group of its own.
+- On a phone the list no longer marks Profile as selected while nothing is open.
+- A switch saves with `requestSubmit()`, not `submit()`: only the first fires
+  the `submit` event that brings the guest back to the same section.
+- Colours are tokens (`--state-red*`, `--tag-*`); the disabled email field is
+  `--sand` instead of Bootstrap's grey; the inline styles are classes.
+
+**Delete account**
+
+- `AccountErasure::problems()` marks each reason `upcoming` (a stay that has not
+  happened yet). Past three, the page prints one line ("You have 21 upcoming
+  bookings, the first on …") with a link to My Bookings. A guest with 21 had a
+  page 2,733px tall on a phone; it is 869px.
+- The reasons come before the explanation of what deleting does.
+- The refusal from a submitted form is shown only when the live list is empty,
+  so the same list is not printed twice.
+
+**New**
+
+- **Sign out everywhere else** (`DELETE /my/profile/sessions`,
+  `ProfileController::signOutOtherSessions()`), in the Login activity section.
+  It asks for the password (a stolen session must not be able to sign the owner
+  out), calls `User::revokeOtherLogins()`, and **rotates `remember_token`**:
+  deleting session rows alone lets a device with a "keep me signed in" cookie
+  straight back in. This browser gets a fresh remember cookie if it had one.
+  Logged as `signed_out_other_sessions` (a security action). **It is offered only
+  when `SESSION_DRIVER=database`** (production): with file sessions nothing can
+  be ended, and the button would report that it had been.
+- **The profile photo has its own route** (`POST /my/profile/avatar`,
+  `updateAvatar()`). It used to ride on the profile form, so a photo chosen
+  alongside a phone number that failed validation was lost. The file input is
+  `form="avatarForm"`; Save changes no longer uploads a photo.
+- Login activity shows the date and time, not only "5 days ago", and says what
+  to do about an unfamiliar sign-in. Trusted devices says what a trusted device
+  is and shows each one's expiry.
+- The phone field is `type="tel"`; name, phone and address carry `autocomplete`.
+  "Contact the resort to change your email" now gives the resort's phone and
+  email from Settings (`GuestEmail::contact()`).
+
+Measured: a wrong password ends nothing; the right one ended two other session
+rows, kept the current one, removed the trusted devices and rotated the token
+(local database, rolled back).
 
 ---
 
