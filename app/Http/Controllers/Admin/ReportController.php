@@ -42,7 +42,7 @@ class ReportController extends Controller
         'online' => 'Online',
         'walk_in' => 'Walk-in',
         'phone' => 'Phone',
-        'partner' => 'Partner',
+        'partner' => 'Others',
     ];
 
     private const STATUS_LABELS = [

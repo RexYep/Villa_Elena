@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\User;
 use App\Models\Booking;
 use App\Models\StaffLog;
+use App\Services\AccountErasure;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Auth;
@@ -101,12 +102,31 @@ class UserController extends Controller
     // ── Show Edit Form ─────────────────────────────────────────────
     public function edit(User $user)
     {
+        if ($user->isAnonymized()) {
+            return $this->anonymizedRefusal($user);
+        }
+
         return view('admin.users.edit', compact('user'));
+    }
+
+    /**
+     * A deleted account stays deleted: giving it a name, an email or an
+     * active status again would rebuild the person the guest asked to have
+     * erased.
+     */
+    private function anonymizedRefusal(User $user)
+    {
+        return redirect()->route('admin.users.show', $user)
+            ->with('error', 'This account was deleted at the guest\'s request and cannot be edited or reactivated.');
     }
 
     // ── Update User ────────────────────────────────────────────────
     public function update(Request $request, User $user)
     {
+        if ($user->isAnonymized()) {
+            return $this->anonymizedRefusal($user);
+        }
+
         $request->validate([
             'full_name' => 'required|string|max:150',
             'email'     => 'required|email|unique:users,email,' . $user->id,
@@ -161,6 +181,26 @@ class UserController extends Controller
             return back()->with('error', 'You cannot delete your own account.');
         }
 
+        // A guest is never hard-deleted (v7.79). `bookings.user_id` and
+        // `payments.booking_id` cascade, so a DELETE here used to take the
+        // guest's whole booking and payment history with it — proof of
+        // transactions, and every past figure in the reports. A guest's
+        // erasure request ("write to us", Privacy Policy §08) goes through
+        // the same AccountErasure as the guest's own button.
+        if ($user->role === 'customer') {
+            if ($user->isAnonymized()) {
+                return back()->with('error', 'This account has already been deleted.');
+            }
+
+            if ($problems = AccountErasure::erase($user, AccountErasure::BY_ADMIN)) {
+                return back()->with('error', 'This guest account cannot be deleted yet: '
+                    .implode(' ', array_column($problems, 'message')));
+            }
+
+            return redirect()->route('admin.users.index')
+                ->with('success', 'The guest\'s personal details have been erased. Their booking and payment records are kept under "'.User::ANONYMIZED_NAME.'".');
+        }
+
         // F6: the id, captured before the delete. It used to pass NULL, so
         // the only handle on the deleted account was a display name — which
         // is not unique, not stable, and not a key. 72 rows in the live
@@ -183,6 +223,10 @@ class UserController extends Controller
     {
         if ($user->id === Auth::id()) {
             return back()->with('error', 'You cannot deactivate your own account.');
+        }
+
+        if ($user->isAnonymized()) {
+            return $this->anonymizedRefusal($user);
         }
 
         $user->update(['status' => !$user->status]);

@@ -714,7 +714,7 @@
                             </span>
 
                             <span class="badge-pill tag-purple">
-                                <i class="bi bi-people-fill me-1"></i> Partner
+                                <i class="bi bi-three-dots me-1"></i> Others
                             </span>
 
                         </div>
@@ -983,7 +983,7 @@
                     const sourceChart = new Chart(sourceCtx, {
                         type: 'doughnut',
                         data: {
-                            labels: ['Online', 'Walk-in', 'Phone', 'Partner'],
+                            labels: ['Online', 'Walk-in', 'Phone', 'Others'],
                             datasets: [{
                                 data: [
                                     {{ $stats['booking_sources']['online'] }},

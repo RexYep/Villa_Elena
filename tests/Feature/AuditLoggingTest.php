@@ -36,6 +36,10 @@ class AuditLoggingTest extends TestCase
 
         $this->withoutVite();
         $this->makeTables();
+
+        // Memoised per process; an earlier test class without the column
+        // would leave AccountErasure refusing every deletion here.
+        \Closure::bind(fn () => User::$anonymizedColumnExists = null, null, User::class)();
     }
 
     // ══════════════════════════════════════════════════════════════
@@ -112,14 +116,19 @@ class AuditLoggingTest extends TestCase
     public function test_a_destructive_action_still_completes_when_the_log_cannot_be_written(): void
     {
         $admin = $this->makeUser(role: 'admin');
-        $victim = $this->makeUser();
+        // Staff: since v7.79 only a staff or admin account is hard-deleted; a
+        // guest is erased in place (AccountErasureTest).
+        $victim = $this->makeUser(role: 'staff');
+        $guest = $this->makeUser();
 
         Log::spy();
         Schema::drop('staff_logs');
 
         $this->actingAs($admin)->delete("/admin/users/{$victim->id}")->assertRedirect();
+        $this->actingAs($admin)->delete("/admin/users/{$guest->id}")->assertRedirect();
 
         $this->assertNull(User::find($victim->id), 'The delete itself must not be held hostage by the logging of it.');
+        $this->assertNotNull(User::find($guest->id)->anonymized_at, 'Nor the erasure of a guest.');
     }
 
     // ══════════════════════════════════════════════════════════════
@@ -347,16 +356,16 @@ class AuditLoggingTest extends TestCase
         $this->assertStringContainsString('Chrome on Windows', $entry->description);
     }
 
-    public function test_self_deactivation_is_recorded_while_the_actor_is_still_known(): void
+    public function test_self_deletion_is_recorded_while_the_actor_is_still_known(): void
     {
         $user = $this->makeUser();
 
-        $this->actingAs($user)->delete('/my/profile', ['password' => 'the-real-password']);
+        $this->actingAs($user)->delete('/my/profile', ['password' => 'the-real-password', 'confirm_text' => 'DELETE']);
 
-        $entry = StaffLog::where('action', 'account_self_deactivated')->first();
+        $entry = StaffLog::where('action', 'account_erased')->first();
 
         $this->assertNotNull($entry);
-        // Recorded one line before Auth::logout(); afterwards this is null.
+        // Recorded before Auth::logout(); afterwards this is null.
         $this->assertSame($user->id, $entry->user_id, 'The actor must be captured before the logout wipes it.');
     }
 
@@ -626,7 +635,8 @@ class AuditLoggingTest extends TestCase
     public function test_deleting_a_user_records_the_id_not_just_a_name(): void
     {
         $admin = $this->makeUser(role: 'admin');
-        $victim = $this->makeUser();
+        // Staff: a guest is erased, not deleted, and logs `account_erased`.
+        $victim = $this->makeUser(role: 'staff');
         $victimId = $victim->id;
 
         $this->actingAs($admin)->delete("/admin/users/{$victimId}");
@@ -1118,10 +1128,11 @@ class AuditLoggingTest extends TestCase
         Schema::create('users', function ($table) {
             $table->id();
             $table->string('full_name');
-            $table->string('email')->unique();
+            $table->string('email')->nullable()->unique();
             $table->string('password');
             $table->string('role')->default('customer');
             $table->tinyInteger('status')->default(1);
+            $table->timestamp('anonymized_at')->nullable();
             $table->string('phone')->nullable();
             $table->text('address')->nullable();
             $table->string('profile_image')->nullable();

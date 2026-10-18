@@ -208,15 +208,15 @@ class RateLimitingTest extends TestCase
     {
         $user = (new User)->forceFill(['id' => 3]);
         Route::middleware(['web', 'throttle:password-confirm'])->put('/_limit/pw', fn () => 'ok')->name('customer.profile.password');
-        Route::middleware(['web', 'throttle:password-confirm'])->delete('/_limit/deactivate', fn () => 'ok')->name('customer.profile.deactivate');
+        Route::middleware(['web', 'throttle:password-confirm'])->delete('/_limit/delete-account', fn () => 'ok')->name('customer.profile.destroy');
 
         for ($i = 0; $i < 5; $i++) {
             $this->actingAs($user)->put('/_limit/pw')->assertOk();
         }
         $this->actingAs($user)->put('/_limit/pw')->assertSessionHasErrors('current_password', null, 'updatePassword');
 
-        // Same user, same counter — deactivate is blocked too, in its own bag.
-        $this->actingAs($user)->delete('/_limit/deactivate')->assertSessionHasErrors('password', null, 'deactivate');
+        // Same user, same counter — deleting the account is blocked too, in its own bag.
+        $this->actingAs($user)->delete('/_limit/delete-account')->assertSessionHasErrors('password', null, 'deleteAccount');
     }
 
     public function test_contact_form_uses_the_flash_key_the_home_page_reads(): void

@@ -266,6 +266,63 @@
             background: #b91c1c;
         }
 
+        .delete-facts {
+            margin: 0 0 16px;
+            padding-left: 20px;
+            font-size: 14px;
+            color: var(--muted);
+        }
+
+        .delete-facts li + li {
+            margin-top: 6px;
+        }
+
+        .delete-blockers {
+            background: var(--tag-red-bg);
+            color: var(--tag-red-fg);
+            border: 1px solid var(--state-red-line);
+            border-radius: 10px;
+            padding: 12px 14px;
+            font-size: 14px;
+            margin-bottom: 16px;
+        }
+
+        .delete-blockers ul {
+            margin: 6px 0 0;
+            padding-left: 20px;
+        }
+
+        .delete-blockers li + li {
+            margin-top: 6px;
+        }
+
+        .delete-blockers a {
+            color: inherit;
+            font-weight: 600;
+            margin-left: 4px;
+        }
+
+        .delete-blockers-title {
+            font-weight: 600;
+        }
+
+        .btn-code {
+            background: #fff;
+            color: var(--stone);
+            border: 1px solid var(--border-strong);
+            border-radius: 10px;
+            padding: 9px 14px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            font-family: var(--font-body);
+            margin-top: 6px;
+        }
+
+        .btn-code:hover {
+            border-color: var(--stone);
+        }
+
         .toggle-row {
             display: flex;
             align-items: center;
@@ -629,8 +686,8 @@
             $openPanel = 'two-factor';
         } elseif ($errors->updatePassword->any()) {
             $openPanel = 'password';
-        } elseif ($errors->deactivate->any()) {
-            $openPanel = 'deactivate';
+        } elseif ($errors->deleteAccount->any() || session('delete_code_sent')) {
+            $openPanel = 'delete';
         } elseif ($errors->getBag('default')->any()) {
             $openPanel = 'profile';
         }
@@ -652,8 +709,8 @@
                 <button type="button" class="rail-item" data-panel="password">
                     <i class="bi bi-key"></i> <span>Change password</span> <span class="chev">›</span>
                 </button>
-                <button type="button" class="rail-item is-danger" data-panel="deactivate">
-                    <i class="bi bi-exclamation-triangle"></i> <span>Deactivate account</span> <span
+                <button type="button" class="rail-item is-danger" data-panel="delete">
+                    <i class="bi bi-exclamation-triangle"></i> <span>Delete account</span> <span
                         class="chev">›</span>
                 </button>
             </div>
@@ -884,39 +941,123 @@
         </form>
             </div>
 
-            {{-- ── Deactivate Account ───────────────────────────────── --}}
-            <div class="settings-panel" id="panel-deactivate">
-                <form method="POST" action="{{ route('customer.profile.deactivate') }}"
-            data-confirm="Deactivate your account? You will be logged out and can't log back in until an admin reactivates it." data-confirm-label="Deactivate">
-            @csrf
-            @method('DELETE')
+            {{-- ── Delete Account ───────────────────────────────────── --}}
+            {{-- Erases the account's personal details and keeps its booking
+                 and payment records (App\Services\AccountErasure). The
+                 reasons it is refused are listed here BEFORE the password
+                 is typed; the server asks the same question again. --}}
+            <div class="settings-panel" id="panel-delete">
             <div class="danger-card">
                 <div class="form-card-head">
                     <i class="bi bi-exclamation-triangle text-red"></i>
-                    <h3 class="text-red">Deactivate Account</h3>
+                    <h3 class="text-red">Delete Account</h3>
                 </div>
                 <div class="form-card-body">
-                    <p class="hint" style="margin-bottom:16px;">
-                        Deactivating logs you out immediately and blocks further logins. Your existing bookings,
-                        payments, and reviews are kept — contact the resort to reactivate your account.
+                    <p class="hint mb-16">
+                        Deleting your account removes your name, email address, phone number, address,
+                        profile photo and sign-in history. <strong>It cannot be undone.</strong>
                     </p>
-                    <div class="mb-16">
-                        <label for="f_password_2" class="form-label">Confirm Password</label>
-                        <div class="pw-field">
-                            <input id="f_password_2" type="password" autocomplete="current-password" name="password"
-                            class="form-control @error('password', 'deactivate') is-invalid @enderror">
-                            <button type="button" class="pw-toggle" data-pw-toggle="f_password_2" aria-label="Show password">
-                                <i class="bi bi-eye" aria-hidden="true"></i>
-                            </button>
+
+                    <ul class="delete-facts">
+                        <li>Records of your bookings and payments are kept without your name, because the law
+                            requires us to keep proof of every transaction.</li>
+                        <li>Your reviews stay up under “{{ \App\Models\User::ANONYMIZED_NAME }}”. To remove one,
+                            delete it from <a href="{{ route('customer.reviews.index') }}">My Reviews</a> first.</li>
+                        <li>You can sign up again with the same email address, but the new account starts fresh:
+                            your past bookings and completed stays do not carry over, including toward
+                            returning-guest promos.</li>
+                    </ul>
+
+                    @if ($errors->deleteAccount->has('account'))
+                        <div class="delete-blockers" role="alert">
+                            @foreach ($errors->deleteAccount->get('account') as $message)
+                                <div>{{ $message }}</div>
+                            @endforeach
                         </div>
-                        @error('password', 'deactivate')
-                            <div class="field-error">{{ $message }}</div>
-                        @enderror
-                    </div>
-                    <button type="submit" class="btn-danger"><i class="bi bi-power"></i> Deactivate My Account</button>
+                    @endif
+
+                    @if (count($deletionProblems))
+                        <div class="delete-blockers">
+                            <div class="delete-blockers-title">Your account can't be deleted yet:</div>
+                            <ul>
+                                @foreach ($deletionProblems as $problem)
+                                    <li>
+                                        {{ $problem['message'] }}
+                                        @if ($problem['booking'])
+                                            <a href="{{ route('customer.bookings.show', $problem['booking']) }}">View booking</a>
+                                        @endif
+                                    </li>
+                                @endforeach
+                            </ul>
+                        </div>
+                    @else
+                        @if ($holdsToCancel->isNotEmpty())
+                            <p class="hint mb-16">
+                                Your unpaid {{ Str::plural('booking', $holdsToCancel->count()) }}
+                                {{ $holdsToCancel->pluck('booking_ref')->implode(', ') }}
+                                will be cancelled.
+                            </p>
+                        @endif
+
+                        @if ($user->two_factor_enabled)
+                            {{-- Its own form: a form cannot sit inside the delete form. --}}
+                            <form method="POST" action="{{ route('customer.profile.delete-code') }}" class="mb-16">
+                                @csrf
+                                <div class="field-label">Code from your email</div>
+                                <p class="hint">Two-factor login is on, so we email you a code to confirm this.</p>
+                                <button type="submit" class="btn-code"><i class="bi bi-envelope"></i>
+                                    {{ session('delete_code_sent') ? 'Send another code' : 'Email me a code' }}</button>
+                                @if (session('delete_code_sent'))
+                                    <div class="hint mt-8">Code sent. It works for {{ \App\Support\AccountDeletionCode::TTL_MINUTES }} minutes.</div>
+                                @endif
+                            </form>
+                        @endif
+
+                        <form method="POST" action="{{ route('customer.profile.destroy') }}"
+                            data-confirm="Delete your account? This cannot be undone." data-confirm-label="Delete account">
+                            @csrf
+                            @method('DELETE')
+
+                            @if ($user->two_factor_enabled)
+                                <div class="mb-16">
+                                    <label for="f_delete_code" class="form-label">Code</label>
+                                    <input id="f_delete_code" type="text" name="code" inputmode="numeric"
+                                        autocomplete="one-time-code" maxlength="6"
+                                        class="form-control @error('code', 'deleteAccount') is-invalid @enderror">
+                                    @error('code', 'deleteAccount')
+                                        <div class="field-error">{{ $message }}</div>
+                                    @enderror
+                                </div>
+                            @endif
+
+                            <div class="mb-16">
+                                <label for="f_password_2" class="form-label">Your Password</label>
+                                <div class="pw-field">
+                                    <input id="f_password_2" type="password" autocomplete="current-password" name="password"
+                                    class="form-control @error('password', 'deleteAccount') is-invalid @enderror">
+                                    <button type="button" class="pw-toggle" data-pw-toggle="f_password_2" aria-label="Show password">
+                                        <i class="bi bi-eye" aria-hidden="true"></i>
+                                    </button>
+                                </div>
+                                @error('password', 'deleteAccount')
+                                    <div class="field-error">{{ $message }}</div>
+                                @enderror
+                            </div>
+
+                            <div class="mb-16">
+                                <label for="f_confirm_text" class="form-label">Type DELETE to confirm</label>
+                                <input id="f_confirm_text" type="text" name="confirm_text" autocomplete="off"
+                                    class="form-control @error('confirm_text', 'deleteAccount') is-invalid @enderror">
+                                @error('confirm_text', 'deleteAccount')
+                                    <div class="field-error">{{ $message }}</div>
+                                @enderror
+                            </div>
+
+                            <button type="submit" class="btn-danger"><i class="bi bi-trash"></i> Delete My Account</button>
+                        </form>
+                    @endif
                 </div>
             </div>
-        </form>
             </div>
 
             {{-- ── Booking emails ───────────────────────────────────── --}}

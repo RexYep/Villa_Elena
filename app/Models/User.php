@@ -22,6 +22,7 @@ use Illuminate\Support\Facades\Schema;
  * @property string|null $id_type
  * @property string|null $id_number
  * @property int $status 1=Active, 0=Deactivated
+ * @property \Illuminate\Support\Carbon|null $anonymized_at When the account was deleted (AccountErasure)
  * @property bool $two_factor_enabled
  * @property \Illuminate\Support\Carbon|null $email_verified_at
  * @property string|null $remember_token
@@ -143,6 +144,7 @@ class User extends Authenticatable implements MustVerifyEmail
 
     protected $casts = [
         'email_verified_at' => 'datetime',
+        'anonymized_at' => 'datetime',
         'last_login' => 'datetime',
         'password' => 'hashed',
         'status' => 'integer',
@@ -322,6 +324,64 @@ class User extends Authenticatable implements MustVerifyEmail
     public function isActive(): bool
     {
         return (int) $this->status === 1;
+    }
+
+    // ── Deleted accounts ───────────────────────────────────────────
+
+    /**
+     * The name a deleted account is left with. It is what a review by a
+     * deleted guest shows, and what the admin pages show for their bookings.
+     */
+    public const ANONYMIZED_NAME = 'Former Guest';
+
+    protected static ?bool $anonymizedColumnExists = null;
+
+    /**
+     * Code deployed ahead of the migration must not turn the walk-in and
+     * admin booking pages into SQL errors, so every query on the column asks
+     * this first.
+     */
+    public static function anonymizedColumnExists(): bool
+    {
+        if (static::$anonymizedColumnExists === null) {
+            try {
+                static::$anonymizedColumnExists = Schema::hasColumn('users', 'anonymized_at');
+            } catch (\Throwable $e) {
+                static::$anonymizedColumnExists = false;
+            }
+        }
+
+        return static::$anonymizedColumnExists;
+    }
+
+    /** True once AccountErasure has cleared this account's personal details. */
+    public function isAnonymized(): bool
+    {
+        return $this->anonymized_at !== null;
+    }
+
+    /**
+     * Leaves out deleted accounts. Every list a person picks a guest from
+     * (walk-in, admin booking) must use it, or staff can book a stay for
+     * "Former Guest".
+     */
+    public function scopeNotAnonymized($query)
+    {
+        return static::anonymizedColumnExists()
+            ? $query->whereNull($query->qualifyColumn('anonymized_at'))
+            : $query;
+    }
+
+    /**
+     * The validation rule for "the guest this booking is for" on the staff
+     * and admin forms. The dropdowns already leave deleted accounts out;
+     * this is the barrier, since a posted `user_id` need not come from them.
+     */
+    public static function bookableGuestRule(): \Illuminate\Validation\Rules\Exists
+    {
+        $rule = \Illuminate\Validation\Rule::exists('users', 'id')->where('role', 'customer');
+
+        return static::anonymizedColumnExists() ? $rule->whereNull('anonymized_at') : $rule;
     }
 
     public function getFullNameAttribute($value): string

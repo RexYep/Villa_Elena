@@ -61,7 +61,11 @@ class InsightsController extends Controller
         );
 
         return $refreshed === null
-            ? back()->with('error', 'Insights could not be refreshed right now — the analysis service did not respond. The figures above are unaffected.')
+            ? back()->with('error', $this->aiFailureMessage(
+                $gemini,
+                'Insights could not be refreshed',
+                'The figures above are unaffected.'
+            ))
             : back()->with('success', 'Insights refreshed.');
     }
 

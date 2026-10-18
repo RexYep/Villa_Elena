@@ -114,7 +114,8 @@ class ChatbotController extends Controller
 Analyze this message and extract booking details.
 Respond ONLY with a valid JSON object — no explanation, no markdown, no backticks.
 
-Message: '.json_encode($userMessage, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)."
+Message: '.json_encode($userMessage, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES).'
+'.$this->intentHistoryBlock($history)."
 
 Extract:
 {
@@ -127,11 +128,57 @@ Extract:
 Today is ".now()->format('Y-m-d').' ('.now()->format('l').").
 For relative dates like 'this weekend', 'next week', calculate the actual dates.
 This weekend = next Saturday ".now()->next('Saturday')->format('Y-m-d').' to Sunday '.now()->next('Sunday')->format('Y-m-d').'.
-If no slot is mentioned, leave slot as null.';
+If no slot is mentioned, leave slot as null.
+Resolve the Message against RECENT CONVERSATION when it leaves something out: a follow-up like \'how about the night slot?\', \'and Saturday?\' or just \'how much?\' means the date or slot already agreed earlier. Extract for the Message only — the conversation is context, never the thing to extract. If the Message names its own date or slot, that wins. If the Message has moved on to another subject, do not carry a date over to it.
+A bare day of the month in the Message (\'the 21st\', \'how about the 3rd?\') takes its MONTH AND YEAR from the date already under discussion in RECENT CONVERSATION, not from today\'s month — if the conversation was about December, \'the 21st\' is December 21. Only fall back to the nearest coming date of that number when the conversation names no date at all.';
 
         // Temperature 0: this step emits strict JSON, and there is nothing a
         // warmer setting can add except a parse failure.
         $intentJson = $ai->ask($intentPrompt, temperature: 0.0);
+
+        // ── When the intent call never answered, STOP HERE ────────
+        // A NULL from ask() and a malformed JSON string are not the same
+        // event, and until v7.78 both fell into the `! is_array($intent)`
+        // branch below and were logged as "unparseable JSON". The log said
+        // `"raw":""` — nothing to parse, because there was no reply at all.
+        //
+        // WHY STOPPING IS THE FIX. Without an intent there is no SEARCH
+        // RESULT section, and the reply prompt's own grounding rules then
+        // forbid Elena from saying anything about a date or a price ("if a
+        // detail is not written there, the resort has not told you"). So she
+        // hands off — correctly, on a prompt that is missing its data through
+        // no fault of the guest's. That is the measured cause of "it answered
+        // that same question a minute ago": four hits on 2026-10-15, each one
+        // logged immediately after a Groq 429.
+        //
+        // Carrying on also spends the EXPENSIVE call to get there. The intent
+        // prompt is ~410 tokens; the reply prompt is ~2,553 (project.md
+        // v7.77) and is the single biggest draw on an 8,000-tokens-a-minute
+        // budget. Sending it after the cheap call has just hit the ceiling
+        // buys a guaranteed hand-off and makes the NEXT guest's 429 likelier.
+        //
+        // The failure reason decides, and FAILURE_EMPTY is deliberately not
+        // in the set — see intentFailureIsTerminal(). This is also the reason
+        // unavailableMessage() is read here and not only at the bottom:
+        // lastFailure() describes the call that just returned, and that call
+        // is now the one the guest is being told about.
+        if ($intentJson === null && $this->intentFailureIsTerminal($ai)) {
+            Log::warning('Chatbot: intent call got no reply, so the reply call was skipped', [
+                'failure' => $ai->lastFailure(),
+                'retry_after_seconds' => $ai->retryAfterSeconds(),
+                'message' => mb_substr($userMessage, 0, 300),
+                'ip' => $request->ip(),
+            ]);
+
+            return response()->json([
+                'ok' => false,
+                'reply' => $this->unavailableMessage($ai),
+                'property_cards' => [],
+                // Nothing was extracted, so nothing is claimed about what the
+                // guest wanted.
+                'intent' => 'general_question',
+            ]);
+        }
 
         // Clean JSON response
         $intentJson = preg_replace('/```json|```/', '', $intentJson ?? '');
@@ -144,6 +191,13 @@ If no slot is mentioned, leave slot as null.';
         // — ang eksaktong estadong pinaka-madalas mag-imbento ng sagot. Walang
         // makikita sa log kung hindi ito itatala.
         if (! is_array($intent)) {
+            // Reached only when the provider DID answer and the answer was not
+            // JSON (or was an empty body — FAILURE_EMPTY, the one reason the
+            // guard above lets through). A NULL from a call that never
+            // happened is handled above and never arrives here, which is what
+            // makes this message true again: it used to fire on every 429 and
+            // log `"raw":""`, so the log named the wrong cause.
+            //
             // The guest's own words are capped at 300 like every other site that
             // logs them (v7.40). This one was uncapped, and it is not a rare
             // path: it fires whenever the model returns unparseable JSON, which
@@ -172,122 +226,124 @@ If no slot is mentioned, leave slot as null.';
             // Ang mga bookable lang — kung hindi, ang isang naimbentong
             // slot ng modelo ay dadaan sa quoteFor() at magiging 422 sa
             // gitna ng isang usapan.
-            $slot = in_array($intent['slot'] ?? null, $slotParts['keys'], true)
-                ? $intent['slot']
-                : $slotParts['default'];
-            $guests = $intent['guests'] ?? null;
-
-            // Ang hiniling na slot ay dapat TUNAY na inaalok sa petsang
-            // iyon, kung hindi ay aabort ang quoteFor() sa 422 at ang
-            // makikita ng guest ay isang error page sa gitna ng usapan.
             //
-            // Kapag hindi inaalok, ililipat sa isang inaalok sa parehong
-            // petsa at SASABIHIN ito sa prompt — hindi tahimik na papalitan.
-            // Ang tahimik na paglipat ay nagbubunga ng sagot na tungkol sa
-            // ibang produkto kaysa sa itinanong.
-            $slotSwitchNote = '';
+            // NULL ANG IBIG SABIHIN NG "WALANG SINABING SLOT", at iyon ang
+            // buong punto ng v7.78. Dati, ang fallback nito ay
+            // `$slotParts['default']` — ang UNANG bookable key, laging
+            // `day`. Kaya ang "available ba sa Dec 25?" ay tumitingin sa
+            // Day LAMANG: kapag booked ang Day at bakante ang Night,
+            // tinatanggihan ni Elena ang isang petsang kayang-kaya pa
+            // naman ipagbili. Hindi iyon malabong sagot — mali ito, at
+            // nagkakahalaga ng booking.
+            $askedSlot = in_array($intent['slot'] ?? null, $slotParts['keys'], true)
+                ? $intent['slot']
+                : null;
+            // Galing ito sa modelo, kaya pinipilit na maging positibong
+            // integer o NULL — tulad ng ginagawa ng safeCheckinDate() sa
+            // petsa at ng in_array() sa slot. HINDI ito pampaganda: ipinapasa
+            // na ito ngayon sa isang `?int` na parameter (slotOutcome()), at
+            // sa PHP 8 ay nagtatapon ng TypeError ang isang hindi-numerong
+            // string doon — ibig sabihin, isang 500 sa isang pampublikong
+            // endpoint kapag sumagot ang modelo ng `"guests": "many"`.
+            $guests = filter_var($intent['guests'] ?? null, FILTER_VALIDATE_INT);
+            $guests = ($guests !== false && $guests > 0) ? $guests : null;
 
             if ($checkin) {
                 $offeredThen = Booking::slotsOfferedOn($checkin, $villa);
+                $date = self::promptDate($checkin);
 
-                if (! in_array($slot, $offeredThen, true)) {
-                    $asked = Booking::SLOTS[$slot]['name'] ?? $slot;
-
-                    if (! $offeredThen) {
-                        $slotSwitchNote = "No booking slot is offered on {$checkin->format('M d, Y')} at all. ";
-                        $slot = null;
-                    } else {
-                        $slot = $offeredThen[0];
-                        $now = Booking::SLOTS[$slot]['name'] ?? $slot;
-                        $slotSwitchNote = "The guest asked about the {$asked} slot, but "
-                            ."{$checkin->format('M d, Y')} is offered as {$now} only — "
-                            .'say so plainly, and give the details below for that slot instead. ';
-                    }
-                }
-            }
-
-            if ($checkin && $slot) {
-                [$checkinDt, $checkoutDt] = Booking::slotDateTimes($slot, $checkin->format('Y-m-d'));
-
-                $guestOk = ! $guests || $guests <= $villa->max_capacity;
-                $isAvailable = ! Booking::hasConflict($villa->id, $checkinDt, $checkoutDt);
-                // quoteFor() — HINDI getPackagePrice() — para tugma ang
-                // sinasabi ni Elena sa presyong makikita ng guest sa
-                // property page at sisingilin sa booking form. Kung
-                // magkaiba ang dalawa, ang chatbot ang unang mapapansing
-                // nagsisinungaling.
-                //
-                // Ipinapasa ang naka-login na guest, kung mayroon: kung
-                // regular na customer siya, ang presyong sinasabi ni
-                // Elena ay ang SA KANYA. Puwedeng anonymous ang chat
-                // (walang `auth` ang route), at sa gayong kaso ay list
-                // price — kailanman hindi isang bawas na pangako sa
-                // taong hindi pa natin kilala.
-                $quote = $villa->quoteFor($checkinDt, $slot, Auth::user());
-                $packagePrice = $quote['total'];
-                $slotLabel = Booking::SLOTS[$slot]['label'];
-
-                $bookUrl = route('portal.property', $villa)
-                    .'?checkin='.$checkin->format('Y-m-d')
-                    .'&slot='.$slot
-                    .'&guests='.($guests ?? 2);
-
-                // Ang paglipat ng slot ay nauuna sa lahat: iyon ang unang
-                // bagay na kailangang malaman ng guest kung nagtanong siya
-                // tungkol sa ibang slot.
-                $contextData = $slotSwitchNote;
-
-                if (! $guestOk) {
-                    $contextData .= "The requested guest count ({$guests}) exceeds Villa Elena's max capacity of {$villa->max_capacity} guests.";
-                } elseif ($isAvailable) {
-                    $propertyCards[] = [
-                        'id' => $villa->id,
-                        'name' => $villa->property_name,
-                        'type' => 'Whole Villa (Exclusive)',
-                        'capacity' => $villa->max_capacity,
-                        // `price` ang aktwal na babayaran; `base_price` ang
-                        // presyo bago ang bawas, para may maitawid na
-                        // numero ang card kapag may promo.
-                        'price' => $packagePrice,
-                        'base_price' => $quote['base'],
-                        'discount' => $quote['discount'],
-                        'promo' => $quote['promo']?->label,
-                        'slot_label' => $slotLabel,
-                        'status' => $villa->status,
-                        'amenities' => is_array($villa->amenities) ? array_slice($villa->amenities, 0, 3) : [],
-                        'book_url' => $bookUrl,
-                        'image' => $villa->primaryImage ? $villa->primaryImage->url : null,
-                    ];
-
-                    $contextData .= "Villa Elena IS AVAILABLE for {$checkin->format('M d, Y')}, {$slotLabel} slot. ";
-
-                    if ($quote['discount'] > 0) {
-                        $contextData .= 'Package price: ₱'.number_format($quote['base'], 2)
-                            .", but the \"{$quote['promo']->label}\" promo ({$quote['promo']->value_label}) applies to this date, so the guest pays ₱"
-                            .number_format($packagePrice, 2).' — a saving of ₱'.number_format($quote['discount'], 2)
-                            .'. The discount is applied AUTOMATICALLY; there is no code to enter. Mention this saving to the guest.';
-                    } else {
-                        $contextData .= 'Package price: ₱'.number_format($packagePrice, 2)
-                            .' (flat rate, not per guest). No promo applies to this particular date/slot.';
-                    }
+                // Ang kapasidad ay humahadlang sa lahat: walang saysay ang
+                // presyo ng isang slot na hindi kasya ang grupo. Nauuna ito
+                // sa pagsusuri ng slot, gaya ng dati.
+                if ($guests && $guests > $villa->max_capacity) {
+                    $contextData = "The requested guest count ({$guests}) exceeds Villa Elena's max capacity of {$villa->max_capacity} guests.";
+                } elseif (! $offeredThen) {
+                    // Walang anumang slot na inaalok sa petsang iyon —
+                    // bihira, pero hindi puwedeng maiwan nang walang sagot:
+                    // kung wala itong sangay, walang SEARCH RESULT at ang
+                    // tagubilin sa prompt ay huhilingin kay Elena na
+                    // magtanong ng petsa na ibinigay naman na ng guest.
+                    $contextData = "No booking slot is offered on {$date} at all. "
+                        .'Tell the guest that date is not open for booking and ask for another.';
                 } else {
-                    $contextData .= "Villa Elena is NOT available for {$checkin->format('M d, Y')}, {$slotLabel} slot — it's already booked. Suggest the guest try a different date or another slot ({$slotParts['names']}).";
+                    // Ang hiniling na slot ay dapat TUNAY na inaalok sa
+                    // petsang iyon, kung hindi ay aabort ang quoteFor() sa
+                    // 422 at ang makikita ng guest ay isang error page sa
+                    // gitna ng usapan.
+                    //
+                    // Kapag hindi inaalok, ililipat sa isang inaalok sa
+                    // parehong petsa at SASABIHIN ito sa prompt — hindi
+                    // tahimik na papalitan. Ang tahimik na paglipat ay
+                    // nagbubunga ng sagot na tungkol sa ibang produkto
+                    // kaysa sa itinanong.
+                    $slotSwitchNote = '';
+
+                    if ($askedSlot !== null && ! in_array($askedSlot, $offeredThen, true)) {
+                        $asked = Booking::SLOTS[$askedSlot]['name'] ?? $askedSlot;
+                        $now = Booking::SLOTS[$offeredThen[0]]['name'] ?? $offeredThen[0];
+                        $slotSwitchNote = "The guest asked about the {$asked} slot, but "
+                            ."{$date} is offered as {$now} only — "
+                            .'say so plainly, and give the details below for that slot instead. ';
+                        $slots = [$offeredThen[0]];
+                    } elseif ($askedSlot !== null) {
+                        $slots = [$askedSlot];
+                    } else {
+                        // WALANG SINABING SLOT: susuriin ang LAHAT ng
+                        // inaalok sa petsang iyon, isa-isa. Dalawa lang ito
+                        // sa ordinaryong petsa (Day at Night) at iisa sa
+                        // petsang 22-oras, kaya ang dagdag na gastos ay
+                        // isang linya ng konteksto at isang quoteFor().
+                        $slots = $offeredThen;
+
+                        // Sa petsang 22-oras, ITO LANG ang inaalok. Kung
+                        // hindi sasabihin, maaaring ipahiwatig ni Elena na
+                        // mapipili pa rin ang Day o Night doon.
+                        if (count($offeredThen) === 1) {
+                            $only = Booking::SLOTS[$offeredThen[0]]['name'] ?? $offeredThen[0];
+                            $slotSwitchNote = "The guest named no slot. On {$date} the ONLY slot offered is "
+                                ."{$only} — Day and Night are not available that day. ";
+                        }
+                    }
+
+                    // Ang paglipat ng slot (o ang pagka-eksklusibo ng
+                    // petsa) ay nauuna sa lahat: iyon ang unang bagay na
+                    // kailangang malaman ng guest.
+                    $contextData = $slotSwitchNote;
+                    $lines = [];
+                    $anyFree = false;
+
+                    foreach ($slots as $slotKey) {
+                        [$card, $line] = $this->slotOutcome($villa, $checkin, $slotKey, $guests);
+
+                        if ($card) {
+                            $propertyCards[] = $card;
+                            $anyFree = true;
+                        }
+
+                        $lines[] = $line;
+                    }
+
+                    $contextData .= count($lines) > 1
+                        ? "Villa Elena on {$date} — every slot offered that date, with the result for each:\n- "
+                            .implode("\n- ", $lines)."\n"
+                            .'Answer about the slot the guest asked about if there was one; otherwise name what IS free and its price. '
+                            .'If one slot is taken and another is free, say exactly that — do NOT call the whole date unavailable.'
+                        : $lines[0];
+
+                    if (! $anyFree) {
+                        $contextData .= ' Every slot offered on that date is taken, so the date itself is fully booked —'
+                            .' suggest the guest try another date.';
+                    }
                 }
-            } elseif ($checkin && ! $slot) {
-                // Walang anumang slot na inaalok sa petsang iyon — bihira,
-                // pero hindi puwedeng maiwan nang walang sagot: kung wala
-                // itong sangay, walang SEARCH RESULT at ang tagubilin sa
-                // prompt ay huhilingin kay Elena na magtanong ng petsa na
-                // ibinigay naman na ng guest.
-                $contextData = $slotSwitchNote
-                    .'Tell the guest that date is not open for booking and ask for another.';
             } elseif (($intent['intent'] ?? '') === 'get_price') {
                 // Walang petsang binanggit, kaya hindi masasabi kung
                 // tumatama ba ang isang promo — nakadepende iyon sa
                 // check-in date. Ibinibigay ang list price at ipinaaalam
                 // na may promo, sa halip na mangako ng bawas na baka
                 // hindi naman pala tumama sa petsang pipiliin niya.
-                $contextData = "Villa Elena package pricing BEFORE any promo (flat rate regardless of number of guests, up to {$villa->max_capacity} max): ₱".number_format($villa->base_price, 2).' for Monday–Thursday check-in and Sunday check-in after 6:00 PM. ₱'.number_format($villa->weekend_price, 2).' for Friday, Saturday, or Sunday check-in before 6:00 PM.';
+                $contextData = "Villa Elena list pricing BEFORE any promo (flat rate regardless of number of guests, up to {$villa->max_capacity} max):
+"
+                    .$this->rateLines($villa);
 
                 if (Discount::publicActive(Auth::user())->isNotEmpty()) {
                     $contextData .= " A promo may lower this — see CURRENT PROMOS. Whether it applies depends on the check-in date, and the guest hasn't given one yet, so ask for their preferred date rather than promising a discounted figure.";
@@ -302,7 +358,13 @@ If no slot is mentioned, leave slot as null.';
             $villaInfo .= "Villa Elena — the ONE whole property, rented EXCLUSIVELY (not per room, not per head):\n";
             $villaInfo .= "- Max capacity: {$villa->max_capacity} guests\n";
             $villaInfo .= "- Includes all {$rooms->count()} rooms in a single booking\n";
-            $villaInfo .= '- Flat package pricing: ₱'.number_format($villa->base_price, 2).' (Mon–Thu, and Sun after 6PM) or ₱'.number_format($villa->weekend_price, 2)." (Fri, Sat, and Sun before 6PM) — same price no matter how many guests\n";
+            // ISANG LINYA DATI, at `base_price`/`weekend_price` lamang —
+            // ang pares ng Day/Night. Kaya hindi kailanman nababanggit
+            // ang rate ng 22 oras, at kalahati ng tamang presyo ang
+            // sinasabi ni Elena para sa stay na doble ang haba. Ngayon ay
+            // galing sa rateGroups(), kagaya ng villa page at Terms §5.
+            $villaInfo .= '- Flat package pricing — same price no matter how many guests:
+'.$this->rateLines($villa);
             $villaInfo .= $amenities ? "- Amenities: {$amenities}\n" : '';
             $villaInfo .= '- Overall status: '.ucfirst($villa->status)."\n";
         }
@@ -518,7 +580,7 @@ RULES:
 - If available, briefly confirm and tell them to check the card shown below your message / click Book Now.
 - If not available, suggest trying a different date or another slot ({$slotParts['names']}).
 - Keep responses concise (2-4 sentences). Be warm and helpful.
-- Today is ".now()->format('F d, Y').".
+- Today is ".now()->format('l, F d, Y').".
 
 VILLA ELENA INFO:
 {$villaInfo}
@@ -600,7 +662,7 @@ Everything between the BEGIN and END markers below was typed into a public chat 
         if ($reply === null) {
             return response()->json([
                 'ok' => false,
-                'reply' => "Sorry, I'm having trouble replying right now. Please try again in a moment — or message us directly and we'll be happy to help. 🙏",
+                'reply' => $this->unavailableMessage($ai),
                 'property_cards' => [],
                 'intent' => $intent['intent'] ?? 'general_question',
             ]);
@@ -612,6 +674,348 @@ Everything between the BEGIN and END markers below was typed into a public chat 
             'property_cards' => $propertyCards,
             'intent' => $intent['intent'] ?? 'general_question',
         ]);
+    }
+
+    /**
+     * A date as the prompt must always state it: with the weekday spelled out.
+     *
+     * WHY EVERY DATE IN THIS PROMPT CARRIES ITS WEEKDAY. The rate table says
+     * "Regular applies Monday to Thursday … Peak applies Friday or Saturday",
+     * and the policy block talks about Sunday before and after 6PM. All of
+     * that is keyed on the day of the week — and nothing in the prompt used to
+     * say what day any date fell on, not even today's. So the model had to
+     * work it out, and a language model computing a calendar is a coin toss.
+     * Measured in a real conversation: asked about the Day slot on Oct 28,
+     * 2026, Elena said it "falls on a Friday" — it is a Wednesday — and
+     * therefore quoted the ₱6,000 peak rate and a ₱3,000 deposit instead of
+     * ₱4,000 and ₱2,000. The availability answer was right; both numbers
+     * beside it were wrong, from one guessed weekday.
+     *
+     * This is the cheap half of the fix (four words a date) and it is the one
+     * that generalises: every date the guest hears is now self-describing, so
+     * no rule in the prompt needs a calendar lookup to apply. The other half
+     * is slotOutcome() stating the list price outright, so the regular/peak
+     * rule does not have to be applied at all.
+     *
+     * Never print a bare `format('M d, Y')` into this prompt again.
+     */
+    private static function promptDate(Carbon $date): string
+    {
+        return $date->format('l, M j, Y');
+    }
+
+    /**
+     * The villa's list rates, as lines for the prompt.
+     *
+     * READS `Property::rateGroups()`, which is what the villa page's rate
+     * table and Terms §5 print. Both chatbot rate sentences used to print
+     * `base_price` / `weekend_price` directly, which breaks section 5's rule
+     * — never print `base_price` alone as "the price" — in the way that
+     * matters most here: those two columns are the Day/Night pair only, so
+     * the 22-hour rate (its own `base_price_22h` / `weekend_price_22h` pair,
+     * ₱8,000 against ₱4,000 on this database) was never mentioned at all.
+     * Elena quoted half price for a stay twice as long, and under the v7.20
+     * grounding rule she had no way to know better: the prompt was the whole
+     * extent of what she knew.
+     *
+     * One group per price-column pair, so a new slot or a new rate appears
+     * here with no edit — the same reason `legalRateGroups()` exists.
+     *
+     * THE 22-HOUR GROUP IS LABELLED "selected dates only" FROM
+     * `selected_dates`, not from a hardcoded slot name. A rate the guest
+     * cannot book on the date they have in mind is worse than no rate: it
+     * reads as a cheaper option being withheld. The villa page marks it the
+     * same way.
+     *
+     * These are LIST prices. A `pricing_rules` override or a promo for a
+     * particular date is not in them, which is exactly why this is only ever
+     * used where no date is known. Once there is a date, `quoteFor()` answers
+     * — see slotOutcome().
+     */
+    private function rateLines(Property $villa): string
+    {
+        $groups = $villa->rateGroups();
+
+        if (! $groups) {
+            return '';
+        }
+
+        $out = '';
+
+        foreach ($groups as $group) {
+            $names = collect($group['names'])->join(', ', ' or ');
+            $out .= "- {$names}: ₱".number_format($group['regular'], 2).' regular';
+            $out .= $group['peak'] != $group['regular']
+                ? ', ₱'.number_format($group['peak'], 2).' peak'
+                : ' (same rate peak or regular)';
+            $out .= $group['selected_dates']
+                ? ' — offered on selected check-in dates only, and on such a date it is the ONLY slot available'
+                : '';
+            $out .= "\n";
+        }
+
+        // Ang panuntunan ng regular/peak, sa PAREHONG pananalita ng villa
+        // page at ng Terms §5. Sinusundan ito ng getPackagePrice(): ang
+        // CHECK-IN TIME ang nagpapasya, kaya sa Linggo ay peak ang 8AM at
+        // regular ang 7PM — iyon ang dahilan kung bakit kailangang sabihin
+        // ang oras at hindi lang ang araw.
+        $out .= 'Regular applies when the slot STARTS Monday to Thursday, or Sunday from 6:00 PM onwards. '
+            ."Peak applies when it starts Friday or Saturday, or Sunday before 6:00 PM.\n";
+
+        return $out;
+    }
+
+    /**
+     * One slot on one date: the card to show, and the sentence for the prompt.
+     *
+     * Lifted out of reply() unchanged in substance (v7.78) so it can run once
+     * when the guest named a slot, or once per offered slot when they did not.
+     * Before, a date with no slot named was silently evaluated as `day` — the
+     * first bookable key — so "is Dec 25 free?" never looked at Night, and a
+     * date whose Day was booked was reported as unavailable while its Night
+     * sat open.
+     *
+     * The card is NULL when the slot is taken; the sentence is returned either
+     * way, because "Night is booked" is an answer and the prompt's grounding
+     * rules mean Elena cannot say it unless it is written here.
+     *
+     * @return array{0: ?array<string, mixed>, 1: string}
+     */
+    private function slotOutcome(Property $villa, Carbon $checkin, string $slot, ?int $guests): array
+    {
+        [$checkinDt, $checkoutDt] = Booking::slotDateTimes($slot, $checkin->format('Y-m-d'));
+
+        $slotLabel = Booking::SLOTS[$slot]['label'];
+        $date = self::promptDate($checkin);
+
+        if (Booking::hasConflict($villa->id, $checkinDt, $checkoutDt)) {
+            // ANG PRESYO AY SINASABI KAHIT BOOKED NA, at may dahilan iyon.
+            //
+            // Dati ay "NOT available … already booked." lang ang linyang ito
+            // — walang pigura. Pero nasa prompt ang talahanayan ng rate at
+            // ang panuntunan ng regular/peak, kaya kapag tinanong ng guest
+            // ang deposito, KINAKALKULA ni Elena ang presyo mula sa
+            // panuntunan: hinuhulaan ang araw ng linggo, at sa totoong usapan
+            // ay sinabi niyang "Friday" ang Oct 28, 2026 (Miyerkules talaga),
+            // kaya ₱6,000 peak at ₱3,000 deposito — dalawang maling numero
+            // mula sa isang maling araw.
+            //
+            // getPackagePrice(), HINDI quoteFor(): list price ito, at ang
+            // quoteFor() ay nagbabawas ng promo — isang pangakong hindi
+            // makukuha sa slot na hindi na naman mababook. Ito ang eksaktong
+            // "bare list price" na sinasabi ng §5 na tanging gamit nito.
+            $line = "{$slotLabel}: NOT available on {$date} — already booked.";
+
+            if ($villa->isSlotPriced($slot)) {
+                $line .= ' (For reference only, since it cannot be booked: the list price for this slot on this date is ₱'
+                    .number_format($villa->getPackagePrice($checkinDt, $slot), 2)
+                    .'. Do NOT work a rate out from the weekday yourself — use this figure or say nothing about price.)';
+            }
+
+            return [null, $line];
+        }
+
+        // quoteFor() — HINDI getPackagePrice() — para tugma ang
+        // sinasabi ni Elena sa presyong makikita ng guest sa
+        // property page at sisingilin sa booking form. Kung
+        // magkaiba ang dalawa, ang chatbot ang unang mapapansing
+        // nagsisinungaling.
+        //
+        // Ipinapasa ang naka-login na guest, kung mayroon: kung
+        // regular na customer siya, ang presyong sinasabi ni
+        // Elena ay ang SA KANYA. Puwedeng anonymous ang chat
+        // (walang `auth` ang route), at sa gayong kaso ay list
+        // price — kailanman hindi isang bawas na pangako sa
+        // taong hindi pa natin kilala.
+        $quote = $villa->quoteFor($checkinDt, $slot, Auth::user());
+        $packagePrice = $quote['total'];
+
+        $card = [
+            'id' => $villa->id,
+            'name' => $villa->property_name,
+            'type' => 'Whole Villa (Exclusive)',
+            'capacity' => $villa->max_capacity,
+            // `price` ang aktwal na babayaran; `base_price` ang
+            // presyo bago ang bawas, para may maitawid na
+            // numero ang card kapag may promo.
+            'price' => $packagePrice,
+            'base_price' => $quote['base'],
+            'discount' => $quote['discount'],
+            'promo' => $quote['promo']?->label,
+            'slot_label' => $slotLabel,
+            'status' => $villa->status,
+            'amenities' => is_array($villa->amenities) ? array_slice($villa->amenities, 0, 3) : [],
+            'book_url' => route('portal.property', $villa)
+                .'?checkin='.$checkin->format('Y-m-d')
+                .'&slot='.$slot
+                .'&guests='.($guests ?? 2),
+            'image' => $villa->primaryImage ? $villa->primaryImage->url : null,
+        ];
+
+        $line = "{$slotLabel}: AVAILABLE on {$date}. ";
+
+        $line .= $quote['discount'] > 0
+            ? 'Package price ₱'.number_format($quote['base'], 2)
+                .", but the \"{$quote['promo']->label}\" promo ({$quote['promo']->value_label}) applies to this date, so the guest pays ₱"
+                .number_format($packagePrice, 2).' — a saving of ₱'.number_format($quote['discount'], 2)
+                .'. The discount is applied AUTOMATICALLY; there is no code to enter. Mention this saving to the guest.'
+            : 'Package price ₱'.number_format($packagePrice, 2)
+                .' (flat rate, not per guest). No promo applies to this particular date/slot.';
+
+        return [$card, $line];
+    }
+
+    /**
+     * The tail of the conversation, for the intent extractor.
+     *
+     * WHY IT EXISTS. The extractor used to see the current message and
+     * nothing else, while Elena saw the whole transcript. So a date given one
+     * turn ago was invisible to the one step that looks a date up:
+     *
+     *   "Is Dec 20 available?"       -> checkin extracted, SEARCH RESULT built
+     *   "how about the night slot?"  -> no date in THIS message, checkin null,
+     *                                   no SEARCH RESULT, and the reply
+     *                                   prompt's grounding rules then make
+     *                                   Elena ask for a date the guest just
+     *                                   gave her
+     *
+     * That is the second, fully reproducible half of "the same question is
+     * sometimes answered" — and from the outside it is indistinguishable from
+     * the budget failure that intentFailureIsTerminal() handles.
+     *
+     * FOUR TURNS, EACH CLAMPED TO 200 CHARACTERS. cleanHistory() allows 8 x
+     * 1,000, which would more than triple this prompt; a reference only ever
+     * reaches back a turn or two, and the thing being resolved is a date or a
+     * slot name, so the opening of each turn is where it is. ~200 tokens
+     * added to a ~410-token call, against a wasted ~2,553-token reply call
+     * every time a follow-up failed to resolve.
+     *
+     * ELENA'S OWN TURNS ARE INCLUDED, and they carry the most weight: her
+     * reply is where the date appears in words ("AVAILABLE for Dec 20, 2026,
+     * Day slot"), so a bare "how much?" resolves against it.
+     *
+     * NO FENCE AND NO NONCE HERE, unlike the reply prompt. The whole block is
+     * one json_encode() of a structure, which is the same defence already
+     * applied to $userMessage one line above: a guest cannot break out of a
+     * JSON string literal, so there are no markers to forge. The entries have
+     * also already been through ChatbotGuard::looksLikeInjection() by this
+     * point. And the blast radius if a model were steered anyway is small by
+     * construction — this output is parsed as JSON, never shown to the guest,
+     * and every field is re-checked downstream (safeCheckinDate(), the
+     * in_array() slot test, slotsOfferedOn(), then quoteFor() failing closed),
+     * so the worst case is a quote for a date the guest could have typed.
+     *
+     * @param  array<int, array{role: string, content: string}>  $history
+     */
+    private function intentHistoryBlock(array $history): string
+    {
+        $turns = collect($history)
+            ->take(-4)
+            ->map(fn (array $entry) => [
+                'role' => $entry['role'] === 'user' ? 'guest' : 'elena',
+                'text' => mb_substr($entry['content'], 0, 200),
+            ])
+            ->values()
+            ->all();
+
+        if (! $turns) {
+            return '';
+        }
+
+        return "\nRECENT CONVERSATION (oldest first, context only — do NOT extract from it):\n"
+            .json_encode($turns, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    }
+
+    /**
+     * Did the intent call fail in a way that the reply call will hit too?
+     *
+     * The question is NOT "did it fail" — it is "did the provider answer us at
+     * all". Those need opposite handling, because the two calls share one
+     * budget and one connection but not one prompt:
+     *
+     *   RATE_LIMITED   the 8,000-tokens-a-minute bucket is empty. The reply
+     *                  prompt is six times larger than the intent one, so it
+     *                  cannot fit where the small one did not.
+     *   UNAVAILABLE    DNS, refused connection, timeout, 5xx. Nothing about
+     *                  the second call is different.
+     *   MISCONFIGURED  no API key, or an AI_PROVIDER nobody implements.
+     *   REFUSED        a non-429 4xx — in practice a retired GROQ_MODEL (404)
+     *                  or a bad key (401), both of which are about the
+     *                  account and not about this prompt. A Gemini safety
+     *                  block lands here too, and that one IS prompt-specific
+     *                  — but the blocked text is the guest's message, which
+     *                  the reply prompt also carries, so it blocks twice.
+     *
+     * FAILURE_EMPTY is the one that must NOT stop us, and it is the whole
+     * reason this is a list rather than `$intentJson === null`. Empty means
+     * the call went through: the key works, the budget had room, the tokens
+     * were spent, and the model simply returned nothing for this one prompt.
+     * The reply prompt is a different prompt and routinely succeeds where
+     * that happened — and the guest may be asking something that needs no
+     * date lookup at all ("do you have a pool?"), which is answerable from
+     * the data block with no intent whatsoever. Bailing on EMPTY would turn a
+     * model hiccup into a hand-off on a question we can answer.
+     */
+    private function intentFailureIsTerminal(GeminiService $ai): bool
+    {
+        return in_array($ai->lastFailure(), [
+            GeminiService::FAILURE_RATE_LIMITED,
+            GeminiService::FAILURE_UNAVAILABLE,
+            GeminiService::FAILURE_MISCONFIGURED,
+            GeminiService::FAILURE_REFUSED,
+        ], true);
+    }
+
+    /**
+     * What to say when Elena has no reply at all.
+     *
+     * Two sentences, not one, because the two situations need opposite things
+     * from the guest. Over the AI's per-minute limit, the answer is coming and
+     * the only thing needed is a few seconds — so say the number, and don't
+     * send the guest off to phone the resort over a wait shorter than dialling
+     * takes. Anything else (provider down, misconfigured, a refused prompt)
+     * will not fix itself while they watch, so that one points at a person.
+     *
+     * The limit is 8,000 tokens a minute shared across the whole site, and one
+     * message spends ~3,200 of them, so this is reachable in ordinary use by
+     * three guests chatting at once — not an exotic state.
+     *
+     * It never says "you're sending messages too fast": the budget may well
+     * have been spent by somebody else, or by an admin refreshing a report, and
+     * blaming the guest for someone else's usage is both wrong and the kind of
+     * thing they repeat to a friend.
+     */
+    private function unavailableMessage(GeminiService $ai): string
+    {
+        if (! $ai->rateLimited()) {
+            // The hand-off names the real number, like every other place this
+            // controller gives up: "message us directly" with no way to do it
+            // leaves the guest exactly where they started.
+            return "Sorry, I'm having trouble replying right now. Please try again in a moment — or message us directly "
+                .$this->handoffContact()." and we'll be happy to help. 🙏";
+        }
+
+        return self::busyMessage($ai->retryAfterSeconds());
+    }
+
+    /**
+     * The one sentence for "the AI budget is spent, wait a moment".
+     *
+     * Static and public because it has two callers that must not drift: this
+     * controller, after the provider answered 429, and the `chatbot` rate
+     * limiter in AppServiceProvider, which refuses the request *before* the
+     * provider is called for the same underlying reason. The guest cannot tell
+     * those apart and should not be able to — one cause, one sentence.
+     */
+    public static function busyMessage(?int $seconds): string
+    {
+        $when = match (true) {
+            $seconds === null => 'in a few seconds',
+            $seconds < 60 => 'in '.$seconds.' second'.($seconds === 1 ? '' : 's'),
+            default => 'in a minute',
+        };
+
+        return "I've had a lot of questions at once and need a moment to catch up — please send that again {$when} and I'll answer it. 🙏";
     }
 
     /**
@@ -637,7 +1041,7 @@ Everything between the BEGIN and END markers below was typed into a public chat 
      *   - Kasama rito ang mga PAGTANGGI. Ang "wala kaming 22 oras" ay isang
      *     pahayag din, kaya hindi puwedeng basta hindi na lang banggitin.
      *
-     * @return array{keys: array<int, string>, default: ?string, json: string, detail: string, names: string}
+     * @return array{keys: array<int, string>, json: string, detail: string, names: string}
      */
     private function slotPromptParts(): array
     {
@@ -680,7 +1084,7 @@ Everything between the BEGIN and END markers below was typed into a public chat 
 
                 return $line.' — offered ONLY on these check-in dates: '
                     .implode(', ', array_map(
-                        fn ($date) => \Carbon\Carbon::parse($date)->format('M j, Y'),
+                        fn ($date) => self::promptDate(\Carbon\Carbon::parse($date)),
                         $show
                     ))
                     .($more > 0 ? " (and {$more} more)" : '')
@@ -696,9 +1100,15 @@ Everything between the BEGIN and END markers below was typed into a public chat 
         $last = array_pop($names);
         $names = $names ? implode(', ', $names).' or '.$last : $last;
 
+        // WALANG `default` DITO, at sinadya iyon (v7.78). May `default`
+        // ito dati — ang unang bookable key — at iyon ang ginagamit kapag
+        // walang sinabing slot ang guest, kaya ang Day LANG ang tinitingnan
+        // ng "available ba sa Dec 25?". Ang tamang sagot sa "walang sinabing
+        // slot" ay LAHAT ng inaalok sa petsang iyon, hindi isang palagay:
+        // tingnan ang slotsOfferedOn() sa reply(). Huwag ibalik ang susing
+        // ito — walang tamang gamit para sa isang default na slot.
         return [
             'keys' => $keys,
-            'default' => $keys[0] ?? null,
             'json' => $json,
             'detail' => $detail,
             'names' => (string) $names,

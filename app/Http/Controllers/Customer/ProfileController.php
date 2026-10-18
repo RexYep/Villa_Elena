@@ -5,9 +5,13 @@ namespace App\Http\Controllers\Customer;
 use App\Http\Controllers\Controller;
 use App\Models\StaffLog;
 use App\Models\TrustedDevice;
+use App\Notifications\AccountDeletionCodeNotification;
+use App\Services\AccountErasure;
+use App\Support\AccountDeletionCode;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 
@@ -23,6 +27,10 @@ class ProfileController extends Controller
             'trustedDevices' => $user->trustedDevices()->where('expires_at', '>', now())->latest('last_used_at')->get(),
             'loginActivities' => $user->loginActivities()->latest()->limit(10)->get(),
             'currentDeviceToken' => $request->cookie('trusted_device'),
+            // Shown before the guest types a password, so a refusal names
+            // its booking instead of arriving as a surprise after submit.
+            'deletionProblems' => AccountErasure::problems($user),
+            'holdsToCancel' => AccountErasure::holdsToCancel($user),
         ]);
     }
 
@@ -71,7 +79,7 @@ class ProfileController extends Controller
         $user = Auth::user();
 
         // Named error bag ('updatePassword') keeps this form's errors from
-        // bleeding into the 2FA-disable and Deactivate forms below, which
+        // bleeding into the 2FA-disable and Delete Account forms below, which
         // both also collect a field literally named "password" — without
         // the bag, Blade's @error('password') can't tell them apart and
         // all three light up together.
@@ -135,7 +143,7 @@ class ProfileController extends Controller
         $user = Auth::user();
 
         // Turning it off is the sensitive direction — require the current
-        // password, same pattern used by deactivate() below. Turning it on
+        // password, same pattern used by destroy() below. Turning it on
         // is friction-free.
         if ($user->two_factor_enabled) {
             $request->validateWithBag('twoFactor', ['password' => 'required|string']);
@@ -198,30 +206,72 @@ class ProfileController extends Controller
         return back()->with('success', 'Device removed. It will need to verify again next time it logs in.');
     }
 
-    // ── Deactivate Account ──────────────────────────────────────────
-    public function deactivate(Request $request)
+    // ── Email A Code For Deleting The Account (2FA guests only) ──────
+    public function sendDeletionCode()
     {
         $user = Auth::user();
 
-        $request->validateWithBag('deactivate', ['password' => 'required|string']);
-
-        if (! Hash::check($request->password, $user->password)) {
-            return back()->withErrors(['password' => 'Password is incorrect.'], 'deactivate');
+        if (! $user->two_factor_enabled) {
+            return back();
         }
 
-        $user->update(['status' => 0]);
+        if ($problem = AccountDeletionCode::issueProblem($user)) {
+            return back()->withErrors(['code' => $problem], 'deleteAccount');
+        }
 
-        // Recorded while the actor is still authenticated — one line further
-        // down Auth::logout() runs and Auth::id() inside record() would be
-        // null, turning this into an anonymous event.
-        StaffLog::record('account_self_deactivated', 'users', $user->id,
-            "Account deactivated by the account holder ({$user->email})");
+        try {
+            $user->notify(new AccountDeletionCodeNotification(AccountDeletionCode::issue($user)));
+        } catch (\Throwable $e) {
+            Log::error('Failed to send the account-deletion code: '.$e->getMessage());
+
+            return back()->withErrors(['code' => 'The code cannot be sent right now. Please try again later.'], 'deleteAccount');
+        }
+
+        return back()->with('delete_code_sent', true);
+    }
+
+    // ── Delete Account ──────────────────────────────────────────────
+    // Replaces "Deactivate" (v7.79). The account's personal details are
+    // erased and its booking and payment records kept — see AccountErasure
+    // for what goes, what stays, and when it is refused.
+    public function destroy(Request $request)
+    {
+        $user = Auth::user();
+
+        $request->validateWithBag('deleteAccount', [
+            'password' => 'required|string',
+            'confirm_text' => 'required|string',
+            'code' => $user->two_factor_enabled ? 'required|digits:6' : 'nullable',
+        ], [
+            'code.required' => 'Enter the code we emailed you.',
+        ]);
+
+        if (! Hash::check($request->password, $user->password)) {
+            return back()->withErrors(['password' => 'Password is incorrect.'], 'deleteAccount');
+        }
+
+        // Typed, not ticked: a checkbox is one stray click, and this cannot
+        // be undone.
+        if (strtoupper(trim($request->confirm_text)) !== 'DELETE') {
+            return back()->withErrors(['confirm_text' => 'Type DELETE to confirm.'], 'deleteAccount');
+        }
+
+        if ($user->two_factor_enabled && ($problem = AccountDeletionCode::check($user, $request->code))) {
+            return back()->withErrors(['code' => $problem], 'deleteAccount');
+        }
+
+        // Runs while the guest is still signed in, so the audit entry it
+        // writes has them as its actor; Auth::logout() below would make it
+        // anonymous.
+        if ($problems = AccountErasure::erase($user, AccountErasure::BY_GUEST)) {
+            return back()->withErrors(['account' => array_column($problems, 'message')], 'deleteAccount');
+        }
 
         Auth::logout();
         $request->session()->invalidate();
         $request->session()->regenerateToken();
 
         return redirect()->route('home')
-            ->with('success', 'Your account has been deactivated. Contact the resort to reactivate it.');
+            ->with('success', 'Your account has been deleted. We have sent a confirmation to your email address.');
     }
 }

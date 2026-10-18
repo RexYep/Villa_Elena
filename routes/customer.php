@@ -59,7 +59,8 @@ Route::prefix('my')
     Route::put('profile',          [ProfileController::class, 'update'])->name('profile.update');
     Route::delete('profile/avatar',[ProfileController::class, 'deleteAvatar'])->name('profile.avatar.destroy');
     Route::put('profile/password', [ProfileController::class, 'updatePassword'])->middleware('throttle:password-confirm')->name('profile.password');
-    Route::delete('profile',       [ProfileController::class, 'deactivate'])->middleware('throttle:password-confirm')->name('profile.deactivate');
+    Route::delete('profile',       [ProfileController::class, 'destroy'])->middleware('throttle:password-confirm')->name('profile.destroy');
+    Route::post('profile/delete-code', [ProfileController::class, 'sendDeletionCode'])->middleware('throttle:password-confirm')->name('profile.delete-code');
 
     Route::put('profile/2fa',                 [ProfileController::class, 'toggleTwoFactor'])->middleware('throttle:password-confirm')->name('profile.2fa.toggle');
     Route::delete('profile/devices/{device}', [ProfileController::class, 'removeTrustedDevice'])->name('profile.devices.destroy');

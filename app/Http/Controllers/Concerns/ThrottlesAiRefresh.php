@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Concerns;
 
+use App\Services\GeminiService;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\RateLimiter;
 
@@ -47,5 +48,35 @@ trait ThrottlesAiRefresh
             $seconds,
             $seconds === 1 ? '' : 's'
         );
+    }
+
+    /**
+     * Why a Refresh produced nothing, for the admin.
+     *
+     * "The service did not respond" is wrong for the commonest cause by far:
+     * the AI tier allows 8,000 tokens a minute across the whole site, and a
+     * report costs up to ~2,400 of them — so a Refresh pressed while a guest
+     * is chatting is refused on budget, not broken. An admin told "did not
+     * respond" investigates; an admin told "over its limit, try again in 40
+     * seconds" waits 40 seconds.
+     *
+     * $what is the subject ('Insights could not be refreshed'), $reassurance
+     * the sentence about what is unaffected — the figures on the page are
+     * computed from the database and never came from the AI, and saying so is
+     * what stops a failed Refresh looking like a failed page.
+     */
+    protected function aiFailureMessage(GeminiService $ai, string $what, string $reassurance): string
+    {
+        if (! $ai->rateLimited()) {
+            return $what.' right now — the AI service did not respond. '.$reassurance;
+        }
+
+        $wait = $ai->retryAfterSeconds();
+
+        $when = $wait === null
+            ? 'Please try again shortly.'
+            : sprintf('Please try again in %d second%s.', $wait, $wait === 1 ? '' : 's');
+
+        return $what.' — the AI service is over its limit for the moment. '.$when.' '.$reassurance;
     }
 }

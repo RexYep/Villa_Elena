@@ -29,6 +29,39 @@ class GeminiService
     private const GEMINI_ENDPOINT = 'https://generativelanguage.googleapis.com/v1beta/models/%s:generateContent';
 
     /**
+     * Why the last ask() returned NULL, read through lastFailure().
+     *
+     * This is NOT a return value and must never become one: ask() returns the
+     * reply or NULL, and nothing else (v7.5 — it used to return
+     * "API Error: 429 — {...}", which every caller then rendered, putting
+     * Groq's raw body in front of a guest). A separate accessor can be ignored
+     * safely, which is the whole difference: a caller that doesn't ask still
+     * gets its own wording, while a sentinel string is a guard every caller
+     * has to remember to string-match.
+     *
+     * The distinction that earns its keep is RATE_LIMITED versus the rest.
+     * The free Groq tier is 8,000 tokens per minute per model, shared by the
+     * chatbot, review moderation and the three admin reports, and one chatbot
+     * message costs ~3,200 of them — so "over the limit, try again shortly"
+     * is a routine and self-healing state, while every other failure needs a
+     * person. Telling a guest "I'm having trouble replying" when the truth is
+     * "ask me again in 20 seconds" sends them away for nothing.
+     */
+    public const FAILURE_RATE_LIMITED = 'rate_limited';
+
+    public const FAILURE_UNAVAILABLE = 'unavailable';
+
+    public const FAILURE_REFUSED = 'refused';
+
+    public const FAILURE_EMPTY = 'empty';
+
+    public const FAILURE_MISCONFIGURED = 'misconfigured';
+
+    private ?string $failure = null;
+
+    private ?int $retryAfter = null;
+
+    /**
      * Returns the model's reply, or NULL when the call failed or came back empty.
      *
      * NULL, never the provider's error text. Every caller renders what it gets,
@@ -51,6 +84,16 @@ class GeminiService
     {
         $provider = config('services.ai.provider', 'groq');
 
+        // Cleared per call, so lastFailure() always describes the call that
+        // just returned — which is the only thing a caller may read it for.
+        // The chatbot makes two in one request (intent, then reply) and reads
+        // it after BOTH: after the intent call to decide whether the reply
+        // call is worth making at all (ChatbotController::
+        // intentFailureIsTerminal(), v7.78), and after the reply call to word
+        // the apology. So neither outcome may be inferred from the other.
+        $this->failure = null;
+        $this->retryAfter = null;
+
         try {
             return match ($provider) {
                 'groq' => $this->askGroq($prompt, $maxTokens, $temperature),
@@ -68,8 +111,34 @@ class GeminiService
                 'exception' => $e::class,
             ]);
 
-            return null;
+            return $this->fail(self::FAILURE_UNAVAILABLE);
         }
+    }
+
+    /**
+     * Why the last ask() returned NULL, or NULL when it succeeded.
+     *
+     * @return self::FAILURE_*|null
+     */
+    public function lastFailure(): ?string
+    {
+        return $this->failure;
+    }
+
+    /** True when the last ask() failed because the provider's limit was hit. */
+    public function rateLimited(): bool
+    {
+        return $this->failure === self::FAILURE_RATE_LIMITED;
+    }
+
+    /**
+     * How long to wait, in whole seconds, when the provider said — or NULL when
+     * it didn't. Never 0: a caller prints this, and "try again in 0 seconds"
+     * reads as a bug (same rule as ThrottlesAiRefresh).
+     */
+    public function retryAfterSeconds(): ?int
+    {
+        return $this->retryAfter;
     }
 
     // ── Groq ────────────────────────────────────────────────────────────
@@ -82,7 +151,7 @@ class GeminiService
         if (blank($key)) {
             Log::error('AI_PROVIDER is groq but GROQ_API_KEY is not set');
 
-            return null;
+            return $this->fail(self::FAILURE_MISCONFIGURED);
         }
 
         $payload = [
@@ -120,13 +189,32 @@ class GeminiService
         }
 
         if ($response->failed()) {
-            Log::error('Groq API call failed', [
+            // A 429 on the free tier is the tier working as sold, not a fault,
+            // so it is logged as a WARNING. Left at ERROR it fires during
+            // ordinary use, and a log that cries wolf is a log nobody reads
+            // when something is really wrong.
+            $context = [
                 'model' => $model,
                 'status' => $response->status(),
                 'body' => $response->body(),
-            ]);
+            ];
 
-            return null;
+            if ($this->requestTooLargeForModel($response)) {
+                // An ERROR, not a WARNING, and it names the knob: this one
+                // does not clear on its own, and "rate limit hit" would send
+                // whoever reads the log to the wrong place entirely.
+                Log::error("Groq refused the request: GROQ_MODEL's per-minute output limit is below the max_tokens we send. Lower max_tokens for this caller or choose another model.", $context + [
+                    'max_tokens' => $maxTokens,
+                ]);
+            } elseif ($response->status() === 429) {
+                Log::warning('Groq API rate limit hit', $context + [
+                    'retry_after_seconds' => $this->retryAfterSecondsFrom($response),
+                ]);
+            } else {
+                Log::error('Groq API call failed', $context);
+            }
+
+            return $this->fail($this->statusFailure($response), $response);
         }
 
         $content = $this->stripReasoning((string) $response->json('choices.0.message.content', ''));
@@ -136,7 +224,7 @@ class GeminiService
                 'model' => $model,
             ]);
 
-            return null;
+            return $this->fail(self::FAILURE_EMPTY);
         }
 
         return $content;
@@ -194,7 +282,7 @@ class GeminiService
         if (blank($key)) {
             Log::error('AI_PROVIDER is gemini but GEMINI_API_KEY is not set');
 
-            return null;
+            return $this->fail(self::FAILURE_MISCONFIGURED);
         }
 
         // Deliberately NO `responseMimeType: application/json`. The broken
@@ -247,7 +335,7 @@ class GeminiService
                 'body' => $response->body(),
             ]);
 
-            return null;
+            return $this->fail($this->statusFailure($response), $response);
         }
 
         $candidate = $response->json('candidates.0');
@@ -259,7 +347,7 @@ class GeminiService
                 'block_reason' => $response->json('promptFeedback.blockReason'),
             ]);
 
-            return null;
+            return $this->fail(self::FAILURE_REFUSED);
         }
 
         // A reply can hold several parts, and a part can carry fields besides
@@ -291,7 +379,7 @@ class GeminiService
                 'finish_reason' => $finish,
             ]);
 
-            return null;
+            return $this->fail(self::FAILURE_EMPTY);
         }
 
         return $content;
@@ -335,6 +423,139 @@ class GeminiService
             'provider' => $provider,
         ]);
 
+        return $this->fail(self::FAILURE_MISCONFIGURED);
+    }
+
+    // ── Failure reporting ───────────────────────────────────────────────
+
+    /**
+     * Records why this call failed and returns NULL, so every failure path
+     * stays a one-line `return $this->fail(...)` and none of them can set the
+     * reason without also returning NULL.
+     */
+    private function fail(string $reason, ?Response $response = null): ?string
+    {
+        $this->failure = $reason;
+        $this->retryAfter = $response ? $this->retryAfterSecondsFrom($response) : null;
+
         return null;
+    }
+
+    /**
+     * A 429 that is NOT a budget state: the request itself is too large for
+     * this model, whatever the bucket says.
+     *
+     * Groq answers 429 for two unrelated things, and they need opposite
+     * handling. The ordinary one is tokens-per-minute — routine on a free
+     * tier, self-healing, and the guest only needs a few seconds. The other
+     * is a per-minute **output** ceiling (OTPM) below the `max_tokens` we
+     * send, and it never heals: every call fails identically until somebody
+     * changes a config value. Real body, from this project's own log:
+     *
+     *   Request too large for model `qwen/qwen3.6-27b` ... on output tokens
+     *   per minute (OTPM): Limit 1000, Requested 1024. The request's expected
+     *   output tokens exceed the enforced limit; reduce max_tokens ...
+     *
+     * WHY THIS MATTERS MORE THAN IT LOOKS. Classified as RATE_LIMITED it is
+     * logged as a WARNING saying "rate limit hit", and the chatbot's v7.78
+     * terminal-failure path then tells the guest "I've had a lot of questions
+     * at once — send that again in 20 seconds" **forever**, while the admin
+     * reports say the AI is over its limit. Both messages promise a wait that
+     * fixes nothing, and the log points at the budget instead of at
+     * `GROQ_MODEL`. MISCONFIGURED is the honest class — it is the same kind of
+     * problem as a missing API key: a person has to change something.
+     *
+     * NOT AUTO-RETRIED WITH A SMALLER CAP, deliberately. The error names the
+     * limit, so a retry is tempting, but the only model on this key that
+     * produced it has since been decommissioned (`qwen3.6-27b`;
+     * `qwen3.8-27b`, `gpt-oss-120b` and `gpt-oss-20b` all report no OTPM
+     * bucket at all, measured in v7.78). Retry code for a condition that
+     * cannot currently be reproduced is code that has never run — and section
+     * 9's rule here is that four confident diagnoses were already wrong. Fail
+     * loudly and name the cause; a retry can be added by whoever can
+     * reproduce it.
+     */
+    private function requestTooLargeForModel(Response $response): bool
+    {
+        if ($response->status() !== 429) {
+            return false;
+        }
+
+        $body = $response->body();
+
+        return str_contains($body, 'OTPM')
+            || str_contains($body, 'reduce max_tokens')
+            || str_contains($body, 'Request too large');
+    }
+
+    /** Which failure an HTTP status is. 429 is the one callers act on. */
+    private function statusFailure(Response $response): string
+    {
+        return match (true) {
+            // Order matters: this is a 429 too, and it is NOT a budget state.
+            $this->requestTooLargeForModel($response) => self::FAILURE_MISCONFIGURED,
+            $response->status() === 429 => self::FAILURE_RATE_LIMITED,
+            $response->serverError() => self::FAILURE_UNAVAILABLE,
+            default => self::FAILURE_REFUSED,
+        };
+    }
+
+    /**
+     * How long the provider said to wait, in whole seconds.
+     *
+     * `retry-after` first, since that is the provider's own answer. Groq also
+     * sends the bucket refill times, and those are consulted next because the
+     * limit this app actually exhausts is tokens-per-minute, not requests:
+     * `x-ratelimit-reset-tokens` is the honest wait, and it is the shorter of
+     * the two whenever the token bucket is what ran dry.
+     *
+     * NULL rather than a guessed default — the caller words "in a moment"
+     * better than this method can invent a number.
+     */
+    private function retryAfterSecondsFrom(Response $response): ?int
+    {
+        foreach (['retry-after', 'x-ratelimit-reset-tokens', 'x-ratelimit-reset-requests'] as $header) {
+            $seconds = $this->parseSeconds((string) $response->header($header));
+
+            if ($seconds !== null) {
+                return $seconds;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Seconds from either shape these headers come in: a bare count of seconds
+     * (`retry-after: 60`) or Groq's duration string, which is written `21.915s`
+     * and, over a minute, `1m26.4s` — both measured on a live response.
+     */
+    private function parseSeconds(string $raw): ?int
+    {
+        $raw = trim($raw);
+
+        if ($raw === '') {
+            return null;
+        }
+
+        if (is_numeric($raw)) {
+            return max(1, (int) ceil((float) $raw));
+        }
+
+        if (! preg_match_all('/(\d+(?:\.\d+)?)(ms|m|s)/', $raw, $parts, PREG_SET_ORDER)) {
+            return null;
+        }
+
+        $total = 0.0;
+
+        foreach ($parts as $part) {
+            $total += match ($part[2]) {
+                'ms' => ((float) $part[1]) / 1000,
+                'm' => ((float) $part[1]) * 60,
+                's' => (float) $part[1],
+            };
+        }
+
+        return max(1, (int) ceil($total));
     }
 }

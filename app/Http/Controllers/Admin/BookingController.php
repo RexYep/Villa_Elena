@@ -81,7 +81,7 @@ class BookingController extends Controller
         // Iisang villa lang ang bookable, kaya awtomatiko itong pinipili —
         // walang dropdown. `null` kung naka-maintenance (hinaharap ng view).
         $villa     = Property::where('status', '!=', 'maintenance')->where('type', 'villa')->orderBy('id')->first();
-        $customers = User::where('role', 'customer')->orderBy('full_name')->get();
+        $customers = User::where('role', 'customer')->notAnonymized()->orderBy('full_name')->get();
         return view('admin.bookings.create', compact('villa', 'customers'));
     }
 
@@ -152,7 +152,7 @@ class BookingController extends Controller
     public function store(Request $request)
     {
         $request->validate([
-            'user_id'          => 'required|exists:users,id',
+            'user_id'          => ['required', User::bookableGuestRule()],
             // Villa lang — ang mga Room record ay hindi bookable.
             'property_id'      => 'required|exists:properties,id,type,villa',
             'check_in_date'    => 'required|date|after_or_equal:today',

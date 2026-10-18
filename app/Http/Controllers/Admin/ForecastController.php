@@ -57,7 +57,11 @@ class ForecastController extends Controller
         );
 
         return $refreshed === null
-            ? back()->with('error', 'The forecast could not be refreshed right now — the forecasting service did not respond. The historical figures above are unaffected.')
+            ? back()->with('error', $this->aiFailureMessage(
+                $ai,
+                'The forecast could not be refreshed',
+                'The historical figures above are unaffected.'
+            ))
             : back()->with('success', 'Forecast refreshed.');
     }
 

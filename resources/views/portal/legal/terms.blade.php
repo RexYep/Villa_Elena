@@ -106,9 +106,13 @@
                         </li>
                         <li>Walk-in guests may have an account created for them by our front desk staff
                             using the details they provide on-site.</li>
-                        <li>You may deactivate your own account from your profile. This signs you out and
-                            blocks sign-in until we reactivate it; it does not cancel a booking or delete
-                            your records.</li>
+                        <li>You may delete your own account from your profile. This erases your name,
+                            email address, phone number, address and photo, signs you out for good, and
+                            cannot be undone. It cannot be done while a stay is booked or in progress, a
+                            payment is being made, or money is still owed either way; an unpaid booking is
+                            cancelled. Booking and payment records are kept without your name, and you may
+                            sign up again with the same email address as a new account that does not carry
+                            over your past bookings.</li>
                         <li>We may suspend or deactivate an account that is used for fraudulent bookings,
                             abuse of staff, or repeated no-shows.</li>
                     </ul>

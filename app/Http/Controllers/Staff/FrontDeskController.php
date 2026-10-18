@@ -648,7 +648,10 @@ class FrontDeskController extends Controller
             ->orderBy('property_name')
             ->get();
 
+        // Deleted accounts are left out: a walk-in for "Former Guest" would be
+        // a booking nobody can be reached about.
         $customers = User::where('role', 'customer')
+            ->notAnonymized()
             ->orderBy('full_name')
             ->get();
 
@@ -677,7 +680,7 @@ class FrontDeskController extends Controller
     {
         $request->validate([
             'guest_type' => 'required|in:existing,new',
-            'user_id' => 'required_if:guest_type,existing|nullable|exists:users,id',
+            'user_id' => ['required_if:guest_type,existing', 'nullable', User::bookableGuestRule()],
             'full_name' => 'required_if:guest_type,new|nullable|string|max:255',
             // create_account: kung gagawa ba ng totoong login account ang
             // bagong guest, o guest record lang (walang login access).

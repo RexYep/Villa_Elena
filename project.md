@@ -1,7 +1,7 @@
 # Villa Elena Private Rental Resort
 ## Resort Management System — Project Documentation
 
-**Version:** 7.76
+**Version:** 7.79
 **Stack:** PHP 8.2 / Laravel 12 / MySQL 8 / Bootstrap 5
 **Local URL:** `http://127.0.0.1:8000` (`php artisan serve`) or `http://localhost:8000` (Docker — see v5.3)
 **Live URL:** `https://villa-elena.onrender.com` (Render, free tier — testing only, not yet handed to real guests)
@@ -125,66 +125,605 @@ camera=(), microphone=(), geolocation=(), payment=(), usb=(),
 magnetometer=(), gyroscope=(), accelerometer=()
 ```
 
-### Task 11 · F9 — no erasure path for a guest's personal data
+---
 
-**Status:** reported in the Task 11 review (2026-09-26), deferred by the owner.
-Everything below was established during that review.
+## What Changed in v7.79 (Read This First)
 
-**What exists today.** `Customer\ProfileController::deactivate()` is the only
-self-service exit. It confirms the password, sets `status = 0`, records
-`account_self_deactivated` in `staff_logs`, logs the guest out and invalidates the
-session. **It deletes nothing.** Name, email, phone, address, profile photo,
-bookings, payments and reviews all remain exactly as they were.
+### A guest can delete their account (RA 10173), and the records stay
 
-**This is NOT currently a misrepresentation, and that distinction matters** — it
-is why this is deferred rather than urgent:
+Self-service "Deactivate" is gone. In its place, **Delete account** on the
+profile page erases the person and keeps the business records. This closes
+Task 11 · F9 (the pending entry is removed; everything it established is
+below).
 
-- The flash message says the account has been *deactivated* and to contact the
-  resort to reactivate it. It does not say "deleted".
-- The privacy policy's §08 Your rights already frames erasure as a manual
-  request — "Reach out and we will answer — including requests to access, correct,
-  or delete your data" — handled by a human with database access, not by a
-  feature.
-- §07 How long we keep it is deliberately non-numeric ("as long as accounting,
-  tax, and audit rules require"), so there is no stated retention period that the
-  code is failing to honour.
+**Why not `DELETE FROM users`.** `bookings.user_id` cascades, and so does
+`payments.booking_id` (→ `refund_transfers`, `refund_destinations`, `reviews`,
+`booking_extras`). A real delete takes the guest's whole booking and payment
+history with it. **That is exactly what the admin's Delete button was doing to
+guests until this version** — 12 `deleted_user` rows in the local audit table,
+each one a guest whose bookings, payments and report figures vanished with
+them. The right to erasure under RA 10173 yields to records the law requires
+the business to keep, so the account is **anonymised in place** instead.
 
-So nothing here needs correcting to make the documentation true. What is missing
-is the capability.
+**`App\Services\AccountErasure` is the one path**, used by the guest's button
+(`Customer\ProfileController::destroy()`) and by the admin's Delete on a
+`customer` (`Admin\UserController::destroy()`; staff and admin accounts are
+still hard-deleted). What it does:
 
-**Why it was not simply built.** Under RA 10173 a data subject's right to erasure
-is not absolute — it yields to records the business is legally required to keep,
-and this system is mostly such records. A booking with a payment against it is
-proof of a transaction. So "delete my account" cannot mean `DELETE FROM users`,
-and the real work is deciding, per table, what happens:
-
-| Data | Plausible answer |
+| Data | Result |
 |---|---|
-| `users` name / email / phone / address | anonymise in place, keep the row so FKs survive |
-| `profile_image` | delete the file from Cloudinary as well as the column |
-| `bookings` / `payments` / `refund_transfers` | **keep** — financial records; they already reference the user only by `user_id` |
-| `refund_destinations` | delete; `cascadeOnDelete` on `payments` already exists, and the migration's own comment calls this "a clean purge for free" |
-| `reviews` | keep the text, detach the author (the policy already offers takedown on request) |
-| `staff_logs` | keep — an audit trail that can be edited by the audited party is not an audit trail |
-| `notifications` | delete |
+| `users.full_name` | `User::ANONYMIZED_NAME` ("Former Guest") — what a kept review and the admin pages show |
+| `users.email` | **NULL**, never a made-up address — frees the address for a new sign-up, the unique index allows many NULLs, and every mail path already skips a NULL email (walk-in records) |
+| phone, address, photo (file deleted too), password (random), remember token, 2FA, email preference, `email_verified_at` | cleared |
+| `users.status` | 0, so every "deactivated" guard keeps working (login, `RoleMiddleware`, Pusher channels) |
+| `users.anonymized_at` | **new column**; tells an erased row from a walk-in record (also no email) or a suspended account (also status 0) |
+| bookings, payments, extras, refund destinations/transfers | kept — financial records |
+| `bookings.special_requests` | cleared on all their bookings — free text, nothing reports on it |
+| reviews | kept, shown under "Former Guest" (the guest can delete a review first) |
+| their notifications, login activities, trusted devices, sessions, password-reset token | deleted |
+| `staff_logs` | kept (audit trail, pruned by `config/audit.php`); the new `account_erased` entry records the user id only, never the email |
 
-That table is a **starting proposal, not a decision.** Anonymise-in-place is the
-shape that fits this schema, because every financial table reaches the guest
-through `user_id` and nothing denormalises their name into a booking row.
+**When it is refused — `AccountErasure::problems()`**, one reason per booking,
+shown on the profile page before the password is typed and asked again inside
+`erase()`'s row lock:
 
-**Two things to check before writing any of it:**
+- `checked_in` — the guest is at the villa;
+- `confirmed`, or `pending` with money paid — a stay that has not happened.
+  Deleting does **not** cancel it: cancelling is its own explicit, no-refund
+  step (owner's decision), and the resort needs to reach that guest;
+- a refund `owed` / `processing` / `failed` (`refundStage()`) — the guest has to
+  give or fix the account it goes to;
+- `isOverpaid()` — the excess is not settled;
+- `checked_out` with `balance_due > 0`;
+- an active booking cooldown (`bookingCooldownEndsAt()`), or delete-and-sign-up
+  would be the way out of it.
 
-1. `users.email` is `unique`. Anonymising to a constant collides on the second
-   deletion — use something like `deleted-{id}@invalid.local`.
-2. `Booking::hasExcessiveCancellations()` counts a guest's auto-cancelled
-   bookings by `user_id`. Anonymising while keeping the row preserves that
-   anti-abuse signal; hard-deleting the user would `cascadeOnDelete` the bookings
-   and silently reset it.
+An **unpaid `pending` hold is cancelled** (`cancelled_by = guest`), not a
+reason to refuse. Before that, `erase()` closes the hold's PayMongo checkout
+**outside any transaction**; `open` (being paid) or `failed` (PayMongo could
+not be asked) stops the deletion, or a QR scanned right now would pay a booking
+whose owner can no longer be contacted.
 
-**Ordering note.** Whoever does this should also decide whether the ID columns
-from Task 11 · F5 get dropped at the same time — they are empty and reserved
-(`users.id_type` / `users.id_number`, see v7.40), and a schema change for erasure
-is the natural moment to remove them rather than a migration of their own.
+**Confirmation.** Password + typing `DELETE`, plus — for a guest with two-factor
+login on — an emailed code (`App\Support\AccountDeletionCode`, its own cache
+keys in the limiter store, separate from the sign-in code: 10 minutes, 5 wrong
+guesses cancel it, 3 codes an hour). After the commit, `AccountDeletedNotification`
+goes to the **old** address through `Notification::route()` (the row has no
+email by then): it says what was removed, what was kept, that the address can
+sign up again, and — when the guest did it — to call the resort if it was not
+them.
+
+**Signing up again with the same address** creates a new, unrelated account.
+Past bookings stay on the erased row, so completed stays do not count toward
+`returning` promos; the profile page and the email both say so. Before this
+version a deactivated guest who tried to sign up again only received the
+"someone tried to register" notice — a dead end.
+
+**Other guards that came with it.**
+
+- The walk-in and admin booking dropdowns use `User::notAnonymized()`, and both
+  validators use `User::bookableGuestRule()` (`exists` + `role = customer` +
+  not erased). Before, `exists:users,id` also accepted a staff or admin id.
+- Admin: an erased row shows **Deleted**; Edit, Activate and Delete are hidden,
+  and `edit`/`update`/`toggleStatus` refuse it server-side — reactivating it
+  would rebuild the person.
+- The delete form uses the `deleteAccount` error bag; `password-confirm` maps
+  `customer.profile.destroy` and `customer.profile.delete-code` to it.
+- Terms and Privacy Policy §07/§08 rewritten; `LEGAL_LAST_UPDATED` bumped.
+- `User::anonymizedColumnExists()` guards every query on the new column, so
+  code deployed ahead of the migration does not 500 the walk-in page; erasure
+  itself refuses until the column exists.
+
+**Deploying.** Run the migration on production before relying on the button:
+`php artisan migrate --force --database=aiven`.
+
+**Not done, deliberately.**
+
+- Copies of a guest's name outside `users` stay: admin bell notifications
+  ("Juan (juan@…) just created an account"), older audit descriptions, and what
+  PayMongo holds. The Privacy Policy now says so; search-and-replacing names in
+  free text was judged more dangerous than useful.
+- Accounts already deactivated before this version are left as they are — they
+  never asked for erasure.
+- `users.id_type` / `users.id_number` (Task 11 · F5, reserved and empty) were
+  not dropped here.
+- Staff/admin hard delete still cascades any bookings such an account owns.
+
+**Tests.** `tests/Feature/AccountErasureTest.php` (13). Its fixtures add columns
+other test classes' hand-built tables lack, and the models memoise "does this
+column exist" per process, so the class resets `Booking::$optionalColumnExists`,
+`Payment::$refundKindColumnExists` and `User::$anonymizedColumnExists` in
+`setUp` **and** `tearDown` — without the `tearDown`, 30 tests in later classes
+failed that pass on their own. The two `AuditLoggingTest` hard-delete tests now
+delete a staff account.
+
+---
+
+## What Changed in v7.78 (Read This First)
+
+### "It answered that same question a minute ago" — five causes, measured
+
+The reported symptom was one sentence: the same question is sometimes answered
+and sometimes gets the grounding hand-off ("I don't have that detail on hand —
+the resort can confirm it for you directly"). It had **three** independent
+causes, and none of them was the model being creative — and a fourth complaint,
+the wrong price for a 22-hour stay, turned out to share the shape of the
+others, and a fifth — a confidently wrong weekday — has the same shape again.
+All five are in `Portal\ChatbotController`, and every one of them ends
+the same way: Elena was asked to answer from a prompt that did not contain the
+answer, and the v7.20 grounding rule then correctly stopped her from guessing.
+When this chatbot "doesn't know" something it used to know, suspect the data
+block before the model.
+
+**Found in the log, not by reading the code.** `storage/logs/laravel.log`,
+2026-10-15 22:20–22:21: eight `Groq API rate limit hit` lines, then four
+`Chatbot intent extraction returned unparseable JSON` for the same question
+("How much for Saturday night?") — each with `"raw":""`. Look for that empty
+`raw` first; it is the fingerprint of cause 1.
+
+### Cause 1 — a failed intent call produced a confident hand-off, and paid for it
+
+Every message is **two** AI calls: intent extraction, then Elena's reply. When
+the intent call returned NULL, `! is_array($intent)` could not tell "the model
+emitted junk" from "the provider never answered", logged both as *unparseable
+JSON*, and **carried on to the reply call anyway**. With no intent there is no
+`SEARCH RESULT` section, and the v7.20 grounding rules then correctly forbid
+Elena from saying anything about a date or a price. So she handed off — on a
+prompt missing its data through no fault of the guest's.
+
+It also spent the expensive call to get there: the intent prompt is ~410
+tokens, the reply prompt ~2,553 (v7.77's table). Sending the big one straight
+after the small one hit an 8,000-tokens-a-minute ceiling buys a guaranteed
+hand-off and makes the next guest's 429 likelier.
+
+**`ChatbotController::intentFailureIsTerminal()` now decides, and the reason
+matters — do not collapse it to `$intentJson === null`.** `RATE_LIMITED`,
+`UNAVAILABLE`, `MISCONFIGURED` and `REFUSED` all mean the provider did not
+answer us, so the second, six-times-larger call cannot succeed where the small
+one failed: stop, and return `unavailableMessage($ai)` (the v7.77 busy sentence
+with the real `Retry-After`, or the hand-off with the real phone number).
+**`FAILURE_EMPTY` is deliberately excluded**: the call went through, the key
+works, the budget had room, and the model simply returned nothing for that one
+prompt — and the guest may be asking something needing no date lookup at all
+("do you have wifi?"), which is answerable from the data block with no intent
+whatsoever. Bailing on EMPTY turns a model hiccup into a hand-off on a question
+we can answer.
+
+Measured with `Http::fake()`, calling the controller directly: a 429 on the
+intent call now makes **1** Groq request instead of 2 and returns the busy
+sentence; a 500 makes 1 and returns the hand-off naming the real phone; an
+empty first reply still makes 2 and the guest gets their answer.
+
+Two consequences to keep in mind. `GeminiService::lastFailure()` is now read
+after **both** calls, so its docblock no longer claims only the second decides
+what the guest is told — neither outcome may be inferred from the other. And
+the *unparseable JSON* warning is finally honest: it fires only when the
+provider really did answer with non-JSON.
+
+### Cause 2 — the intent extractor could not see the conversation
+
+Elena got the whole transcript; the one step that **looks a date up** got only
+the current message. So a date given one turn ago was invisible:
+
+- "Is Dec 20 available?" — extracted, `SEARCH RESULT` built, answered.
+- "how about the night slot?" — no date in *this* message, `checkin` null, no
+  `SEARCH RESULT`, and Elena asks for a date the guest just gave her.
+
+Fully reproducible, and from the outside indistinguishable from cause 1.
+
+**`intentHistoryBlock()` adds the last 4 turns, each clamped to 200
+characters** — `cleanHistory()`'s 8 x 1,000 would more than triple this prompt,
+and a reference never reaches back further than a turn or two. ~200 tokens on a
+~410-token call, against a wasted ~2,553-token reply call every time a
+follow-up failed to resolve. **Elena's own turns are included and carry the
+most weight**: her reply is where the date appears in words.
+
+**No fence and no nonce here, unlike the reply prompt.** The block is one
+`json_encode()` of a structure — the same defence already applied to
+`$userMessage` one line above — so there are no markers to forge; verified that
+a turn containing a closing brace, a bracket and quotes round-trips as inert
+text inside a JSON string. The entries have already been through
+`ChatbotGuard::looksLikeInjection()` by that point, and the blast radius is
+small by construction: this output is parsed as JSON, never shown to the guest,
+and every field is re-checked downstream (`safeCheckinDate()`, the `in_array()`
+slot test, `slotsOfferedOn()`, then `quoteFor()` failing closed), so the worst
+case is a quote for a date the guest could have typed.
+
+**A bare day of the month needs its own clause, and it was measured.** With
+December under discussion, "what about the 21st?" first extracted
+**2026-10-21** — today's month. The prompt now says a bare day number takes its
+month and year from the date already under discussion, falling back to the
+nearest coming date of that number only when the conversation names none.
+Re-probed against live `gpt-oss-120b`: `2026-12-21` with that history,
+`2026-10-21` without, "is it free on Jan 5 2027 instead?" to `2027-01-05`, and
+"do you have a swimming pool?" carried no date over.
+
+### Cause 3 — a date with no slot named was silently answered as Day
+
+`$slot` fell back to `$slotParts['default']` — `bookableSlotKeys()[0]`, always
+`day`. So "Is Dec 25 available?" examined **Day only**. With Day booked and
+Night free, Elena reported the date unavailable. That is not a vague answer; it
+is a wrong one that costs a booking, and on this database 2026-10-22 was
+exactly that shape.
+
+**`$askedSlot` is now NULL when the guest named no slot, and NULL means "every
+slot offered on that date".** `slotsOfferedOn()` supplies the list,
+`slotOutcome()` (lifted out of `reply()` unchanged in substance) returns the
+card and the sentence for one slot, and the branch runs it once per slot. The
+cost is bounded by the offering rule: two slots on an ordinary date, **one** on
+a 22-hour date.
+
+Four rules came out of building it:
+
+- **A slot the guest *did* name still wins**, including the existing
+  `slotSwitchNote` when that slot is not offered on the date. Only the
+  no-slot-named case fans out.
+- **A date offering exactly one slot says so.** On a 22-hour date the note
+  states that Day and Night are not available that day, or Elena implies they
+  can still be chosen.
+- **"Every slot is taken" is said once, after the loop**, so the date reads as
+  fully booked rather than as two unrelated refusals.
+- **Capacity is checked before any slot**, as before: the price of a slot that
+  cannot fit the group is noise.
+
+Verified against the dev database — Oct 22 (Day booked, Night free) returns one
+card for Night and a `SEARCH RESULT` naming both outcomes plus "If one slot is
+taken and another is free, say exactly that — do NOT call the whole date
+unavailable"; Oct 23 and Oct 29 (both slots taken) return no card and the
+fully-booked sentence.
+
+**`intent.guests` is now coerced to a positive int or NULL.** It is model
+output reaching a typed `?int` parameter, and PHP 8 throws `TypeError` on a
+non-numeric string there — a `"guests": "many"` would have been a 500 on a
+public, unauthenticated endpoint. Same discipline as `safeCheckinDate()` for
+the date and `in_array()` for the slot.
+
+### Cause 4 — Elena knew only the Day/Night rate, so she quoted half price
+
+`villaInfo` and the dateless `get_price` branch both printed `base_price` /
+`weekend_price` directly. Those two columns are the **Day/Night pair only**
+(`Property::priceColumnsFor()`), so the 22-hour pair — `base_price_22h` /
+`weekend_price_22h`, ₱8,000 / ₱10,000 against ₱4,000 / ₱6,000 on this
+database — was **never in the prompt at all**. Asked "how much for 22 hours?",
+Elena had two choices and both were wrong: quote the Day rate, or hand off. She
+was not hallucinating; under the v7.20 grounding rule the prompt is the whole
+extent of what she knows, and nobody had told her.
+
+Section 5's rule — **a list of rates comes from `Property::rateGroups()`, never
+`base_price` alone as "the price"** — was being broken on exactly those two
+lines while the villa page's rate table and Terms §5 both obeyed it.
+
+**`ChatbotController::rateLines()` now renders `rateGroups()` for both.** One
+line per price-column pair, so a new slot or a new rate appears with no edit.
+Three details carried over from the villa page rather than reinvented:
+
+- **The 22-hour group is marked "selected check-in dates only"** from
+  `selected_dates`, not from a hardcoded slot name. A rate the guest cannot
+  book on the date they have in mind reads as a cheaper option being withheld.
+- **The regular/peak sentence is the same wording** the villa page and Terms
+  use, and it says the slot **starts** on those days, because
+  `getPackagePrice()` keys off check-in *time*: on a Sunday the 8AM 22-hour
+  slot is peak and the 7PM one is regular.
+- **These are list prices, which is why this is only used when no date is
+  known.** With a date, `slotOutcome()` answers through `quoteFor()` and picks
+  up `pricing_rules` and promos.
+
+Verified live against `gpt-oss-120b` — "How much for 22 hours?" now answers
+"₱8,000.00 for a regular-rate stay and ₱10,000.00 for a peak-rate stay" and
+asks for the date to pin the rate down.
+
+### Cause 5 — no date in the prompt said what day of the week it was
+
+Reported from a real conversation. Asked about the deposit, then "the date in
+october 28, the day slot is it available?", Elena answered:
+
+> The deposit is 50% of the total package price for the slot you choose. For a
+> Day slot the package is ₱6,000 (peak rate, since **October 28 2026 falls on a
+> Friday**), so the deposit would be ₱3,000. However, the Day slot on Oct 28
+> 2026 is already booked and not available.
+
+**October 28, 2026 is a Wednesday.** The availability answer was right; both
+numbers beside it were wrong, and from a single root — a guessed weekday. The
+correct figures are ₱4,000 and ₱2,000.
+
+**Nothing in the prompt stated the day of the week for any date, not even
+today's.** Meanwhile the prompt is full of rules keyed on it: the rate table's
+"Regular applies Monday to Thursday … Peak applies Friday or Saturday", and the
+policy block's Sunday-before/after-6PM split. So the model was handed a rule it
+could only apply by doing calendar arithmetic, and a language model computing a
+weekday from a date is a coin toss. Cause 4 made this more likely by putting
+the regular/peak rule in front of her more prominently — the hazard predates it,
+but the invitation to compute got stronger.
+
+A second gap made it certain rather than merely possible: **a booked slot's line
+carried no price at all.** `slotOutcome()` returned "NOT available … already
+booked" and stopped, so when the previous turn was about deposits Elena had no
+figure to work from and derived one.
+
+Both halves are closed:
+
+- **`ChatbotController::promptDate()` is now the only way a date is written into
+  this prompt** — `format('l, M j, Y')`, so "Wednesday, Oct 28, 2026". It covers
+  `slotOutcome()`, the availability branch, the 22-hour window dates Elena reads
+  out, and "Today is", which had no weekday either. **Never print a bare
+  `format('M d, Y')` into this prompt again**; every date it states is now
+  self-describing, so no rule in the prompt needs a calendar lookup to apply.
+- **A booked slot now states its list price outright**, with "Do NOT work a rate
+  out from the weekday yourself — use this figure or say nothing about price."
+  It reads `getPackagePrice()`, **not `quoteFor()`**: this is the "bare list
+  price" that is section 5's one sanctioned use of that method, and `quoteFor()`
+  would subtract a promo the guest cannot have on a slot they cannot book. It is
+  guarded by `isSlotPriced()`.
+
+**The tier is never recomputed here**, which is the point — `getPackagePrice()`
+owns the Mon–Thu / Fri–Sat / Sunday-6PM rule *and* any `pricing_rules`
+override, and a second copy in the chatbot would drift from the price actually
+charged. Verified through the real prompt: Friday Oct 30 Day → ₱6,000, Sunday
+Nov 1 **Day** (8AM, before 6PM) → ₱6,000, Sunday Nov 1 **Night** (7PM) →
+₱4,000. That Sunday pair is the boundary a hand-rolled predicate would have
+got wrong.
+
+Re-run live against `gpt-oss-120b` as the same two-turn conversation: "The Day
+slot on **Wednesday**, Oct 28 2026 is already booked", and pressed for the
+deposit, "the package price would be ₱4,000.00, so the required deposit would be
+₱2,000.00" — the two figures that were wrong before.
+
+---
+
+### `max_tokens` does not buy budget — the v7.78 inference was wrong
+
+v7.78 initially reported that Groq looked like it reserved `max_tokens` against
+TPM, on the strength of a 429 body reading `Limit 8000, Used 6185, Requested
+1883` — far more than the intent call's input. **Measured on
+`gpt-oss-120b`, that is false**, three independent ways:
+
+1. **The debit is actual usage.** Three calls at `max_tokens: 1024` with a
+   76-token prompt and an 18-token reply moved `x-ratelimit-remaining-tokens`
+   by ~94 each — not 1024. Remaining stayed near 7,900 of 8,000 while the
+   bucket refilled faster than the calls drained it.
+2. **There is no admission check against the cap.** `max_tokens: 8100` — more
+   than the entire 8,000 TPM limit — was **admitted** with ~7,900 remaining,
+   and debited 94.
+3. **Nor when the bucket is nearly empty.** Drained to 1,527 remaining in one
+   big-prompt call, a request declaring `max_tokens: 4000` was still
+   **admitted**.
+
+So `Requested` in a 429 body is prompt + `max_tokens` (827 + 1024 = 1,851 ≈ the
+logged 1,883) and it *looks* exactly like a reservation, which is the trap.
+**Do not lower the chatbot's or the reports' caps to save budget — there is
+nothing to save**, and lowering them risks the opposite: hidden reasoning is
+billed against `max_tokens` (section 9), so a tight cap truncates the answer.
+The caps stay at 1024 / 2048 / 500.
+
+**What the measurement did settle is the real cost of a message:** 827 + ~20 for
+the intent call, 2,203 + ~181 for the reply = **~3,230 tokens**, so 8,000 TPM is
+**~2.4 messages a minute for the whole site**. That is independent confirmation
+that v7.77's global `Limit::perMinute(2)->by('g:chatbot')` is sized correctly,
+and it is why v7.78's Cause 1 fix matters as much as it does: a wasted reply
+call is a third of a minute's entire budget.
+
+Only **two** buckets exist on `gpt-oss-120b`: `x-ratelimit-limit-requests`
+(1,000/day) and `x-ratelimit-limit-tokens` (8,000/min). There is no
+output-tokens-per-minute bucket, and `qwen3.8-27b` and `gpt-oss-20b` report the
+same two.
+
+### The one place the cap does bite, and why it is now MISCONFIGURED
+
+Groq answers **429 for two unrelated things**. One is tokens-per-minute:
+routine, self-healing, a few seconds' wait. The other appears in this
+project's own log seven times:
+
+```
+Request too large for model `qwen/qwen3.6-27b` ... on output tokens per minute
+(OTPM): Limit 1000, Requested 1024. The request's expected output tokens
+exceed the enforced limit; reduce max_tokens ...
+```
+
+That one **never heals** — every call fails identically until a config value
+changes. Classified as `FAILURE_RATE_LIMITED` it was logged as a WARNING
+reading "rate limit hit", and after v7.78's Cause 1 fix the chatbot would have
+told the guest *"I've had a lot of questions at once — send that again in 22
+seconds"* **forever**, while Insights and Forecast said the AI was over its
+limit. Three messages, all promising a wait that fixes nothing, and a log
+pointing at the budget instead of at `GROQ_MODEL`.
+
+`GeminiService::requestTooLargeForModel()` now sorts the two 429s apart, and
+**order matters in `statusFailure()`** — this case must be tested before the
+`status() === 429` arm. It maps to `FAILURE_MISCONFIGURED`, the same class as a
+missing API key, because it is the same kind of problem: a person has to change
+something. The log line is an ERROR that names the knob. Verified against the
+exact body above: OTPM gives `misconfigured`, `rateLimited() === false`, and
+the guest gets the hand-off with the real phone number; an ordinary TPM 429
+still gives `rate_limited` and "send that again in 22 seconds".
+
+**Deliberately not auto-retried with a smaller cap.** The error names the
+limit, so a retry is tempting — but the only model that ever produced it,
+`qwen3.6-27b`, has been decommissioned, and no current model has an OTPM bucket
+to reproduce it against. Retry code for a condition nobody can trigger is code
+that has never run, and section 9's standing rule here is that four confident
+diagnoses were already wrong from small samples. Fail loudly, name the cause,
+and leave the retry to whoever can reproduce it.
+
+---
+
+### Known, measured, and deliberately not fixed here
+
+- **The extractor misreads a named slot about 1 time in 5.** Identical payload
+  sent five times at `temperature: 0.0`: "and how much for the night?" gave
+  `night` four times and `day` once, while the date was stable 5/5. So
+  `gpt-oss-120b` is not deterministic at temperature 0, and this is a property
+  of the extractor rather than anything cause 2 introduced — but cause 2 does
+  make it *reachable* on follow-ups, which previously produced no date at all.
+  Before hardening it, measure a baseline: send the same payload at least five
+  times, per the section 9 rule that one correlated sample is not a diagnosis.
+- **The v7.77 global limiter makes the chatbot untestable over HTTP.**
+  `Limit::perMinute(2)->by('g:chatbot')` is keyed on a constant, so **every
+  test in the run shares one 2-per-minute counter**: four tests in
+  `AiSecurityTest` and `RateLimitingTest` fail with 429 on a clean checkout,
+  unrelated to this version's changes. A test that posts to `/chatbot` needs
+  the limiter cleared first.
+- **Chat history is lost on page navigation.** `let history = []` in
+  `partials/chatbot.blade.php` with no `sessionStorage`, so the transcript
+  resets on every in-page link — a second, independent source of the context
+  loss cause 2 fixed.
+
+---
+
+## What Changed in v7.77 (Read This First)
+
+### The AI budget, measured — and the two failures it produced
+
+Measured on 2026-10-15 by capturing the exact prompt each feature sends
+(`Http::fake()` + `Http::recorded()`, no code changed), then sending one real
+Groq call to read the `usage` object and the live rate-limit headers.
+Re-measure the same way; never estimate a prompt's size by reading the Blade.
+
+**What the free Groq tier allows on this key** (read from the response headers,
+not from the docs): **8,000 tokens per minute** and **1,000 requests per day**.
+
+Three facts about how that is scoped, and all three matter:
+
+- **It is per *organization*, not per API key.** Groq's docs: "Rate limits
+  apply at the organization level, not individual users." A second key in the
+  same account shares one bucket and adds nothing. A second *account* does add
+  one, and is the single thing Groq's Acceptable Use Policy names: it forbids
+  exceeding published limits "including by registering multiple accounts" or
+  "orchestrating usage between multiple organizations". Not an option — and it
+  would be the worst possible answer to "how did you handle the API limit?"
+- **It is per *model*.** Measured: immediately after a call that left
+  `gpt-oss-120b` at 5,063 remaining, `gpt-oss-20b` was at 7,927 and
+  `qwen/qwen3.8-27b` at 7,986 — same key, same minute. So one account holds
+  3 x 8,000 TPM if the work is spread across models. **This is the real
+  headroom, and it is deliberately NOT built yet** (see *Not done* below).
+- **Every usable model has the same ceiling**, so switching `GROQ_MODEL` by
+  itself gains nothing: `gpt-oss-120b`, `gpt-oss-20b` and `qwen/qwen3.8-27b`
+  all report 8,000 / 1,000. (`llama-3.3-70b-versatile` and
+  `llama-3.1-8b-instant` now **404** — decommissioned, as section 9 warns.
+  `allam-2-7b` is 6,000 TPM and Arabic-focused.)
+
+**What each feature costs** (`AI_PROVIDER=groq`, `gpt-oss-120b`):
+
+| Feature | Groq requests | Input tokens | Output cap | Tokens per use |
+|---|---|---|---|---|
+| **Chatbot, one guest message** | **2** (intent + reply) | 827 + 2,203...3,780 | 1024 | **3,230 - 4,800** |
+| Insights refresh | 1 | 260 | 1024 | 700 - 1,300 |
+| Forecast refresh | 1 | 380 | 2048 | 900 - 2,400 |
+| Prescriptive briefing (button, plus the 01:30 cron) | 1 | 480 | 500 | ~1,000 |
+| Review moderation (per review past the pre-filter) | 1 | 310 | 1024 | ~370 |
+
+**The intent figure in that row was wrong and is corrected above: re-measured
+in v7.78 it is 827 prompt tokens, not 410** — the slot block now carries the
+`slot_windows` dates, and v7.78 added the history turns. Measure a prompt by
+sending it with `max_tokens: 1` and reading `usage.prompt_tokens`; that costs
+the input only.
+
+The real reply call: `prompt_tokens: 2553, completion_tokens: 181` (57 of them
+reasoning) = **2,734 tokens in one request**.
+
+**So the binding limit is tokens-per-minute, and it allows about two chatbot
+messages a minute for the whole site.** Requests-per-day (1,000) and
+requests-per-minute are not the constraint. 200,000 tokens a day is ~60
+chatbot messages.
+
+**The chatbot prompt cannot usefully be shrunk**, and that was measured too, so
+do not spend a pass on it. Of the 8,954-character reply prompt, 3,799 is the
+"ONLY SAY WHAT IS WRITTEN BELOW" grounding block, 1,439 "HOW THIS RESORT
+ACTUALLY WORKS", 1,303 the policy block and 981 the transcript fence — about
+67% is the anti-hallucination scaffolding v7.20 exists to protect, and only
+**376 characters are live data**. Cutting it trades a small measured saving for
+the exact failure (an invented WiFi password) that block prevents.
+
+### Fix 1 — the chatbot limiter now sees the limit that actually runs out
+
+`throttle:chatbot` was 10/min, 60/hour, 150/day **per user or IP**. Groq's
+budget is per organization, so none of those could see it: three guests on
+three phones, each well inside 10/min, exhaust 8,000 tokens between them, and
+the third message spent two Groq requests to be told 429 and then showed a
+generic apology.
+
+`AppServiceProvider::configureRateLimiting()` adds one global limit beside
+them: `Limit::perMinute(2)->by('g:chatbot')->response($busy)`.
+
+- **2/min is ~6,400 tokens**, which fits inside 8,000 and leaves room for
+  review moderation and one admin report. It is our own refusal, issued before
+  the budget is spent, with a real `Retry-After`.
+- **Keyed on a constant** — a shared counter is the point — but it still needs
+  its own `g:` prefix so the per-guest limits do not count against it (the
+  v7.8 rule: every `Limit` in one limiter gets its own prefix).
+- **It never blames the guest.** The existing per-IP wording ("You are sending
+  messages a little too fast") is wrong here: the budget may have gone on
+  someone else's message, or on an admin pressing Refresh.
+- Verified through the real `ThrottleRequests` middleware with four different
+  IPs: guests 1-2 reach the controller, guests 3-4 get 429 with the shared
+  sentence. Note the framework's `Retry-After` is the decay window (60s), not
+  the token bucket's refill, so the wording says "in a minute".
+
+### Fix 2 — GeminiService now reports *why* it failed
+
+`ask()` returned NULL for every failure, so no surface could tell "over the
+limit, ask again in 20 seconds" from "something is broken" — and on a tier
+this small the first is routine, self-healing, and needs nobody.
+
+- **`ask()` still returns the reply or NULL and nothing else.** The reason is a
+  separate accessor: `lastFailure()`, `rateLimited()`, `retryAfterSeconds()`,
+  with `FAILURE_RATE_LIMITED` / `UNAVAILABLE` / `REFUSED` / `EMPTY` /
+  `MISCONFIGURED`. **Never move the reason into the return value** — that is
+  the v7.5 bug (`"API Error: 429 - {...}"` rendered into a guest's chat
+  bubble). An accessor can be ignored safely; a sentinel string is a guard
+  every caller has to remember to string-match.
+- Cleared at the top of every `ask()`, so it always describes the call that
+  just returned. The chatbot makes two per request, and only the second one's
+  outcome decides what the guest is told.
+- **`retryAfterSeconds()` reads `retry-after` first, then
+  `x-ratelimit-reset-tokens`**, because the limit this app exhausts is tokens,
+  not requests. Groq writes that header as `21.915s` and, past a minute, as
+  `1m26.4s` — both parsed by `parseSeconds()`, both measured on live
+  responses. NULL when the provider said nothing, so the caller can word it
+  "in a moment" instead of inventing a number.
+- **A Groq 429 is logged as a WARNING, not an ERROR.** On a free tier it is the
+  tier working as sold, and an ERROR that fires in ordinary use is an ERROR
+  nobody reads when something is really wrong.
+
+**The surfaces that print it:**
+
+- **The guest.** `ChatbotController::busyMessage(?int $seconds)` is the one
+  sentence for "the budget is spent". It is `public static` because **two**
+  places print it: this controller after a 429, and the Fix 1 limiter, which
+  refuses *before* calling Groq for the same underlying reason. A guest cannot
+  tell those apart and should not have to — one cause, one sentence. Every
+  other failure keeps the "having trouble replying" wording and now adds
+  `handoffContact()`: "message us directly" without the number leaves the guest
+  exactly where they started.
+- **The admin.** `ThrottlesAiRefresh::aiFailureMessage()`, shared by the
+  Insights and Forecast Refresh buttons: "the AI service is over its limit for
+  the moment. Please try again in 42 seconds. The figures above are
+  unaffected." An admin told "did not respond" starts investigating; an admin
+  told the wait waits.
+- Neither ever prints the provider's response body.
+
+### Not done, on purpose
+
+- **Per-model routing plus 429 failover** — the 24,000 TPM lever above. It
+  would move the intent call, review moderation and the three admin reports off
+  the chatbot's bucket and fail over on a 429. Verified feasible first:
+  `gpt-oss-20b` extracted the intent correctly
+  (`{"intent":"get_price","slot":"night","guests":12}`, 692 tokens) and wrote a
+  coherent, correctly-grounded reply. Deferred as too large a change this close
+  to the defense.
+- **Caching repeated chatbot answers** — the same five demo questions would
+  cost five calls instead of fifteen. The cache key must include the live data
+  block, or a stale availability answer outlives the booking that changed it.
+- **Trimming `cleanHistory()`** (8 turns x 1,000 chars to 4 x 400) — rejected
+  for now: it saves ~1,500 tokens only in the tail case and costs Elena her
+  memory of the conversation, which is the thing a live demo exercises.
+- **A global per-day chatbot cap.** 200,000 tokens is ~60 messages and nothing
+  stops that being spent by lunchtime, but a per-day cap switches the chatbot
+  off site-wide when it bites, so the number is the owner's to choose.
+- **`AI_PROVIDER=gemini` stays the escape hatch, not the default.** Verified
+  working on the real prompt (correct answer, `gemini-3.6-flash`) but **6.1s
+  against Groq's 0.5s**. Separate quota, one `.env` line plus `config:clear`,
+  and a redeploy on Render — so it is a decision to take before a demo, never
+  during one.
 
 ---
 
@@ -7321,7 +7860,7 @@ An audit of every route found the same problem worse elsewhere. The limits were 
 | `two-factor-verify` | `POST /two-factor/verify` | 10/min per IP |
 | `two-factor-resend` | `POST /two-factor/resend` | 2/min and 6/hour per pending login, 20/hour per IP |
 | `verification-send` | `POST /email/verification-notification` | 2/min, 6/hour, 10/day per user |
-| `chatbot` | `POST /chatbot` | 10/min, 60/hour, 150/day per user or IP |
+| `chatbot` | `POST /chatbot` | 10/min, 60/hour, 150/day per user or IP, **plus 2/min for the whole site (v7.77)** |
 | `password-confirm` | `PUT my/profile/password`, `PUT my/profile/2fa`, `DELETE my/profile`, `PUT staff/profile/password` (v7.76) | 5/min per user |
 | `review-write` | `POST my/bookings/{booking}/review`, `PUT my/reviews/{review}` | 10/min per user |
 | `contact` | `POST /contact` | 5/hour per IP |
@@ -10310,7 +10849,7 @@ Setting::set('resort_name', 'New Name')     // upsert + cache clear
 **v5.0 — Profile Management** (`ProfileController`, `resources/views/customer/profile.blade.php`):
 - Edit name/phone/address + avatar upload (`Storage::disk('public')`, replaces old avatar on change).
 - Change password — requires current password, `min:8|confirmed`, rotates `remember_token`.
-- **Deactivate account** (soft delete via `status = 0`, not a hard `DELETE`) — chosen deliberately because `bookings`/`reviews`/`notifications` all `cascadeOnDelete()` on `user_id`; a real delete would silently wipe a guest's entire booking/payment/review history. Deactivating logs the guest out and blocks future logins (same convention as `Admin\UserController::toggleStatus()`) but keeps every record intact.
+- *(Replaced in v7.79 by **Delete account** — erasure in place through `AccountErasure`; see v7.79. The reasoning below about cascades still holds and is why the row is kept.)* **Deactivate account** (soft delete via `status = 0`, not a hard `DELETE`) — chosen deliberately because `bookings`/`reviews`/`notifications` all `cascadeOnDelete()` on `user_id`; a real delete would silently wipe a guest's entire booking/payment/review history. Deactivating logs the guest out and blocks future logins (same convention as `Admin\UserController::toggleStatus()`) but keeps every record intact.
 
 **v5.0 — My Reviews** (`Customer\ReviewController@index/edit/update/destroy`, `resources/views/customer/reviews.blade.php`): editing a review that was already `approved` re-runs it through the same automated moderation pipeline used on creation (see [Reviews Module](#613-reviews-module)) rather than blindly demoting it back to `pending` — a clean edit can stay live.
 
@@ -11373,7 +11912,8 @@ PUT    /my/refunds/{payment}/destination      customer.refunds.destination.updat
 GET    /my/profile                            customer.profile.edit              ← NEW v5.0
 PUT    /my/profile                            customer.profile.update            ← NEW v5.0
 PUT    /my/profile/password                   customer.profile.password          ← NEW v5.0
-DELETE /my/profile                            customer.profile.deactivate        ← NEW v5.0
+DELETE /my/profile                            customer.profile.destroy           ← v7.79 (was .deactivate)
+POST   /my/profile/delete-code                customer.profile.delete-code       ← NEW v7.79
 PUT    /my/profile/2fa                        customer.profile.2fa.toggle        ← NEW v5.0
 DELETE /my/profile/devices/{device}           customer.profile.devices.destroy   ← NEW v5.0
 ```

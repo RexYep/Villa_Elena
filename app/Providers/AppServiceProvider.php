@@ -2,6 +2,7 @@
 
 namespace App\Providers;
 
+use App\Http\Controllers\Portal\ChatbotController;
 use App\Models\Notification;
 use Illuminate\Cache\Events\CacheFailedOver;
 use Illuminate\Cache\RateLimiting\Limit;
@@ -287,7 +288,7 @@ class AppServiceProvider extends ServiceProvider
             ->response($this->throttledBack('Too many login attempts from this network.', 'email')));
 
         // Profile forms that check the current password (change password,
-        // turn off 2FA, deactivate). Without a limit a hijacked session could
+        // turn off 2FA, delete the account). Without a limit a hijacked session could
         // guess the password here indefinitely. Each form reads its errors
         // from its own bag — see ProfileController — so the message goes
         // into that bag, or it would never appear on the page.
@@ -295,7 +296,8 @@ class AppServiceProvider extends ServiceProvider
             [$bag, $field] = match ($request->route()?->getName()) {
                 'customer.profile.password' => ['updatePassword', 'current_password'],
                 'customer.profile.2fa.toggle' => ['twoFactor', 'password'],
-                'customer.profile.deactivate' => ['deactivate', 'password'],
+                'customer.profile.destroy' => ['deleteAccount', 'password'],
+                'customer.profile.delete-code' => ['deleteAccount', 'code'],
                 // The staff form has one bag and prints each error under
                 // its field; the password it asks for is `current_password`.
                 'staff.profile.password' => ['default', 'current_password'],
@@ -485,10 +487,32 @@ class AppServiceProvider extends ServiceProvider
                 'property_cards' => [],
             ], 429, $headers);
 
+            // The limit the per-guest ones above cannot see. Groq's budget is
+            // 8,000 tokens a minute **per organization**, not per IP, and one
+            // chatbot message costs ~3,200 of them (measured: 2,553 in + 181
+            // out for the reply, ~490 for the intent call). So three guests on
+            // three phones, each comfortably inside 10/min, exhaust it between
+            // them — and the third one spends two Groq requests just to be told
+            // 429 and shown a generic apology.
+            //
+            // Two a minute is ~6,400 tokens, which fits inside 8,000 and leaves
+            // room for review moderation and one admin report. This is our own
+            // refusal, before the budget is spent, with a real Retry-After.
+            //
+            // Keyed on a constant, not on $who: a shared counter is the point
+            // here, which is why it still needs its own `g:` prefix — the
+            // per-guest limits above must not count against it.
+            $busy = fn (Request $request, array $headers) => response()->json([
+                'ok' => false,
+                'reply' => ChatbotController::busyMessage((int) ($headers['Retry-After'] ?? 0) ?: null),
+                'property_cards' => [],
+            ], 429, $headers);
+
             return [
                 Limit::perMinute(10)->by('m:'.$who)->response($respond),
                 Limit::perHour(60)->by('h:'.$who)->response($respond),
                 Limit::perDay(150)->by('d:'.$who)->response($respond),
+                Limit::perMinute(2)->by('g:chatbot')->response($busy),
             ];
         });
     }

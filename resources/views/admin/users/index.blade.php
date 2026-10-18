@@ -359,7 +359,9 @@
                                 {{ $user->last_login ? $user->last_login->diffForHumans() : 'Never' }}
                             </td>
                             <td>
-                                @if ($user->status)
+                                @if ($user->isAnonymized())
+                                    <span class="status-inactive">Deleted</span>
+                                @elseif ($user->status)
                                     <span class="status-active">Active</span>
                                 @else
                                     <span class="status-inactive">Inactive</span>
@@ -369,6 +371,9 @@
                                 <div class="action-btns">
                                     <a href="{{ route('admin.users.show', $user) }}" class="btn-icon"
                                         title="View Profile"><i class="bi bi-eye"></i></a>
+                                    {{-- A deleted guest keeps only View: editing or reactivating
+                                         would rebuild the person they asked to have erased. --}}
+                                    @unless ($user->isAnonymized())
                                     <a href="{{ route('admin.users.edit', $user) }}" class="btn-icon" title="Edit"><i
                                             class="bi bi-pencil"></i></a>
                                     <form method="POST" action="{{ route('admin.users.toggle', $user) }}"
@@ -384,9 +389,10 @@
                                             {{-- Js::from(), never '{{ $x }}': the HTML parser decodes entities in an attribute
                                                  before the JS parser runs, so `{{ }}` does not keep a value inside a JS string.
                                                  Measured exploitable on this shape; see staff/partials/_today_list.blade.php. --}}
-                                            onclick="confirmDelete({{ $user->id }}, {{ Illuminate\Support\Js::from($user->full_name) }})"
+                                            onclick="confirmDelete({{ $user->id }}, {{ Illuminate\Support\Js::from($user->full_name) }}, {{ $user->role === 'customer' ? 'true' : 'false' }})"
                                             class="btn-icon danger" title="Delete"><i class="bi bi-trash"></i></button>
                                     @endif
+                                    @endunless
                                 </div>
                             </td>
                         </tr>
@@ -431,8 +437,12 @@
     <script>
         const deleteUserUrlTemplate = '{{ route('admin.users.destroy', ['user' => '__ID__']) }}';
 
-        function confirmDelete(id, name) {
-            document.getElementById('deleteMsg').textContent = `"${name}" and all their data will be permanently deleted.`;
+        // A guest is erased, not deleted (AccountErasure): the message has to
+        // say the bookings stay, or an admin cannot tell what the button does.
+        function confirmDelete(id, name, isGuest) {
+            document.getElementById('deleteMsg').textContent = isGuest
+                ? `"${name}"'s name, email, phone, address and photo will be erased and they will be signed out for good. Their bookings and payments are kept without their name. This cannot be undone.`
+                : `"${name}" and all their data will be permanently deleted.`;
             document.getElementById('deleteForm').action = deleteUserUrlTemplate.replace('__ID__', id);
             new bootstrap.Modal(document.getElementById('deleteModal')).show();
         }

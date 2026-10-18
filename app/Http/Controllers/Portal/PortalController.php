@@ -33,7 +33,7 @@ class PortalController extends Controller
      * ipinapakita nito sa guest ay kung kailan huling nagbago ang
      * *patakaran*, hindi kung kailan huling na-deploy ang app.
      */
-    public const LEGAL_LAST_UPDATED = '2026-10-11';
+    public const LEGAL_LAST_UPDATED = '2026-10-17';
 
     // ── Homepage / Property Listing ────────────────────────────────
     public function home(Request $request)

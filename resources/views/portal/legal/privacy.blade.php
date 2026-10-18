@@ -310,9 +310,12 @@
                 <section id="retention">
                     <h2><span class="num">07</span>How long we keep it</h2>
                     <ul>
-                        <li><strong>Account details</strong> — while your account exists, and afterwards
-                            only where a booking or financial record requires it. Deactivating your account
-                            blocks sign-in but does not delete it.</li>
+                        <li><strong>Account details</strong> — while your account exists. When you delete
+                            your account, your name, email address, phone number, address, profile photo,
+                            notifications and sign-in history are erased, and your bookings and payments
+                            stay on record without your name. Your name can remain in records made while the
+                            account existed — staff activity logs and notices our staff received about your
+                            bookings — and in what our payment processor holds under its own policy.</li>
                         <li><strong>Unverified sign-ups</strong> — an account whose email address is never
                             verified is deleted after {{ $unverifiedHours }} hours.</li>
                         <li><strong>Booking and payment records</strong> — kept as long as accounting, tax,
@@ -320,7 +323,8 @@
                         <li><strong>Refund payout details</strong> — kept with the refund record as proof
                             of where the money was sent.</li>
                         <li><strong>Published reviews</strong> — kept while published; you can delete
-                            yours from your account at any time.</li>
+                            yours from your account at any time. A review you have not deleted stays up under
+                            “{{ \App\Models\User::ANONYMIZED_NAME }}” after you delete your account.</li>
                         <li><strong>Problem reports</strong> — kept with the booking they belong to.</li>
                         <li><strong>Contact-form messages</strong> — <strong>not stored in our
                             database.</strong> They are delivered to the resort's email inbox, and kept
@@ -330,7 +334,7 @@
                             database.</strong> The conversation lives in your browser tab only and is gone
                             once you close or refresh it.</li>
                         <li><strong>Sign-in records</strong> — your sign-in history is kept with your
-                            account. A verified browser is forgotten after {{ $trustedDeviceDays }} days,
+                            account and erased when you delete it. A verified browser is forgotten after {{ $trustedDeviceDays }} days,
                             or as soon as you remove it from your profile.</li>
                         {{-- Mula sa config/audit.php; 0 = hindi binubura. May iilang
                              entry na hindi kailanman binubura dahil binabasa sila ng
@@ -371,8 +375,10 @@
                     <p>
                         Several of these you can do yourself while signed in: edit your details, remove
                         your profile photo, edit or delete your reviews, turn booking emails off, remove a
-                        verified browser, and deactivate your account. Deactivation is not erasure — to
-                        have your data erased, write to us.
+                        verified browser, and delete your account. An account cannot be deleted while a
+                        stay is booked or in progress, a payment is being made, or money is still owed
+                        either way — your profile page names the booking that is holding it up. If you
+                        cannot sign in, write to us and we will delete it for you.
                     </p>
                 </section>
 

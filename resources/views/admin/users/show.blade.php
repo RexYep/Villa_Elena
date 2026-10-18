@@ -337,6 +337,9 @@
     @if (session('success'))
         <div class="alert alert-success"><i class="bi bi-check-circle me-2"></i>{{ session('success') }}</div>
     @endif
+    @if (session('error'))
+        <div class="alert alert-danger"><i class="bi bi-exclamation-circle me-2"></i>{{ session('error') }}</div>
+    @endif
 
     <div class="profile-grid">
 
@@ -355,7 +358,17 @@
                     <div class="profile-name">{{ $user->full_name }}</div>
                     <div class="profile-email">{{ $user->email }}</div>
                     <span class="role-badge role-{{ $user->role }}">{{ ucfirst($user->role) }}</span>
-                    @if (!$user->status)
+                    @if ($user->isAnonymized())
+                        <div class="mt-8">
+                            <span class="tag-red"
+                                style="padding:3px 10px;border-radius:20px;font-size: 13px;font-weight:600;">Deleted
+                                {{ $user->anonymized_at->format('M d, Y') }}</span>
+                        </div>
+                        <p class="note-text mt-8">
+                            Deleted at the guest's request. Their personal details were erased; the bookings and
+                            payments below are kept as financial records.
+                        </p>
+                    @elseif (!$user->status)
                         <div class="mt-8">
                             <span class="tag-red"
                                 style="padding:3px 10px;border-radius:20px;font-size: 13px;font-weight:600;">Inactive</span>
@@ -418,6 +431,7 @@
                 </div>
 
                 {{-- Actions --}}
+                @unless ($user->isAnonymized())
                 <div class="profile-actions">
                     <a href="{{ route('admin.users.edit', $user) }}" class="btn-action btn-edit">
                         <i class="bi bi-pencil"></i> Edit Profile
@@ -433,6 +447,7 @@
                         </form>
                     @endif
                 </div>
+                @endunless
             </div>
         </div>
 
@@ -441,10 +456,14 @@
             <div class="card-panel">
                 <div class="card-header-custom">
                     <h3>Booking History</h3>
+                    {{-- The list is searched by email, and a deleted account has none:
+                         an empty search would list every booking. --}}
+                    @if ($user->email)
                     <a href="{{ route('admin.bookings.index', ['search' => $user->email]) }}"
                         style="font-size: 14px;color:var(--terracotta);text-decoration:none;font-weight:500;">
                         View all <i class="bi bi-arrow-right"></i>
                     </a>
+                    @endif
                 </div>
                 <div class="card-body-custom history-scroll" style="padding:0;">
                     @if ($bookings->isEmpty())
