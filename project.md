@@ -1,7 +1,7 @@
 # Villa Elena Private Rental Resort
 ## Resort Management System — Project Documentation
 
-**Version:** 7.80
+**Version:** 7.83
 **Stack:** PHP 8.2 / Laravel 12 / MySQL 8 / Bootstrap 5
 **Local URL:** `http://127.0.0.1:8000` (`php artisan serve`) or `http://localhost:8000` (Docker — see v5.3)
 **Live URL:** `https://villa-elena.onrender.com` (Render, free tier — testing only, not yet handed to real guests)
@@ -124,6 +124,250 @@ tune:
 camera=(), microphone=(), geolocation=(), payment=(), usb=(),
 magnetometer=(), gyroscope=(), accelerometer=()
 ```
+
+---
+
+## What Changed in v7.83 (Read This First)
+
+### Insights: the figures are calculated; the AI only puts them into words
+
+The same rebuild Forecast had in v7.82.
+
+**What was wrong.** `/admin/insights` sent ten bare counts to the AI. The
+stored text (written 2026-10-19) had three wrong sentences out of five:
+
+- "94 booking requests **this month**": 94 was every booking ever made.
+  "Total Bookings" was sent with no period.
+- "32 (34%) confirmed, 19 (20%) cancelled": `checked_out` (43, the largest
+  group) was never sent, so the model saw 51 of the 94.
+- "All 8 registered guests are **repeat visitors**": invented. Nothing sent
+  said anything about earlier stays.
+
+Also:
+
+- Revenue was gross (₱69,018) while the dashboard showed net (₱68,991); the
+  difference is this month's refunds.
+- "New Guests This Month" had `whereMonth` with no `whereYear`, so it counted
+  October of every year.
+- This month so far was compared with the whole of last month.
+- The tiles were live but the text was not, and nothing said when they
+  disagreed. The subtitle showed today's date over 3-day-old text.
+
+**What it does now.** `App\Services\Insights\MonthToDate::build()` works out
+every figure for **this month so far** and **the same days of last month**
+(Oct 1–22 against Sep 1–22; on Mar 30, Feb 1–28). It uses Reports' three date
+bases, so the two pages agree for the same dates (checked: both periods
+identical on every figure):
+
+| Figure | Basis | Rule |
+|---|---|---|
+| Bookings made, still standing, cancelled | date made (`created_at`) | standing = not `cancelled`/`no_show` |
+| Cancelled, by who | date made | `cancelled_by`: `system` (unpaid hold ran out), `guest`, `admin`, NULL = "Not recorded" |
+| By slot, by source | date made | `slotKey()`; same source labels as Reports |
+| Slots booked | date of the stay | `OccupancyCalendar::covering()->slotCounts()`, as Reports |
+| Collected, refunded, net | date paid | `Payment::collected()` / `refunds()` |
+| Stays, returning vs first-time | check-in date | returning = a `User::COMPLETED_STAY_STATUS` booking with an **earlier** check-in date (the returning-guest promos' definition) |
+| New guest accounts | `created_at` | same as Reports' New Guests |
+
+**The AI's job** is five sentences, one per topic in a fixed order (bookings
+made, cancellations, slots, money, guests). Every figure is pre-formatted
+and every comparison pre-stated ("Compared with the same days last month:
+down by 1, from 22 (−5%)"), the v7.82 lesson. The rules forbid any number of
+its own, any reason the data doesn't show, predictions and advice (that is
+Forecast and Recommendations), and calling a small change a trend.
+Temperature 0.3, `max_tokens` 1024. The reply is split into lines, stripped
+of numbering/bullets/bold, and **refused unless it is exactly five lines**.
+The refusal says so ("answered, but not in five lines") rather than "did not
+respond". Split with `/\R/u`: without `/u`, `\R` matches byte 0x85, the last
+byte of 📅, and cut that emoji in half (measured).
+
+**Stale text.** Stored with `meta`: `version` (2), `month`, `as_of` (the date)
+and the figures. Notes, most specific first: a different month; an earlier
+day ("written on Oct 19 for Oct 1–19; the table now covers Oct 1–22"); the
+same day with changed figures. A report without `version: 2` is treated as
+none, so the old text is never shown beside the new table.
+
+**Page.** Four tiles (bookings made, slots booked, net received, the villa
+now), a comparison table grouped by basis, slot and source breakdowns, a
+"How these figures are counted" panel, then "What the Figures Say" (badged
+AI-written). Colours are tokens; the old hex literals are gone.
+
+**Verified.** All five page states through the HTTP kernel as an admin; the
+Refresh path for real (one AI call, all five sentences matched the table)
+and its one-minute cooldown; the cleaner against fake replies; the page in
+Chrome at desktop width and at 390px inside a frame (the window would not
+resize), where the table stacks with left-aligned group headings. Pint
+passes. The full suite has the same 6 failures as v7.82, none touching this
+page.
+
+**Known limit.** "Returning" only knows stays recorded in this system, so a
+guest who stayed before it existed counts as first-time.
+
+---
+
+## What Changed in v7.82 (Read This First)
+
+### Forecast: the numbers are calculated; the AI only explains them
+
+**What was wrong.** `/admin/forecast` sent six monthly totals to the AI and
+asked it for the next three months' bookings and revenue. The stored report
+(written 2026-10-19) divided **revenue by payment date** by **bookings by stay
+date**, got "≈ ₱3,030 per booking" — below the cheapest rate, ₱4,000 — and
+multiplied every month by it. Also:
+
+- Revenue was gross (refunds not subtracted), so it disagreed with the
+  Dashboard and Reports (local August: ₱54,086 here, ₱38,068 there).
+- Bookings already made for the forecast months were never sent (local:
+  November had 5, December 1), and nothing capped a prediction at what the
+  villa can hold.
+- The current month was sent as if it were finished.
+- A report kept being shown after the months it covered had moved on.
+- "LIVE" badge on a stored report; "Occupancy Predictions" subtitle on a
+  prompt that forbade occupancy; §6.17 said the chart showed the forecast (it
+  did not).
+
+**What it does now.** `App\Services\Forecast\MonthlyOutlook::build()` works out
+the figures by rule, on every visit, for the last five months, this month and
+the next three. Everything is counted in **slots** (one Day, Night or 22-hour
+stay), the unit Reports' occupancy and Recommendations already use:
+
+| Figure | Rule |
+|---|---|
+| For sale | `OccupancyCalendar::sellableSlots()` — blocked dates and unpriced slots excluded |
+| Booked | datetime-overlap test (`isTaken()`), so a 22-hour stay takes its date and the next date's Day |
+| Usual fill | `summarise()` over the dates still ahead: the same weekdays over the last `history_days` (180), Day and Night only |
+| Expected slots | dates still ahead: the larger of booked-so-far and usual (the Recommendations rule); past dates keep what they got; never more than the open slots |
+| Value booked | sum of `total_amount` of the month's live bookings, **by month of the stay** |
+| Expected value | value booked + extra expected slots × the average rate the month's open slots are listed at today (`quoteFor()`, promos included, no guest) |
+
+Value is **not money received** — the page says so, and says that Dashboard
+and Reports count money by payment date. Don't divide one by the other.
+
+**The AI's job** is the "What the Figures Say" panel. The prompt hands it every
+figure already formatted, tells it how they were calculated, and forbids any
+number of its own, any claim the figures don't support (v7.20 grounding), and
+any advice (v6.3). Two things were measured and are now **stated in the
+prompt rather than left to the model**:
+
+- Asked to compare each month's percentage with the usual fill, it called July's
+  6% "above" 12%. Each history line now says above / below / the same, and one
+  sentence groups the months; with only the per-line label it still summed
+  them up as "recent months were below the usual fill" with September at 30%.
+- Whether a month's expected figure rests on bookings already made or on the
+  usual fill is stated per month; it had called December "largely secured" at
+  1 booked + 7 expected. It also called October "fully booked" at 21 of 60,
+  hence rule 5 ("secured is not full").
+
+Three generations 25 s apart after those changes: all correct, no invented
+numbers. Temperature 0.3, `max_tokens` 2048 (unchanged).
+
+**Stale explanations.** `AiReportStore::refresh()/remember()` take an optional
+`$meta`, stored beside the text and returned by `read()` (Insights does too since v7.83).
+The forecast stores `version`, the first month it covers and the figures it
+quoted. The page shows an amber note when the months have moved on, or when
+any booked / expected / value figure has changed since. A report without
+`version: 2` (the pre-v7.82 one with the invented numbers) is treated as no
+report: `index()` writes a new one once, and if the AI is down the page says
+none exists rather than showing the old text.
+
+**Cost.** Pricing ~240 open slots one at a time was ~700 queries and 2.2 s.
+`MonthlyOutlook::price()` reuses a `quoteFor()` result only between dates that
+quoteFor() cannot tell apart: same slot, same weekday, no pricing rule on
+either date, and the same promos valid (`Discount::isValidOn()`). Now 68
+queries, 0.3 s locally; checked against a direct quote on all 217 open slots,
+0 differences. **If `quoteFor()` ever reads something new about a date, add it
+to that key.**
+
+**Page.** Table for this month and the next three (booked of for-sale, usual,
+expected, value booked, expected value, holidays from `HolidayCalendar`); two
+stacked-bar charts over nine months (booked solid, expected pale outlined, HTML
+legend); a "How these numbers are worked out" panel; the AI panel badged
+"AI-written"; the button is now **Refresh Explanation**, since the figures are
+always live.
+
+**Verified.** The page through the HTTP kernel as an admin in all four states
+(current, figures changed, months moved, old-format report with the AI
+unreachable — the old text is not shown); the chart script run against stubs;
+Pint. The browser extension was not connected, so the page was **not** looked
+at in a browser. The full suite has the same 6 failures before and after
+(AiSecurity ×3, ExampleTest, RateLimiting chatbot, XssAndHeaders checkout),
+none touching this page.
+
+**Known limit.** "Usual" is a 180-day average, so a rising trend lifts it
+slowly: locally it is 12% while September ran 30% and October 35% so far, so
+December and January (resting on the usual fill) are probably low. The
+explanation says which months ran above it. The window is
+`config('prescriptive.history_days')`, shared with Recommendations.
+
+---
+
+## What Changed in v7.81 (Read This First)
+
+### Chatbot: "Day is booked, and I'm not sure whether Night is open"
+
+Reported conversation: the guest asked whether the Night slot on a date was
+open (correct answer: yes), then whether the Day slot on that same date was
+open. Elena answered correctly that Day was booked, then added that she was not
+sure whether Night was available, although she had said it was one message
+earlier and the guest had not asked about it again.
+
+**Cause.** Not an invented fact; three instructions that could only be obeyed
+together by hedging:
+
+1. When the guest named a slot, `reply()` checked **only that slot**, so the
+   SEARCH RESULT for the second question said nothing about Night.
+2. The prompt told Elena: "If not available, suggest … another slot".
+3. The grounding rule (v7.20) says every fact must come from the data sections,
+   and the transcript warning says her own earlier replies are not verified
+   facts. That warning is correct and stays: the browser posts the history, so
+   it can be forged, and Night could have been booked in between.
+
+So she had to mention Night and had no data for it.
+
+**Fix** (`Portal\ChatbotController`):
+
+- **When the guest names a slot, the other slots offered that date are checked
+  too** (`$checkAlternatives`), through the same `slotOutcome()`. At most one
+  extra slot on an ordinary date, none on a 22-hour date.
+  - Named slot **booked**, another **free**: Elena answers the named slot
+    first, then offers the free one with its price and asks whether the guest
+    wants it.
+  - Named slot **free**: the others are listed with "do not bring them up
+    unless they ask", so she has nothing to be unsure about.
+  - All booked: the existing "date is fully booked, suggest another date" note.
+    Before, rule 2 could make her suggest a slot that was also taken.
+- **No booking card for a slot the guest did not ask about** (owner's
+  decision: it reads as pushy). The prompt says so, so Elena does not point to a
+  card that is not there. A "yes" to her offer gets the card through the normal
+  path (below).
+- Rule 2 now reads: suggest another slot **only when the SEARCH RESULT lists it
+  as AVAILABLE**, otherwise another date; never mention a slot without a result,
+  and never say you are unsure whether one is open.
+- **A "yes" now resolves to the offered slot.** Because Elena now ends with a
+  question, guests answer "yes". The intent prompt has a rule (with one example)
+  that a short acceptance means the date and slot Elena offered in her last
+  turn. Measured on `openai/gpt-oss-20b`: on a scenario different from the
+  example ("sure" after a Day offer on Oct 26), **5/5 with the rule, 0/5
+  without it** (all `general_question`, no date). Its RECENT CONVERSATION header
+  no longer says "do NOT extract from it", which contradicted that rule.
+- `intentHistoryBlock()` keeps the **start and end** of a turn over 200
+  characters (110 + 90) instead of the first 200. The date is at the start of
+  Elena's reply but the offer is at the end, and these replies run ~230
+  characters.
+- `slotPromptParts()` no longer returns `names` (its only use was the old rule
+  2).
+
+**Measured live** (Groq, local data; Oct 28 Day booked / Night free): the
+three-turn conversation Night? → Day? → "Yes please", twice. Both runs: Night
+confirmed with its card; Day "already booked" with Night offered and no card; the
+"yes" confirmed Night with its card. No "not sure" sentence in any turn. Day on
+Oct 26 (free; Night booked) was answered without mentioning Night.
+
+**Testing note.** A test script that replays history must send Elena's turns as
+`role: 'assistant'` (what the widget sends). `cleanHistory()` silently drops any
+other role, so a script using `bot` runs without Elena's side of the
+conversation. Two of the first measurements in this fix were invalid for that
+reason and were redone.
 
 ---
 
@@ -11316,17 +11560,18 @@ Other guest-facing notifications (booking confirmations, payment receipts, revie
 
 ### 6.16 AI Smart Insights
 
-**Service:** `app/Services/GeminiService.php` (uses Groq API)
-**Route:** `GET /admin/insights` → `admin.insights`
+**Routes:** `GET /admin/insights` → `admin.insights.index`, `POST /admin/insights/refresh`
 
-Generates 5 bullet-point insights from real booking/revenue data using AI.
+**(v7.83)** This month so far against the same days of last month. Figures calculated by `App\Services\Insights\MonthToDate` on every visit, on Reports' three date bases. The AI writes five sentences about them (bookings made, cancellations, slots, money, guests) and adds no numbers. The text is stored in `AiReportStore` and only rewritten by the Refresh button; the page flags it once the figures have moved on.
 
-**Sample insights:**
-- "Bookings increased 20% compared to last month"
-- "December is the peak season based on historical data"
-- "Cancellation rate is higher than average at 15%"
+**Outputs:**
+- Tiles: bookings made, slots booked, net received, the villa now
+- Comparison table: bookings (by date made, cancellations by who), slots (by stay date), money (by date paid, net), guests (returning vs first-time, new accounts)
+- Bookings made this month by slot and by source
+- "How these figures are counted" panel
+- AI summary, five lines
 
-**Cached:** 1 hour per day-hour key to minimize API calls.
+Insights is *what happened*; Forecast (§6.17) is *what is likely*; Recommendations (§6.18) is *what to do*.
 
 ---
 
@@ -11334,15 +11579,15 @@ Generates 5 bullet-point insights from real booking/revenue data using AI.
 
 **Route:** `GET /admin/forecast` → `admin.forecast`
 
-LLM-written outlook over 6 months of **live** booking and revenue data (the hardcoded `$dummyBookings`/`$dummyRevenue` arrays were replaced on 2026-08-11 — see the Pending/Optional table).
+**(v7.82)** Forecast figures calculated by `App\Services\Forecast\MonthlyOutlook` (slots and stay value, by rule — see v7.82), with an AI-written explanation of them that adds no numbers. Before v7.82 the AI produced the numbers itself from six monthly totals (the hardcoded `$dummyBookings`/`$dummyRevenue` arrays before that were replaced on 2026-08-11).
 
 > **(v6.3) This page is the outlook only.** The prompt used to ask for *"2 actionable recommendations"*; that request was removed and replaced with an explicit instruction **not** to recommend actions, discounts, price changes, or campaigns. Recommendations are computed — not written by the model — over at [§6.18](#618-prescriptive-analytics-recommendations). If this prompt ever asks for advice again, the two pages will contradict each other and both become untrustworthy.
 
 **Outputs:**
-- Expected bookings for each of the next 3 months
-- Expected revenue (PHP) for each of the next 3 months
-- 3 key factors influencing performance
-- Bar chart: 6 months historical + forecast
+- Table, this month and the next 3: slots booked of slots for sale, usual fill, expected slots, value booked, expected value, public holidays
+- Two stacked-bar charts over 9 months (5 finished + this month + 3 ahead): slots, and value of stays — booked vs expected more
+- "How these numbers are worked out" panel
+- AI explanation of the figures (stored; flagged when the figures or months have changed since it was written)
 - Footer link through to Recommendations (what to *do* about the outlook)
 
 ---

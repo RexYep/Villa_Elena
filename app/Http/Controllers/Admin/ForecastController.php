@@ -6,86 +6,158 @@ use App\Http\Controllers\Concerns\ThrottlesAiRefresh;
 use App\Http\Controllers\Controller;
 use App\Models\Booking;
 use App\Models\Payment;
+use App\Models\Setting;
 use App\Services\AiReportStore;
+use App\Services\Forecast\MonthlyOutlook;
 use App\Services\GeminiService;
-use Carbon\Carbon;
 use League\CommonMark\CommonMarkConverter;
 
+/**
+ * /admin/forecast — what the next three months are likely to bring (v7.82).
+ *
+ * The NUMBERS are worked out by `MonthlyOutlook`, by rule, on every visit.
+ * The AI only writes the explanation around them, and is told not to add a
+ * number of its own. Until v7.82 the AI produced the numbers too, and they
+ * could not be traced to any method (see MonthlyOutlook's docblock).
+ *
+ * Still an outlook only: what to DO about it is /admin/prescriptive. If this
+ * prompt ever asks for advice again, the two pages will contradict each other.
+ */
 class ForecastController extends Controller
 {
     use ThrottlesAiRefresh;
 
     /**
-     * Reads the stored forecast; calls Groq only when there is none yet.
-     *
-     * The historical chart below is live DB data and is recomputed every
-     * visit. Only the AI's written outlook is stored — see `AiReportStore`.
-     *
-     * This page is also the app's largest single AI request (`max_tokens`
-     * 2048, for a multi-month Markdown report), which makes it the first thing
-     * Groq refuses when the per-minute output budget is tight. All the more
-     * reason it should not fire on an idle sidebar click.
+     * Bumped when the prompt's inputs change shape. A stored report from an
+     * older version was written from figures this page no longer shows (the
+     * v7.81 one invented its own), so it is treated as no report at all.
      */
-    public function index(AiReportStore $store, GeminiService $ai)
-    {
-        $data = $this->gatherHistory();
+    private const REPORT_VERSION = 2;
 
-        $report = $store->remember(
-            AiReportStore::FORECAST,
-            fn () => $ai->ask($this->prompt($data), 2048)
-        );
+    /**
+     * Reads the stored explanation; calls the AI only when there is none yet
+     * (or only one from an older version). The figures are live either way.
+     */
+    public function index(AiReportStore $store, GeminiService $ai, MonthlyOutlook $outlook)
+    {
+        $data = $outlook->build();
+        $report = $store->read(AiReportStore::FORECAST);
+
+        if (! $this->isCurrentVersion($report)) {
+            $report = $store->refresh(
+                AiReportStore::FORECAST,
+                fn () => $this->ask($ai, $data),
+                $this->reportMeta($data)
+            );
+        }
 
         return $this->render($data, $report);
     }
 
     /**
-     * The Refresh button. The ONLY path that spends a Groq request on purpose.
+     * The Refresh button. The ONLY path that spends an AI request on purpose.
      */
-    public function refresh(AiReportStore $store, GeminiService $ai)
+    public function refresh(AiReportStore $store, GeminiService $ai, MonthlyOutlook $outlook)
     {
         if ($wait = $this->aiRefreshCooldown(AiReportStore::FORECAST)) {
             return back()->with('error', $this->aiRefreshCooldownMessage('forecast', $wait));
         }
 
-        $data = $this->gatherHistory();
+        $data = $outlook->build();
 
-        // NULL means "not regenerated" — `refresh()` leaves the previous report
-        // in place.
+        // NULL means "not regenerated" — `refresh()` leaves the previous
+        // explanation in place.
         $refreshed = $store->refresh(
             AiReportStore::FORECAST,
-            fn () => $ai->ask($this->prompt($data), 2048)
+            fn () => $this->ask($ai, $data),
+            $this->reportMeta($data)
         );
 
         return $refreshed === null
             ? back()->with('error', $this->aiFailureMessage(
                 $ai,
-                'The forecast could not be refreshed',
-                'The historical figures above are unaffected.'
+                'The explanation could not be rewritten',
+                'The forecast figures above are worked out without the AI and are unaffected.'
             ))
-            : back()->with('success', 'Forecast refreshed.');
+            : back()->with('success', 'Forecast explanation rewritten from the current figures.');
+    }
+
+    private function ask(GeminiService $ai, array $data): ?string
+    {
+        // 2048: the explanation is several sections of Markdown, and hidden
+        // reasoning is billed against the same cap (at 1024 it was cut off).
+        // 0.3: it restates given figures; warmth only adds invented ones.
+        return $ai->ask($this->prompt($data), 2048, 0.3);
     }
 
     /**
-     * @param  array<string, mixed>  $data
-     * @param  array{text: string, generated_at: \Carbon\Carbon}|null  $report
+     * @param  array{text: string, generated_at: \Carbon\Carbon, meta: ?array}|null  $report
+     */
+    private function isCurrentVersion(?array $report): bool
+    {
+        return $report !== null && ($report['meta']['version'] ?? null) === self::REPORT_VERSION;
+    }
+
+    /**
+     * What the explanation was written from, kept with it so the page can
+     * say when it no longer matches the live figures.
+     *
+     * @return array<string, mixed>
+     */
+    private function reportMeta(array $data): array
+    {
+        return [
+            'version' => self::REPORT_VERSION,
+            'first_month' => $this->firstForecastMonth($data)['key'] ?? null,
+            'figures' => $this->figures($data),
+        ];
+    }
+
+    /**
+     * The figures the explanation quotes, for the months it covers.
+     *
+     * @return array<string, array{0: int, 1: int, 2: int}>
+     */
+    private function figures(array $data): array
+    {
+        $figures = [];
+
+        foreach ($data['months'] as $m) {
+            if ($m['state'] !== 'past') {
+                $figures[$m['key']] = [$m['booked'], $m['expected'], (int) round($m['value_expected'])];
+            }
+        }
+
+        return $figures;
+    }
+
+    private function firstForecastMonth(array $data): ?array
+    {
+        foreach ($data['months'] as $m) {
+            if ($m['state'] !== 'past') {
+                return $m;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * @param  array{text: string, generated_at: \Carbon\Carbon, meta: ?array}|null  $report
      */
     private function render(array $data, ?array $report)
     {
-        // Ang sagot ng AI ay Markdown (may mga heading, bold, listahan) —
-        // dating dinidisplay ito bilang plain text sa loob ng
-        // white-space:pre-wrap na div, kaya literal na nakikita ang mga
-        // "**"/"#" sa halaman sa halip na tunay na bold/heading. Ni-
-        // rerender na natin ito ngayon bilang tunay na HTML, para
-        // formal at maayos ang itsura sa halip na "hilaw" mula sa AI.
-        // `html_input => 'escape'` + `allow_unsafe_links => false` para
-        // secure pa rin kahit external (AI-generated) ang content na
-        // ito.
-        //
-        // NULL ang `$forecastHtml` kapag wala pang naitatabing forecast.
-        // Hindi ipinapakita ang tunay na error sa admin, nasa log iyon
-        // ("Groq API call failed"); ang view ang nagsasabi na pansamantalang
-        // hindi available ang forecast.
+        // An explanation from before v7.82 quotes numbers the AI made up;
+        // showing it under the calculated table would put two forecasts on
+        // one page.
+        if (! $this->isCurrentVersion($report)) {
+            $report = null;
+        }
+
+        // The AI writes Markdown. `html_input => 'escape'` and
+        // `allow_unsafe_links => false` because the content is model output.
         $forecastHtml = null;
+        $reportState = null;
 
         if ($report !== null) {
             $converter = new CommonMarkConverter([
@@ -93,144 +165,136 @@ class ForecastController extends Controller
                 'allow_unsafe_links' => false,
             ]);
             $forecastHtml = (string) $converter->convert($report['text']);
+
+            // Which months it covers is decided by the month it was written
+            // in; the figures move whenever a booking does.
+            $reportState = match (true) {
+                ($report['meta']['first_month'] ?? null) !== ($this->firstForecastMonth($data)['key'] ?? null) => 'months_moved',
+                ($report['meta']['figures'] ?? null) !== $this->figures($data) => 'figures_changed',
+                default => 'current',
+            };
         }
 
         return view('admin.forecast.index', [
-            'months' => $data['months'],
-            'historicalData' => $data['historicalData'],
-            'next3Months' => $data['next3Months'],
+            'outlook' => $data,
             'forecastHtml' => $forecastHtml,
+            'reportState' => $reportState,
             'generatedAt' => $report['generated_at'] ?? null,
         ]);
     }
 
     /**
-     * @return array<string, mixed>
-     */
-    private function gatherHistory(): array
-    {
-        // ── REAL DATA (last 6 months, live DB queries) ──────────────
-        // "bookings" — lahat ng booking na ang check-in ay nahulog sa
-        //   buwang iyon, hindi kasama ang cancelled/no_show (hindi
-        //   dapat isama sa performance trend ang mga hindi natuloy).
-        // "revenue" — parehong pattern ng DashboardController::index()
-        //   (Payment::whereMonth/whereYear, hindi kasama ang refund).
-        // "stayed" — subset lang ng "bookings": ilan sa mga iyon ang
-        //   talagang natapos (checked_out), bilang completion metric.
-        $months = [];
-        $historicalData = [];
-
-        // `startOfMonth()` muna (v7.69): mula ika-29 hanggang ika-31, ang
-        // `now()->subMonths()` / `addMonth()` ay lumalampas sa mas maikling
-        // buwan (Okt 31 − 1 buwan = Okt 1; Ene 31 + 1 buwan = Mar 3), kaya
-        // may buwang nauulit at may nawawala sa history at sa forecast.
-        $thisMonth = Carbon::now()->startOfMonth();
-
-        for ($i = 5; $i >= 0; $i--) {
-            $date = $thisMonth->copy()->subMonths($i);
-            $label = $date->format('M Y');
-
-            $bookings = Booking::whereYear('check_in_date', $date->year)
-                ->whereMonth('check_in_date', $date->month)
-                ->whereNotIn('status', ['cancelled', 'no_show'])
-                ->count();
-
-            $revenue = Payment::whereYear('payment_date', $date->year)
-                ->whereMonth('payment_date', $date->month)
-                ->where('status', 'success')
-                ->where('payment_type', '!=', 'refund')
-                ->sum('amount');
-
-            $stayed = Booking::whereYear('check_in_date', $date->year)
-                ->whereMonth('check_in_date', $date->month)
-                ->where('status', 'checked_out')
-                ->count();
-
-            $months[] = $label;
-            $historicalData[] = [
-                'month' => $label,
-                'bookings' => $bookings,
-                'revenue' => (float) $revenue,
-                'stayed' => $stayed,
-            ];
-        }
-
-        $next3Months = [
-            $thisMonth->copy()->addMonths(1)->format('F Y'),
-            $thisMonth->copy()->addMonths(2)->format('F Y'),
-            $thisMonth->copy()->addMonths(3)->format('F Y'),
-        ];
-
-        return compact('months', 'historicalData', 'next3Months');
-    }
-
-    /**
-     * @param  array<string, mixed>  $data
+     * The facts the AI may use — and nothing else (the v7.20 grounding rule:
+     * the prompt is the complete extent of what it knows, and a denial is a
+     * claim too). Every figure is printed here already formatted, so the
+     * model copies numbers instead of working them out.
      */
     private function prompt(array $data): string
     {
-        // ── BUILD PROMPT ────────────────────────────────────
-        $historySummary = '';
-        foreach ($data['historicalData'] as $d) {
-            $historySummary .= "- {$d['month']}: {$d['bookings']} bookings, ₱{$d['revenue']} revenue, {$d['stayed']} guests stayed\n";
+        $peso = fn (float $v) => Payment::formatPesos($v);
+        $pct = fn (?float $v) => $v === null ? '—' : number_format($v, 0).'%';
+
+        // Comparisons are stated, not left to the model: asked to compare the
+        // percentages itself, it called July's 6% "above" a 12% usual fill.
+        $usualRounded = (int) round($data['usual_pct']);
+        $versusUsual = fn (float $v) => match (true) {
+            (int) round($v) > $usualRounded => 'above the usual fill',
+            (int) round($v) < $usualRounded => 'below the usual fill',
+            default => 'the same as the usual fill',
+        };
+
+        $history = '';
+        $ahead = '';
+        $groups = [];
+        $latest = null;
+
+        foreach ($data['months'] as $m) {
+            if ($m['state'] === 'past') {
+                $history .= "- {$m['name']}: {$m['booked']} of {$m['offered']} slots booked ({$pct($m['booked_pct'])}, {$versusUsual($m['booked_pct'])}); stays worth {$peso($m['value_booked'])}.\n";
+                $groups[$versusUsual($m['booked_pct'])][] = $m['name'];
+                $latest = $m;
+
+                continue;
+            }
+
+            $line = $m['state'] === 'current'
+                ? "- {$m['name']} (this month, {$m['days_left']} days left including today): {$m['booked']} of {$m['offered']} slots booked so far; {$m['ahead_booked']} of the {$m['ahead_offered']} slots still ahead are already booked."
+                : "- {$m['name']}: {$m['booked']} of {$m['offered']} slots booked so far ({$pct($m['booked_pct'])}).";
+
+            $line .= " Usual fill for these weekdays: {$pct($m['usual_pct'])}."
+                ." Expected: {$m['expected']} slots"
+                .($m['extra'] > 0 ? " ({$m['booked']} already booked + {$m['extra']} more expected)" : ' (all of them already booked; none more expected)')
+                ."; stays worth about {$peso($m['value_expected'])}, of which {$peso($m['value_booked'])} is already booked."
+                .match (true) {
+                    $m['extra'] === 0 => ' This figure is fully secured by bookings already made.',
+                    $m['booked'] >= $m['extra'] => ' This figure rests mostly on bookings already made.',
+                    default => ' This figure rests mostly on the usual fill, not on bookings already made.',
+                };
+
+            if ($m['open_price'] !== null) {
+                $line .= " Open slots are listed at {$peso($m['open_price'])} on average.";
+            }
+
+            if ($m['holidays'] !== []) {
+                $line .= ' Public holidays: '.collect($m['holidays'])
+                    ->map(fn ($h) => $h['date']->format('D, M j').' ('.$h['name'].')')
+                    ->implode('; ').'.';
+            }
+
+            $ahead .= $line."\n";
         }
 
-        $next3Months = $data['next3Months'];
+        // Said in one sentence as well, because a per-line label was not
+        // enough: given the five lines above, the model still summed them up
+        // as "recent months were below the usual fill" with September at 30%.
+        $trend = collect($groups)
+            ->map(fn ($names, $label) => ucfirst($label).': '.implode(', ', $names).'.')
+            ->implode(' ');
 
-        // Walang "occupancy rate" / "available properties" — Villa
-        // Elena ay ISANG villa lang, exclusive-use, hindi hotel na may
-        // maraming hiwalay na bookable na kwarto. Walang kahulugan ang
-        // "occupancy rate ng mga property" dito; ang totoong ineresenteng
-        // metric ay bookings/revenue lang.
-        //
-        // Multi-month Markdown report — kaya 2048 ang `max_tokens` sa dalawang
-        // tumatawag nito, samantalang 1024 (ang default) ang lahat ng iba:
-        // sa 1024 ay naputol ang report sa gitna ng section.
-        $prompt = "
-You are a hospitality business forecasting analyst for Villa Elena Private Rental Resort in the Philippines.
+        if ($latest !== null) {
+            $trend .= " The most recent finished month, {$latest['name']}, was {$versusUsual($latest['booked_pct'])}.";
+        }
 
-IMPORTANT CONTEXT: Villa Elena is a SINGLE, EXCLUSIVE-USE villa rented out in its
-entirety to one guest group at a time — not a hotel with multiple independently
-bookable rooms. Do NOT mention 'occupancy rate', 'available properties', or any
-metric implying multiple bookable units — those don't apply to this business model.
+        $slots = collect(Booking::SLOTS)
+            ->map(fn ($s) => $s['name'].' ('.$s['times'].')')
+            ->implode(', ');
 
-Based on the following 6-month historical data, provide a forecast for the next 3 months: {$next3Months[0]}, {$next3Months[1]}, and {$next3Months[2]}.
+        $resort = Setting::resortName();
+        $usual = $pct($data['usual_pct']);
+        $days = $data['history_days'];
 
-HISTORICAL DATA (last 6 months):
-{$historySummary}
+        return <<<PROMPT
+You are writing the explanation for a booking forecast of {$resort}, a single private villa in the Philippines that is rented whole to one guest group at a time.
 
-RESORT INFO:
-- Location: Philippines (consider Philippine holidays and tourism seasons)
+The forecast has ALREADY BEEN CALCULATED by the system. Your only job is to explain it to the owner in plain, formal words.
 
-Please provide:
-1. Expected number of bookings for each of the next 3 months
-2. Expected revenue (in PHP) for each of the next 3 months
-3. 3 key factors that will influence performance
+WHAT A SLOT IS: one stay the villa can sell. The slots are: {$slots}. An ordinary date offers Day and Night; on dates the owner selects, a 22-hour stay is the only slot offered. Closed dates offer nothing.
 
-Do NOT recommend specific actions, discounts, price changes, or promo campaigns.
-Your job here is the OUTLOOK only — what is likely to happen and why. Stop there.
+HOW THE EXPECTED FIGURES WERE CALCULATED:
+- For dates still ahead: the larger of (a) the share of slots already booked and (b) the usual share — how full the same weekdays were over the last {$days} days ({$usual} across all weekdays).
+- Dates already past keep what they actually got.
+- Expected value = value already booked + the extra expected slots × the average price the open slots are listed at today.
+- "Value" is the price of the stays, by the month of the stay. It is not money received.
 
-Write a clear, professional, formal business report — the kind a resort owner would
-receive from a real analyst, not a casual chat reply. Use proper Markdown: a heading
-per month (###), short paragraphs or bullet points under each, and a closing section
-for the key factors. Be specific with numbers.
-        ";
+FINISHED MONTHS:
+{$history}
+FINISHED MONTHS AGAINST THE USUAL FILL: {$trend}
 
-        // SADYANG HINDI humihingi ng rekomendasyon ang prompt sa itaas.
-        //
-        // Dati, hinihingan dito ang AI ng "2 actionable recommendations".
-        // Sinusulat iyon ng modelo mula sa pangkalahatang kaalaman nito sa
-        // industriya, hindi kinokompyut mula sa datos ng Villa Elena — kaya
-        // walang masasagot sa tanong na "saan galing ang numerong iyan?",
-        // at hindi ito maaaring isagawa ng sistema.
-        //
-        // Ang gawaing iyon ay nasa /admin/prescriptive na ngayon, kung saan
-        // ang bawat mungkahi ay may kinompyut na inaasahang halaga, may
-        // ipinapakitang ebidensya, at may Apply na tunay na gumagawa ng
-        // Discount o AvailabilityBlock. Mahalagang MANATILING iisa lang ang
-        // pinagmumulan ng payo: kung muling hihingi ang page na ito ng
-        // sariling rekomendasyon, magkakasalungat ang dalawang page at
-        // mawawalan ng saysay pareho.
-        return $prompt;
+THIS MONTH AND THE NEXT THREE:
+{$ahead}
+RULES:
+1. Quote only the figures above, exactly as written. Do not calculate, adjust or add any number of your own: no growth rates, no averages, no ranges, no new estimates.
+2. Everything you say must come from the data above; it is the complete extent of what you know. Do not claim tourism seasons, weather, events, competitors or demand patterns that the figures do not show. You may say that a listed public holiday falls in a month, but not how much it will change bookings. If the history is too short to show a pattern, say so.
+3. Do not recommend any action, discount, price change or promotion. Stop at the outlook.
+4. The villa is one unit. Never mention rooms, properties or an occupancy rate across units.
+5. "Secured" is not "full". Never call a month fully booked unless its booked slots equal its slots for sale.
+
+WHAT TO EXPLAIN: the owner sees every figure above in a table beside your text, so do not restate them line by line. Explain what they mean: what each expected figure rests on (each month says so above), and which finished months ran above or below the usual fill (each says so above — never decide that yourself), because that is the main reason an expected figure could turn out too low or too high.
+
+FORMAT (Markdown, under 300 words):
+- Start with a two- or three-sentence overview of the whole period.
+- Then one "###" heading per month in "THIS MONTH AND THE NEXT THREE", each with 2 bullets: what its expected figure rests on, and any public holiday listed for it (leave the holiday bullet out if none is listed).
+- End with "### What could change these numbers": 3 short bullets, each tied to a figure above.
+PROMPT;
     }
 }

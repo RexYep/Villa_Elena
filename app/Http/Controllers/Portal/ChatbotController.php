@@ -130,6 +130,7 @@ For relative dates like 'this weekend', 'next week', calculate the actual dates.
 This weekend = next Saturday ".now()->next('Saturday')->format('Y-m-d').' to Sunday '.now()->next('Sunday')->format('Y-m-d').'.
 If no slot is mentioned, leave slot as null.
 Resolve the Message against RECENT CONVERSATION when it leaves something out: a follow-up like \'how about the night slot?\', \'and Saturday?\' or just \'how much?\' means the date or slot already agreed earlier. Extract for the Message only — the conversation is context, never the thing to extract. If the Message names its own date or slot, that wins. If the Message has moved on to another subject, do not carry a date over to it.
+A short reply that accepts what Elena offered in her LAST turn (\'yes\', \'yes please\', \'sure\', \'ok\', \'sige\', \'that one\', \'book it\') is about the date and slot she OFFERED, usually in her closing question — not a slot the guest asked about earlier: extract intent check_availability with that date and slot. Example: if Elena\'s last turn says the Day slot on Wednesday, Oct 28 2026 is not available and asks "Would you like to book the Night slot instead?", and the Message is "yes please", extract {"intent": "check_availability", "checkin": "2026-10-28", "slot": "night", "guests": null}.
 A bare day of the month in the Message (\'the 21st\', \'how about the 3rd?\') takes its MONTH AND YEAR from the date already under discussion in RECENT CONVERSATION, not from today\'s month — if the conversation was about December, \'the 21st\' is December 21. Only fall back to the nearest coming date of that number when the conversation names no date at all.';
 
         // Temperature 0: this step emits strict JSON, and there is nothing a
@@ -277,6 +278,7 @@ A bare day of the month in the Message (\'the 21st\', \'how about the 3rd?\') ta
                     // nagbubunga ng sagot na tungkol sa ibang produkto
                     // kaysa sa itinanong.
                     $slotSwitchNote = '';
+                    $checkAlternatives = false;
 
                     if ($askedSlot !== null && ! in_array($askedSlot, $offeredThen, true)) {
                         $asked = Booking::SLOTS[$askedSlot]['name'] ?? $askedSlot;
@@ -287,6 +289,7 @@ A bare day of the month in the Message (\'the 21st\', \'how about the 3rd?\') ta
                         $slots = [$offeredThen[0]];
                     } elseif ($askedSlot !== null) {
                         $slots = [$askedSlot];
+                        $checkAlternatives = true;
                     } else {
                         // WALANG SINABING SLOT: susuriin ang LAHAT ng
                         // inaalok sa petsang iyon, isa-isa. Dalawa lang ito
@@ -329,6 +332,58 @@ A bare day of the month in the Message (\'the 21st\', \'how about the 3rd?\') ta
                             .'Answer about the slot the guest asked about if there was one; otherwise name what IS free and its price. '
                             .'If one slot is taken and another is free, say exactly that — do NOT call the whole date unavailable.'
                         : $lines[0];
+
+                    // ── A named slot: check the others offered that date too ──
+                    // Measured (2026-10-21): turn 3 asked about Night on a date
+                    // and got "open"; turn 4 asked about Day on the same date and
+                    // got "Day is booked, and I'm not sure whether Night is
+                    // available". Only Day was looked up on turn 4, the prompt
+                    // told Elena to suggest another slot, and the transcript
+                    // rule forbids her from trusting her own earlier answer
+                    // (correctly: the browser posts the history, and Night may
+                    // have been booked in between). So she had to mention a slot
+                    // she had no data on.
+                    //
+                    // The same applies when the named slot is FREE but another
+                    // slot is still under discussion in the transcript: she
+                    // would have to hedge about it ("I don't have information on
+                    // the Day slot"). So the other slots are checked whenever a
+                    // slot is named, and she is told to stay quiet about them
+                    // unless they are needed. With data there is nothing left
+                    // for her to be unsure about. That is at most one more slot
+                    // on an ordinary date and none on a 22-hour date, where only
+                    // one slot is offered.
+                    //
+                    // NO CARD for another slot (owner's decision): the guest
+                    // asked about one slot, and a booking card for another reads
+                    // as pushy. Elena offers it in words and asks; if the guest
+                    // says yes, the intent prompt resolves that to the offered
+                    // slot and the card comes through the normal path.
+                    if ($checkAlternatives) {
+                        $askedFree = $anyFree;
+                        $altLines = [];
+
+                        foreach (array_diff($offeredThen, $slots) as $altSlot) {
+                            [$altCard, $altLine] = $this->slotOutcome($villa, $checkin, $altSlot, $guests);
+                            $altLines[] = $altLine;
+                            $anyFree = $anyFree || $altCard !== null;
+                        }
+
+                        if ($altLines) {
+                            $askedName = Booking::SLOTS[$askedSlot]['name'] ?? $askedSlot;
+                            $contextData .= "\nThe guest asked ONLY about the {$askedName} slot — answer that first, plainly. "
+                                ."The other slots offered on {$date}, checked just now:\n- "
+                                .implode("\n- ", $altLines);
+
+                            if ($askedFree) {
+                                $contextData .= "\nThe guest did not ask about these, so do not bring them up unless they ask.";
+                            } elseif ($anyFree) {
+                                $contextData .= "\nOffer the AVAILABLE one in one sentence with its price and ask whether the guest "
+                                    .'would like it instead. No booking card is shown for it, so do NOT point the guest to a card or '
+                                    .'a Book Now button for that slot.';
+                            }
+                        }
+                    }
 
                     if (! $anyFree) {
                         $contextData .= ' Every slot offered on that date is taken, so the date itself is fully booked —'
@@ -578,7 +633,7 @@ RULES:
 - Never comment on conversation history or repetitions.
 - If checking availability or price, use the SEARCH RESULT below — don't guess. If there is no SEARCH RESULT section, you have NOT checked any date: ask the guest for one instead of describing the villa as free or booked.
 - If available, briefly confirm and tell them to check the card shown below your message / click Book Now.
-- If not available, suggest trying a different date or another slot ({$slotParts['names']}).
+- If not available, suggest another slot ONLY when the SEARCH RESULT lists that slot as AVAILABLE on the same date; otherwise suggest a different date. Never bring up a slot the SEARCH RESULT does not show as available, and never tell the guest you are unsure whether a slot is open — if you have no result for it, do not mention it.
 - Keep responses concise (2-4 sentences). Be warm and helpful.
 - Today is ".now()->format('l, F d, Y').".
 
@@ -886,9 +941,14 @@ Everything between the BEGIN and END markers below was typed into a public chat 
      * FOUR TURNS, EACH CLAMPED TO 200 CHARACTERS. cleanHistory() allows 8 x
      * 1,000, which would more than triple this prompt; a reference only ever
      * reaches back a turn or two, and the thing being resolved is a date or a
-     * slot name, so the opening of each turn is where it is. ~200 tokens
-     * added to a ~410-token call, against a wasted ~2,553-token reply call
-     * every time a follow-up failed to resolve.
+     * slot name. ~200 tokens added to a ~410-token call, against a wasted
+     * ~2,553-token reply call every time a follow-up failed to resolve.
+     *
+     * A LONG TURN KEEPS ITS START AND ITS END, not just its start. The date is
+     * at the start of Elena's reply, but an offer ("would you like the Night
+     * slot instead?") is at the end — and a guest's "yes" is answering that.
+     * Those replies run to ~230 characters, so a plain cut at 200 drops
+     * exactly the question the "yes" refers to.
      *
      * ELENA'S OWN TURNS ARE INCLUDED, and they carry the most weight: her
      * reply is where the date appears in words ("AVAILABLE for Dec 20, 2026,
@@ -913,7 +973,9 @@ Everything between the BEGIN and END markers below was typed into a public chat 
             ->take(-4)
             ->map(fn (array $entry) => [
                 'role' => $entry['role'] === 'user' ? 'guest' : 'elena',
-                'text' => mb_substr($entry['content'], 0, 200),
+                'text' => mb_strlen($entry['content']) > 200
+                    ? mb_substr($entry['content'], 0, 110).' … '.mb_substr($entry['content'], -90)
+                    : $entry['content'],
             ])
             ->values()
             ->all();
@@ -922,7 +984,7 @@ Everything between the BEGIN and END markers below was typed into a public chat 
             return '';
         }
 
-        return "\nRECENT CONVERSATION (oldest first, context only — do NOT extract from it):\n"
+        return "\nRECENT CONVERSATION (oldest first — use it to fill in what the Message leaves out, as described below):\n"
             .json_encode($turns, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
     }
 
@@ -1041,12 +1103,11 @@ Everything between the BEGIN and END markers below was typed into a public chat 
      *   - Kasama rito ang mga PAGTANGGI. Ang "wala kaming 22 oras" ay isang
      *     pahayag din, kaya hindi puwedeng basta hindi na lang banggitin.
      *
-     * @return array{keys: array<int, string>, json: string, detail: string, names: string}
+     * @return array{keys: array<int, string>, json: string, detail: string}
      */
     private function slotPromptParts(): array
     {
         $keys = Booking::bookableSlotKeys();
-        $defs = array_map(fn ($k) => Booking::SLOTS[$k], $keys);
 
         // hal. "day" or "night" or null
         $json = implode(' or ', array_map(fn ($k) => '"'.$k.'"', $keys)).' or null';
@@ -1095,11 +1156,6 @@ Everything between the BEGIN and END markers below was typed into a public chat 
             $keys
         ));
 
-        // hal. "Day or Night" / "Day, Night or 22 Hours"
-        $names = array_map(fn ($d) => $d['name'], $defs);
-        $last = array_pop($names);
-        $names = $names ? implode(', ', $names).' or '.$last : $last;
-
         // WALANG `default` DITO, at sinadya iyon (v7.78). May `default`
         // ito dati — ang unang bookable key — at iyon ang ginagamit kapag
         // walang sinabing slot ang guest, kaya ang Day LANG ang tinitingnan
@@ -1111,7 +1167,6 @@ Everything between the BEGIN and END markers below was typed into a public chat 
             'keys' => $keys,
             'json' => $json,
             'detail' => $detail,
-            'names' => (string) $names,
         ];
     }
 

@@ -54,11 +54,12 @@ class AiReportStore
      * could clear.
      *
      * @param  callable(): ?string  $generate
-     * @return array{text: string, generated_at: Carbon}|null
+     * @param  array<string, mixed>  $meta  stored beside the text; see refresh()
+     * @return array{text: string, generated_at: Carbon, meta: ?array}|null
      */
-    public function remember(string $report, callable $generate): ?array
+    public function remember(string $report, callable $generate, array $meta = []): ?array
     {
-        return $this->read($report) ?? $this->refresh($report, $generate);
+        return $this->read($report) ?? $this->refresh($report, $generate, $meta);
     }
 
     /**
@@ -73,10 +74,15 @@ class AiReportStore
      * comparing timestamps to guess. Those are second-resolution, and two
      * generations inside one second would compare equal and read as a failure.
      *
+     * `$meta` is whatever the caller needs later to tell whether the text
+     * still describes today's figures (the forecast stores the figures it was
+     * written from). Empty means none, and read() then returns `meta: null`.
+     *
      * @param  callable(): ?string  $generate
-     * @return array{text: string, generated_at: Carbon}|null
+     * @param  array<string, mixed>  $meta
+     * @return array{text: string, generated_at: Carbon, meta: ?array}|null
      */
-    public function refresh(string $report, callable $generate): ?array
+    public function refresh(string $report, callable $generate, array $meta = []): ?array
     {
         $text = $generate();
 
@@ -89,13 +95,17 @@ class AiReportStore
             'generated_at' => Carbon::now()->toDateTimeString(),
         ];
 
+        if ($meta !== []) {
+            $entry['meta'] = $meta;
+        }
+
         $this->repo()->forever($this->key($report), $entry);
 
         return $this->hydrate($entry);
     }
 
     /**
-     * @return array{text: string, generated_at: Carbon}|null
+     * @return array{text: string, generated_at: Carbon, meta: ?array}|null
      */
     public function read(string $report): ?array
     {
@@ -110,8 +120,8 @@ class AiReportStore
     }
 
     /**
-     * @param  array{text: string, generated_at?: string}  $entry
-     * @return array{text: string, generated_at: Carbon}
+     * @param  array{text: string, generated_at?: string, meta?: array}  $entry
+     * @return array{text: string, generated_at: Carbon, meta: ?array}
      */
     private function hydrate(array $entry): array
     {
@@ -122,6 +132,7 @@ class AiReportStore
             'generated_at' => isset($entry['generated_at'])
                 ? Carbon::parse($entry['generated_at'])
                 : Carbon::now(),
+            'meta' => isset($entry['meta']) && is_array($entry['meta']) ? $entry['meta'] : null,
         ];
     }
 
