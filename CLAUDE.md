@@ -195,6 +195,7 @@ Pending Bookings, Total Bookings, Total Guests, Revenue Today, Revenue This Mont
 - **The engine writes only `recommendations` rows.** Promo, pricing rule, block, housekeeping task and reminder are created in `PrescriptiveController::apply()` when a person presses the button — claimed under `lockForUpdate()`, then logged twice (`applied_recommendation` + the manual path's own action name). A new action type needs a `staleReason()` case, a creation method, an entry in `Recommendation::ACTIONS`, and both log names.
 - **The turnover card is not the automatic checkout task** that v7.11 removed: nothing is sent until the admin presses Send task.
 - **A pricing rule has no admin screen**, so the page's own "Turn off rate" (`turnOffRate()`) is the only way to undo one without the database.
+- **The history filter (`?history=30|90|365`, v7.84) is view-only.** It goes through `PrescriptiveEngine::preview()`, which writes nothing; never call `run()` there (it would expire every saved card the other window doesn't produce), and never give a preview card an Apply button. `php artisan demo:history` / `--clear` adds and removes made-up local history (`DEMO-…` bookings, `@demo.villa-elena.test` guests) and refuses anything but `APP_ENV=local`.
 
 ### Forecast (v7.82)
 

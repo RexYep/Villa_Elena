@@ -53,6 +53,9 @@ class OccupancyCalendar
     /** @var array<int, array{booked: int, offered: int}>|null keyed by day of week */
     private ?array $history = null;
 
+    /** Set by withHistoryDays(); null reads `prescriptive.history_days`. */
+    private ?int $historyDaysOverride = null;
+
     /** @var array<string, array<int, string>> */
     private array $offeredCache = [];
 
@@ -106,7 +109,23 @@ class OccupancyCalendar
 
     public function historyDays(): int
     {
-        return max(30, (int) config('prescriptive.history_days', 180));
+        return max(30, $this->historyDaysOverride ?? (int) config('prescriptive.history_days', 180));
+    }
+
+    /**
+     * Measure "usual" over a different number of days. Only the page's
+     * view-only history filter uses this; the nightly rules always read the
+     * configured value. Call it before reading anything: the loaded
+     * bookings and blocks start where the history starts.
+     */
+    public function withHistoryDays(int $days): static
+    {
+        $this->historyDaysOverride = $days;
+        $this->history = null;
+        $this->taken = null;
+        $this->blocked = null;
+
+        return $this;
     }
 
     // ── One date ───────────────────────────────────────────────────

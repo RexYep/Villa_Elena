@@ -264,6 +264,106 @@
             margin-top: 30px;
         }
 
+        /* History filter: plain links, because each view is its own page. */
+        .rec-filter {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 8px;
+            margin: 0 0 18px;
+        }
+
+        .rec-filter-label {
+            font-size: 13px;
+            color: var(--muted);
+            margin-right: 4px;
+        }
+
+        .rec-filter a {
+            display: inline-flex;
+            align-items: center;
+            min-height: 36px;
+            padding: 6px 14px;
+            border: 1px solid var(--border-strong);
+            border-radius: 999px;
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--stone);
+            text-decoration: none;
+            background: var(--cream);
+        }
+
+        .rec-filter a:hover {
+            border-color: var(--stone);
+        }
+
+        .rec-filter a[aria-current="page"] {
+            background: var(--btn-primary);
+            border-color: var(--btn-primary);
+            color: #fff;
+        }
+
+        .rec-preview-banner {
+            background: var(--state-amber-soft);
+            border: 1px solid var(--state-amber-line);
+            border-radius: 12px;
+            padding: 14px 18px;
+            font-size: 14px;
+            line-height: 1.6;
+            color: var(--stone);
+            margin-bottom: 18px;
+            max-width: 80ch;
+        }
+
+        .rec-preview-banner a {
+            color: var(--stone);
+            font-weight: 600;
+        }
+
+        .rec-compare {
+            margin-bottom: 22px;
+        }
+
+        .rec-compare td,
+        .rec-compare th {
+            white-space: nowrap;
+        }
+
+        .rec-compare .rec-history-note {
+            white-space: normal;
+        }
+
+        .rec-up {
+            color: var(--tag-green-fg);
+            font-weight: 600;
+        }
+
+        .rec-down {
+            color: var(--tag-red-fg);
+            font-weight: 600;
+        }
+
+        .rec-section-title {
+            font-family: var(--font-display);
+            font-size: 18px;
+            font-weight: 700;
+            color: var(--stone);
+            margin: 26px 0 12px;
+        }
+
+        .rec-card .badge {
+            margin-left: 6px;
+            vertical-align: middle;
+        }
+
+        .rec-gone {
+            margin: 0 0 14px;
+            padding-left: 18px;
+            font-size: 14px;
+            line-height: 1.8;
+            color: var(--stone);
+        }
+
         .rec-history td {
             vertical-align: top;
         }
@@ -375,6 +475,21 @@
         $count = $open->count();
         $checked = $lastGenerated ? \Carbon\Carbon::parse($lastGenerated) : null;
     @endphp
+
+    <nav class="rec-filter" aria-label="History used for Usual">
+        <span class="rec-filter-label">Usual measured over:</span>
+        <a href="{{ route('admin.prescriptive.index') }}" @if (!$preview) aria-current="page" @endif>
+            Default ({{ $defaultHistoryDays }} days)
+        </a>
+        @foreach (\App\Http\Controllers\Admin\PrescriptiveController::PREVIEW_HISTORY as $days => $label)
+            <a href="{{ route('admin.prescriptive.index', ['history' => $days]) }}"
+                @if ($preview && $preview['days'] === $days) aria-current="page" @endif>{{ $label }}</a>
+        @endforeach
+    </nav>
+
+    @if ($preview)
+        @include('admin.prescriptive._preview')
+    @else
 
     <p class="rec-status">
         @if ($count === 0)
@@ -494,7 +609,9 @@
         </div>
     @endforelse
 
-    @if ($history->isNotEmpty())
+    @endif
+
+    @if (!$preview && $history->isNotEmpty())
         <div class="table-card rec-history">
             <div class="table-header">
                 <h3>Your decisions</h3>

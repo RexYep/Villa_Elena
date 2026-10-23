@@ -54,6 +54,41 @@ class PrescriptiveEngine
         ];
     }
 
+    /** The rules that read past occupancy ("usual") — the ones a history filter can change. */
+    public function historyAdvisors(): array
+    {
+        return [
+            new QuietDatesPromoAdvisor,
+            new PeakRateAdvisor,
+            new MaintenanceWindowAdvisor,
+        ];
+    }
+
+    /**
+     * Runs these rules and returns their cards WITHOUT writing anything:
+     * no row is created, refreshed or expired. For the page's view-only
+     * history filter.
+     *
+     * @param  array<int, Advisor>  $advisors
+     * @return array{cards: array<int, array>, failed: array<int, string>}
+     */
+    public function preview(array $advisors): array
+    {
+        $cards = [];
+        $failed = [];
+
+        foreach ($advisors as $advisor) {
+            try {
+                array_push($cards, ...$advisor->generate($this->calendar));
+            } catch (\Throwable $e) {
+                Log::error('Recommendation preview failed: '.$advisor::class.' — '.$e->getMessage());
+                $failed[] = $advisor->type();
+            }
+        }
+
+        return ['cards' => $cards, 'failed' => $failed];
+    }
+
     /**
      * @return array{created: int, refreshed: int, skipped: int, expired: int}
      */

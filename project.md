@@ -1,7 +1,7 @@
 # Villa Elena Private Rental Resort
 ## Resort Management System — Project Documentation
 
-**Version:** 7.83
+**Version:** 7.84
 **Stack:** PHP 8.2 / Laravel 12 / MySQL 8 / Bootstrap 5
 **Local URL:** `http://127.0.0.1:8000` (`php artisan serve`) or `http://localhost:8000` (Docker — see v5.3)
 **Live URL:** `https://villa-elena.onrender.com` (Render, free tier — testing only, not yet handed to real guests)
@@ -124,6 +124,71 @@ tune:
 camera=(), microphone=(), geolocation=(), payment=(), usb=(),
 magnetometer=(), gyroscope=(), accelerometer=()
 ```
+
+---
+
+## What Changed in v7.84 (Read This First)
+
+### Recommendations: a view-only history filter, and demo booking history
+
+**Why.** "Usual" (how full the same weekdays were) is measured over a fixed
+`history_days` (180). There was no way to show whether more or less history
+changes the advice, and the local database had too little history to show it.
+
+**The filter.** `/admin/prescriptive?history=30|90|365` ("Last 30 days",
+"Quarterly (90 days)", "Yearly (365 days)"; `PrescriptiveController::PREVIEW_HISTORY`).
+Any other value shows the normal page.
+
+- It runs the three rules that read history (promo, peak rate, maintenance;
+  `PrescriptiveEngine::historyAdvisors()`) twice, once with the chosen window
+  and once with the configured one, both fresh, through
+  `PrescriptiveEngine::preview()`. **`preview()` writes nothing**: no card is
+  created, refreshed or expired. Running `run()` here instead would expire
+  every saved card the chosen window does not produce.
+- **No card in a preview has Apply or Dismiss.** Apply needs a saved card, and
+  the nightly 180-day rules stay the one thing that acts. A card is tagged
+  "Same as Default" or "Only in this view" by fingerprint, which holds the
+  dates and action but not the history length. Default cards that drop out
+  are listed under "Default cards that disappear here".
+- A "Usual by weekday" table shows both windows side by side, with the counts.
+- Turnover cleans and balance reminders read no history, so they are not in
+  the preview.
+- `OccupancyCalendar::withHistoryDays()` sets the window for one calendar; it
+  clears the loaded bookings and blocks because their range starts where the
+  history starts. Forecast and the nightly run still read the config.
+
+**Demo data (local only).** `php artisan demo:history` adds 12 months back and
+60 days ahead of made-up bookings; `--clear` removes them. It refuses unless
+`APP_ENV=local` and the connection is not `aiven`.
+
+- Bookings are `DEMO-…`, guests (25) are `…@demo.villa-elena.test` with an
+  unusable random password. `--clear` deletes only those, plus their payments
+  and notifications.
+- It fills only slots that `OccupancyCalendar::covering()` says are offered,
+  unblocked and free, so existing bookings are never overlapped; no 22-hour
+  stays. Today is skipped (the scheduler would check it in/out at once).
+- Pattern: weekday × month factor (summer and December busy, July–September
+  quiet), ×1.8 on holidays, fewer the further ahead. Fixed seed (`--seed`), so
+  the same data comes out each run.
+- Past stays are `checked_out` with a full cash payment on the check-in date;
+  upcoming ones `confirmed` with half paid; about 10% are unpaid holds
+  cancelled by `system`. Money goes through `recalculateFinancials()`.
+- It sends no email and no notification. It does appear on Dashboard,
+  Reports, Forecast and Insights until cleared.
+
+**Measured on the local database with the demo data (2026-10-23).** With 30
+days of history: 5 cards (3 only in that view). With 90 days: 4 (2 only
+there). With 365 days: 2, the same as Default. The promos for Nov 13–15 and
+Nov 20–22 fall away with a year of history because the summer and December
+weekends lift "usual" above the 30% quiet mark.
+
+**Verified.** Seed, `--clear` (counts back to exactly 100 bookings, 127
+payments, 10 users) and re-seed (same counts). All four views rendered as an
+admin; 0 Apply buttons in a preview, 7 on Default; `?history=7` falls back to
+Default; the saved cards' counts by status and their latest `updated_at` were
+unchanged after rendering every view. Pint passes. **Not checked visually:**
+Chrome's screenshot timed out on every attempt, so the layout (including the
+phone width) still needs a look.
 
 ---
 

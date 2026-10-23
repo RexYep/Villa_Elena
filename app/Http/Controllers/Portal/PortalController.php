@@ -271,9 +271,13 @@ class PortalController extends Controller
     {
         $request->validate([
             'name' => 'required|string|max:150',
-            'email' => 'required|email',
+            // `dns` refuses a domain that cannot receive mail, so a typo like
+            // gmial.con is caught here instead of the owner's reply bouncing.
+            'email' => 'required|email:rfc,dns',
             'subject' => 'nullable|string|max:150',
             'message' => 'required|string|min:10|max:2000',
+        ], [
+            'email.email' => 'Please check your email address. We need one we can reply to.',
         ]);
 
         $resortEmail = Setting::get('resort_email', config('mail.from.address'));

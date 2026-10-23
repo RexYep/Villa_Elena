@@ -38,8 +38,21 @@ class PrescriptiveController extends Controller
 {
     use ThrottlesAiRefresh;
 
-    public function index()
+    /**
+     * The view-only history filter: days of history => label. Anything
+     * else in `?history=` shows the normal page.
+     */
+    public const PREVIEW_HISTORY = [
+        30 => 'Last 30 days',
+        90 => 'Quarterly (90 days)',
+        365 => 'Yearly (365 days)',
+    ];
+
+    public function index(Request $request)
     {
+        $days = (int) $request->query('history');
+        $preview = isset(self::PREVIEW_HISTORY[$days]) ? $this->historyPreview($days) : null;
+
         $open = Recommendation::open()
             // Soonest first: the card about this weekend matters before the
             // one about next month.
@@ -63,11 +76,75 @@ class PrescriptiveController extends Controller
             'history' => $history,
             'results' => $history->mapWithKeys(fn (Recommendation $r) => [$r->id => $this->resultOf($r)]),
             'rules' => $this->rules(),
-            'historyDays' => (int) config('prescriptive.history_days', 180),
+            'historyDays' => $preview['days'] ?? (int) config('prescriptive.history_days', 180),
+            'defaultHistoryDays' => (int) config('prescriptive.history_days', 180),
             'lastGenerated' => Recommendation::max('generated_at'),
             // No AI call here — this only reads what the last run wrote.
             'briefing' => Setting::get(BriefingWriter::SETTING_TEXT, ''),
+            'preview' => $preview,
         ]);
+    }
+
+    /**
+     * What the history-based rules would suggest if "usual" were measured
+     * over `$days` instead of the configured window — side by side with
+     * the configured window, computed fresh for both so the two are
+     * compared on the same day's bookings.
+     *
+     * READ ONLY. Nothing is saved, so nothing here can be applied: the
+     * Apply button needs a saved card, and the nightly rules stay the one
+     * thing that acts.
+     */
+    private function historyPreview(int $days): array
+    {
+        $chosenCalendar = (new OccupancyCalendar)->withHistoryDays($days);
+        $defaultCalendar = new OccupancyCalendar;
+
+        $chosenEngine = new PrescriptiveEngine($chosenCalendar);
+        $defaultEngine = new PrescriptiveEngine($defaultCalendar);
+
+        $chosen = $chosenEngine->preview($chosenEngine->historyAdvisors());
+        $default = $defaultEngine->preview($defaultEngine->historyAdvisors());
+
+        // A card's fingerprint is its dates and action, never the history
+        // length, so the same suggestion has the same fingerprint in both.
+        $defaultFingerprints = array_column($default['cards'], 'fingerprint');
+        $chosenFingerprints = array_column($chosen['cards'], 'fingerprint');
+
+        $cards = array_map(fn (array $attrs) => [
+            'rec' => (new Recommendation)->forceFill($attrs),
+            'same' => in_array($attrs['fingerprint'], $defaultFingerprints, true),
+        ], $chosen['cards']);
+
+        usort($cards, fn ($a, $b) => [$a['rec']->target_start, $a['rec']->title] <=> [$b['rec']->target_start, $b['rec']->title]);
+
+        $gone = array_values(array_filter(
+            $default['cards'],
+            fn (array $attrs) => ! in_array($attrs['fingerprint'], $chosenFingerprints, true)
+        ));
+
+        $names = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+        $chosenHistory = $chosenCalendar->weekdayHistory();
+        $defaultHistory = $defaultCalendar->weekdayHistory();
+        $weekdays = [];
+
+        // Monday first, as the stretches are.
+        foreach ([1, 2, 3, 4, 5, 6, 0] as $dow) {
+            $weekdays[] = [
+                'name' => $names[$dow],
+                'default' => $defaultHistory[$dow],
+                'chosen' => $chosenHistory[$dow],
+            ];
+        }
+
+        return [
+            'days' => $days,
+            'label' => self::PREVIEW_HISTORY[$days],
+            'cards' => $cards,
+            'gone' => array_map(fn (array $attrs) => (new Recommendation)->forceFill($attrs), $gone),
+            'weekdays' => $weekdays,
+            'failed' => array_values(array_unique(array_merge($chosen['failed'], $default['failed']))),
+        ];
     }
 
     /**
