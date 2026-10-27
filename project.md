@@ -1,7 +1,7 @@
 # Villa Elena Private Rental Resort
 ## Resort Management System — Project Documentation
 
-**Version:** 7.84
+**Version:** 7.85
 **Stack:** PHP 8.2 / Laravel 12 / MySQL 8 / Bootstrap 5
 **Local URL:** `http://127.0.0.1:8000` (`php artisan serve`) or `http://localhost:8000` (Docker — see v5.3)
 **Live URL:** `https://villa-elena.onrender.com` (Render, free tier — testing only, not yet handed to real guests)
@@ -124,6 +124,82 @@ tune:
 camera=(), microphone=(), geolocation=(), payment=(), usb=(),
 magnetometer=(), gyroscope=(), accelerometer=()
 ```
+
+---
+
+## What Changed in v7.85 (Read This First)
+
+### Recommendations: Monthly, Quarterly and Yearly what-ifs, with charts
+
+The v7.84 "Last 30 days" / "Yearly (365 days)" history filter is gone. The
+view buttons are **Default · Monthly · Quarterly · Yearly**
+(`?view=month|quarter|year&year=2025&month=1&quarter=1`). Default is the page
+as it was (saved cards, Apply, Dismiss), plus a chart.
+
+**Monthly, Quarterly and Yearly answer "What would the system have
+recommended back then?"** All the logic is in
+`App\Services\Prescriptive\WhatIfPreview`; the controller only picks the view.
+
+- **A month or quarter is run as of its start** (`OccupancyCalendar::asOf()`),
+  `min_lead_days` (2) before it, so the rules cover all of it: January 2025
+  is run as of Dec 30, 2024. A period that has not started is run as of
+  today.
+- **Booked so far** counts only bookings that existed that day: made by then
+  (`created_at`) and live then (cancelled later, `cancelled_at` after the
+  day, still counts; a no-show counts until its date).
+- **Usual** is the `history_days` (180) before that day: the Default rule as
+  it would have run then.
+- **Blocks, pricing rules and promos created after that day are left out**
+  for dates ahead of it. Past dates keep every block.
+- **A year is its twelve monthly what-ifs**, each run as of its own start.
+  It shows two charts, a month-by-month table (each month links to Monthly)
+  and the cards grouped by month. About 3s to render; not cached.
+- **"Not enough history":** a period whose 180 days reach back before the
+  booking history starts (`WhatIfPreview::dataStart()`, the first day of the
+  month of the earliest check-in) is not run, and says why. Those empty days
+  would read as "nobody booked" and give every week a promo card.
+- **The Year dropdown lists years up to this one with at least one month
+  that has enough history** (`WhatIfPreview::years()`). Any other value falls
+  back to this year.
+- **Not rebuilt, because nothing keeps their history:** slot prices (cards
+  show today's rates) and which dates were 22-hour dates. A booking's status
+  that day is inferred from `created_at`/`cancelled_at`, so a hold not yet
+  paid counts as booked.
+- `OccupancyCalendar::today()` replaces every `Carbon::today()` in the
+  calendar. `withFutureRange()` stops the stretches at the period's last
+  date. `maintenanceRange()` gives the maintenance rule its search dates.
+  `withHistoryDays()` and the v7.84 comparison code are gone.
+- Still view-only: `PrescriptiveEngine::preview()` writes nothing, and no
+  what-if card has Apply or Dismiss (`_preview_card.blade.php`).
+
+**Charts** (Chart.js through `admin-charts.js`; one script in
+`index.blade.php` draws every `[data-rec-chart]` from server numbers):
+
+| View | Chart |
+|---|---|
+| Default, Monthly, Quarterly | `_stretch_chart`: booked so far (blue) and usual (orange) per stretch, dashed lines at the quiet and busy settings. Predicted is the taller bar, so it is not a third series |
+| Yearly | Predicted occupancy by month (one series, same dashed lines) and recommendations by month (stacked: promo, raise rate, maintenance) |
+
+The two Yearly measures are two charts on purpose: one chart with a % axis and
+a count axis would be a dual axis. Colours are the validated palette's slots
+1–3 (`#2a78d6`, `#eb6834`, `#1baf7a`; adjacent CVD ΔE ≥ 9.2 on `--cream`). The
+aqua is under 3:1, so every chart has a table (stretch chart: "Show as a
+table"; Yearly: the month-by-month table). The marks' words are in the legend,
+not on the plot, where they collided with the bars.
+
+**Demo data:** `demo:history` now starts six months before last year (Jul 1,
+2024 when run in 2026), so January 2025 has its 180 days. 2024 has no month
+with enough history and is not offered.
+
+**Verified (2026-10-23, demo data).** Years offered: 2026, 2025. Every view
+and year rendered as an admin, including December 2026 (run as of today), a
+2024 request (falls back to 2026) and a junk view (Default); no Apply in any
+what-if; saved cards unchanged by status and latest `updated_at`. Monthly
+0.3–0.4s, Quarterly ~0.6s, Yearly ~3s. The charts were checked in Chrome
+in a stripped test page at desktop width: both Yearly charts, the Monthly
+chart and its tooltip. The full admin page could not be screenshotted (the
+browser tool times out on it, with or without its scripts), and neither
+could a 390px window. Pint passes.
 
 ---
 

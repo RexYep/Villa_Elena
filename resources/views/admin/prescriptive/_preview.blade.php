@@ -1,116 +1,86 @@
-{{-- View-only history filter. Nothing on this page is saved, so no card has
-     an Apply or Dismiss button: those need a saved card, and the nightly
-     rules (Default) stay the one thing that acts. --}}
+{{-- Monthly / Quarterly what-if: "What would the system have recommended back
+     then?" ($preview comes from WhatIfPreview::month() / quarter()). Nothing
+     here is saved, so no card has an Apply or Dismiss button. --}}
 @php
     $pct = fn (array $row) => $row['offered'] > 0 ? (int) round($row['booked'] / $row['offered'] * 100) : 0;
-    $cardCount = count($preview['cards']);
+    $asOf = $preview['as_of']->format('M j, Y');
 @endphp
 
 <div class="rec-preview-banner" role="status">
-    <strong>Preview.</strong> "Usual" is measured over the {{ strtolower($preview['label']) }} instead of the last
-    {{ $defaultHistoryDays }} days. Nothing here is saved and nothing can be applied. To act on a card,
-    <a href="{{ route('admin.prescriptive.index') }}">switch to Default</a>.
+    <strong>What-if for {{ $preview['label'] }} ({{ $preview['dates'] }}).</strong>
+    @if ($preview['is_past'])
+        These are the cards the system would have shown on {{ $asOf }}, using only the bookings made by that day.
+    @else
+        This period has not started, so these are the cards the system shows today for its dates.
+    @endif
+    "Usual" is from the {{ $preview['history_days'] }} days before {{ $asOf }} ({{ $preview['history_dates'] }}).
+    Prices on the cards are today's rates. Nothing here is saved and nothing can be applied.
 </div>
 
-@if (!empty($preview['failed']))
-    <div class="alert alert-danger">
-        Some rules could not run for this preview, so their cards are missing. The error is in the log.
-    </div>
-@endif
-
-<div class="table-card rec-compare">
-    <div class="table-header">
-        <h3>Usual by weekday</h3>
-        <span class="rec-history-note">Day and Night slots booked ÷ slots offered</span>
-    </div>
-    <table>
-        <thead>
-            <tr>
-                <th scope="col">Weekday</th>
-                <th scope="col">Default ({{ $defaultHistoryDays }} days)</th>
-                <th scope="col">{{ $preview['label'] }}</th>
-                <th scope="col">Change</th>
-            </tr>
-        </thead>
-        <tbody>
-            @foreach ($preview['weekdays'] as $row)
-                @php
-                    $was = $pct($row['default']);
-                    $now = $pct($row['chosen']);
-                    $diff = $now - $was;
-                @endphp
-                <tr>
-                    <td>{{ $row['name'] }}</td>
-                    <td>
-                        {{ $was }}%
-                        <div class="rec-history-note">{{ $row['default']['booked'] }} of {{ $row['default']['offered'] }} slots</div>
-                    </td>
-                    <td>
-                        {{ $now }}%
-                        <div class="rec-history-note">{{ $row['chosen']['booked'] }} of {{ $row['chosen']['offered'] }} slots</div>
-                    </td>
-                    <td>
-                        @if ($diff > 0)
-                            <span class="rec-up">+{{ $diff }} pts</span>
-                        @elseif ($diff < 0)
-                            <span class="rec-down">−{{ abs($diff) }} pts</span>
-                        @else
-                            Same
-                        @endif
-                    </td>
-                </tr>
-            @endforeach
-        </tbody>
-    </table>
-</div>
-
-<h2 class="rec-section-title">
-    {{ $cardCount }} {{ $cardCount === 1 ? 'card' : 'cards' }} with the {{ strtolower($preview['label']) }}
-</h2>
-
-@forelse ($preview['cards'] as $item)
-    @php $rec = $item['rec']; @endphp
-    <article class="rec-card">
-        <div class="rec-kind-icon {{ $rec->action_tag_class }}" aria-hidden="true">
-            <i class="bi bi-{{ $rec->action_icon }}"></i>
-        </div>
-        <div>
-            <div class="rec-kind">
-                {{ $rec->action_label }}
-                @if ($item['same'])
-                    <span class="badge tag-neutral">Same as Default</span>
-                @else
-                    <span class="badge tag-amber">Only in this view</span>
-                @endif
-            </div>
-            <h3 class="rec-title">{{ $rec->title }}</h3>
-            <p class="rec-summary">{{ $rec->summary }}</p>
-
-            @if (!empty($rec->evidence))
-                <ul class="rec-facts">
-                    @foreach ($rec->evidence as $fact)
-                        <li>{{ $fact }}</li>
-                    @endforeach
-                </ul>
-            @endif
-        </div>
-    </article>
-@empty
+@if (!$preview['enough'])
     <div class="rec-empty">
-        With this much history, no rule suggests a promo, a higher rate or a maintenance date.
+        Not enough booking history for {{ $preview['label'] }}. "Usual" needs bookings from
+        {{ $preview['needs_from']->format('M j, Y') }}, but the booking history starts
+        {{ $preview['data_start'] ? $preview['data_start']->format('M j, Y') : 'later' }}. Without it, the empty days would
+        count as "nobody booked" and every week would get a promo card.
     </div>
-@endforelse
+@else
+    @if (!empty($preview['failed']))
+        <div class="alert alert-danger">
+            Some rules could not run for this what-if, so their cards are missing. The error is in the log.
+        </div>
+    @endif
 
-@if (!empty($preview['gone']))
-    <h2 class="rec-section-title">Default cards that disappear here</h2>
-    <ul class="rec-gone">
-        @foreach ($preview['gone'] as $rec)
-            <li>{{ $rec->title }}</li>
-        @endforeach
-    </ul>
+    <div class="table-card rec-compare">
+        <div class="table-header">
+            <h3>Usual by weekday on {{ $asOf }}</h3>
+            <span class="rec-history-note">Day and Night slots booked ÷ slots offered, {{ $preview['history_dates'] }}</span>
+        </div>
+        <table>
+            <thead>
+                <tr>
+                    <th scope="col">Weekday</th>
+                    <th scope="col">Usual</th>
+                    <th scope="col">Slots</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach ($preview['weekdays'] as $row)
+                    <tr>
+                        <td>{{ $row['name'] }}</td>
+                        <td>{{ $pct($row) }}%</td>
+                        <td>{{ $row['booked'] }} of {{ $row['offered'] }}</td>
+                    </tr>
+                @endforeach
+            </tbody>
+        </table>
+    </div>
+
+    @include('admin.prescriptive._stretch_chart', [
+        'chartId' => 'recPeriodChart',
+        'chartTitle' => 'Booked so far and usual, week by week',
+        'chartNote' => 'As of '.$asOf.'. Each pair of bars is one stretch: the weekdays (Mon–Thu) or the weekend (Fri–Sun) of a week. Predicted occupancy is the taller of the two bars.',
+        'stretches' => $preview['stretches'],
+    ])
+
+    @php $cardCount = count($preview['cards']); @endphp
+    <h2 class="rec-section-title">
+        {{ $cardCount }} {{ $cardCount === 1 ? 'card' : 'cards' }} for {{ $preview['label'] }}
+        @if ($preview['is_past'])
+            <span class="rec-history-note">as of {{ $asOf }}</span>
+        @endif
+    </h2>
+
+    @forelse ($preview['cards'] as $rec)
+        @include('admin.prescriptive._preview_card', ['rec' => $rec])
+    @empty
+        <div class="rec-empty">
+            No rule suggests a promo, a higher rate or a maintenance date for {{ $preview['label'] }}.
+        </div>
+    @endforelse
+
+    <p class="rec-status-sub">
+        Only the promo, peak rate and maintenance rules use history, so only they are shown. Turnover cleans and balance
+        reminders are about the coming days; see them under Default.
+    </p>
 @endif
-
-<p class="rec-status-sub">
-    Only the promo, peak rate and maintenance rules use history, so only they are shown. Turnover cleans and balance
-    reminders are the same in every view; see them under Default.
-</p>

@@ -32,10 +32,10 @@ class MaintenanceWindowAdvisor extends Advisor
     {
         $days = max(1, (int) OccupancyCalendar::setting('prescriptive_maintenance_days', 2));
 
-        $first = Carbon::today()->addDays((int) config('prescriptive.maintenance_lead_days', 7));
-        $last = Carbon::today()->addDays((int) config('prescriptive.maintenance_horizon_days', 60));
+        // The next 7–60 days normally; a chosen quarter in the preview.
+        ['check_from' => $checkFrom, 'first' => $first, 'last' => $last] = $calendar->maintenanceRange();
 
-        for ($day = Carbon::today(); $day->lte($last); $day->addDay()) {
+        for ($day = $checkFrom->copy(); $day->lte($last); $day->addDay()) {
             if ($calendar->blockReason($day) === 'maintenance') {
                 return [];
             }
@@ -79,12 +79,12 @@ class MaintenanceWindowAdvisor extends Advisor
                 $last->format('M j')
             ),
             sprintf(
-                'Usual for %s: %s — %d of %d slots were booked in the last %d days.',
+                'Usual for %s: %s — %d of %d slots were booked %s.',
                 $weekdays,
                 $this->percent($best['usual_pct']),
                 $best['usual_booked'],
                 $best['usual_offered'],
-                $calendar->historyDays()
+                $calendar->historyPhrase()
             ),
         ];
 

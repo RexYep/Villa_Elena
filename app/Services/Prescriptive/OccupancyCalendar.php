@@ -53,8 +53,11 @@ class OccupancyCalendar
     /** @var array<int, array{booked: int, offered: int}>|null keyed by day of week */
     private ?array $history = null;
 
-    /** Set by withHistoryDays(); null reads `prescriptive.history_days`. */
-    private ?int $historyDaysOverride = null;
+    /** Set by asOf(): the day the rules pretend is today, for the what-if preview. */
+    private ?Carbon $asOf = null;
+
+    /** @var array{0: Carbon, 1: Carbon}|null set by withFutureRange(): the upcoming dates the rules judge */
+    private ?array $futureRange = null;
 
     /** @var array<string, array<int, string>> */
     private array $offeredCache = [];
@@ -109,21 +112,91 @@ class OccupancyCalendar
 
     public function historyDays(): int
     {
-        return max(30, $this->historyDaysOverride ?? (int) config('prescriptive.history_days', 180));
+        return max(30, (int) config('prescriptive.history_days', 180));
     }
 
     /**
-     * Measure "usual" over a different number of days. Only the page's
-     * view-only history filter uses this; the nightly rules always read the
-     * configured value. Call it before reading anything: the loaded
-     * bookings and blocks start where the history starts.
+     * Run the rules as if today were `$date`: "What would the system have
+     * recommended back then?" Only bookings that already existed on that
+     * day count (made by then, and not yet cancelled by then), and "usual"
+     * is the `history_days` before it. Blocks, pricing rules and promos
+     * created later are left out too. View-only, and called before reading
+     * anything.
+     *
+     * Not rebuilt, because nothing keeps their history: the slot prices
+     * (today's rates) and which dates were 22-hour dates (today's list).
      */
-    public function withHistoryDays(int $days): static
+    public function asOf(Carbon $date): static
     {
-        $this->historyDaysOverride = $days;
+        $this->asOf = $date->copy()->startOfDay();
+        $this->offeredCache = [];
+
+        return $this->forgetLoaded();
+    }
+
+    /** The day the rules treat as today: the real today, or the what-if date. */
+    public function today(): Carbon
+    {
+        return ($this->asOf ?? Carbon::today())->copy();
+    }
+
+    public function isAsOf(): bool
+    {
+        return $this->asOf !== null;
+    }
+
+    /**
+     * Judge these upcoming dates instead of the next `lookahead_days`. The
+     * stretches stop at the range's last date rather than finishing their
+     * week, so a card never names a date outside the chosen quarter.
+     */
+    public function withFutureRange(Carbon $from, Carbon $to): static
+    {
+        $this->futureRange = [$from->copy()->startOfDay(), $to->copy()->startOfDay()];
+        $this->windowDates = null;
+
+        return $this->forgetLoaded();
+    }
+
+    /** "in the last 180 days" or "in the 180 days before Dec 30, 2025": where "usual" came from, for a card. */
+    public function historyPhrase(): string
+    {
+        return $this->asOf !== null
+            ? 'in the '.$this->historyDays().' days before '.$this->asOf->format('M j, Y')
+            : 'in the last '.$this->historyDays().' days';
+    }
+
+    /**
+     * Where the maintenance rule looks for a free gap, and from when it
+     * checks that maintenance is already scheduled.
+     *
+     * @return array{check_from: Carbon, first: Carbon, last: Carbon}
+     */
+    public function maintenanceRange(): array
+    {
+        $first = $this->today()->addDays((int) config('prescriptive.maintenance_lead_days', 7));
+
+        if ($this->futureRange !== null) {
+            $first = $first->max($this->futureRange[0])->copy();   // max() returns one of the two objects, not a copy
+
+            return ['check_from' => $first->copy(), 'first' => $first, 'last' => $this->futureRange[1]->copy()];
+        }
+
+        return [
+            'check_from' => $this->today(),
+            'first' => $first,
+            'last' => $this->today()->addDays((int) config('prescriptive.maintenance_horizon_days', 60)),
+        ];
+    }
+
+    /** Bookings and blocks are loaded for the range the history starts in, so they go when it changes. */
+    private function forgetLoaded(): static
+    {
         $this->history = null;
         $this->taken = null;
         $this->blocked = null;
+        $this->ruled = null;
+        $this->offeredCache = [];   // it reads the blocks
 
         return $this;
     }
@@ -156,11 +229,16 @@ class OccupancyCalendar
      */
     private function windowDatesFor(Carbon $date): ?array
     {
-        if ($this->fixedRange === null || ! $date->betweenIncluded(...$this->fixedRange)) {
+        $span = $this->fixedRange ?? ($this->futureRange === null ? null : [
+            $this->futureRange[0]->copy()->subDay(),
+            $this->futureRange[1]->copy()->addDay(),
+        ]);
+
+        if ($span === null || ! $date->betweenIncluded(...$span)) {
             return null;
         }
 
-        return $this->windowDates ??= Booking::slotWindowDates($this->villa, ...$this->fixedRange);
+        return $this->windowDates ??= Booking::slotWindowDates($this->villa, ...$span);
     }
 
     public function isTaken(Carbon $date, string $slot): bool
@@ -198,13 +276,27 @@ class OccupancyCalendar
     /** Is a promo that any guest can get already discounting this slot? */
     public function hasPromo(Carbon $date, string $slot): bool
     {
-        return $this->quote($date, $slot)['promo'] !== null;
+        return $this->promoExistedThen($this->quote($date, $slot)['promo']);
     }
 
-    /** What the slot is charged at today, promos included. */
+    /** What the slot is charged at today, promos included (a promo made after the what-if date is not). */
     public function price(Carbon $date, string $slot): float
     {
-        return (float) $this->quote($date, $slot)['total'];
+        $quote = $this->quote($date, $slot);
+
+        return (float) ($this->promoExistedThen($quote['promo']) ? $quote['total'] : $quote['base']);
+    }
+
+    /** A promo counts in a what-if only if it had been created by that day. */
+    private function promoExistedThen($promo): bool
+    {
+        if ($promo === null) {
+            return false;
+        }
+
+        return $this->asOf === null
+            || $promo->created_at === null
+            || $promo->created_at->lte($this->asOf->copy()->endOfDay());
     }
 
     /**
@@ -329,14 +421,21 @@ class OccupancyCalendar
      */
     public function stretches(): array
     {
-        $first = Carbon::today()->addDays((int) config('prescriptive.min_lead_days', 2));
-        $last = Carbon::today()->addDays((int) config('prescriptive.lookahead_days', 30));
+        $first = $this->today()->addDays((int) config('prescriptive.min_lead_days', 2));
 
-        // Finish the stretch the range ends in, rather than judging half of it.
-        $last = $last->copy()->addDays(match (true) {
-            $last->dayOfWeekIso <= 4 => 4 - $last->dayOfWeekIso,
-            default => 7 - $last->dayOfWeekIso,
-        });
+        if ($this->futureRange !== null) {
+            // A chosen quarter: its own dates, never closer than the lead.
+            $first = $first->max($this->futureRange[0])->copy();   // max() returns one of the two objects, not a copy
+            $last = $this->futureRange[1]->copy();
+        } else {
+            $last = $this->today()->addDays((int) config('prescriptive.lookahead_days', 30));
+
+            // Finish the stretch the range ends in, rather than judging half of it.
+            $last = $last->copy()->addDays(match (true) {
+                $last->dayOfWeekIso <= 4 => 4 - $last->dayOfWeekIso,
+                default => 7 - $last->dayOfWeekIso,
+            });
+        }
 
         $groups = [];
 
@@ -382,8 +481,7 @@ class OccupancyCalendar
 
         $this->history = array_fill(0, 7, ['booked' => 0, 'offered' => 0]);
 
-        $start = Carbon::today()->subDays($this->historyDays());
-        $end = Carbon::today()->subDay();
+        [$start, $end] = $this->historySpan();
 
         for ($date = $start->copy(); $date->lte($end); $date->addDay()) {
             if ($this->isBlocked($date)) {
@@ -418,13 +516,20 @@ class OccupancyCalendar
         return false;
     }
 
+    /** @return array{0: Carbon, 1: Carbon} the past dates "usual" is measured over */
+    private function historySpan(): array
+    {
+        return [$this->today()->subDays($this->historyDays()), $this->today()->subDay()];
+    }
+
     private function rangeStart(): Carbon
     {
         if ($this->fixedRange !== null) {
             return $this->fixedRange[0]->copy();
         }
 
-        return Carbon::today()->subDays($this->historyDays() + 1);
+        // A day early: a 22-hour stay from the day before reaches the first date.
+        return $this->historySpan()[0]->subDay();
     }
 
     private function rangeEnd(): Carbon
@@ -438,7 +543,11 @@ class OccupancyCalendar
             (int) config('prescriptive.maintenance_horizon_days', 60)
         );
 
-        return Carbon::today()->addDays($days + 1);
+        $end = $this->today()->addDays($days + 1);
+
+        return $this->futureRange !== null
+            ? $end->max($this->futureRange[1]->copy()->addDay())
+            : $end;
     }
 
     private function loadBookings(): void
@@ -449,11 +558,27 @@ class OccupancyCalendar
 
         $this->taken = [];
 
-        Booking::where('property_id', $this->villa->id)
+        $query = Booking::where('property_id', $this->villa->id)
+            ->whereBetween('check_in_date', [$this->rangeStart()->toDateString(), $this->rangeEnd()->toDateString()]);
+
+        if ($this->asOf === null) {
             // The same statuses hasConflict() treats as holding a slot. A
             // pending booking counts: the guest is at checkout right now.
-            ->whereNotIn('status', ['cancelled', 'no_show'])
-            ->whereBetween('check_in_date', [$this->rangeStart()->toDateString(), $this->rangeEnd()->toDateString()])
+            $query->whereNotIn('status', ['cancelled', 'no_show']);
+        } else {
+            // What-if: the bookings as they stood at the end of that day.
+            // Made by then; and live then — a later cancellation still
+            // held the slot, and a no-show is only known once the date came.
+            $then = $this->asOf->copy()->endOfDay();
+
+            $query->where('created_at', '<=', $then)
+                ->where(fn ($q) => $q
+                    ->whereNotIn('status', ['cancelled', 'no_show'])
+                    ->orWhere(fn ($q) => $q->where('status', 'cancelled')->where('cancelled_at', '>', $then))
+                    ->orWhere(fn ($q) => $q->where('status', 'no_show')->where('check_in_date', '>', $then->toDateString())));
+        }
+
+        $query
             ->get(['check_in_date', 'check_in_time', 'check_out_date', 'check_out_time'])
             ->each(function (Booking $booking) {
                 $start = $booking->checkInDateTime();
@@ -491,9 +616,20 @@ class OccupancyCalendar
         AvailabilityBlock::where('property_id', $this->villa->id)
             ->whereDate('end_date', '>=', $this->rangeStart()->toDateString())
             ->whereDate('start_date', '<=', $this->rangeEnd()->toDateString())
-            ->get(['start_date', 'end_date', 'reason'])
+            ->get(['start_date', 'end_date', 'reason', 'created_at'])
             ->each(function ($block) {
+                // What-if: a block made after that day cannot close a date
+                // still ahead of it. Dates already past keep every block —
+                // they really were closed.
+                $later = $this->asOf !== null
+                    && $block->created_at !== null
+                    && $block->created_at->gt($this->asOf->copy()->endOfDay());
+
                 for ($day = $block->start_date->copy(); $day->lte($block->end_date); $day->addDay()) {
+                    if ($later && $day->gte($this->asOf)) {
+                        continue;
+                    }
+
                     $this->blocked[$day->format('Y-m-d')] = $block->reason;
                 }
             });
@@ -509,8 +645,10 @@ class OccupancyCalendar
 
         $this->villa->pricingRules()
             ->where('is_active', 1)
-            ->whereDate('end_date', '>=', Carbon::today()->toDateString())
+            ->whereDate('end_date', '>=', $this->today()->toDateString())
             ->whereDate('start_date', '<=', $this->rangeEnd()->toDateString())
+            // What-if: only a rate the owner had set by that day.
+            ->when($this->asOf, fn ($q) => $q->where('created_at', '<=', $this->asOf->copy()->endOfDay()))
             ->get(['start_date', 'end_date'])
             ->each(function ($rule) {
                 for ($day = $rule->start_date->copy(); $day->lte($rule->end_date); $day->addDay()) {

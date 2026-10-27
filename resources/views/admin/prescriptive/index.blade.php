@@ -14,6 +14,7 @@
 @endsection
 
 @push('styles')
+    @vite(['resources/js/admin-charts.js'])
     <style>
         .rec-refresh,
         .rec-apply {
@@ -303,6 +304,135 @@
             color: #fff;
         }
 
+        .rec-quarter-form {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 8px;
+            margin: -6px 0 18px;
+        }
+
+        .rec-quarter-select {
+            min-height: 38px;
+            padding: 6px 34px 6px 12px;
+            border: 1px solid var(--border-strong);
+            border-radius: 9px;
+            background-color: var(--cream);
+            color: var(--stone);
+            font-size: 14px;
+            font-weight: 600;
+            max-width: 100%;
+        }
+
+        .rec-quarter-go {
+            min-height: 38px;
+            padding: 6px 16px;
+            border: 1px solid var(--border-strong);
+            border-radius: 9px;
+            background: transparent;
+            color: var(--stone);
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+        }
+
+        .rec-quarter-go:hover {
+            border-color: var(--stone);
+        }
+
+        /* Charts. The colours here are the legend keys; the canvas reads the
+           same values from the script, since a canvas cannot read CSS. */
+        .rec-chart-card {
+            background: var(--cream);
+            border: 1px solid var(--border);
+            border-radius: 14px;
+            padding: 18px 20px;
+            margin-bottom: 18px;
+        }
+
+        .rec-chart-title {
+            font-size: 15px;
+            font-weight: 700;
+            color: var(--stone);
+            margin: 0 0 4px;
+        }
+
+        .rec-chart-legend {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px 18px;
+            margin: 10px 0 6px;
+            font-size: 13px;
+            color: var(--stone);
+        }
+
+        .rec-chart-legend span {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .rec-key {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border-radius: 3px;
+        }
+
+        .rec-key-1 {
+            background: #2a78d6;
+        }
+
+        .rec-key-2 {
+            background: #eb6834;
+        }
+
+        .rec-key-3 {
+            background: #1baf7a;
+        }
+
+        .rec-key-line {
+            height: 0;
+            width: 16px;
+            border-radius: 0;
+            border-top: 2px dashed var(--muted);
+        }
+
+        .rec-chart-box {
+            position: relative;
+            height: 280px;
+        }
+
+        .rec-chart-table {
+            margin-top: 10px;
+        }
+
+        .rec-chart-table summary,
+        .rec-month summary {
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--stone);
+            padding: 6px 0;
+        }
+
+        .rec-chart-table .table-card {
+            margin-top: 8px;
+        }
+
+        .rec-month {
+            border-top: 1px solid var(--border);
+            padding: 6px 0;
+        }
+
+        .rec-month summary {
+            font-size: 15px;
+        }
+
+        .rec-month[open] summary {
+            margin-bottom: 10px;
+        }
+
         .rec-preview-banner {
             background: var(--state-amber-soft);
             border: 1px solid var(--state-amber-line);
@@ -476,20 +606,63 @@
         $checked = $lastGenerated ? \Carbon\Carbon::parse($lastGenerated) : null;
     @endphp
 
-    <nav class="rec-filter" aria-label="History used for Usual">
-        <span class="rec-filter-label">Usual measured over:</span>
-        <a href="{{ route('admin.prescriptive.index') }}" @if (!$preview) aria-current="page" @endif>
-            Default ({{ $defaultHistoryDays }} days)
+    <nav class="rec-filter" aria-label="Recommendation view">
+        <span class="rec-filter-label">View:</span>
+        <a href="{{ route('admin.prescriptive.index') }}" @if ($view === 'default') aria-current="page" @endif>
+            Default ({{ $historyDays }} days)
         </a>
-        @foreach (\App\Http\Controllers\Admin\PrescriptiveController::PREVIEW_HISTORY as $days => $label)
-            <a href="{{ route('admin.prescriptive.index', ['history' => $days]) }}"
-                @if ($preview && $preview['days'] === $days) aria-current="page" @endif>{{ $label }}</a>
+        @foreach (\App\Http\Controllers\Admin\PrescriptiveController::PREVIEW_VIEWS as $key => $label)
+            <a href="{{ route('admin.prescriptive.index', ['view' => $key]) }}" @if ($view === $key) aria-current="page" @endif>
+                {{ $label }}
+            </a>
         @endforeach
     </nav>
 
-    @if ($preview)
+    @if ($view !== 'default')
+        @if (empty($years))
+            <div class="rec-empty">
+                There is not enough booking history yet. A what-if needs {{ $historyDays }} days of bookings before the
+                month it looks at.
+            </div>
+        @else
+            {{-- A plain GET form, so it works without JavaScript; the script at
+                 the end only saves pressing Show. --}}
+            <form method="GET" action="{{ route('admin.prescriptive.index') }}" class="rec-quarter-form" id="recPeriodForm">
+                <input type="hidden" name="view" value="{{ $view }}">
+
+                <label for="recYear" class="rec-filter-label">Year:</label>
+                <select id="recYear" name="year" class="rec-quarter-select">
+                    @foreach ($years as $y)
+                        <option value="{{ $y }}" @selected($y === $year)>{{ $y }}</option>
+                    @endforeach
+                </select>
+
+                @if ($view === 'month')
+                    <label for="recMonth" class="rec-filter-label">Month:</label>
+                    <select id="recMonth" name="month" class="rec-quarter-select">
+                        @foreach (\App\Services\Prescriptive\WhatIfPreview::MONTHS as $number => $name)
+                            <option value="{{ $number }}" @selected($number === $month)>{{ $name }}</option>
+                        @endforeach
+                    </select>
+                @elseif ($view === 'quarter')
+                    <label for="recQuarter" class="rec-filter-label">Quarter:</label>
+                    <select id="recQuarter" name="quarter" class="rec-quarter-select">
+                        @foreach ([1 => 'Jan–Mar', 2 => 'Apr–Jun', 3 => 'Jul–Sep', 4 => 'Oct–Dec'] as $number => $months)
+                            <option value="{{ $number }}" @selected($number === $quarter)>Q{{ $number }} ({{ $months }})</option>
+                        @endforeach
+                    </select>
+                @endif
+
+                <button type="submit" class="rec-quarter-go">Show</button>
+            </form>
+        @endif
+    @endif
+
+    @if ($view === 'year' && $preview)
+        @include('admin.prescriptive._year')
+    @elseif ($view !== 'default' && $preview)
         @include('admin.prescriptive._preview')
-    @else
+    @elseif ($view === 'default')
 
     <p class="rec-status">
         @if ($count === 0)
@@ -609,9 +782,16 @@
         </div>
     @endforelse
 
+    @include('admin.prescriptive._stretch_chart', [
+        'chartId' => 'recLiveChart',
+        'chartTitle' => 'The next 30 days, week by week',
+        'chartNote' => 'Worked out now, from the live calendar; the cards above were saved by the last run. Each pair of bars is one stretch: the weekdays (Mon–Thu) or the weekend (Fri–Sun) of a week. Predicted occupancy is the taller of the two bars.',
+        'stretches' => $liveStretches,
+    ])
+
     @endif
 
-    @if (!$preview && $history->isNotEmpty())
+    @if ($view === 'default' && $history->isNotEmpty())
         <div class="table-card rec-history">
             <div class="table-header">
                 <h3>Your decisions</h3>
@@ -666,3 +846,182 @@
     @endif
 
 @endsection
+
+@push('scripts')
+    <script>
+        // Choosing a year, month or quarter shows it straight away. Without
+        // this script the Show button does the same.
+        (function () {
+            const form = document.getElementById('recPeriodForm');
+            if (!form) return;
+
+            form.querySelector('.rec-quarter-go').hidden = true;
+            form.querySelectorAll('select').forEach(select =>
+                select.addEventListener('change', () => form.requestSubmit()));
+        })();
+
+        // Every [data-rec-chart] on the page. The numbers come from the server
+        // (WhatIfPreview); nothing is worked out here. Hex values because a
+        // canvas cannot read CSS variables: series slots 1–3 of the checked
+        // palette, the --muted ink and the --border grid.
+        document.addEventListener('DOMContentLoaded', function () {
+            if (!window.Chart) return;
+
+            const BLUE = '#2a78d6', ORANGE = '#eb6834', AQUA = '#1baf7a';
+            const INK = '#746a59', GRID = '#e4ddd0', SURFACE = '#fdfbf7';
+            const QUIET = {{ (float) $thresholds['quiet'] }};
+            const BUSY = {{ (float) $thresholds['busy'] }};
+
+            Chart.defaults.font.family = "'DM Sans', sans-serif"; // keep in step with --font-body
+            Chart.defaults.color = INK;
+
+            // The quiet and busy marks, drawn as dashed reference lines: they
+            // are thresholds, not gridlines. Their words are in the legend
+            // above the chart; text on the plot collided with the bars.
+            const marks = {
+                id: 'recMarks',
+                afterDatasetsDraw(chart) {
+                    const { ctx, chartArea: a, scales: { y } } = chart;
+                    ctx.save();
+                    ctx.strokeStyle = INK;
+                    ctx.lineWidth = 1;
+                    ctx.setLineDash([5, 4]);
+                    [QUIET, BUSY].forEach(v => {
+                        const py = y.getPixelForValue(v);
+                        ctx.beginPath();
+                        ctx.moveTo(a.left, py);
+                        ctx.lineTo(a.right, py);
+                        ctx.stroke();
+                    });
+                    ctx.restore();
+                },
+            };
+
+            const pctAxis = {
+                min: 0,
+                max: 100,
+                ticks: { stepSize: 25, callback: v => v + '%' },
+                grid: { color: GRID },
+                border: { display: false },
+            };
+            const xAxis = { grid: { display: false }, ticks: { autoSkip: true, maxRotation: 0 } };
+            const bar = { borderRadius: 4, borderSkipped: 'start', maxBarThickness: 24 };
+
+            document.querySelectorAll('[data-rec-chart]').forEach(canvas => {
+                const rows = JSON.parse(canvas.dataset.chart);
+                const kind = canvas.dataset.recChart;
+
+                if (kind === 'stretch') {
+                    new Chart(canvas, {
+                        type: 'bar',
+                        data: {
+                            labels: rows.map(r => r.label),
+                            datasets: [
+                                { label: 'Booked so far', data: rows.map(r => r.booked_pct), backgroundColor: BLUE, ...bar },
+                                { label: 'Usual', data: rows.map(r => r.usual_pct), backgroundColor: ORANGE, ...bar },
+                            ],
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            interaction: { mode: 'index', intersect: false },
+                            datasets: { bar: { categoryPercentage: 0.7, barPercentage: 0.9 } },
+                            plugins: {
+                                legend: { display: false },
+                                tooltip: {
+                                    callbacks: {
+                                        title: items => rows[items[0].dataIndex].label.join(' · '),
+                                        label: item => {
+                                            const r = rows[item.dataIndex];
+                                            return item.datasetIndex === 0
+                                                ? ' Booked so far: ' + Math.round(r.booked_pct) + '% (' + r.booked + ' of ' + r.offered + ' slots)'
+                                                : ' Usual: ' + Math.round(r.usual_pct) + '%';
+                                        },
+                                        footer: items => 'Predicted: ' + Math.round(rows[items[0].dataIndex].predicted) + '%',
+                                    },
+                                },
+                            },
+                            scales: { y: pctAxis, x: xAxis },
+                        },
+                        plugins: [marks],
+                    });
+                }
+
+                if (kind === 'year-occupancy') {
+                    new Chart(canvas, {
+                        type: 'bar',
+                        data: {
+                            labels: rows.map(r => r.label),
+                            datasets: [{ label: 'Predicted occupancy', data: rows.map(r => r.predicted), backgroundColor: BLUE, ...bar }],
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            plugins: {
+                                legend: { display: false },
+                                tooltip: {
+                                    callbacks: {
+                                        label: item => {
+                                            const r = rows[item.dataIndex];
+                                            return ' Predicted: ' + Math.round(r.predicted) + '% (' + r.booked + ' of ' + r.offered + ' slots booked so far)';
+                                        },
+                                    },
+                                },
+                            },
+                            scales: { y: pctAxis, x: xAxis },
+                        },
+                        plugins: [marks],
+                    });
+                }
+
+                if (kind === 'year-cards') {
+                    // Stacked: a 2px surface-coloured edge on top of each
+                    // segment is the gap between them.
+                    const seg = (label, key, colour) => ({
+                        label,
+                        data: rows.map(r => r.enough ? r[key] : null),
+                        backgroundColor: colour,
+                        borderColor: SURFACE,
+                        borderWidth: { top: 2 },
+                        borderSkipped: 'start',
+                        maxBarThickness: 24,
+                    });
+
+                    new Chart(canvas, {
+                        type: 'bar',
+                        data: {
+                            labels: rows.map(r => r.label),
+                            datasets: [
+                                seg('Promo', 'promo', BLUE),
+                                seg('Raise rate', 'peak', ORANGE),
+                                seg('Maintenance', 'maintenance', AQUA),
+                            ],
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            interaction: { mode: 'index', intersect: false },
+                            plugins: {
+                                legend: { display: false },
+                                tooltip: {
+                                    filter: item => item.raw > 0,
+                                    callbacks: { label: item => ' ' + item.dataset.label + ': ' + item.raw },
+                                },
+                            },
+                            scales: {
+                                x: { ...xAxis, stacked: true },
+                                y: {
+                                    stacked: true,
+                                    beginAtZero: true,
+                                    ticks: { precision: 0 },
+                                    grid: { color: GRID },
+                                    border: { display: false },
+                                },
+                            },
+                        },
+                    });
+                }
+            });
+        });
+    </script>
+@endpush

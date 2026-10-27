@@ -33,7 +33,7 @@ class DemoHistory extends Command
 {
     protected $signature = 'demo:history
         {--clear : Remove every DEMO booking and demo guest instead}
-        {--months=12 : How many months back to fill}
+        {--months= : How many months back to fill (default: from six months before last year began)}
         {--ahead=60 : How many days ahead to fill (as "booked so far")}
         {--seed=2026 : Random seed, so the same data comes out each time}';
 
@@ -94,7 +94,14 @@ class DemoHistory extends Command
         $holidays = new HolidayCalendar;
 
         $today = Carbon::today();
-        $from = $today->copy()->subMonthsNoOverflow((int) $this->option('months'));
+        // The what-if views cover this year and last year, and January's
+        // "usual" is the 180 days before it — so by default the history
+        // starts six months before LAST year (Jul 1, 2024 when run in 2026).
+        // Those six months only feed January's history: that year itself
+        // has no month with 180 days behind it, so it is not offered.
+        $from = $this->option('months') !== null
+            ? $today->copy()->subMonthsNoOverflow((int) $this->option('months'))
+            : $today->copy()->startOfYear()->subYearNoOverflow()->subMonthsNoOverflow(6);
         $to = $today->copy()->addDays((int) $this->option('ahead'));
 
         // Reads what is already booked and offered, once, with the same

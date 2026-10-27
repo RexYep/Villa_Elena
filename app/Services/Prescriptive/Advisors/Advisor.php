@@ -138,12 +138,12 @@ abstract class Advisor
                 $this->percent($stretch['booked_pct'])
             ),
             sprintf(
-                'Usual for %s: %s — %d of %d slots were booked in the last %d days.',
+                'Usual for %s: %s — %d of %d slots were booked %s.',
                 $this->weekdayLabel($stretch['dates']),
                 $this->percent($stretch['usual_pct']),
                 $stretch['usual_booked'],
                 $stretch['usual_offered'],
-                $calendar->historyDays()
+                $calendar->historyPhrase()
             ),
             sprintf(
                 'Predicted occupancy: %s (the larger of the two).',
