@@ -35,9 +35,10 @@ class DemoHistory extends Command
         {--clear : Remove every DEMO booking and demo guest instead}
         {--months= : How many months back to fill (default: from six months before last year began)}
         {--ahead=60 : How many days ahead to fill (as "booked so far")}
-        {--seed=2026 : Random seed, so the same data comes out each time}';
+        {--seed=2026 : Random seed, so the same data comes out each time}
+        {--production : Write to the aiven (Render) database instead, after typing its name to confirm}';
 
-    protected $description = 'Add (or --clear) made-up booking history on the LOCAL database, for the Recommendations demo';
+    protected $description = 'Add (or --clear) made-up booking history for the Recommendations demo (local, or the Render database with --production)';
 
     public const REF_PREFIX = 'DEMO-';
 
@@ -70,13 +71,71 @@ class DemoHistory extends Command
 
     public function handle(): int
     {
-        if (! app()->environment('local') || config('database.default') === 'aiven') {
-            $this->error('Refused: demo data is for the local database only (APP_ENV=local, not the aiven connection).');
+        // Always run from a dev machine: production has no shell, and its
+        // own APP_ENV must never be able to start this.
+        if (! app()->environment('local')) {
+            $this->error('Refused: run this from a dev machine (APP_ENV=local).');
+
+            return self::FAILURE;
+        }
+
+        if ($this->option('production')) {
+            if (! $this->useProductionDatabase()) {
+                return self::FAILURE;
+            }
+        } elseif (config('database.default') === 'aiven') {
+            $this->error('Refused: the default connection is aiven. Use --production to write there on purpose.');
 
             return self::FAILURE;
         }
 
         return $this->option('clear') ? $this->clear() : $this->fill();
+    }
+
+    /**
+     * Points every model at the aiven connection for this run, after the
+     * person types the database name.
+     *
+     * The cache becomes `array` so settings are read from the production
+     * database, not from the local cache (which holds the local values).
+     * Broadcasting and mail are switched off: open admin pages on Render
+     * would otherwise refetch once per booking written.
+     */
+    private function useProductionDatabase(): bool
+    {
+        $connection = DB::connection('aiven');
+        $name = $connection->getDatabaseName();
+
+        try {
+            $connection->getPdo();
+        } catch (\Throwable $e) {
+            $this->error('Could not reach the aiven database: '.$e->getMessage());
+
+            return false;
+        }
+
+        $this->warn(sprintf(
+            '%s demo data on the PRODUCTION database "%s" (%s).',
+            $this->option('clear') ? 'Removing' : 'Adding',
+            $name,
+            config('database.connections.aiven.host')
+        ));
+
+        if ($this->ask('Type the database name to continue') !== $name) {
+            $this->error('Name did not match. Nothing was changed.');
+
+            return false;
+        }
+
+        config([
+            'database.default' => 'aiven',
+            'cache.default' => 'array',
+            'broadcasting.default' => 'null',
+            'mail.default' => 'array',
+        ]);
+        DB::setDefaultConnection('aiven');
+
+        return true;
     }
 
     private function fill(): int
