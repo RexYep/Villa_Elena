@@ -60,6 +60,75 @@ class PropertyController extends Controller
         ];
     }
 
+    /** The four price fields on the villa form, in the order the form shows them. */
+    private const PRICE_FIELDS = ['base_price', 'weekend_price', 'base_price_22h', 'weekend_price_22h'];
+
+    /**
+     * Strip the thousands separators the pricing form puts in ("10,000").
+     *
+     * The form formats amounts for reading; this undoes it before `numeric`
+     * sees them, so the form also works when its script does not run.
+     */
+    private function normalizePrices(Request $request): void
+    {
+        foreach (self::PRICE_FIELDS as $field) {
+            if ($request->filled($field)) {
+                $request->merge([$field => str_replace([',', '₱', ' '], '', (string) $request->input($field))]);
+            }
+        }
+    }
+
+    /**
+     * The price rules, shared by create and update.
+     *
+     * Every price is more than ₱0 or blank, never 0. Blank has a meaning
+     * (Peak falls back to Regular; a blank 22-hour Regular stops offering
+     * 22-hour stays), but 0 does not, and it breaks things quietly:
+     *  - a Regular of 0 counts as "not priced" (Property::isSlotPriced()),
+     *    so Day and Night stop being offered anywhere;
+     *  - a Peak of 0 is not blank, so getPackagePrice() charges ₱0 for every
+     *    weekend booking.
+     * A 22-hour Peak needs a 22-hour Regular: without one the slots are not
+     * offered and the Peak is never read.
+     *
+     * Rooms have no price (the form hides these fields and store/update write
+     * 0/NULL), so their values are not checked.
+     */
+    private function priceRules(bool $isVilla): array
+    {
+        if (! $isVilla) {
+            return array_fill_keys(self::PRICE_FIELDS, 'nullable');
+        }
+
+        // decimal(10,2) columns; anything larger is a typo, and MySQL would
+        // refuse it with a 500. `bail` so "4k" gets one message, not also
+        // "must be more than ₱0".
+        $amount = 'numeric|gt:0|max:99999999';
+
+        return [
+            'base_price' => 'bail|required|'.$amount,
+            'weekend_price' => 'bail|nullable|'.$amount,
+            'base_price_22h' => 'bail|nullable|required_with:weekend_price_22h|'.$amount,
+            'weekend_price_22h' => 'bail|nullable|'.$amount,
+        ];
+    }
+
+    private function priceMessages(): array
+    {
+        $amount = 'Enter an amount in pesos, like 4,000.';
+        $tooLarge = 'That amount is too large. Check for an extra zero.';
+
+        return [
+            'base_price.required' => 'Enter the Day & Night regular rate.',
+            'base_price.gt' => 'The Day & Night regular rate must be more than ₱0. At ₱0, guests cannot book Day or Night at all.',
+            'weekend_price.gt' => 'A peak rate of ₱0 would make weekend bookings free. Leave it blank to charge the regular rate instead.',
+            'base_price_22h.gt' => 'Leave the 22-hour regular rate blank to stop offering 22-hour stays. ₱0 is not accepted.',
+            'base_price_22h.required_with' => 'Enter a 22-hour regular rate too. Without it, 22-hour stays are not offered and the peak rate is never used.',
+            'weekend_price_22h.gt' => 'A 22-hour peak rate of ₱0 would make weekend 22-hour stays free. Leave it blank to charge the 22-hour regular rate instead.',
+        ] + array_fill_keys(array_map(fn ($f) => "{$f}.numeric", self::PRICE_FIELDS), $amount)
+          + array_fill_keys(array_map(fn ($f) => "{$f}.max", self::PRICE_FIELDS), $tooLarge);
+    }
+
     private function amenityList(): array
     {
         return json_decode(
@@ -112,19 +181,17 @@ class PropertyController extends Controller
     public function store(Request $request)
     {
         $isVilla = $request->type === 'villa';
+        $this->normalizePrices($request);
 
         $request->validate([
             'property_name' => $isVilla ? 'required|string|max:150' : 'nullable|string|max:150',
             'type'          => 'required|in:villa,room',
             'description'   => 'nullable|string',
             'max_capacity'  => 'required|integer|min:1',
-            'base_price'    => $isVilla ? 'required|numeric|min:0' : 'nullable|numeric|min:0',
-            'weekend_price' => 'nullable|numeric|min:0',
             // 22-Hours: NULL = hindi pa ipinepresyo, kaya hindi inaalok ang
             // slot (Property::isSlotPriced()). Villa lang — walang slot ang
             // mga informational na room.
-            'base_price_22h' => 'nullable|numeric|min:0',
-            'weekend_price_22h' => 'nullable|numeric|min:0',
+            ...$this->priceRules($isVilla),
             'floor_area_sqm'=> 'nullable|numeric|min:0',
             'amenities'     => 'nullable|array',
             // 10, not 20, and the number is not arbitrary: 10 x 3 MB is 30 MB,
@@ -135,7 +202,7 @@ class PropertyController extends Controller
             // this — all four numbers move together.
             'images'   => 'nullable|array|max:10',
             'images.*' => $this->photoRule(),
-        ], $this->photoMessages());
+        ], $this->photoMessages() + $this->priceMessages());
 
         $property = Property::create([
             'property_name'  => $request->property_name,
@@ -155,7 +222,6 @@ class PropertyController extends Controller
                 : null,
             'floor_area_sqm' => $request->floor_area_sqm,
             'amenities'      => $isVilla ? ($request->amenities ?? []) : [],
-            'is_featured'    => $request->boolean('is_featured'),
             'created_by'     => Auth::id(),
         ]);
 
@@ -218,18 +284,16 @@ class PropertyController extends Controller
     public function update(Request $request, Property $property)
     {
         $isVilla = $request->type === 'villa';
+        $this->normalizePrices($request);
 
         $request->validate([
             'property_name' => $isVilla ? 'required|string|max:150' : 'nullable|string|max:150',
             'type'          => 'required|in:villa,room',
             'max_capacity'  => 'required|integer|min:1',
-            'base_price'    => $isVilla ? 'required|numeric|min:0' : 'nullable|numeric|min:0',
-            'weekend_price' => 'nullable|numeric|min:0',
             // 22-Hours: NULL = hindi pa ipinepresyo, kaya hindi inaalok ang
             // slot (Property::isSlotPriced()). Villa lang — walang slot ang
             // mga informational na room.
-            'base_price_22h' => 'nullable|numeric|min:0',
-            'weekend_price_22h' => 'nullable|numeric|min:0',
+            ...$this->priceRules($isVilla),
             // 10, not 20, and the number is not arbitrary: 10 x 3 MB is 30 MB,
             // which fits inside PHP post_max_size (32M) and nginx
             // client_max_body_size (32M). Past post_max_size PHP throws the
@@ -238,7 +302,7 @@ class PropertyController extends Controller
             // this — all four numbers move together.
             'images'   => 'nullable|array|max:10',
             'images.*' => $this->photoRule(),
-        ], $this->photoMessages());
+        ], $this->photoMessages() + $this->priceMessages());
 
         // I-kunin ang lumang datos ng property BAGO mag-update, para
         // magamit sa StaffLog (audit trail: "ano bago, ano pagkatapos").
@@ -264,7 +328,6 @@ class PropertyController extends Controller
                 : null,
             'floor_area_sqm' => $request->floor_area_sqm,
             'amenities'      => $isVilla ? ($request->amenities ?? []) : [],
-            'is_featured'    => $request->boolean('is_featured'),
         ]);
 
         // Handle new image uploads

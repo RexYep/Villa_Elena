@@ -407,16 +407,16 @@
     @if ($property->type === 'villa')
         <div class="tag-green" style="border-radius:10px;padding:12px 16px;margin-bottom:18px;font-size:13px;">
             <i class="bi bi-shield-check me-2"></i>
-            Ito ang <strong>master Villa record</strong> — ang tanging bookable na listing sa customer-facing site. Lahat ng
-            booking, kita, at review ay naka-tally dito.
+            This is the <strong>master Villa record</strong>, the only bookable listing on the guest site. All
+            bookings, revenue and reviews are counted here.
         </div>
     @elseif($property->type === 'room')
         <div
             style="background:var(--sand);color:var(--muted);border-radius:10px;padding:12px 16px;margin-bottom:18px;font-size:13px;">
             <i class="bi bi-info-circle me-2"></i>
-            Ito ay isa sa mga <strong>kwarto ng Villa Elena</strong> — info/reference lang ito (status, litrato,
-            housekeeping). Hindi ito hiwalay na binebentang listing, kaya inaasahang <strong>0 ang bookings/reviews</strong>
-            dito — nasa master Villa record ang mga iyon.
+            This is one of <strong>Villa Elena's rooms</strong>. It is for reference only (status, photos,
+            housekeeping). It isn't sold as a separate listing, so it should show <strong>0 bookings and reviews</strong>.
+            Those are on the master Villa record.
         </div>
     @endif
 
@@ -488,16 +488,6 @@
                         <div class="info-item">
                             <label>Max Capacity</label>
                             <div class="val">{{ $property->max_capacity }} guests</div>
-                        </div>
-                        <div class="info-item">
-                            <label>Featured</label>
-                            <div class="val">
-                                @if ($property->is_featured)
-                                    <span style="color:#d97706;"><i class="bi bi-star-fill"></i> Yes</span>
-                                @else
-                                    <span class="text-muted-theme">No</span>
-                                @endif
-                            </div>
                         </div>
                         <div class="info-item">
                             <label>Sort Order</label>

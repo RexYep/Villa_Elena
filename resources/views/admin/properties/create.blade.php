@@ -21,24 +21,6 @@
             min-height: 110px;
         }
 
-        .input-prefix {
-            position: relative;
-        }
-
-        .input-prefix span {
-            position: absolute;
-            left: 12px;
-            top: 50%;
-            transform: translateY(-50%);
-            color: var(--muted);
-            font-size: 14px;
-            pointer-events: none;
-        }
-
-        .input-prefix input {
-            padding-left: 28px;
-        }
-
         .three-col {
             display: grid;
             grid-template-columns: 1fr 1fr 1fr;
@@ -222,44 +204,6 @@
             text-transform: uppercase;
         }
 
-        /* Toggle Switch */
-        .toggle-row {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            padding: 12px 0;
-            border-bottom: 1px solid var(--border);
-        }
-
-        .toggle-row:last-child {
-            border-bottom: none;
-            padding-bottom: 0;
-        }
-
-        .toggle-label {
-            font-size: 13px;
-            font-weight: 500;
-            color: var(--text-main);
-        }
-
-        .toggle-label small {
-            display: block;
-            font-size: 13px;
-            color: var(--muted);
-            font-weight: 400;
-        }
-
-        .form-switch .form-check-input {
-            width: 40px;
-            height: 22px;
-            cursor: pointer;
-        }
-
-        .form-switch .form-check-input:checked {
-            background-color: var(--terracotta);
-            border-color: var(--terracotta);
-        }
-
         /* Submit Buttons */
         .btn-submit {
             width: 100%;
@@ -414,78 +358,7 @@
                 </div>
 
                 {{-- Pricing (Villa only) --}}
-                <div class="form-card" id="villaOnlyPricing" style="display:{{ $initialIsVilla ? 'block' : 'none' }};">
-                    <div class="form-card-header">
-                        <div class="card-icon tag-amber"><i class="bi bi-tag"></i></div>
-                        <h3>Pricing</h3>
-                    </div>
-                    <div class="form-card-body">
-                        <div class="two-col">
-                            <div>
-                                {{-- Hindi "/ Night". Flat package kada slot ang
-                                     singil (Day 9 oras, Night 11 oras), hindi
-                                     kada gabi. --}}
-                                <label class="form-label">Regular Rate <span class="req">*</span></label>
-                                <small class="field-caption">
-                                    Mon–Thu, and Sun after 6PM
-                                </small>
-                                <div class="input-prefix">
-                                    <span>₱</span>
-                                    <input type="number" name="base_price"
-                                        class="form-control @error('base_price') is-invalid @enderror"
-                                        value="{{ old('base_price') }}" min="0" step="0.01" placeholder="0.00">
-                                </div>
-                                @error('base_price')
-                                    <span class="invalid-feedback">{{ $message }}</span>
-                                @enderror
-                            </div>
-                            <div>
-                                <label class="form-label">Peak Rate</label>
-                                <div class="input-prefix">
-                                    <span>₱</span>
-                                    <input type="number" name="weekend_price" class="form-control"
-                                        value="{{ old('weekend_price') }}" min="0" step="0.01"
-                                        placeholder="0.00">
-                                </div>
-                                {{-- MALI ang dating "Applied on Saturdays &
-                                     Sundays" kahit sa lumang modelo. Ang peak ay
-                                     Fri/Sat AT Sun bago mag-6PM; ang Sun pagkatapos
-                                     ng 6PM ay regular. Tingnan ang
-                                     Property::getPackagePrice(). --}}
-                                <small class="field-hint d-block">
-                                    Fri/Sat, and Sun before 6PM
-                                </small>
-                            </div>
-                            <div>
-                                <label class="form-label">22-Hour Regular Rate</label>
-                                <div class="input-prefix">
-                                    <span>₱</span>
-                                    <input type="number" name="base_price_22h" class="form-control"
-                                        value="{{ old('base_price_22h') }}" min="0" step="0.01"
-                                        placeholder="Leave blank to hide the slot">
-                                </div>
-                                <small class="field-hint d-block">
-                                    {{-- Bawat slot na bumabasa ng column na ito, hindi
-                                         `SLOTS['stay22']` — dalawa na ang 22-oras. --}}
-                                    {{ collect(\App\Models\Booking::SLOTS)->filter(fn ($d) => ($d['rate'] ?? null) === '22h')->pluck('times')->join(', ', ' and ') }}
-                                    — one rate for both; leave blank and neither is offered anywhere.
-                                </small>
-                            </div>
-                            <div>
-                                <label class="form-label">22-Hour Peak Rate</label>
-                                <div class="input-prefix">
-                                    <span>₱</span>
-                                    <input type="number" name="weekend_price_22h" class="form-control"
-                                        value="{{ old('weekend_price_22h') }}" min="0" step="0.01"
-                                        placeholder="0.00">
-                                </div>
-                                <small class="field-hint d-block">
-                                    Falls back to the 22-hour regular rate if blank
-                                </small>
-                            </div>
-                        </div>
-                    </div>
-                </div>
+                @include('admin.properties._pricing', ['property' => null])
 
                 {{-- Amenities (Villa only) --}}
                 <div class="form-card" id="villaOnlyAmenities" style="display:{{ $initialIsVilla ? 'block' : 'none' }};">
@@ -544,27 +417,6 @@
                             {{ \App\Models\PropertyImage::MIN_HEIGHT }} px are not accepted.
                         </p>
                         <div class="image-previews" id="imagePreviews"></div>
-                    </div>
-                </div>
-
-                {{-- Settings --}}
-                <div class="form-card">
-                    <div class="form-card-header">
-                        <div class="card-icon tag-amber"><i class="bi bi-sliders"></i>
-                        </div>
-                        <h3>Settings</h3>
-                    </div>
-                    <div class="form-card-body">
-                        <div class="toggle-row">
-                            <div class="toggle-label">
-                                Featured Property
-                                <small>Show on homepage highlights</small>
-                            </div>
-                            <div class="form-check form-switch">
-                                <input class="form-check-input" type="checkbox" name="is_featured" value="1"
-                                    {{ old('is_featured') ? 'checked' : '' }}>
-                            </div>
-                        </div>
                     </div>
                 </div>
 

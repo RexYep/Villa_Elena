@@ -135,7 +135,7 @@ class PaymentController extends Controller
             if ($request->payment_type === 'deposit'
                 && $booking->amount_paid == 0
                 && Booking::hasExcessiveCancellations($booking->user_id)) {
-                return back()->with('error', 'Dahil sa cancellation history mo, kailangan ng full payment para sa booking na ito — hindi available ang deposit option.');
+                return back()->with('error', 'Because of your cancellation history, this booking requires full payment. The deposit option isn\'t available.');
             }
 
             // May bukas pa bang session? Ibalik iyon sa halip na gumawa

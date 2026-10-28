@@ -1,7 +1,7 @@
 # Villa Elena Private Rental Resort
 ## Resort Management System — Project Documentation
 
-**Version:** 7.85
+**Version:** 7.86
 **Stack:** PHP 8.2 / Laravel 12 / MySQL 8 / Bootstrap 5
 **Local URL:** `http://127.0.0.1:8000` (`php artisan serve`) or `http://localhost:8000` (Docker — see v5.3)
 **Live URL:** `https://villa-elena.onrender.com` (Render, free tier — testing only, not yet handed to real guests)
@@ -124,6 +124,50 @@ tune:
 camera=(), microphone=(), geolocation=(), payment=(), usb=(),
 magnetometer=(), gyroscope=(), accelerometer=()
 ```
+
+---
+
+## What Changed in v7.86 (Read This First)
+
+### Admin property form: the pricing card, and the Featured switch removed
+
+**The "Featured Property" switch is gone** from the create and edit forms, and
+"Featured" from the property detail page. It saved `is_featured`, but nothing
+read it: the homepage's `$featuredVilla` is just the one `type=villa` row. The
+column, the model cast and the seeder value stay; nothing writes it any more.
+
+**A price is more than ₱0 or blank, never 0.** `PropertyController::priceRules()`
+(shared by `store()` and `update()`) uses `gt:0`, where it was `min:0`:
+
+- **A Peak of 0 charged ₱0 for every weekend booking.** `getPackagePrice()`
+  falls back with `$weekend ?? $base`, and 0 is not null. `isSlotPriced()` only
+  tests the Regular column, so nothing downstream caught it, for Day/Night or
+  for 22 hours.
+- **A Regular of 0 closed Day and Night everywhere**, because `isSlotPriced()`
+  treats it as unpriced, and the save still said "updated successfully".
+- **A 22-hour Peak without a 22-hour Regular is refused** (`required_with`).
+  The slots were not offered and the Peak was never read, with no message.
+- Blank keeps its meaning: Peak blank = Regular every day; 22-hour Regular
+  blank = 22-hour stays not offered. Rooms' price fields are not validated
+  (`nullable`), since store/update write 0/NULL for them anyway.
+- The rules use `bail` and a `max` that fits `decimal(10,2)`.
+
+**The card is one partial, `admin/properties/_pricing.blade.php`**, included by
+both forms. Before, there were two copies whose hints had already drifted (one
+above the box, one below). It has two groups, one per pair of price columns:
+"Day & Night" and "22 Hours", with the slot names and times read from
+`Booking::SLOTS`. Each group has the same day hints, says what blank means, and
+the 22-hour group says it is offered only on dates picked in Calendar. Every
+label has `for`, every field shows its own error, and the boxes line up across
+a pair (CSS subgrid). Amounts are text fields showing "10,000";
+`normalizePrices()` strips commas before validation, so the form works without
+its script.
+
+**Verified (2026-10-28).** The rules were run against 0, blank, commas, a
+22-hour Peak alone, "4k" and an over-long amount. Create, villa edit and room
+edit rendered as an admin, and the error state was checked in Chrome at
+desktop width and in a 390px frame (one column, no sideways scroll). No
+property was saved during the check.
 
 ---
 

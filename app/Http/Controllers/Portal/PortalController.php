@@ -433,7 +433,7 @@ class PortalController extends Controller
         if ($validator->fails()) {
             return response()->json([
                 'valid' => false,
-                'message' => 'Kulang o mali ang petsa/slot na napili.',
+                'message' => 'The selected date or slot is missing or invalid.',
             ], 422);
         }
 

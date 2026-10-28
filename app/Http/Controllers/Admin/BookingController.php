@@ -335,7 +335,7 @@ class BookingController extends Controller
         // cancel again on an already-cancelled (or checked-in/out) booking
         // would recompute and insert another 'refund' Payment row.
         if ($newStatus === 'cancelled' && !$booking->isCancellable()) {
-            return back()->with('error', "Hindi na pwedeng i-cancel ang booking na ito — kasalukuyan itong '{$oldStatus}'.");
+            return back()->with('error', "This booking can no longer be cancelled. It is currently '{$oldStatus}'.");
         }
 
         // Parehong guard na nasa Staff\FrontDeskController::checkIn() —
@@ -372,8 +372,8 @@ class BookingController extends Controller
             && Booking::hasConflict($booking->property_id, $booking->checkInDateTime(), $booking->checkOutDateTime(), $booking->id)
         ) {
             return back()->with('error',
-                "Hindi na maibabalik sa '{$newStatus}' ang booking na ito — may ibang booking nang humahawak sa "
-                . $booking->checkInDateTime()->format('M d, Y g:i A') . ' na slot.');
+                "This booking can't be changed back to '{$newStatus}'. Another booking now holds the "
+                . $booking->checkInDateTime()->format('M d, Y g:i A') . ' slot.');
         }
 
         // Ang refund sa isang cancellation ay nakadepende sa SINO ang
@@ -561,7 +561,7 @@ class BookingController extends Controller
     public function extendStay(Request $request, Booking $booking)
     {
         if ($booking->status !== 'checked_in') {
-            return back()->withErrors(['extend' => 'Ang "Extend Stay" ay para lang sa mga bookings na naka-check-in na.']);
+            return back()->withErrors(['extend' => '"Extend Stay" is only for bookings that are already checked in.']);
         }
 
         $request->validate([
@@ -573,7 +573,7 @@ class BookingController extends Controller
         $newCheckout = \Carbon\Carbon::parse($request->new_check_out_date . ' ' . $request->new_check_out_time);
 
         if ($newCheckout->lte($currentCheckout)) {
-            return back()->withErrors(['extend' => 'Ang bagong check-out ay dapat pagkatapos ng kasalukuyang check-out na naka-schedule.']);
+            return back()->withErrors(['extend' => 'The new check-out must be later than the current scheduled check-out.']);
         }
 
         $oldCheckoutDate = $booking->check_out_date->format('M d, Y');
@@ -601,7 +601,7 @@ class BookingController extends Controller
         );
 
         if ($extended === null) {
-            return back()->withErrors(['extend' => 'Hindi pwedeng i-extend — may susunod na guest na naka-schedule mag-check-in bago pa man mapaglinis ang Villa. Sabihan na lang ang guest na kailangan nilang mag check-out sa oras na naka-schedule.']);
+            return back()->withErrors(['extend' => 'This stay can\'t be extended. The next guest checks in before the villa can be cleaned. Please tell the guest they need to check out at the scheduled time.']);
         }
 
         Notification::create([
@@ -617,7 +617,7 @@ class BookingController extends Controller
         StaffLog::record('extended_stay', 'bookings', $booking->id,
             "Extended booking {$booking->booking_ref} checkout from {$oldCheckoutDate} {$oldCheckoutTime} to {$newCheckout->format('M d, Y g:i A')}");
 
-        return back()->with('success', "Na-extend ang stay hanggang {$newCheckout->format('M d, Y g:i A')}. Huwag kalimutang idagdag ang extension charge sa Extra Charges kung meron.");
+        return back()->with('success', "Stay extended until {$newCheckout->format('M d, Y g:i A')}. Remember to add any extension charge under Extra Charges.");
     }
 
     // ── Add Extra Charge (amenity request outside base package) ────
@@ -646,7 +646,7 @@ class BookingController extends Controller
         StaffLog::record('added_booking_extra', 'bookings', $booking->id,
             "Added extra '{$request->item_name}' (₱" . number_format($total, 2) . ") to booking {$booking->booking_ref}");
 
-        return back()->with('success', "Naidagdag ang extra charge: {$request->item_name} (₱" . number_format($total, 2) . ")");
+        return back()->with('success', "Extra charge added: {$request->item_name} (₱" . number_format($total, 2) . ")");
     }
 
     // ── Remove Extra Charge ─────────────────────────────────────────
@@ -662,7 +662,7 @@ class BookingController extends Controller
         StaffLog::record('removed_booking_extra', 'bookings', $booking->id,
             "Removed extra '{$itemName}' from booking {$booking->booking_ref}");
 
-        return back()->with('success', "Naalis ang extra charge: {$itemName}");
+        return back()->with('success', "Extra charge removed: {$itemName}");
     }
 
     // ── Recalculate totals after extras change ──────────────────────
